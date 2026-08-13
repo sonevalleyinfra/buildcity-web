@@ -38,11 +38,65 @@ export function AuthProvider({ children }) {
   // three roles (customer/vendor/admin) can be tested without a real backend.
   const verifyOtp = async ({ phone, otp, role = "customer", name }) => {
     await new Promise((r) => setTimeout(r, 600));
+
+    const cleanPhone = phone.trim();
+    let assignedRole = role;
+    let drMatch = null;
+    let vendorMatch = null;
+
+    // 1. Check if phone is an assigned active DR
+    try {
+      const savedDrs = localStorage.getItem("buildcity_admin_drs");
+      const drs = savedDrs ? JSON.parse(savedDrs) : [];
+      drMatch = drs.find((d) => d.phone.trim() === cleanPhone && d.status === "ACTIVE");
+    } catch {
+      drMatch = null;
+    }
+
+    // 2. Check if phone belongs to a registered Vendor
+    try {
+      const savedVendors = localStorage.getItem("buildcity_admin_vendors");
+      const vendors = savedVendors ? JSON.parse(savedVendors) : [];
+      vendorMatch = vendors.find((v) => v.phone.trim() === cleanPhone);
+    } catch {
+      vendorMatch = null;
+    }
+
+    // Evaluate Role & Status
+    if (cleanPhone === "9999999999" || cleanPhone === "0000000000") {
+      assignedRole = "admin";
+    } else if (drMatch) {
+      assignedRole = "dr";
+    } else if (vendorMatch) {
+      if (vendorMatch.status === "PENDING") {
+        throw new Error("Your vendor account is pending approval by DR or Admin.");
+      }
+      if (vendorMatch.status === "SUSPENDED") {
+        throw new Error("Your vendor account has been suspended. Contact support.");
+      }
+      if (vendorMatch.status === "APPROVED") {
+        assignedRole = "vendor";
+      }
+    } else if (cleanPhone === "8888888888") {
+      assignedRole = "vendor";
+    }
+
+    const defaultName =
+      assignedRole === "admin"
+        ? "Admin User"
+        : assignedRole === "dr"
+        ? drMatch?.name || "District Representative"
+        : assignedRole === "vendor"
+        ? vendorMatch?.shopName || "Vendor Partner"
+        : `Customer ${cleanPhone.slice(-4)}`;
+
     const userObj = {
-      id: "mock-" + Date.now(),
-      name: name || `User ${phone.slice(-4)}`,
-      phone,
-      role,
+      id: drMatch?.id || vendorMatch?.id || "mock-" + Date.now(),
+      name: name || defaultName,
+      phone: cleanPhone,
+      role: assignedRole,
+      drInfo: drMatch || null,
+      vendorInfo: vendorMatch || null,
     };
     persist(userObj);
     return userObj;

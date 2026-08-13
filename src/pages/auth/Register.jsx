@@ -47,7 +47,7 @@ export default function Register() {
     setLoading(true);
     try {
       await register(form);
-      navigate("/", { replace: true }); // new accounts always start as customer
+      navigate("/", { replace: true }); // new accounts hamesha start  as customer
     } finally {
       setLoading(false);
     }

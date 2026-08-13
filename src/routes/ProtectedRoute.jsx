@@ -16,6 +16,8 @@ export default function ProtectedRoute({ children, role }) {
     const home =
       user.role === "admin"
         ? "/admin/dashboard"
+        : user.role === "dr"
+        ? "/dr/dashboard"
         : user.role === "vendor"
         ? "/vendor/dashboard"
         : "/";

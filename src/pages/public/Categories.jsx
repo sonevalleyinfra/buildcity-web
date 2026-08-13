@@ -60,12 +60,12 @@ export default function Categories() {
 
   return (
     <div className="min-h-screen bg-surface pb-24 sm:pb-0">
-      {/* Desktop header — shared Navbar bar hai  */}
+      {/* Desktop header - shared Navbar bar hai  */}
       <div className="hidden lg:block">
         <Navbar />
       </div>
 
-      {/* Mobile header — custom navy-accented header */}
+      {/* Mobile header - custom navy-accented header hai  */}
       <div className="lg:hidden">
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -100,7 +100,7 @@ export default function Categories() {
           </div>
         </div>
 
-        {/* Search bar */}
+        {/* Search bar   hai category ka */}
         <form onSubmit={handleSearch} className="max-w-6xl mx-auto px-4 pb-3">
           <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-3">
             <SearchIcon />
@@ -117,7 +117,7 @@ export default function Categories() {
           </div>
         </form>
 
-        {/* Filter pills */}
+        {/* Filter pills jisse filter kar sakte hai product ka  */}
         <div className="max-w-6xl mx-auto px-4 pb-4 flex items-center gap-4 overflow-x-auto">
           {filterPills.map((p) => (
             <button
@@ -205,7 +205,7 @@ export default function Categories() {
             ))}
           </div>
         </div>
-{/* Shop by category — 4 columns, consistent small size */}
+{/* Shop by category - 4 columns, consistent small size  karna pada for UI  */}
         <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-base font-bold text-navy-900">Shop by Category</h2>
@@ -233,7 +233,7 @@ export default function Categories() {
           </div>
         </section>
 
-     {/* Shop by category — single row, rounded bordered cards like screenshot */}
+     {/* Shop by category - single row, rounded bordered cards  Banaya  */}
      
 
         {/* Best Selling Products */}

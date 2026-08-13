@@ -22,7 +22,7 @@ const BRAND_POOL = {
   plumbing: ["Cera", "Jaquar", "Somany", "Astral"],
 };
 
-// Mock product generator kiya hai AI ki help se Maine  — replace with GET /api/v1/products?category=slug once backend is ready
+// Mock product generator kiya hai AI ki help se Maine   - replace with GET /api/v1/products?category=slug once backend is ready
 function generateProducts(slug, priceFactor = 1) {
   const brandList = BRAND_POOL[slug] || ["Generic Brand"];
   const label = CATEGORY_LABELS[slug] || slug;
@@ -117,7 +117,7 @@ export default function CategoryListing() {
         </div>
 
         <div className="flex gap-6">
-          {/* Filters — desktop ka sidebar  hai */}
+          {/* Filters - desktop ka sidebar  hai */}
           <div className="hidden sm:block">
             <FilterSidebar
               brands={brands}
@@ -230,7 +230,7 @@ export default function CategoryListing() {
         </div>
       </main>
 
-      {/* Filters — mobile bottom sheet  Jo phone me dekhega */}
+      {/* Filters -  mobile bottom sheet  Jo phone me dekhega */}
       {showFilters && (
         <div className="fixed inset-0 z-50 sm:hidden">
           <div

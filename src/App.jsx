@@ -23,11 +23,22 @@ import Profile from "./pages/customer/Profile";
 import Addresses from "./pages/customer/Addresses";
 import VendorDashboard from "./pages/vendor/VendorDashboard";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import DrDashboard from "./pages/dr/DrDashboard";
 
 function CatchAll() {
   const { user, loading } = useAuth();
   if (loading) return null;
-  return <Navigate to={user ? "/" : "/login"} replace />;
+  const target =
+    user?.role === "admin"
+      ? "/admin/dashboard"
+      : user?.role === "dr"
+      ? "/dr/dashboard"
+      : user?.role === "vendor"
+      ? "/vendor/dashboard"
+      : user
+      ? "/"
+      : "/login";
+  return <Navigate to={target} replace />;
 }
 
 export default function App() {
@@ -146,6 +157,14 @@ export default function App() {
                     element={
                       <ProtectedRoute role="admin">
                         <AdminDashboard />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/dr/dashboard"
+                    element={
+                      <ProtectedRoute role="dr">
+                        <DrDashboard />
                       </ProtectedRoute>
                     }
                   />

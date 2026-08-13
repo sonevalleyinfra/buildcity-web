@@ -48,7 +48,7 @@ export default function NotificationPanel({ className }) {
               onClick={handleClose}
             />
 
-            {/* Panel — slides down from the top */}
+            {/* Panel- slides down from the top kar diya hai  */}
             <div
             className={`fixed top-14 right-3 left-3 sm:left-auto w-auto sm:w-80 max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden transition-all duration-200 ease-out ${
             visible

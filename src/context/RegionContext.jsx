@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 const RegionContext = createContext(null);
 const STORAGE_KEY = "buildcity_region";
 
-// TEMPORARY MOCK id hai ,  — replace with GET /api/v1/regions once backend is ready
+// TEMPORARY MOCK id hai ,  - replace with GET /api/v1/regions once backend is ready
 export const REGIONS = [
   { id: "varanasi", name: "Varanasi", state: "Uttar Pradesh", priceFactor: 1 },
   { id: "mirzapur", name: "Mirzapur", state: "Uttar Pradesh", priceFactor: 1.08 },

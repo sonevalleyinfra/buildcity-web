@@ -9,7 +9,7 @@ const ALL_KEYWORDS = [
   "hardware", "sanitary", "furniture", "drill", "pipe", "wire",
 ];
 
-// TEMPORARY MOCK — replace with GET /api/v1/products?q= once backend is ready
+// TEMPORARY MOCK hai  - replace with GET /api/v1/products?q= jab backend is ready
 function searchProducts(query, priceFactor) {
   const q = query.trim().toLowerCase();
   if (!q) return [];

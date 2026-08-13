@@ -4,7 +4,7 @@ import Navbar from "../../components/Navbar";
 import { useCart } from "../../context/CartContext";
 import { useRegion } from "../../context/RegionContext";
 
-// Mock single-product lookup — replace with GET /api/v1/products/:id?region=id once backend is ready
+// Mock single-product lookup - replace with GET /api/v1/products/:id?region=id jab  backend is ready
 function generateProduct(id, priceFactor = 1, regionName = "Varanasi") {
   const slug = (id.split("-")[0] || "product");
   const brand = "BuildCity Trusted Brand";

@@ -26,7 +26,7 @@ export default function FilterSidebar({
           </button>
         </div>
 
-        {/* Brand filter */}
+        {/* Brand filter yaha se hota hai  */}
         <div className="mb-6">
           <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
             Brand
@@ -49,7 +49,7 @@ export default function FilterSidebar({
           </div>
         </div>
 
-        {/* Price filter */}
+        {/* Price filter yaha se hota hai  */}
         <div>
           <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
             Price

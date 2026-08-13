@@ -60,7 +60,7 @@ export default function Checkout() {
 
         <div className="grid md:grid-cols-3 gap-6">
           <div className="md:col-span-2 space-y-5">
-            {/* Address */}
+            {/* Address ka hai  */}
             <div className="bg-white rounded-xl border border-slate-200 p-4">
               <h3 className="text-sm font-bold text-navy-900 mb-3">
                 Delivery Address
@@ -94,7 +94,7 @@ export default function Checkout() {
               </div>
             </div>
 
-            {/* Payment */}
+            {/* Payment ka hai  */}
             <div className="bg-white rounded-xl border border-slate-200 p-4">
               <h3 className="text-sm font-bold text-navy-900 mb-3">
                 Payment Method

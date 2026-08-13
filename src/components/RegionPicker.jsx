@@ -14,11 +14,13 @@ export default function RegionPicker({ trigger }) {
 
       {open &&
         createPortal(
+         
           <div className="fixed inset-0 z-[999]">
             <div
               className="absolute inset-0 bg-black/40"
               onClick={() => setOpen(false)}
             />
+             {/*Yaha Pe delivery slection ka code hai */}
             <div className="absolute bottom-0 left-0 right-0 sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-white rounded-t-2xl sm:rounded-2xl w-full sm:w-96 max-h-[70vh] overflow-y-auto p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-bold text-navy-900">Select Delivery Region</h3>

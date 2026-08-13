@@ -27,12 +27,12 @@ export default function Orders() {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20 font-sans">
-      {/* Desktop header — shared Navbar */}
+      {/* Desktop header - shared Navbar */}
       <div className="hidden lg:block">
         <Navbar />
       </div>
 
-      {/* Mobile header — custom */}
+      {/* Mobile header - custom */}
       <div className="lg:hidden bg-white px-4 py-3 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
@@ -166,7 +166,7 @@ export default function Orders() {
         )}
 
    
-       {/* Need help banner */}
+       {/* Helpke liye ye banner banaya hai  */}
         <div className="relative overflow-hidden rounded-2xl bg-navy-900 px-5 py-5 flex items-center justify-between mb-4">
           <div className="absolute -bottom-8 -right-8 w-40 h-40 rounded-full bg-brand-500/20 blur-2xl" />
           <div className="relative z-10">

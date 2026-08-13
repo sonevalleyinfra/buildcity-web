@@ -4,12 +4,6 @@ import AuthLayout from "../../layouts/AuthLayout";
 import Button from "../../components/Button";
 import { useAuth } from "../../context/AuthContext";
 
-const ROLES = [
-  { id: "customer", label: "Customer" },
-  { id: "vendor", label: "Vendor" },
-  { id: "admin", label: "Admin" },
-];
-
 export default function Login() {
   const navigate = useNavigate();
   const { requestOtp, verifyOtp } = useAuth();
@@ -47,12 +41,14 @@ export default function Login() {
       const home =
         user.role === "admin"
           ? "/admin/dashboard"
+          : user.role === "dr"
+          ? "/dr/dashboard"
           : user.role === "vendor"
           ? "/vendor/dashboard"
           : "/";
       navigate(home, { replace: true });
-    } catch {
-      setError("Something went wrong, try again");
+    } catch (err) {
+      setError(err?.message || "Something went wrong, try again");
     } finally {
       setLoading(false);
     }
@@ -69,12 +65,6 @@ export default function Login() {
           : `Enter the OTP sent to +91 ${phone}`}
       </p>
 
-      <div className="mb-5 rounded-lg bg-brand-50 border border-brand-500/20 px-3.5 py-2.5 text-xs text-navy-700">
-        <strong>Dev preview:</strong> backend abhi nahi hai — koi bhi OTP
-        chalega. Neeche role select karke Customer/Vendor/Admin, teeno test
-        kar sakte ho.
-      </div>
-
       {error && <p className="mb-4 text-sm text-red-500">{error}</p>}
 
       {step === "phone" ? (
@@ -82,7 +72,7 @@ export default function Login() {
           <label className="block text-sm font-medium text-navy-900 mb-1.5">
             Phone Number
           </label>
-          <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 mb-4 focus-within:border-brand-500">
+          <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 mb-6 focus-within:border-brand-500">
             <span className="text-sm text-slate-500 shrink-0">+91</span>
             <span className="text-slate-200">|</span>
             <input
@@ -96,26 +86,6 @@ export default function Login() {
             />
           </div>
 
-          <label className="block text-sm font-medium text-navy-900 mb-1.5">
-            Login as (dev testing)
-          </label>
-          <div className="flex gap-2 mb-6">
-            {ROLES.map((r) => (
-              <button
-                type="button"
-                key={r.id}
-                onClick={() => setRole(r.id)}
-                className={`flex-1 text-sm font-medium rounded-xl py-2.5 border transition-colors ${
-                  role === r.id
-                    ? "border-brand-500 bg-brand-50 text-brand-600"
-                    : "border-slate-200 text-slate-600"
-                }`}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-
           <Button type="submit" disabled={loading}>
             {loading ? "Sending OTP..." : "Send OTP"}
           </Button>
@@ -126,6 +96,12 @@ export default function Login() {
               Sign Up
             </Link>
           </p>
+
+          <div className="mt-8 text-center border-t border-slate-100 pt-4">
+            <p className="text-xs text-slate-400">
+              Admin Access: Enter <strong>9999999999</strong> as phone number
+            </p>
+          </div>
         </form>
       ) : (
         <form onSubmit={handleVerify} noValidate>

@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 const NotificationContext = createContext(null);
 const STORAGE_KEY = "buildcity_notifications";
 
-// TEMPORARY MOCK - replace with GET /api/v1/notifications hab backend ban jaye 
+// TEMPORARY MOCK - replace with GET /api/v1/notifications jab backend ban jaye 
 const seedNotifications = [
   {
     id: "n1",

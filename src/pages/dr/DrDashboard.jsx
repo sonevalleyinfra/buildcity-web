@@ -11,16 +11,23 @@ const PRESET_IMAGES = [
   { label: "Electrical / Wire", url: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=400&q=80" },
 ];
 
+// District Representative (DR) Dashboard component — Ground Agent Portal
+// DR ka kaam district me Naye Vendors onboard karna aur Master Products add/edit karna hai.
 export default function DrDashboard() {
   const { user, logout } = useAuth();
-  const { masterProducts = [], vendors, products, categories, regions, addVendor, addMasterProduct, addProduct, setVendorStatus } = useAdmin();
+  const { masterProducts = [], vendors, products, categories, regions, addVendor, updateVendor, addMasterProduct, updateMasterProduct, setVendorStatus } = useAdmin();
 
-  const [activeTab, setActiveTab] = useState("products"); // "products" | "vendors"
+
+  const [activeTab, setActiveTab] = useState("products");
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Modals
+  // Modals state hai ye  (Naya Vendor ya Product banane ke liye)
   const [showVendorModal, setShowVendorModal] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
+
+  // Modals state  hai ye (Vendor ya Product edit karne ke liye)
+  const [editingVendor, setEditingVendor] = useState(null);
+  const [editingProduct, setEditingProduct] = useState(null);
 
   // Forms
   const [vendorForm, setVendorForm] = useState({
@@ -44,12 +51,12 @@ export default function DrDashboard() {
     imageUrl: PRESET_IMAGES[0].url,
   });
 
-  // DR Assigned Region info
+  
   const drInfo = user?.drInfo || {};
   const districtName = drInfo.regionName || "Varanasi";
   const drRegionId = drInfo.regionId || "r1";
 
-  // Filter vendors & products for this DR's district
+
   const districtVendors = vendors.filter(
     (v) => v.regionId === drRegionId || v.regionName?.toLowerCase() === districtName.toLowerCase()
   );
@@ -343,6 +350,14 @@ export default function DrDashboard() {
                             {p.stockQty} in stock
                           </span>
                         </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <button
+                            onClick={() => setEditingProduct({ ...p })}
+                            className="text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer"
+                          >
+                            ✏️ Edit
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -352,7 +367,7 @@ export default function DrDashboard() {
           </div>
         )}
 
-        {/* Tab 2: Vendors Section */}
+        {/*  Vendors Section */}
         {activeTab === "vendors" && (
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
             <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
@@ -425,6 +440,12 @@ export default function DrDashboard() {
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => setEditingVendor({ ...v })}
+                              className="text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer"
+                            >
+                              ✏️ Edit
+                            </button>
                             {v.status !== "APPROVED" && (
                               <button
                                 onClick={() => setVendorStatus(v.id, "APPROVED")}
@@ -461,7 +482,7 @@ export default function DrDashboard() {
         )}
       </main>
 
-      {/* Modal 1: Add Vendor Modal */}
+      {/*  Add Vendor Modal */}
       {showVendorModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
@@ -567,7 +588,7 @@ export default function DrDashboard() {
         </div>
       )}
 
-      {/* Modal 2: Add Product Modal */}
+      {/* Add Product Modal */}
       {showProductModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-100 my-8">
@@ -764,6 +785,113 @@ export default function DrDashboard() {
                 >
                   Save Product
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT VENDOR MODAL (DR) */}
+      {editingVendor && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <h3 className="font-bold text-navy-900 text-base">Edit District Vendor Details</h3>
+              <button onClick={() => setEditingVendor(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none">✕</button>
+            </div>
+            <form onSubmit={(e) => { e.preventDefault(); updateVendor(editingVendor.id, editingVendor); setEditingVendor(null); alert("Vendor updated!"); }} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Shop / Business Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingVendor.shopName}
+                  onChange={(e) => setEditingVendor({ ...editingVendor, shopName: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Owner Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingVendor.ownerName}
+                  onChange={(e) => setEditingVendor({ ...editingVendor, ownerName: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Mobile Number *</label>
+                <input
+                  type="tel"
+                  required
+                  maxLength={10}
+                  value={editingVendor.phone}
+                  onChange={(e) => setEditingVendor({ ...editingVendor, phone: e.target.value.replace(/\D/g, "") })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onClick={() => setEditingVendor(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs">Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT PRODUCT MODAL (DR) */}
+      {editingProduct && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <h3 className="font-bold text-navy-900 text-base">Edit Master Product</h3>
+              <button onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none">✕</button>
+            </div>
+            <form onSubmit={(e) => { e.preventDefault(); updateMasterProduct(editingProduct.id || editingProduct.masterProductId, editingProduct); setEditingProduct(null); alert("Product updated!"); }} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Product Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingProduct.name}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-navy-900 mb-1">Brand</label>
+                  <input
+                    type="text"
+                    value={editingProduct.brand}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, brand: e.target.value })}
+                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-navy-900 mb-1">Grade / Spec</label>
+                  <input
+                    type="text"
+                    value={editingProduct.grade}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, grade: e.target.value })}
+                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Price (₹) *</label>
+                <input
+                  type="number"
+                  required
+                  value={editingProduct.suggestedPrice || editingProduct.price}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, suggestedPrice: e.target.value, price: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onClick={() => setEditingProduct(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs">Save Changes</button>
               </div>
             </form>
           </div>

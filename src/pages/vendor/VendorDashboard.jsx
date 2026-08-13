@@ -3,6 +3,7 @@ import DashboardShell from "../../components/DashboardShell";
 import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
 
+// Vendor Dashboard component — Vendor partner ka main portal (Master Catalog selection, Custom Price & Stock setting, Orders management)
 export default function VendorDashboard() {
   const { user } = useAuth();
   const {
@@ -14,22 +15,23 @@ export default function VendorDashboard() {
     removeVendorProductListing,
   } = useAdmin();
 
-  const [activeTab, setActiveTab] = useState("overview"); // "overview" | "products" | "orders"
+  // Tabs navigation state: "overview" -> Store Summary, "products" -> My Shop Items, "orders" -> Customer Orders
+  const [activeTab, setActiveTab] = useState("overview");
 
-  // Master Catalog Modal State
+  // Master Catalog — Admin/DR dwara banaye gaye Master Products select karne ke liye
   const [showCatalogModal, setShowCatalogModal] = useState(false);
   const [selectedMasterProd, setSelectedMasterProd] = useState(null);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("ALL");
   const [catalogSearch, setCatalogSearch] = useState("");
 
-  // Price & Stock Input for adding chosen master product
+  // Selling Price (₹) & Stock Qty State — Master Product dukan me add karte waqt vendor ka custom price
   const [vendorSellingPrice, setVendorSellingPrice] = useState("");
   const [vendorStockQty, setVendorStockQty] = useState(100);
 
-  // Edit Listing Modal State
+  // Edit Listing - Custom selling price aur stock modify karne ke liye
   const [editingProduct, setEditingProduct] = useState(null);
 
-  // Vendor Profile Info
+  // Logged-in Vendor Info details extraction
   const vendorInfo = user?.vendorInfo || {};
   const shopName = vendorInfo.shopName || user?.name || "Shree Cement Traders";
   const ownerName = vendorInfo.ownerName || "Vendor Owner";
@@ -37,12 +39,12 @@ export default function VendorDashboard() {
   const districtName = vendorInfo.regionName || "Varanasi";
   const vendorId = vendorInfo.id || "v1";
 
-  // Filter products listed in this vendor's shop
+  // Current vendor ki dukan par list huye products filter karo
   const vendorProducts = products.filter(
     (p) => p.vendorId === vendorId || p.vendorName?.toLowerCase() === shopName.toLowerCase()
   );
 
-  // Filter master products by category & search term
+  // Category aur search term ke mutabiq Master Catalog products filter karo
   const filteredMasterProducts = masterProducts.filter((mp) => {
     const matchesCategory =
       selectedCategoryFilter === "ALL" || mp.categoryId === selectedCategoryFilter;
@@ -187,7 +189,7 @@ export default function VendorDashboard() {
         </button>
       </div>
 
-      {/* TAB 1: OVERVIEW */}
+      {/* : OVERVIEW */}
       {activeTab === "overview" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
@@ -295,7 +297,7 @@ export default function VendorDashboard() {
         </div>
       )}
 
-      {/* TAB 2: MY STORE PRODUCTS */}
+      {/* : MY STORE PRODUCTS */}
       {activeTab === "products" && (
         <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
           <div className="p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
@@ -395,7 +397,7 @@ export default function VendorDashboard() {
         </div>
       )}
 
-      {/* TAB 3: CUSTOMER ORDERS */}
+      {/*  CUSTOMER ORDERS */}
       {activeTab === "orders" && (
         <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
           <div className="p-4 border-b border-slate-200">
@@ -434,8 +436,8 @@ export default function VendorDashboard() {
 
       {/* MODAL 1: CHOOSE FROM MASTER CATALOG MODAL */}
       {showCatalogModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-2xl border border-slate-100 my-8">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-3xl w-full p-4 sm:p-6 shadow-2xl border border-slate-100 my-auto max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
               <div>
                 <h3 className="font-extrabold text-navy-900 text-base">Choose from Master Product Catalog</h3>
@@ -543,7 +545,7 @@ export default function VendorDashboard() {
               )}
             </div>
 
-            {/* Sub-Modal / Form for Price & Stock when Master Product selected */}
+            {/* Sub-M / Form for Price & Stock when Master Product selected */}
             {selectedMasterProd && (
               <form onSubmit={handleAddMasterProductToStore} className="bg-brand-50/50 border border-brand-200 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between border-b border-brand-200/60 pb-2">
@@ -597,7 +599,7 @@ export default function VendorDashboard() {
         </div>
       )}
 
-      {/* MODAL 2: EDIT LISTING PRICE & STOCK */}
+      {/* M 2: EDIT LISTING PRICE & STOCK */}
       {editingProduct && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">

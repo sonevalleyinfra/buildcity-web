@@ -1,414 +1,535 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 import { useCart } from "../../context/CartContext";
-import { useAdmin } from "../../context/AdminContext";
 import Navbar from "../../components/Navbar";
+import RegionPicker from "../../components/RegionPicker";
+import NotificationPanel from "../../components/NotificationPanel"; 
+// Category Tiles array  Homepage par category grid ke liye High-Res images ke saath
+const categoryTiles = [
+  { name: "Paints", bg: "#EDE7F6", img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=500&q=80" },
+  { name: "Electronics", bg: "#F1F5F9", img: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=500&q=80" },
+  { name: "Furniture", bg: "#E3F2FD", img: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=500&q=80" },
+  { name: "Hardware", bg: "#FFF3E0", img: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=500&q=80" },
+  { name: "Plumbing", bg: "#EFF6FF", img: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=500&q=80" },
+];
 
-const HERO_SLIDES = [
+// Top Brands array - District brand partners grid me rendering ke liye (UltraTech, Asian Paints, Tata Tiscon, etc.)
+const brands = [
+  { name: "UltraTech", category: "Cement", short: "UltraTech", icon: "🏗️", color: "#F59E0B" },
+  { name: "Asian Paints", category: "Paints", short: "Asian Paints", icon: "🎨", color: "#1E5FD9" },
+  { name: "Tata Tiscon", category: "Steel 550D", short: "Tata Tiscon", icon: "⚙️", color: "#0F172A" },
+  { name: "Ambuja", category: "Waterproof", short: "Ambuja", icon: "🛡️", color: "#16A34A" },
+  { name: "Astral Pipes", category: "Plumbing", short: "Astral", icon: "🚰", color: "#0EA5E9" },
+  { name: "Finolex", category: "Electrical", short: "Finolex", icon: "⚡", color: "#DC2626" },
+  { name: "Berger", category: "Coatings", short: "Berger", icon: "🖌️", color: "#9333EA" },
+  { name: "Havells", category: "Switches", short: "Havells", icon: "💡", color: "#2563EB" },
+  { name: "Kajaria", category: "Ceramics", short: "Kajaria", icon: "🧱", color: "#D97706" },
+];
+
+// Building Material Categories array - Bulk pricing tags ke saath
+const categories = [
+  { name: "Cement", img: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=300&q=80", tag: "Bulk Prices" },
+  { name: "Tiling", img: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80", tag: "Bulk Prices" },
+  { name: "Painting", img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=300&q=80" },
+  { name: "Water Proofing", img: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=300&q=80" },
+  { name: "Plywood, MDF & HDHMR", img: "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=300&q=80" },
+  { name: "Adhesives", img: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=300&q=80" },
+  { name: "Wires, MCB & Boards", img: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=300&q=80" },
+  { name: "Kitchen Sinks & Faucets", img: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80" },
+  { name: "Sanitary & Bath Fittings", img: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80" },
+  { name: "Switches & Sockets", img: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=300&q=80" },
+  { name: "Hardware & Handles", img: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=300&q=80" },
+  { name: "Lighting", img: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=300&q=80" },
+];
+
+// Features - Fast Delivery, Verified Brands, Best Prices, Support
+const features = [
+  { title: "Fast Delivery", sub: "Across Varanasi", icon: "🚚", bg: "#DBEAFE" },
+  { title: "Verified", sub: "Trusted Brands", icon: "✅", bg: "#DCFCE7" },
+  { title: "Best Price", sub: "Guaranteed", icon: "🏷️", bg: "#FEF3C7" },
+  { title: "Support", sub: "24/7 Help", icon: "🎧", bg: "#EDE9FE" },
+];
+
+const services = [
+  { title: "Site Visit", sub: "Professional Inspection", icon: "👷" },
+  { title: "Web Development", sub: "Get your business online", icon: "💻" },
+];
+
+// Hero Banners list - 4s timer slider ke saath change hone wale banners
+const banners = [
   {
-    tag: "DIRECT WHOLESALE",
-    title: "UltraTech & Tata Steel Wholesale Rates",
-    desc: "Order 50kg cement bags & Fe 550D TMT rebars directly from verified district suppliers.",
-    bg: "from-navy-950 via-navy-900 to-slate-900",
-    image: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80",
+    tag: "BUILD YOUR DREAM SPACE",
+    title: ["Quality Products.", "Best Prices.", "Reliable Service."],
+    img: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=600&q=80",
   },
   {
-    tag: "PAINTS & FINISHES",
-    title: "Asian Paints & Berger Luxury Emulsions",
-    desc: "Interior shine, waterproofing damp-shield primers, and exterior weather-guard.",
-    bg: "from-purple-950 via-slate-900 to-navy-950",
-    image: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=600&q=80",
+    tag: "NEW ARRIVALS",
+    title: ["Modern Furniture.", "Timeless Design.", "Shop the Collection."],
+    img: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=600&q=80",
   },
   {
-    tag: "PLUMBING & WIRES",
-    title: "Astral Pipes & Finolex Heavy Wires",
-    desc: "CPVC hot & cold water pipes, SWR fittings, and 90m flame retardant copper wire coils.",
-    bg: "from-navy-900 via-blue-950 to-slate-950",
-    image: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80",
+    tag: "LIMITED TIME",
+    title: ["Power Tools.", "Trusted Brands.", "Up to 30% Off."],
+    img: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80",
   },
 ];
 
-const CATEGORIES_DATA = [
-  { id: "c1", name: "Cement", icon: "🏗️", count: "120+ Items", img: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=300&q=80", tag: "Bulk" },
-  { id: "c2", name: "Paints", icon: "🎨", count: "150+ Items", img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=300&q=80", tag: "Shine" },
-  { id: "c3", name: "Steel Rebar", icon: "⚙️", count: "80+ Items", img: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=300&q=80", tag: "550D" },
-  { id: "c4", name: "Plumbing", icon: "🚰", count: "90+ Items", img: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=300&q=80", tag: "CPVC" },
-  { id: "c5", name: "Electrical", icon: "⚡", count: "110+ Items", img: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=300&q=80", tag: "Wires" },
+// Deals of the week products - Discount tags & cashback offers
+const deals = [
+  {
+    id: "deal-1",
+    name: "UltraTech Super PPC Cement, 50 Kg Bag",
+    brand: "UltraTech",
+    img: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=300&q=80",
+    mrp: 390,
+    price: 360,
+    discount: "8% OFF",
+    cashback: "₹1000 Cashback",
+  },
+  {
+    id: "deal-2",
+    name: "Asian Paints Royale Luxury Emulsion, 20L",
+    brand: "Asian Paints",
+    img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=300&q=80",
+    mrp: 3250,
+    price: 2950,
+    discount: "9% OFF",
+    cashback: "₹1000 Cashback",
+  },
+  {
+    id: "deal-3",
+    name: "Tata Tiscon 550D TMT Steel Rebar, 12mm",
+    brand: "Tata Tiscon",
+    img: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=300&q=80",
+    mrp: 720,
+    price: 650,
+    discount: "10% OFF",
+    cashback: "₹1000 Cashback",
+  },
+  {
+    id: "deal-4",
+    name: "Tractor Uno Acrylic Distemper Paint, White, 20kg",
+    brand: "Tractor",
+    img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=300&q=80",
+    mrp: 1580,
+    price: 980,
+    discount: "38% OFF",
+    cashback: "₹1000 Cashback",
+  },
+  {
+    id: "deal-5",
+    name: "Astral CPVC Pipe 1 Inch, Heavy Duty",
+    brand: "Astral",
+    img: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=300&q=80",
+    mrp: 450,
+    price: 320,
+    discount: "28% OFF",
+    cashback: "₹1000 Cashback",
+  },
 ];
 
-const BRANDS = [
-  "🏗️ UltraTech",
-  "🎨 Asian Paints",
-  "⚙️ Tata Tiscon",
-  "🛡️ Ambuja",
-  "🚰 Astral",
-  "⚡ Finolex",
-  "🖌️ Berger",
-  "💡 Havells",
-];
-
+// Main Homepage component
 export default function Home() {
-  const { addItem } = useCart();
-  const { masterProducts = [], products = [] } = useAdmin();
+  const { user } = useAuth();
+  const { addItem, count } = useCart();
   const navigate = useNavigate();
-
   const [slide, setSlide] = useState(0);
+  const [qty, setQty] = useState(deals.map(() => 1));
+  const [justAdded, setJustAdded] = useState(deals.map(() => false));
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCatFilter, setSelectedCatFilter] = useState("ALL");
-  const [itemQuantities, setItemQuantities] = useState({});
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    navigate(searchQuery ? `/search?q=${encodeURIComponent(searchQuery)}` : "/search");
+  };
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setSlide((s) => (s + 1) % HERO_SLIDES.length);
-    }, 4500);
-    return () => clearInterval(timer);
+    const id = setInterval(() => {
+      setSlide((s) => (s + 1) % banners.length);
+    }, 4000);
+    return () => clearInterval(id);
   }, []);
 
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-    }
+  const changeQty = (i, delta) => {
+    setQty((q) => q.map((v, idx) => (idx === i ? Math.max(1, v + delta) : v)));
   };
 
-  const displayItems = (masterProducts.length > 0 ? masterProducts : products).filter((item) => {
-    if (selectedCatFilter === "ALL") return true;
-    return item.categoryId === selectedCatFilter;
-  });
-
-  const getQty = (id) => itemQuantities[id] || 1;
-
-  const updateQty = (id, delta) => {
-    setItemQuantities((prev) => ({
-      ...prev,
-      [id]: Math.max(1, (prev[id] || 1) + delta),
-    }));
-  };
-
-  const handleAddToCart = (item) => {
-    const qty = getQty(item.id);
-    addItem(
-      {
-        id: item.id,
-        name: item.name,
-        price: item.suggestedPrice || item.price || 390,
-        image: item.imageUrl,
-        unit: item.unit || "Unit",
-      },
-      qty
-    );
-    alert(`Added ${qty} x "${item.name}" to cart!`);
+  const handleAdd = (i, deal) => {
+    addItem(deal, qty[i]);
+    setJustAdded((prev) => prev.map((v, idx) => (idx === i ? true : v)));
+    setTimeout(() => {
+      setJustAdded((prev) => prev.map((v, idx) => (idx === i ? false : v)));
+    }, 1500);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-navy-900 font-sans pb-28 lg:pb-12">
-      {/* Announcement Bar */}
-      <div className="bg-navy-950 text-white text-[11px] py-1.5 px-3 text-center border-b border-navy-800 font-medium">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <span className="truncate">🚚 Same-Day Site Delivery in <strong>Varanasi, Mirzapur &amp; Prayagraj</strong></span>
-          <span className="hidden sm:inline bg-brand-500 text-white font-extrabold px-2 py-0.5 rounded text-[10px]">GST Bill Ready</span>
+    <div className="min-h-screen bg-surface pb-24 sm:pb-0">
+      {/* Desktop header - shared Navbar (logo, nav links, search, cart) */}
+      <div className="hidden lg:block">
+        <Navbar />
+      </div>
+
+      {/* Mobile header - navy hero + floating search card */}
+      <div className="lg:hidden">
+        <div className="relative bg-navy-900 pt-4 pb-14 px-4 ">
+          <div className="flex items-center justify-end gap-4">
+            <Link to="/cart" className="relative text-white">
+              <CartIcon />
+              {count > 0 && (
+                <span className="absolute -top-1.5 -right-2 h-4 w-4 rounded-full bg-brand-500 text-white text-[10px] flex items-center justify-center">
+                  {count}
+                </span>
+              )}
+            </Link>
+         <NotificationPanel className="relative text-white" />
+          </div>
+        </div>
+
+        {/* White card */}
+        <div className="max-w-6xl mx-auto px-8 -mt-12 relative z-10">
+          <div className="relative">
+            <div className="bg-white rounded-2xl shadow-lg px-4 py-4 flex flex-col items-left text-left">
+              <div className="flex items-center gap-1.5">
+                <span className="text-lg">🏗️</span>
+                <span className="font-extrabold text-navy-900 text-lg">
+                  Build <span className="text-brand-500">City</span>
+                </span>
+              </div>
+           <RegionPicker
+                trigger={(r) => (
+                  <span className="flex items-center gap-1 text-xs text-slate-500 mt-1">
+                    <PinIcon />
+                    {r.name}, {r.state === "Uttar Pradesh" ? "UP" : r.state}
+                    <ChevronIcon />
+                  </span>
+                )}
+              />
+            </div>
+          </div>
+
+          {/* Search bar + scan */}
+          <form onSubmit={handleSearch} className="flex items-center gap-2 mt-3">
+            <div className="flex-1 flex items-center gap-2 rounded-xl border border-slate-200 bg-white shadow-md px-3.5 py-3">
+              <SearchIcon />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                type="text"
+                placeholder="Search for products, brands, services..."
+                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
+              />
+            </div>
+            <button
+              type="button"
+              className="h-[46px] w-[46px] shrink-0 flex items-center justify-center rounded-xl border border-slate-200 bg-white shadow-md text-slate-500"
+            >
+              <ScanIcon />
+            </button>
+          </form>
         </div>
       </div>
 
-      {/* Main Navbar */}
-      <Navbar />
-
-      {/* Mobile Sticky Quick Search Bar */}
-      <div className="sticky top-[53px] z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 p-2.5 sm:hidden shadow-xs">
-        <form onSubmit={handleSearchSubmit} className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search Cement, TMT Steel, Asian Paints..."
-              className="w-full bg-slate-100 text-navy-900 text-xs font-semibold rounded-xl px-3 py-2 pl-8 outline-none focus:bg-white focus:ring-2 focus:ring-brand-500 transition-all"
-            />
-            <span className="absolute left-2.5 top-2 text-slate-400 text-xs">🔍</span>
-          </div>
-          <button type="submit" className="bg-brand-500 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-xs">
-            Search
-          </button>
-        </form>
-      </div>
-
-      {/* Hero Banner */}
-      <section className="bg-navy-950 text-white relative overflow-hidden py-4 sm:py-10">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6">
-          <div className={`bg-linear-to-r ${HERO_SLIDES[slide].bg} rounded-2xl sm:rounded-3xl p-4 sm:p-8 border border-white/10 shadow-xl relative`}>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-8 items-center">
-              <div className="lg:col-span-7 space-y-2 sm:space-y-4">
-                <div className="flex items-center gap-2">
-                  <span className="bg-brand-500 text-white text-[10px] sm:text-xs font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                    {HERO_SLIDES[slide].tag}
-                  </span>
-                  <span className="bg-white/10 text-slate-300 text-[10px] sm:text-xs font-semibold px-2.5 py-0.5 rounded-full">
-                    ✓ Verified Suppliers
-                  </span>
-                </div>
-
-                <h1 className="text-xl sm:text-4xl lg:text-5xl font-black text-white leading-tight tracking-tight">
-                  {HERO_SLIDES[slide].title}
+      <main className="max-w-6xl mx-auto px-4 pt-5 space-y-8">
+        {/* Hero banner Hai */}
+        <div className="relative overflow-hidden rounded-2xl bg-navy-900 h-44 sm:h-56">
+          {banners.map((b, i) => (
+            <div
+              key={i}
+              className="absolute inset-0 transition-opacity duration-700 flex"
+              style={{ opacity: slide === i ? 1 : 0, pointerEvents: slide === i ? "auto" : "none" }}
+            >
+              <div className="flex-[1.4] flex flex-col justify-center px-6 py-5 relative z-10">
+                <span className="text-warning text-[10px] font-bold tracking-wide mb-1.5">
+                  {b.tag}
+                </span>
+                <h1 className="text-white text-xl sm:text-2xl font-extrabold leading-tight mb-3">
+                  {b.title.map((line, idx) => (
+                    <span key={idx}>
+                      {line}
+                      {idx < b.title.length - 1 && <br />}
+                    </span>
+                  ))}
                 </h1>
-
-                <p className="text-xs sm:text-sm text-slate-300 max-w-lg leading-normal hidden sm:block">
-                  {HERO_SLIDES[slide].desc}
-                </p>
-
-                {/* Desktop Search */}
-                <form onSubmit={handleSearchSubmit} className="pt-2 hidden sm:flex items-center gap-2 max-w-lg">
-                  <div className="relative flex-1">
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search Cement, TMT Steel, Asian Paints..."
-                      className="w-full bg-white text-navy-900 text-xs sm:text-sm font-semibold rounded-xl px-4 py-3 pl-10 outline-none shadow-lg"
-                    />
-                    <span className="absolute left-3.5 top-3 text-slate-400 text-sm">🔍</span>
-                  </div>
-                  <button type="submit" className="bg-brand-500 text-white font-bold text-xs sm:text-sm px-5 py-3 rounded-xl shadow-lg">
-                    Search
-                  </button>
-                </form>
+                <button className="bg-white text-navy-900 text-xs font-semibold rounded-xl px-4 py-2 flex items-center gap-1.5 w-fit">
+                  Shop Now <span>→</span>
+                </button>
               </div>
-
-              <div className="lg:col-span-5">
-                <div className="relative rounded-xl overflow-hidden border border-white/20 shadow-lg">
-                  <img
-                    src={HERO_SLIDES[slide].image}
-                    alt={HERO_SLIDES[slide].title}
-                    className="w-full h-36 sm:h-64 object-cover"
-                  />
-                  <div className="absolute inset-0 bg-linear-to-t from-navy-950 via-transparent to-transparent"></div>
-                  <div className="absolute bottom-2 left-2 right-2 sm:bottom-4 sm:left-4 sm:right-4 bg-navy-900/90 backdrop-blur-md p-2 sm:p-3 rounded-lg border border-white/10">
-                    <p className="font-extrabold text-[11px] sm:text-xs text-white">Direct District Wholesale Rates</p>
-                    <p className="text-[10px] text-slate-300">Onboarded by District Representatives (DR).</p>
-                  </div>
-                </div>
+              <div className="flex-1 relative overflow-hidden">
+                <img
+                  src={b.img}
+                  alt={b.title[0]}
+                  className="absolute inset-0 w-full h-full object-cover"
+                  style={{ clipPath: "polygon(20% 0, 100% 0, 100% 100%, 0% 100%)" }}
+                />
               </div>
             </div>
+          ))}
 
-          </div>
-
-          {/* Dots */}
-          <div className="flex justify-center gap-1.5 mt-3">
-            {HERO_SLIDES.map((_, i) => (
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-20">
+            {banners.map((_, i) => (
               <button
                 key={i}
                 onClick={() => setSlide(i)}
-                className={`h-2 rounded-full transition-all cursor-pointer ${
-                  slide === i ? "w-6 bg-brand-500" : "w-2 bg-slate-700"
+                className={`h-1.5 rounded-full transition-all ${
+                  slide === i ? "w-4 bg-white" : "w-1.5 bg-white/40"
                 }`}
               />
             ))}
           </div>
         </div>
-      </section>
 
-      {/* Main Container */}
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 mt-6 space-y-8">
-        
-        {/* Value Proposition Mobile Grid */}
-        <section className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4">
-          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-xs flex items-center gap-2.5">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-blue-50 text-brand-600 font-bold text-sm sm:text-lg flex items-center justify-center shrink-0">🚚</div>
-            <div>
-              <p className="font-extrabold text-xs text-navy-900">Fast Delivery</p>
-              <p className="text-[10px] sm:text-[11px] text-slate-500">Same-day site unloading</p>
+        {/* Feature strip */}
+        <div className="grid grid-cols-4 gap-2 sm:gap-4 bg-white rounded-xl border border-slate-200 p-3">
+          {features.map((f) => (
+            <div key={f.title} className="flex flex-col items-center text-center gap-1.5">
+              <div
+                className="h-10 w-10 rounded-full flex items-center justify-center text-lg"
+                style={{ backgroundColor: f.bg }}
+              >
+                {f.icon}
+              </div>
+              <div className="text-[11px] sm:text-xs font-semibold text-navy-900 leading-tight">
+                {f.title}
+              </div>
+              <div className="text-[9px] sm:text-[10px] text-slate-500 leading-tight">
+                {f.sub}
+              </div>
             </div>
+          ))}
+        </div>
+
+ {/* Shop by category - colored bg with image overlay */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-bold text-navy-900">Shop by Category</h2>
+           <Link to="/categories" className="text-xs font-medium text-brand-500">See all</Link>
           </div>
-          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-xs flex items-center gap-2.5">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-green-50 text-green-700 font-bold text-sm sm:text-lg flex items-center justify-center shrink-0">✅</div>
-            <div>
-              <p className="font-extrabold text-xs text-navy-900">DR Verified</p>
-              <p className="text-[10px] sm:text-[11px] text-slate-500">Audited local vendors</p>
-            </div>
-          </div>
-          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-xs flex items-center gap-2.5">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-amber-50 text-amber-700 font-bold text-sm sm:text-lg flex items-center justify-center shrink-0">🏷️</div>
-            <div>
-              <p className="font-extrabold text-xs text-navy-900">Best Price</p>
-              <p className="text-[10px] sm:text-[11px] text-slate-500">Direct factory rates</p>
-            </div>
-          </div>
-          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-xs flex items-center gap-2.5">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-purple-50 text-purple-700 font-bold text-sm sm:text-lg flex items-center justify-center shrink-0">🧾</div>
-            <div>
-              <p className="font-extrabold text-xs text-navy-900">GST Invoice</p>
-              <p className="text-[10px] sm:text-[11px] text-slate-500">100% Tax credit claim</p>
-            </div>
+          <div className="grid grid-cols-5 gap-2 sm:gap-3">
+            {categoryTiles.map((c) => (
+              <Link
+                key={c.name}
+                to={`/category/${c.name.toLowerCase()}`}
+                className="flex flex-col items-center gap-1.5"
+              >
+                <div
+                  className="w-full aspect-square rounded-xl overflow-hidden flex items-center justify-center"
+                  style={{ backgroundColor: c.bg }}
+                >
+                  <img
+                    src={c.img}
+                    alt={c.name}
+                    className="w-full h-full object-cover mix-blend-multiply opacity-90"
+                    loading="lazy"
+                  />
+                </div>
+                <span className="text-[11px] font-medium text-navy-900">{c.name}</span>
+              </Link>
+            ))}
           </div>
         </section>
-
-        {/* Categories Section */}
+        {/* Top Brands - Responsive Grid */}
         <section>
-          <div className="flex items-center justify-between mb-3 sm:mb-5">
+          <div className="flex items-center justify-between mb-3">
             <div>
-              <h2 className="text-base sm:text-xl font-black text-navy-900 tracking-tight">Shop by Category</h2>
-              <p className="text-[11px] sm:text-xs text-slate-500">Construction &amp; home improvement supplies</p>
+              <h2 className="text-base font-bold text-navy-900">Top Brands</h2>
+              <p className="text-[11px] text-slate-500">Official manufacturers & verified district distributors</p>
             </div>
-            <Link to="/categories" className="text-xs font-bold text-brand-600 hover:underline">
-              View All →
+            <Link to="/categories" className="text-xs font-semibold text-brand-500 hover:underline">
+              See all →
             </Link>
           </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-4">
-            {CATEGORIES_DATA.map((cat) => (
-              <div
-                key={cat.id}
-                onClick={() => setSelectedCatFilter(cat.id === selectedCatFilter ? "ALL" : cat.id)}
-                className={`group bg-white rounded-xl sm:rounded-2xl border p-3 sm:p-4 shadow-xs hover:shadow-md transition-all cursor-pointer overflow-hidden ${
-                  selectedCatFilter === cat.id ? "border-brand-500 ring-2 ring-brand-500/20 bg-brand-50/20" : "border-slate-200 hover:border-brand-300"
-                }`}
+          <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-2 sm:gap-3">
+            {brands.map((b) => (
+              <Link
+                key={b.name}
+                to={`/search?q=${encodeURIComponent(b.name)}`}
+                className="bg-white rounded-2xl border border-slate-200 p-2.5 flex flex-col items-center justify-center text-center hover:border-brand-500 hover:shadow-md transition-all group"
               >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xl sm:text-2xl">{cat.icon}</span>
-                  <span className="text-[9px] sm:text-[10px] font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
-                    {cat.tag}
-                  </span>
+                <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-base mb-1.5 group-hover:scale-110 transition-transform">
+                  {b.icon}
                 </div>
-                <h3 className="font-extrabold text-navy-900 text-xs sm:text-sm group-hover:text-brand-600 transition-colors">{cat.name}</h3>
-                <p className="text-[10px] sm:text-[11px] text-slate-500">{cat.count}</p>
-
-                <img
-                  src={cat.img}
-                  alt={cat.name}
-                  className="w-full h-16 sm:h-24 object-cover rounded-lg mt-2 border border-slate-100"
-                />
-              </div>
+                <span className="text-xs font-bold text-navy-900 leading-tight group-hover:text-brand-600 transition-colors">
+                  {b.name}
+                </span>
+                <span className="text-[9px] font-semibold text-slate-400 mt-0.5">
+                  {b.category}
+                </span>
+              </Link>
             ))}
           </div>
         </section>
 
-        {/* Master Catalog Products Mobile Grid (2 Columns on Mobile!) */}
+        {/* Deals of the Week */}
         <section>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
-            <div>
-              <h2 className="text-base sm:text-xl font-black text-navy-900 tracking-tight">Marketplace Catalog</h2>
-              <p className="text-[11px] sm:text-xs text-slate-500">Products configured by Admin &amp; DRs</p>
-            </div>
-
-            {/* Horizontal Filter Chips */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-              <button
-                onClick={() => setSelectedCatFilter("ALL")}
-                className={`text-[11px] sm:text-xs font-bold px-3 py-1 rounded-xl border transition-colors cursor-pointer whitespace-nowrap ${
-                  selectedCatFilter === "ALL" ? "bg-navy-900 text-white border-navy-900" : "bg-white text-slate-700 border-slate-200"
-                }`}
+          <h2 className="text-lg font-bold text-navy-900">Deals Of The Week</h2>
+          <p className="text-xs text-slate-500 mb-3">5 products at our lowest ever price</p>
+          <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 sm:grid sm:grid-cols-5 sm:gap-3">
+            {deals.map((d, i) => (
+              <div
+                key={d.name}
+                className="bg-white rounded-xl border border-slate-200 p-3 w-40 sm:w-auto shrink-0 flex flex-col"
               >
-                All ({displayItems.length})
-              </button>
-              {CATEGORIES_DATA.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => setSelectedCatFilter(c.id)}
-                  className={`text-[11px] sm:text-xs font-bold px-3 py-1 rounded-xl border transition-colors cursor-pointer whitespace-nowrap ${
-                    selectedCatFilter === c.id ? "bg-navy-900 text-white border-navy-900" : "bg-white text-slate-700 border-slate-200"
-                  }`}
-                >
-                  {c.name}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Products Grid: 2 Columns on Mobile! */}
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-6">
-            {displayItems.map((p) => {
-              const currentQty = getQty(p.id);
-
-              return (
-                <div key={p.id} className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-all p-2.5 sm:p-4 flex flex-col justify-between group">
-                  <div>
-                    {/* Image & Badges */}
-                    <div className="relative rounded-lg sm:rounded-xl overflow-hidden border border-slate-100 mb-2 bg-slate-50">
-                      <img
-                        src={p.imageUrl}
-                        alt={p.name}
-                        className="w-full h-32 sm:h-44 object-cover group-hover:scale-105 transition-transform duration-500"
-                      />
-                      <span className="absolute top-1.5 left-1.5 bg-navy-900/90 text-white text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded backdrop-blur-xs">
-                        🏷️ {p.brand}
-                      </span>
-                      <span className="absolute top-1.5 right-1.5 bg-amber-400 text-navy-900 text-[9px] sm:text-[10px] font-extrabold px-1.5 py-0.5 rounded shadow-xs">
-                        {p.grade}
-                      </span>
-                    </div>
-
-                    {/* Category & Title */}
-                    <div className="flex items-center justify-between text-[9px] sm:text-[11px] mb-0.5">
-                      <span className="font-bold text-brand-600 uppercase tracking-wider">{p.categoryName}</span>
-                    </div>
-
-                    <h3 className="font-extrabold text-navy-900 text-xs sm:text-sm leading-snug line-clamp-2 mb-1">
-                      {p.name}
-                    </h3>
-                    <p className="text-[10px] sm:text-xs text-slate-500 mb-2">Unit: <strong>{p.unit}</strong></p>
-                  </div>
-
-                  {/* Price & Cart Actions */}
-                  <div className="pt-2 border-t border-slate-100">
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <p className="text-[9px] text-slate-400 uppercase font-bold">Wholesale</p>
-                        <p className="text-sm sm:text-lg font-black text-navy-900">
-                          ₹{p.suggestedPrice || p.price}
-                        </p>
-                      </div>
-                      <span className="bg-green-50 text-green-700 text-[9px] font-extrabold px-1.5 py-0.5 rounded border border-green-200">
-                        In Stock
-                      </span>
-                    </div>
-
-                    {/* Stepper + Add Button */}
-                    <div className="flex items-center gap-1.5">
-                      <div className="flex items-center border border-slate-200 rounded-lg bg-slate-50 p-0.5 shrink-0">
-                        <button
-                          onClick={() => updateQty(p.id, -1)}
-                          className="w-5 h-5 sm:w-7 sm:h-7 font-bold text-slate-600 hover:bg-white rounded flex items-center justify-center text-xs"
-                        >
-                          -
-                        </button>
-                        <span className="w-5 sm:w-8 text-center text-xs font-bold text-navy-900">{currentQty}</span>
-                        <button
-                          onClick={() => updateQty(p.id, 1)}
-                          className="w-5 h-5 sm:w-7 sm:h-7 font-bold text-slate-600 hover:bg-white rounded flex items-center justify-center text-xs"
-                        >
-                          +
-                        </button>
-                      </div>
-
-                      <button
-                        onClick={() => handleAddToCart(p)}
-                        className="flex-1 bg-brand-500 hover:bg-brand-600 text-white font-bold text-[11px] sm:text-xs py-2 px-2 rounded-lg sm:rounded-xl shadow-xs transition-colors text-center cursor-pointer"
-                      >
-                        + Add
-                      </button>
-                    </div>
-                  </div>
+                <div className="relative h-24 rounded-lg overflow-hidden bg-slate-100 mb-2">
+                  {d.discount && (
+                    <span className="absolute top-1 left-1 bg-warning text-navy-900 text-[9px] font-bold px-1.5 py-0.5 rounded">
+                      {d.discount}
+                    </span>
+                  )}
+                  <img src={d.img} alt={d.name} className="w-full h-full object-cover" loading="lazy" />
                 </div>
-              );
-            })}
-          </div>
-        </section>
 
-        {/* Brands Section */}
-        <section className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-xs">
-          <h2 className="text-center text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">
-            Verified Partner Brands Across Districts
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-            {BRANDS.map((b, i) => (
-              <div key={i} className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-center">
-                <span className="text-[11px] font-extrabold text-navy-900">{b}</span>
+                <div className="flex items-center gap-1 text-[9px] text-slate-500 mb-1">
+                  <ClockIcon /> 60 Mins &nbsp;·&nbsp; Pay on Delivery
+                </div>
+                <span className="inline-block w-fit bg-green-50 text-green-700 text-[8px] font-semibold px-1.5 py-0.5 rounded mb-1.5">
+                  Free Delivery above ₹1000
+                </span>
+
+                <p className="text-[11px] font-medium text-navy-900 leading-tight mb-1.5 line-clamp-2 flex-1">
+                  {d.name}
+                </p>
+
+                <div className="flex items-baseline gap-1.5 mb-1">
+                  {d.mrp !== d.price && (
+                    <span className="text-[10px] text-slate-400 line-through">₹{d.mrp}</span>
+                  )}
+                  <span className="text-sm font-bold text-navy-900">₹{d.price}</span>
+                </div>
+                <span className="text-[8px] text-amber-700 font-medium mb-2">{d.cashback}</span>
+
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center border border-slate-200 rounded-lg">
+                    <button
+                      onClick={() => changeQty(i, -1)}
+                      className="px-2 py-1 text-slate-500 text-sm"
+                    >
+                      −
+                    </button>
+                    <span className="px-2 text-xs font-medium">{qty[i]}</span>
+                    <button
+                      onClick={() => changeQty(i, 1)}
+                      className="px-2 py-1 text-slate-500 text-sm"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => handleAdd(i, d)}
+                    className={`flex-1 text-xs font-bold rounded-lg py-1.5 ${
+                      justAdded[i]
+                        ? "bg-success text-white"
+                        : "bg-warning text-navy-900"
+                    }`}
+                  >
+                    {justAdded[i] ? "Added ✓" : "ADD"}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         </section>
 
+        {/* Popular services */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-bold text-navy-900">Popular Services</h2>
+           <Link to="/categories" className="text-xs font-medium text-brand-500">See all</Link>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {services.map((s) => (
+              <div
+                key={s.title}
+                className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col justify-between h-28"
+              >
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-lg">{s.icon}</span>
+                    <span className="text-xs font-bold text-navy-900">{s.title}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500">{s.sub}</p>
+                </div>
+                <button className="h-6 w-6 rounded-full bg-brand-500 text-white flex items-center justify-center text-xs self-end">
+                  →
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Exclusive deals */}
+        <div className="rounded-2xl bg-navy-900 px-6 py-6 flex items-center justify-between overflow-hidden relative">
+          <div className="relative z-10">
+            <h3 className="text-white font-bold text-base mb-1">Exclusive Deals</h3>
+            <p className="text-white/60 text-xs mb-3">Up to 20% OFF on selected products</p>
+            <button className="bg-white text-navy-900 text-xs font-semibold rounded-lg px-4 py-2">
+              Explore Offers →
+            </button>
+          </div>
+          <span className="relative z-10 text-warning font-extrabold text-lg bg-white/10 rounded-full h-16 w-16 flex items-center justify-center text-center leading-none shrink-0">
+            UP TO
+            <br />
+            20% OFF
+          </span>
+        </div>
       </main>
+
     </div>
+  );
+}
+
+function PinIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+      <circle cx="12" cy="10" r="3" />
+    </svg>
+  );
+}
+function ChevronIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+function SearchIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
+function ScanIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M3 8V5a2 2 0 0 1 2-2h3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M21 16v3a2 2 0 0 1-2 2h-3" />
+    </svg>
+  );
+}
+function BellIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9Z" />
+      <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+    </svg>
+  );
+}
+function CartIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="9" cy="21" r="1" />
+      <circle cx="20" cy="21" r="1" />
+      <path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" />
+    </svg>
+  );
+}
+function ClockIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
+    </svg>
   );
 }

@@ -6,44 +6,45 @@ import RegionPicker from "../../components/RegionPicker";
 import NotificationPanel from "../../components/NotificationPanel";
 
 const filterPills = [
-  { name: "All", img: null },
-  { name: "Cement", img: "https://loremflickr.com/100/100/cement,bag" },
-  { name: "Paints", img: "https://loremflickr.com/100/100/paint,bucket" },
-  { name: "Steel", img: "https://loremflickr.com/100/100/steel,rebar" },
-  { name: "Plumbing", img: "https://loremflickr.com/100/100/faucet,tap" },
+  { name: "All", img: null, icon: "⚡" },
+  { name: "Cement", img: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=150&q=80" },
+  { name: "Paints", img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=150&q=80" },
+  { name: "Steel", img: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=150&q=80" },
+  { name: "Plumbing", img: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=150&q=80" },
+  { name: "Electrical", img: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=150&q=80" },
 ];
 
 const banners = [
   {
-    tag: "UP TO 20% OFF",
-    title: ["Premium Quality", "Building Materials"],
-    sub: "At Best Prices",
-    img: "https://loremflickr.com/500/500/construction,materials",
+    tag: "DISTRICT DIRECT SALE",
+    title: ["Premium Building", "Materials Catalog"],
+    sub: "Direct Wholesale Rates from Authorized DR Suppliers",
+    img: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80",
   },
   {
-    tag: "NEW STOCK",
-    title: ["Fresh Cement", "& Steel Arrivals"],
-    sub: "Order in Bulk & Save",
-    img: "https://loremflickr.com/500/500/cement,steel",
+    tag: "WHOLESALE DEALS",
+    title: ["Fresh Cement &", "TMT Steel Stock"],
+    sub: "Bulk Quantity Discounts & Same-Day Site Delivery",
+    img: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=600&q=80",
   },
 ];
 
 const categoryCards = [
-  { name: "Cement", count: "120+ Products", img: "https://loremflickr.com/300/300/cement,bag" },
-  { name: "Paints", count: "150+ Products", img: "https://loremflickr.com/300/300/paint,bucket" },
-  { name: "Steel", count: "100+ Products", img: "https://loremflickr.com/300/300/steel,rebar" },
-  { name: "Plumbing", count: "80+ Products", img: "https://loremflickr.com/300/300/faucet,tap" },
-  { name: "Electrical", count: "120+ Products", img: "https://loremflickr.com/300/300/bulb,light" },
-  { name: "Sanitary", count: "90+ Products", img: "https://loremflickr.com/300/300/toilet,bathroom" },
-  { name: "Hardware", count: "200+ Products", img: "https://loremflickr.com/300/300/drill,tools" },
-  { name: "Tiles", count: "110+ Products", img: "https://loremflickr.com/300/300/tiles,ceramic" },
+  { name: "Cement", count: "120+ Products", img: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=300&q=80", tag: "OPC & PPC" },
+  { name: "Paints", count: "150+ Products", img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=300&q=80", tag: "Emulsion" },
+  { name: "Steel", count: "100+ Products", img: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=300&q=80", tag: "Fe 550D" },
+  { name: "Plumbing", count: "80+ Products", img: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=300&q=80", tag: "CPVC / PVC" },
+  { name: "Electrical", count: "120+ Products", img: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=300&q=80", tag: "Wires & Switches" },
+  { name: "Sanitary", count: "90+ Products", img: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80", tag: "Fittings" },
+  { name: "Hardware", count: "200+ Products", img: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=300&q=80", tag: "Tools" },
+  { name: "Tiles", count: "110+ Products", img: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80", tag: "Ceramics" },
 ];
 
 const bestSelling = [
-  { id: "bs-1", name: "UltraTech Cement 50kg", brand: "UltraTech", img: "https://picsum.photos/seed/cement1/300/300", mrp: 445, price: 390, discount: "12% OFF" },
-  { id: "bs-2", name: "Asian Paints Royale 20L", brand: "Asian Paints", img: "https://picsum.photos/seed/paint1/300/300", mrp: 2450, price: 2250, discount: "8% OFF" },
-  { id: "bs-3", name: "TMT Steel Bar 12mm", brand: "Generic", img: "https://picsum.photos/seed/steel1/300/300", mrp: 765, price: 650, discount: "15% OFF" },
-  { id: "bs-4", name: "Berger Weathercoat 20L", brand: "Berger", img: "https://picsum.photos/seed/paint2/300/300", mrp: 2250, price: 2050, discount: "10% OFF" },
+  { id: "bs-1", name: "UltraTech Super PPC Cement, 50kg", brand: "UltraTech", img: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80", mrp: 445, price: 390, discount: "12% OFF", rating: "4.9 ★" },
+  { id: "bs-2", name: "Asian Paints Royale Luxury Emulsion, 20L", brand: "Asian Paints", img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=400&q=80", mrp: 2450, price: 2250, discount: "8% OFF", rating: "4.8 ★" },
+  { id: "bs-3", name: "Tata Tiscon 550D TMT Steel Bar 12mm", brand: "Tata Tiscon", img: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=400&q=80", mrp: 765, price: 650, discount: "15% OFF", rating: "5.0 ★" },
+  { id: "bs-4", name: "Berger Weathercoat Smooth 20L", brand: "Berger", img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=400&q=80", mrp: 2250, price: 2050, discount: "10% OFF", rating: "4.7 ★" },
 ];
 
 export default function Categories() {
@@ -58,27 +59,30 @@ export default function Categories() {
     navigate(searchQuery ? `/search?q=${encodeURIComponent(searchQuery)}` : "/search");
   };
 
+  const filteredCategories = categoryCards.filter((c) => {
+    if (activePill === "All") return true;
+    return c.name.toLowerCase().includes(activePill.toLowerCase());
+  });
+
   return (
-    <div className="min-h-screen bg-surface pb-24 sm:pb-0">
-      {/* Desktop header - shared Navbar bar hai  */}
+    <div className="min-h-screen bg-slate-50 text-navy-900 pb-24 sm:pb-12">
+      {/* Desktop Navbar */}
       <div className="hidden lg:block">
         <Navbar />
       </div>
 
-      {/* Mobile header - custom navy-accented header hai  */}
-      <div className="lg:hidden">
-      <div className="bg-white border-b border-slate-200">
+      {/* Mobile Header */}
+      <div className="lg:hidden bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          
-          <div className="flex items-center gap-1.5">
-            <span className="text-lg">🏗️</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🏗️</span>
             <div>
-              <div className="font-extrabold text-navy-900 text-base leading-none">
+              <div className="font-black text-navy-900 text-base leading-none">
                 Build <span className="text-brand-500">City</span>
               </div>
               <RegionPicker
                 trigger={(r) => (
-                  <span className="flex items-center gap-1 text-[11px] text-slate-500 mt-1">
+                  <span className="flex items-center gap-1 text-[11px] text-slate-500 mt-0.5">
                     <PinIcon />
                     {r.name}, {r.state === "Uttar Pradesh" ? "UP" : r.state}
                     <ChevronIcon />
@@ -87,12 +91,13 @@ export default function Categories() {
               />
             </div>
           </div>
-          <div className="flex items-center gap-4">
-           <NotificationPanel className="relative text-navy-900" />
+
+          <div className="flex items-center gap-3">
+            <NotificationPanel className="relative text-navy-900" />
             <Link to="/cart" className="relative text-navy-900">
               <CartIcon />
               {count > 0 && (
-                <span className="absolute -top-2 -right-2 h-4 w-4 rounded-full bg-brand-500 text-white text-[10px] flex items-center justify-center">
+                <span className="absolute -top-1.5 -right-2 h-4.5 w-4.5 rounded-full bg-brand-500 text-white text-[10px] font-bold flex items-center justify-center">
                   {count}
                 </span>
               )}
@@ -100,77 +105,74 @@ export default function Categories() {
           </div>
         </div>
 
-        {/* Search bar   hai category ka */}
+        {/* Mobile Search Bar */}
         <form onSubmit={handleSearch} className="max-w-6xl mx-auto px-4 pb-3">
-          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-3">
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
             <SearchIcon />
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               type="text"
-              placeholder="Search for products, brands, services..."
-              className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
+              placeholder="Search category, brand, material..."
+              className="w-full bg-transparent text-xs outline-none placeholder:text-slate-400 font-medium"
             />
             <button type="button" className="text-slate-400">
               <ScanIcon />
             </button>
           </div>
         </form>
+      </div>
 
-        {/* Filter pills jisse filter kar sakte hai product ka  */}
-        <div className="max-w-6xl mx-auto px-4 pb-4 flex items-center gap-4 overflow-x-auto">
-          {filterPills.map((p) => (
-            <button
-              key={p.name}
-              onClick={() => setActivePill(p.name)}
-              className="flex flex-col items-center gap-1.5 shrink-0"
-            >
-              <div
-                className={`h-14 w-14 rounded-full flex items-center justify-center overflow-hidden border-2 ${
+      <main className="max-w-6xl mx-auto px-4 pt-6 space-y-8">
+        
+        {/* Top Header Title & Filter Pills */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-slate-100 pb-3">
+            <div>
+              <h1 className="text-xl font-black text-navy-900 tracking-tight">Browse All Building Categories</h1>
+              <p className="text-xs text-slate-500">Certified construction supplies directly from verified district distributors</p>
+            </div>
+            <span className="text-xs font-bold bg-brand-50 text-brand-700 px-3 py-1 rounded-full border border-brand-200 w-fit">
+              {filteredCategories.length} Categories Available
+            </span>
+          </div>
+
+          {/* Filter Pills */}
+          <div className="flex items-center gap-3 overflow-x-auto pb-1">
+            {filterPills.map((p) => (
+              <button
+                key={p.name}
+                onClick={() => setActivePill(p.name)}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl border transition-all cursor-pointer shrink-0 text-xs font-bold ${
                   activePill === p.name
-                    ? "border-brand-500 bg-brand-500"
-                    : "border-slate-200 bg-white"
+                    ? "bg-navy-900 text-white border-navy-900 shadow-xs"
+                    : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
                 }`}
               >
                 {p.img ? (
-                  <img src={p.img} alt={p.name} className="w-full h-full object-cover" />
+                  <img src={p.img} alt={p.name} className="w-5 h-5 rounded-full object-cover border border-white/20" />
                 ) : (
-                  <GridIcon active={activePill === p.name} />
+                  <span>{p.icon || "🧱"}</span>
                 )}
-              </div>
-              <span
-                className={`text-[11px] font-medium ${
-                  activePill === p.name ? "text-brand-500" : "text-slate-600"
-                }`}
-              >
-                {p.name}
-              </span>
-            </button>
-          ))}
-          <button className="flex flex-col items-center gap-1.5 shrink-0">
-            <div className="h-14 w-14 rounded-full border-2 border-slate-200 bg-white flex items-center justify-center">
-              <DotsIcon />
-            </div>
-            <span className="text-[11px] font-medium text-slate-600">More</span>
-          </button>
+                <span>{p.name}</span>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-      </div>
 
-      <main className="max-w-6xl mx-auto px-4 pt-4 space-y-7">
-        {/* Banner slider */}
-        <div className="relative overflow-hidden rounded-2xl bg-navy-900 h-44 sm:h-52">
+        {/* Hero Slider Banner */}
+        <div className="relative overflow-hidden rounded-2xl bg-navy-950 text-white h-44 sm:h-56 shadow-md border border-slate-800">
           {banners.map((b, i) => (
             <div
               key={i}
               className="absolute inset-0 transition-opacity duration-700 flex"
               style={{ opacity: slide === i ? 1 : 0, pointerEvents: slide === i ? "auto" : "none" }}
             >
-              <div className="flex-[1.3] flex flex-col justify-center px-6 py-5 relative z-10">
-                <span className="text-warning text-[10px] font-bold tracking-wide mb-1.5">
+              <div className="flex-[1.3] flex flex-col justify-center px-6 sm:px-8 py-5 relative z-10">
+                <span className="text-brand-300 text-[10px] font-black tracking-widest uppercase mb-1">
                   {b.tag}
                 </span>
-                <h2 className="text-white text-xl sm:text-2xl font-extrabold leading-tight mb-1">
+                <h2 className="text-white text-xl sm:text-3xl font-black leading-tight mb-1 tracking-tight">
                   {b.title.map((line, idx) => (
                     <span key={idx}>
                       {line}
@@ -178,11 +180,12 @@ export default function Categories() {
                     </span>
                   ))}
                 </h2>
-                <p className="text-white/70 text-xs mb-3">{b.sub}</p>
-                <button className="bg-white text-navy-900 text-xs font-semibold rounded-xl px-4 py-2 flex items-center gap-1.5 w-fit">
-                  Shop Now <span>→</span>
+                <p className="text-slate-300 text-xs mb-3">{b.sub}</p>
+                <button className="bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl px-4 py-2 flex items-center gap-1.5 w-fit shadow-xs transition-colors cursor-pointer">
+                  Shop Category <span>→</span>
                 </button>
               </div>
+
               <div className="flex-1 relative overflow-hidden">
                 <img
                   src={b.img}
@@ -190,85 +193,117 @@ export default function Categories() {
                   className="absolute inset-0 w-full h-full object-cover"
                   style={{ clipPath: "polygon(15% 0, 100% 0, 100% 100%, 0% 100%)" }}
                 />
+                <div className="absolute inset-0 bg-linear-to-r from-navy-950/90 via-transparent to-transparent"></div>
               </div>
             </div>
           ))}
+
           <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-20">
             {banners.map((_, i) => (
               <button
                 key={i}
                 onClick={() => setSlide(i)}
-                className={`h-1.5 rounded-full transition-all ${
-                  slide === i ? "w-4 bg-white" : "w-1.5 bg-white/40"
+                className={`h-2 rounded-full transition-all cursor-pointer ${
+                  slide === i ? "w-6 bg-brand-500" : "w-2 bg-white/40"
                 }`}
               />
             ))}
           </div>
         </div>
-{/* Shop by category - 4 columns, consistent small size  karna pada for UI  */}
+
+        {/* Shop by Category Grid */}
         <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-bold text-navy-900">Shop by Category</h2>
-            
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-black text-navy-900">Explore Materials by Category</h2>
+            <span className="text-xs text-slate-500 font-medium">Click category to view products</span>
           </div>
-          <div className="grid grid-cols-4 gap-2">
-            {categoryCards.map((c) => (
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 gap-4">
+            {filteredCategories.map((c) => (
               <Link
                 key={c.name}
-                to={`/category/${encodeURIComponent(c.name)}`}
-                className="bg-white border border-slate-200 rounded-lg p-2 flex flex-col items-center text-center hover:border-brand-500 transition-colors"
+                to={`/category/${encodeURIComponent(c.name.toLowerCase())}`}
+                className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md hover:border-brand-500 transition-all group relative overflow-hidden"
               >
-                <div className="h-12 w-12 mb-1.5 shrink-0">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-extrabold bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-full">
+                    {c.tag}
+                  </span>
+                  <span className="text-xs text-brand-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+                    Explore →
+                  </span>
+                </div>
+
+                <div className="h-28 w-full rounded-xl overflow-hidden bg-slate-100 mb-3 border border-slate-100">
                   <img
                     src={c.img}
                     alt={c.name}
-                    className="w-full h-full object-cover rounded-md"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     loading="lazy"
                   />
                 </div>
-                <span className="text-[10px] font-bold text-navy-900 leading-tight">{c.name}</span>
-                <span className="text-[8px] text-slate-500 leading-tight">{c.count}</span>
+
+                <div>
+                  <h3 className="font-extrabold text-navy-900 text-sm group-hover:text-brand-600 transition-colors">
+                    {c.name}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">{c.count}</p>
+                </div>
               </Link>
             ))}
           </div>
         </section>
 
-     {/* Shop by category - single row, rounded bordered cards  Banaya  */}
-     
-
         {/* Best Selling Products */}
         <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-bold text-navy-900">Best Selling Products</h2>
-            <Link to="/categories" className="text-xs font-medium text-brand-500">View all</Link>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-black text-navy-900">Best Selling District Products</h2>
+              <p className="text-xs text-slate-500">Highest ordered construction items across Varanasi & nearby districts</p>
+            </div>
+            <Link to="/search" className="text-xs font-bold text-brand-600 hover:underline">
+              View All Products →
+            </Link>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {bestSelling.map((p) => {
               const inCart = items.some((i) => i.id === p.id);
+
               return (
                 <div
                   key={p.id}
-                  className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col"
+                  className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group"
                 >
-                  <div className="relative aspect-square bg-slate-100">
-                    {p.discount && (
-                      <span className="absolute top-2 left-2 z-10 bg-success text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
-                        {p.discount}
+                  <div>
+                    <div className="relative rounded-xl overflow-hidden bg-slate-50 mb-3 border border-slate-100">
+                      {p.discount && (
+                        <span className="absolute top-2 left-2 z-10 bg-green-600 text-white text-[10px] font-extrabold px-2 py-0.5 rounded shadow-xs">
+                          {p.discount}
+                        </span>
+                      )}
+                      <span className="absolute top-2 right-2 z-10 bg-navy-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded backdrop-blur-xs">
+                        {p.rating}
                       </span>
-                    )}
-                    <img
-                      src={p.img}
-                      alt={p.name}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                  </div>
-                  <div className="p-3 flex flex-col flex-1">
-                    <p className="text-sm font-medium text-navy-900 leading-snug line-clamp-2 mb-1.5">
+                      <img
+                        src={p.img}
+                        alt={p.name}
+                        className="w-full h-40 object-cover group-hover:scale-105 transition-transform duration-500"
+                        loading="lazy"
+                      />
+                    </div>
+
+                    <span className="text-[10px] font-bold text-brand-600 uppercase tracking-wider">
+                      🏷️ {p.brand}
+                    </span>
+                    <h3 className="font-extrabold text-navy-900 text-xs leading-snug line-clamp-2 mt-0.5 mb-2">
                       {p.name}
-                    </p>
-                    <div className="flex items-baseline gap-1.5 mb-3">
-                      <span className="text-sm font-bold text-navy-900">
+                    </h3>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-100">
+                    <div className="flex items-baseline gap-2 mb-3">
+                      <span className="text-base font-black text-navy-900">
                         ₹{p.price.toLocaleString("en-IN")}
                       </span>
                       {p.mrp > p.price && (
@@ -277,15 +312,16 @@ export default function Categories() {
                         </span>
                       )}
                     </div>
+
                     <button
                       onClick={() => addItem(p, 1)}
-                      className={`mt-auto w-full text-sm font-semibold rounded-lg py-2 transition-colors ${
+                      className={`w-full text-xs font-bold rounded-xl py-2.5 transition-all shadow-xs cursor-pointer ${
                         inCart
-                          ? "bg-success text-white"
-                          : "border border-brand-500 text-brand-500 hover:bg-brand-500 hover:text-white"
+                          ? "bg-green-600 text-white"
+                          : "bg-brand-500 hover:bg-brand-600 text-white"
                       }`}
                     >
-                      {inCart ? "Added ✓" : "Add to Cart"}
+                      {inCart ? "Added to Cart ✓" : "+ Add to Cart"}
                     </button>
                   </div>
                 </div>
@@ -294,15 +330,7 @@ export default function Categories() {
           </div>
         </section>
       </main>
-
     </div>
-  );
-}
-function MenuIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M4 6h16M4 12h16M4 18h16" />
-    </svg>
   );
 }
 
@@ -336,39 +364,12 @@ function ScanIcon() {
     </svg>
   );
 }
-function BellIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9Z" />
-      <path d="M13.7 21a2 2 0 0 1-3.4 0" />
-    </svg>
-  );
-}
 function CartIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <circle cx="9" cy="21" r="1" />
       <circle cx="20" cy="21" r="1" />
       <path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" />
-    </svg>
-  );
-}
-function GridIcon({ active }) {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={active ? "#fff" : "#0f172a"} strokeWidth="2">
-      <rect x="3" y="3" width="7" height="7" rx="1.5" />
-      <rect x="14" y="3" width="7" height="7" rx="1.5" />
-      <rect x="3" y="14" width="7" height="7" rx="1.5" />
-      <rect x="14" y="14" width="7" height="7" rx="1.5" />
-    </svg>
-  );
-}
-function DotsIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-slate-500">
-      <circle cx="5" cy="12" r="1.8" />
-      <circle cx="12" cy="12" r="1.8" />
-      <circle cx="19" cy="12" r="1.8" />
     </svg>
   );
 }

@@ -4,40 +4,44 @@ import AuthLayout from "../../layouts/AuthLayout";
 import Button from "../../components/Button";
 import { useAuth } from "../../context/AuthContext";
 
+// Login Page  — User / Vendor / DR / Admin ka universal login screen
 export default function Login() {
   const navigate = useNavigate();
   const { requestOtp, verifyOtp } = useAuth();
 
-  const [step, setStep] = useState("phone"); // "phone" | "otp"
+
+  const [step, setStep] = useState("phone");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [role, setRole] = useState("customer");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Step 1: 10-digit Mobile number submit karke OTP request bhejna
   const handleSendOtp = async (e) => {
     e.preventDefault();
     setError("");
     if (!/^\d{10}$/.test(phone.trim())) {
-      setError("Enter a valid 10-digit phone number");
+      setError("Kripya sahi 10-digit mobile number enter karein");
       return;
     }
     setLoading(true);
     await requestOtp(phone.trim());
     setLoading(false);
-    setStep("otp");
-  };
+    setStep("otp"); 
 
   const handleVerify = async (e) => {
     e.preventDefault();
     setError("");
     if (!/^\d{4,6}$/.test(otp.trim())) {
-      setError("Enter the OTP sent to your phone");
+      setError("Aapke mobile par aaya hua OTP yahan enter karein");
       return;
     }
     setLoading(true);
     try {
       const user = await verifyOtp({ phone: phone.trim(), otp: otp.trim(), role });
+      
+      // Arrow mapping — User ki dynamic role (Admin/DR/Vendor/Customer) ke mutabiq homepage target karega 
       const home =
         user.role === "admin"
           ? "/admin/dashboard"
@@ -46,9 +50,10 @@ export default function Login() {
           : user.role === "vendor"
           ? "/vendor/dashboard"
           : "/";
+          
       navigate(home, { replace: true });
     } catch (err) {
-      setError(err?.message || "Something went wrong, try again");
+      setError(err?.message || "Kuch dikkat aayi, kripya dobara try karein");
     } finally {
       setLoading(false);
     }

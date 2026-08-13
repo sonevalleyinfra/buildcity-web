@@ -25,6 +25,8 @@ const STATUS_STYLE = {
   Cancelled: "bg-red-50 text-red-600 border-red-200",
 };
 
+// Super Admin Dashboard component — Master Control Center for platform operations
+// Admin yahan se DRs assign karta hai, Vendors approve/suspend karta hai, Master Product Catalog manage karta hai, aur Categories/Regions configure karta hai.
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
   const {
@@ -33,27 +35,39 @@ export default function AdminDashboard() {
     orders,
     categories,
     regions,
+    masterProducts = [],
     products,
     stats,
     addDr,
+    updateDr,
     toggleDrActive,
+    addVendor,
+    updateVendor,
     setVendorStatus,
     addCategory,
-    toggleCategoryActive,
+    updateCategory,
     addRegion,
-    toggleRegionActive,
-    addProduct,
-    toggleProductActive,
+    updateRegion,
+    addMasterProduct,
+    updateMasterProduct,
   } = useAdmin();
 
+  // Tab State: Overview, District Reps, Vendors, Products, Orders, Categories, Regions
   const [tab, setTab] = useState("Overview");
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Modals
+  // Modals state (Naya DR, Category, Region, Product add karne ke liye)
   const [showDrForm, setShowDrForm] = useState(false);
   const [showCatForm, setShowCatForm] = useState(false);
   const [showRegionForm, setShowRegionForm] = useState(false);
   const [showProductForm, setShowProductForm] = useState(false);
+
+  // Modals state (Existing DR, Vendor, Product, Category, Region EDIT karne ke liye)
+  const [editingDr, setEditingDr] = useState(null);
+  const [editingVendor, setEditingVendor] = useState(null);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [editingRegion, setEditingRegion] = useState(null);
 
   // Forms
   const [drForm, setDrForm] = useState({ name: "", phone: "", regionId: "" });
@@ -87,6 +101,30 @@ export default function AdminDashboard() {
     alert("District Representative added successfully!");
   };
 
+  const handleUpdateDrSubmit = (e) => {
+    e.preventDefault();
+    if (!editingDr) return;
+    updateDr(editingDr.id, editingDr);
+    setEditingDr(null);
+    alert("DR details updated!");
+  };
+
+  const handleUpdateVendorSubmit = (e) => {
+    e.preventDefault();
+    if (!editingVendor) return;
+    updateVendor(editingVendor.id, editingVendor);
+    setEditingVendor(null);
+    alert("Vendor details updated!");
+  };
+
+  const handleUpdateProductSubmit = (e) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+    updateMasterProduct(editingProduct.id || editingProduct.masterProductId, editingProduct);
+    setEditingProduct(null);
+    alert("Product details updated!");
+  };
+
   const handleAddCategory = (e) => {
     e.preventDefault();
     if (!catForm.name.trim()) return;
@@ -95,65 +133,80 @@ export default function AdminDashboard() {
     setShowCatForm(false);
   };
 
+  const handleUpdateCategorySubmit = (e) => {
+    e.preventDefault();
+    if (!editingCategory) return;
+    updateCategory(editingCategory.id, editingCategory);
+    setEditingCategory(null);
+    alert("Category updated!");
+  };
+
   const handleAddRegion = (e) => {
     e.preventDefault();
     if (!regionForm.name.trim()) return;
-    addRegion({
-      name: regionForm.name,
-      state: regionForm.state,
-      baseDeliveryCharge: Number(regionForm.baseDeliveryCharge),
-    });
+    addRegion({ name: regionForm.name, state: regionForm.state, baseDeliveryCharge: Number(regionForm.baseDeliveryCharge) });
     setRegionForm({ name: "", state: "Uttar Pradesh", baseDeliveryCharge: 49 });
     setShowRegionForm(false);
   };
 
+  const handleUpdateRegionSubmit = (e) => {
+    e.preventDefault();
+    if (!editingRegion) return;
+    updateRegion(editingRegion.id, editingRegion);
+    setEditingRegion(null);
+    alert("District Region updated!");
+  };
+
   const handleAddProduct = (e) => {
     e.preventDefault();
-    if (!productForm.name.trim() || !productForm.categoryId || !productForm.vendorId) return;
-    addProduct({
-      name: productForm.name,
+    if (!productForm.name.trim() || !productForm.categoryId) {
+      alert("Please select Category and enter Product Name!");
+      return;
+    }
+    addMasterProduct({
+      name: productForm.name.trim(),
       categoryId: productForm.categoryId,
-      vendorId: productForm.vendorId,
-      brand: productForm.brand || "Generic",
-      type: productForm.type || "Standard",
-      grade: productForm.grade || "Standard Grade",
-      unit: productForm.unit || "Unit",
-      price: Number(productForm.price) || 0,
-      stockQty: Number(productForm.stockQty) || 0,
-      addedBy: "Admin",
+      vendorId: productForm.vendorId || null,
+      brand: productForm.brand.trim() || "Generic",
+      type: productForm.type.trim() || "Standard",
+      grade: productForm.grade.trim() || "Standard Grade",
+      unit: productForm.unit.trim() || "Unit",
+      price: Number(productForm.price) || 100,
+      stockQty: Number(productForm.stockQty) || 100,
+      addedBy: "Super Admin",
     });
     setProductForm({ name: "", categoryId: "", vendorId: "", brand: "", type: "", grade: "", unit: "50kg Bag", price: "", stockQty: "" });
     setShowProductForm(false);
+    alert("Master Product created successfully!");
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-navy-900 pb-16">
-      {/* Header */}
+    <div className="min-h-screen bg-slate-50 text-navy-900 pb-16 font-sans">
+      {/* Admin Sticky Header hai  */}
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Logo size="sm" />
-            <span className="bg-navy-900 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5 shadow-xs">
-              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-              Super Admin
+            <span className="bg-brand-50 text-brand-700 border border-brand-200 text-xs font-bold px-2.5 py-1 rounded-full">
+              🟢 Super Admin Control Center
             </span>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="text-right hidden sm:block">
               <p className="text-xs font-bold text-navy-900">{user?.name || "System Administrator"}</p>
-              <p className="text-[11px] text-slate-500">Master Control Center</p>
+              <p className="text-[11px] text-slate-500">Master Platform Operations</p>
             </div>
             <button
               onClick={logout}
-              className="text-xs font-semibold text-red-600 bg-red-50 border border-red-200 px-3.5 py-1.5 rounded-xl hover:bg-red-100 transition-colors cursor-pointer"
+              className="text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-3.5 py-1.5 rounded-xl hover:bg-red-100 transition-colors cursor-pointer"
             >
               Logout
             </button>
           </div>
         </div>
 
-        {/* Tabs Bar */}
+        {/* Tabs Bar hai  */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-2 overflow-x-auto py-2 border-t border-slate-100">
           {TABS.map((t) => (
             <button
@@ -176,7 +229,6 @@ export default function AdminDashboard() {
         {/* OVERVIEW TAB */}
         {tab === "Overview" && (
           <div className="space-y-6">
-            {/* Top Metric Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
                 <p className="text-xs font-medium text-slate-500">Total Revenue</p>
@@ -205,7 +257,6 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Quick Action Banner */}
             <div className="bg-linear-to-r from-navy-900 to-slate-900 rounded-2xl p-6 text-white shadow-md flex flex-col sm:flex-row items-center justify-between gap-4">
               <div>
                 <h2 className="text-lg font-bold">Admin Management Shortcuts</h2>
@@ -220,32 +271,10 @@ export default function AdminDashboard() {
                 </button>
               </div>
             </div>
-
-            {/* Recent Orders List */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
-              <h3 className="font-extrabold text-navy-900 text-sm mb-4">Recent Marketplace Transactions</h3>
-              <div className="divide-y divide-slate-100">
-                {orders.map((o) => (
-                  <div key={o.id} className="py-3 flex items-center justify-between text-xs">
-                    <div>
-                      <span className="font-bold text-navy-900">#{o.id}</span>
-                      <span className="text-slate-600 ml-2 font-medium">Customer: {o.customer}</span>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Vendor: {o.vendor} · Date: {o.date}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-extrabold text-navy-900 text-sm">₹{o.amount.toLocaleString("en-IN")}</span>
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${STATUS_STYLE[o.status]}`}>
-                        {o.status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         )}
 
-        {/* DISTRICT REPS (DR) TAB */}
+        {/* DISTRICT REPS (DR) TAB  hai ye */}
         {tab === "District Reps (DR)" && (
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
             <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
@@ -276,7 +305,6 @@ export default function AdminDashboard() {
                       className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
                     />
                   </div>
-
                   <div>
                     <label className="block text-xs font-bold text-navy-900 mb-1">Assigned Mobile Number *</label>
                     <input
@@ -289,7 +317,6 @@ export default function AdminDashboard() {
                       className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
                     />
                   </div>
-
                   <div>
                     <label className="block text-xs font-bold text-navy-900 mb-1">Assign District / Region *</label>
                     <select
@@ -307,14 +334,9 @@ export default function AdminDashboard() {
                     </select>
                   </div>
                 </div>
-
                 <div className="flex justify-end gap-2">
-                  <button type="button" onClick={() => setShowDrForm(false)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl">
-                    Cancel
-                  </button>
-                  <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl shadow-xs hover:bg-brand-600">
-                    Save DR Access
-                  </button>
+                  <button type="button" onClick={() => setShowDrForm(false)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl">Cancel</button>
+                  <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl shadow-xs hover:bg-brand-600">Save DR Access</button>
                 </div>
               </form>
             )}
@@ -350,16 +372,24 @@ export default function AdminDashboard() {
                         {d.vendorCount || 0} Vendors · {d.productCount || 0} Products
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        <button
-                          onClick={() => toggleDrActive(d.id)}
-                          className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
-                            d.status === "ACTIVE"
-                              ? "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100"
-                              : "bg-green-500 text-white border-green-600 hover:bg-green-600"
-                          }`}
-                        >
-                          {d.status === "ACTIVE" ? "Deactivate" : "Activate"}
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setEditingDr({ ...d })}
+                            className="text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer"
+                          >
+                            ✏️ Edit
+                          </button>
+                          <button
+                            onClick={() => toggleDrActive(d.id)}
+                            className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                              d.status === "ACTIVE"
+                                ? "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100"
+                                : "bg-green-500 text-white border-green-600 hover:bg-green-600"
+                            }`}
+                          >
+                            {d.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -375,7 +405,7 @@ export default function AdminDashboard() {
             <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
               <div>
                 <h2 className="text-base font-extrabold text-navy-900">Vendor Management</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Approve or Suspend marketplace vendors. Approved vendors can log in via Mobile OTP.</p>
+                <p className="text-xs text-slate-500 mt-0.5">Approve, Edit, or Suspend marketplace vendors. Approved vendors can log in via Mobile OTP.</p>
               </div>
             </div>
 
@@ -387,8 +417,8 @@ export default function AdminDashboard() {
                     <th className="py-3 px-4">Owner & Mobile</th>
                     <th className="py-3 px-4">District</th>
                     <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Commission</th>
-                    <th className="py-3 px-4 text-right">Approval Actions</th>
+                    <th className="py-3 px-4">Commission Rate</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -399,15 +429,25 @@ export default function AdminDashboard() {
                         <p className="font-semibold text-slate-800">{v.ownerName}</p>
                         <p className="text-[11px] text-slate-500">📱 {v.phone}</p>
                       </td>
-                      <td className="py-3.5 px-4 font-medium text-slate-700">{v.regionName || "Varanasi"}</td>
+                      <td className="py-3.5 px-4">
+                        <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-semibold">
+                          📍 {v.regionName}
+                        </span>
+                      </td>
                       <td className="py-3.5 px-4">
                         <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${STATUS_STYLE[v.status]}`}>
                           {v.status}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 font-semibold text-slate-700">{v.commissionRate}%</td>
+                      <td className="py-3.5 px-4 font-bold text-navy-900">{v.commissionRate || 10}%</td>
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setEditingVendor({ ...v })}
+                            className="text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer"
+                          >
+                            ✏️ Edit
+                          </button>
                           {v.status !== "APPROVED" && (
                             <button
                               onClick={() => setVendorStatus(v.id, "APPROVED")}
@@ -422,14 +462,6 @@ export default function AdminDashboard() {
                               className="text-[11px] font-semibold border border-red-300 text-red-600 hover:bg-red-50 rounded-lg px-2.5 py-1.5 cursor-pointer"
                             >
                               Suspend
-                            </button>
-                          )}
-                          {v.status === "SUSPENDED" && (
-                            <button
-                              onClick={() => setVendorStatus(v.id, "APPROVED")}
-                              className="text-[11px] font-semibold border border-brand-500 text-brand-500 hover:bg-brand-50 rounded-lg px-2.5 py-1.5 cursor-pointer"
-                            >
-                              Reinstate
                             </button>
                           )}
                         </div>
@@ -448,18 +480,15 @@ export default function AdminDashboard() {
             <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
               <div>
                 <h2 className="text-base font-extrabold text-navy-900">Master Product Catalog</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Manage all products listed across all districts and vendors.</p>
+                <p className="text-xs text-slate-500 mt-0.5">Platform master products created by Admin & DRs for vendor store selection.</p>
               </div>
-              <button
-                onClick={() => setShowProductForm((v) => !v)}
-                className="bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer"
-              >
-                + Add Master Product
+              <button onClick={() => setShowProductForm((v) => !v)} className="bg-brand-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs">
+                + Create Master Product
               </button>
             </div>
 
             {showProductForm && (
-              <form onSubmit={handleAddProduct} className="p-5 border-b border-slate-200 bg-slate-50 space-y-3.5">
+              <form onSubmit={handleAddProduct} className="p-5 border-b border-slate-200 bg-brand-50/30 space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-navy-900 mb-1">Product Title *</label>
@@ -490,75 +519,22 @@ export default function AdminDashboard() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-navy-900 mb-1">Vendor *</label>
-                    <select
-                      required
-                      value={productForm.vendorId}
-                      onChange={(e) => setProductForm({ ...productForm, vendorId: e.target.value })}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none"
-                    >
-                      <option value="">-- Select Vendor --</option>
-                      {vendors.map((v) => (
-                        <option key={v.id} value={v.id}>{v.shopName}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
                     <label className="block text-xs font-bold text-navy-900 mb-1">Brand</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. UltraTech"
-                      value={productForm.brand}
-                      onChange={(e) => setProductForm({ ...productForm, brand: e.target.value })}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none"
-                    />
+                    <input type="text" placeholder="e.g. UltraTech" value={productForm.brand} onChange={(e) => setProductForm({ ...productForm, brand: e.target.value })} className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none" />
                   </div>
-
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Type</label>
+                    <input type="text" placeholder="e.g. PPC Cement" value={productForm.type} onChange={(e) => setProductForm({ ...productForm, type: e.target.value })} className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none" />
+                  </div>
                   <div>
                     <label className="block text-xs font-bold text-navy-900 mb-1">Grade</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. OPC 53 Grade"
-                      value={productForm.grade}
-                      onChange={(e) => setProductForm({ ...productForm, grade: e.target.value })}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-navy-900 mb-1">Price (₹) *</label>
-                    <input
-                      type="number"
-                      required
-                      placeholder="390"
-                      value={productForm.price}
-                      onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-navy-900 mb-1">Stock Qty</label>
-                    <input
-                      type="number"
-                      placeholder="500"
-                      value={productForm.stockQty}
-                      onChange={(e) => setProductForm({ ...productForm, stockQty: e.target.value })}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none"
-                    />
+                    <input type="text" placeholder="e.g. OPC 53 Grade" value={productForm.grade} onChange={(e) => setProductForm({ ...productForm, grade: e.target.value })} className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none" />
                   </div>
                 </div>
 
                 <div className="flex justify-end gap-2 pt-2">
-                  <button type="button" onClick={() => setShowProductForm(false)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl">
-                    Cancel
-                  </button>
-                  <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl shadow-xs hover:bg-brand-600">
-                    Save Master Product
-                  </button>
+                  <button type="button" onClick={() => setShowProductForm(false)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl">Cancel</button>
+                  <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl shadow-xs hover:bg-brand-600">Save Master Product</button>
                 </div>
               </form>
             )}
@@ -567,31 +543,30 @@ export default function AdminDashboard() {
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase">
-                    <th className="py-3 px-4">Product</th>
+                    <th className="py-3 px-4">Product Details</th>
                     <th className="py-3 px-4">Category & Brand</th>
                     <th className="py-3 px-4">Type & Grade</th>
-                    <th className="py-3 px-4">Vendor</th>
-                    <th className="py-3 px-4">Price / Unit</th>
-                    <th className="py-3 px-4">Stock Status</th>
+                    <th className="py-3 px-4">Suggested Price</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {products.map((p) => (
+                  {masterProducts.map((p) => (
                     <tr key={p.id} className="hover:bg-slate-50">
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
                           <img src={p.imageUrl} alt={p.name} className="w-10 h-10 object-cover rounded-lg border border-slate-200 shrink-0" />
                           <div>
                             <p className="font-bold text-navy-900">{p.name}</p>
-                            <p className="text-[10px] text-slate-400">Added by: {p.addedBy || "Admin"}</p>
+                            <p className="text-[10px] text-slate-400">Packaging: {p.unit}</p>
                           </div>
                         </div>
                       </td>
                       <td className="py-3.5 px-4">
-                        <span className="bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded text-[11px]">
-                          {p.categoryName || "General"}
+                        <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-semibold">
+                          {p.categoryName}
                         </span>
-                        <p className="text-slate-800 font-medium mt-0.5">🏷️ {p.brand}</p>
+                        <p className="text-slate-700 font-medium mt-0.5">🏷️ {p.brand}</p>
                       </td>
                       <td className="py-3.5 px-4">
                         <p className="font-semibold text-slate-800">{p.type}</p>
@@ -599,15 +574,17 @@ export default function AdminDashboard() {
                           Grade: {p.grade}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 font-semibold text-navy-900">{p.vendorName}</td>
                       <td className="py-3.5 px-4">
-                        <span className="font-extrabold text-navy-900 text-sm">₹{p.price}</span>
+                        <span className="font-extrabold text-navy-900 text-sm">₹{p.suggestedPrice || p.price}</span>
                         <span className="text-[11px] text-slate-500"> /{p.unit}</span>
                       </td>
-                      <td className="py-3.5 px-4">
-                        <span className={`px-2 py-1 rounded text-xs font-semibold ${p.stockQty > 0 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}>
-                          {p.stockQty} in stock
-                        </span>
+                      <td className="py-3.5 px-4 text-right">
+                        <button
+                          onClick={() => setEditingProduct({ ...p })}
+                          className="text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer"
+                        >
+                          ✏️ Edit
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -625,16 +602,11 @@ export default function AdminDashboard() {
               {orders.map((o) => (
                 <div key={o.id} className="py-3.5 flex items-center justify-between text-xs">
                   <div>
-                    <span className="font-bold text-navy-900 text-sm">#{o.id}</span>
-                    <span className="text-slate-600 ml-2 font-medium">Customer: {o.customer}</span>
-                    <p className="text-[11px] text-slate-500 mt-0.5">Vendor: {o.vendor} · Date: {o.date}</p>
+                    <span className="font-extrabold text-navy-900">{o.id}</span>
+                    <span className={`ml-2 px-2 py-0.5 rounded text-[10px] font-bold border ${STATUS_STYLE[o.status]}`}>{o.status}</span>
+                    <p className="text-slate-500 mt-0.5">Vendor: {o.vendorName} · Total Amount: ₹{o.amount.toLocaleString()}</p>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-extrabold text-navy-900 text-sm">₹{o.amount.toLocaleString("en-IN")}</span>
-                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${STATUS_STYLE[o.status]}`}>
-                      {o.status}
-                    </span>
-                  </div>
+                  <span className="text-slate-400 text-[11px]">{o.date}</span>
                 </div>
               ))}
             </div>
@@ -646,7 +618,7 @@ export default function AdminDashboard() {
           <div className="space-y-4">
             <div className="flex items-center justify-between bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
               <div>
-                <h2 className="text-base font-extrabold text-navy-900">Product Categories & GST Rates</h2>
+                <h2 className="text-base font-extrabold text-navy-900">Product Categories</h2>
                 <p className="text-xs text-slate-500">Configure tax rates and product count by category.</p>
               </div>
               <button onClick={() => setShowCatForm((v) => !v)} className="bg-brand-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs">
@@ -682,9 +654,17 @@ export default function AdminDashboard() {
                     <h3 className="font-bold text-navy-900 text-sm">{c.name}</h3>
                     <p className="text-xs text-slate-500 mt-0.5">{c.productCount} products listed</p>
                   </div>
-                  <span className="bg-brand-50 text-brand-700 text-xs font-bold px-2.5 py-1 rounded-full border border-brand-200">
-                    {c.gstRate}% GST
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="bg-brand-50 text-brand-700 text-xs font-bold px-2.5 py-1 rounded-full border border-brand-200">
+                      {c.gstRate}% GST
+                    </span>
+                    <button
+                      onClick={() => setEditingCategory({ ...c })}
+                      className="text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1 cursor-pointer"
+                    >
+                      ✏️
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -727,16 +707,265 @@ export default function AdminDashboard() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {regions.map((r) => (
-                <div key={r.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-                  <h3 className="font-bold text-navy-900 text-sm">📍 {r.name}</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">{r.state}</p>
-                  <p className="text-xs font-bold text-brand-600 mt-2">Base Delivery: ₹{r.baseDeliveryCharge}</p>
+                <div key={r.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-navy-900 text-sm">📍 {r.name}</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">{r.state}</p>
+                    <p className="text-xs font-bold text-brand-600 mt-1">Delivery: ₹{r.baseDeliveryCharge}</p>
+                  </div>
+                  <button
+                    onClick={() => setEditingRegion({ ...r })}
+                    className="text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer"
+                  >
+                    ✏️ Edit
+                  </button>
                 </div>
               ))}
             </div>
           </div>
         )}
       </main>
+
+      {/* EDIT MODAL: DR */}
+      {editingDr && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <h3 className="font-bold text-navy-900 text-base">Edit District Representative (DR)</h3>
+              <button onClick={() => setEditingDr(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none">✕</button>
+            </div>
+            <form onSubmit={handleUpdateDrSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">DR Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingDr.name}
+                  onChange={(e) => setEditingDr({ ...editingDr, name: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Assigned Mobile Number *</label>
+                <input
+                  type="tel"
+                  required
+                  maxLength={10}
+                  value={editingDr.phone}
+                  onChange={(e) => setEditingDr({ ...editingDr, phone: e.target.value.replace(/\D/g, "") })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Assigned District Region *</label>
+                <select
+                  value={editingDr.regionId}
+                  onChange={(e) => setEditingDr({ ...editingDr, regionId: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                >
+                  {regions.map((r) => (
+                    <option key={r.id} value={r.id}>{r.name} ({r.state})</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onClick={() => setEditingDr(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs">Save DR Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT MODAL: VENDOR */}
+      {editingVendor && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <h3 className="font-bold text-navy-900 text-base">Edit Vendor Details</h3>
+              <button onClick={() => setEditingVendor(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none">✕</button>
+            </div>
+            <form onSubmit={handleUpdateVendorSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Shop / Business Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingVendor.shopName}
+                  onChange={(e) => setEditingVendor({ ...editingVendor, shopName: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Owner Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingVendor.ownerName}
+                  onChange={(e) => setEditingVendor({ ...editingVendor, ownerName: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Mobile Phone Number *</label>
+                <input
+                  type="tel"
+                  required
+                  maxLength={10}
+                  value={editingVendor.phone}
+                  onChange={(e) => setEditingVendor({ ...editingVendor, phone: e.target.value.replace(/\D/g, "") })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Commission Rate (%)</label>
+                <input
+                  type="number"
+                  value={editingVendor.commissionRate}
+                  onChange={(e) => setEditingVendor({ ...editingVendor, commissionRate: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onClick={() => setEditingVendor(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs">Save Vendor Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT MODAL: MASTER PRODUCT */}
+      {editingProduct && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <h3 className="font-bold text-navy-900 text-base">Edit Master Product Catalog</h3>
+              <button onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none">✕</button>
+            </div>
+            <form onSubmit={handleUpdateProductSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Product Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingProduct.name}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-navy-900 mb-1">Brand</label>
+                  <input
+                    type="text"
+                    value={editingProduct.brand}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, brand: e.target.value })}
+                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-navy-900 mb-1">Grade / Spec</label>
+                  <input
+                    type="text"
+                    value={editingProduct.grade}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, grade: e.target.value })}
+                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Suggested Price (₹) *</label>
+                <input
+                  type="number"
+                  required
+                  value={editingProduct.suggestedPrice || editingProduct.price}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, suggestedPrice: e.target.value, price: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onClick={() => setEditingProduct(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs">Save Product Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT MODAL: CATEGORY hai ye  */}
+      {editingCategory && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <h3 className="font-bold text-navy-900 text-base">Edit Category</h3>
+              <button onClick={() => setEditingCategory(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none">✕</button>
+            </div>
+            <form onSubmit={handleUpdateCategorySubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Category Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingCategory.name}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">GST Rate (%)</label>
+                <input
+                  type="number"
+                  value={editingCategory.gstRate}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, gstRate: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onClick={() => setEditingCategory(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs">Save Category</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT MODAL: REGION */}
+      {editingRegion && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <h3 className="font-bold text-navy-900 text-base">Edit District Region</h3>
+              <button onClick={() => setEditingRegion(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none">✕</button>
+            </div>
+            <form onSubmit={handleUpdateRegionSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">District Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingRegion.name}
+                  onChange={(e) => setEditingRegion({ ...editingRegion, name: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Base Delivery Charge (₹)</label>
+                <input
+                  type="number"
+                  value={editingRegion.baseDeliveryCharge}
+                  onChange={(e) => setEditingRegion({ ...editingRegion, baseDeliveryCharge: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onClick={() => setEditingRegion(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs">Save District Region</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -21,7 +21,7 @@ export function OrderProvider({ children }) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
   }, [orders]);
 
-  // TEMPORARY MOCK - replace with POST /api/v1/orders jab backend ban jaye ga tab  connect with real database 
+  // TEMPORARY MOCK hai  - replace with POST /api/v1/orders jab backend ban jaye ga tab  connect with real database 
   const placeOrder = ({ items, address, total }) => {
     const order = {
       id: "BC" + Math.floor(10000 + Math.random() * 89999),

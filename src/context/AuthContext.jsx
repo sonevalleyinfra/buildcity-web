@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
+// AuthContext setup - poore app ka user state, login, OTP verify aur dynamic roles (Customer, DR, Vendor, Admin) yahan se handle hota hai
 const AuthContext = createContext(null);
 const STORAGE_KEY = "buildcity_auth";
 
@@ -7,6 +8,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // App start hone par check karo ki kya koi user pehle se logged in hai (localStorage se load karo)
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
@@ -19,23 +21,26 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
+  // User details ko state aur localStorage dono mein safe-save karne ke liye helper function
   const persist = (userObj) => {
     setUser(userObj);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(userObj));
   };
 
-  // TEMPORARY MOCK — replace with POST /api/v1/auth/otp/request once backend exists
+  
   const requestOtp = async (phone) => {
     await new Promise((r) => setTimeout(r, 600));
     if (process.env.NODE_ENV !== "production") {
-      console.log(`[DEV] OTP for ${phone}: 123456 (any code works in dev)`);
+      console.log(`[DEV] OTP for ${phone}: 123456 (dev mein koi bhi 6-digit OTP chalega)`);
     }
     return true;
   };
 
-  // TEMPORARY MOCK — replace with POST /api/v1/auth/otp/verify once backend exists.
-  // Dev-only: role comes from an explicit selector on the login screen so all
-  // three roles (customer/vendor/admin) can be tested without a real backend.
+  // OTP Verify & Dynamic Role Matching hai ye :
+  // 1. Mobile number '9999999999' -> Direct Super Admin
+  // 2. Mobile number DR list mein ACTIVE mila - District Representative (DR)
+  // 3. Mobile number Vendor list mein mila - Checks status: APPROVED, PENDING
+  // 4. Default -> Standard Customer hamesha rahega 
   const verifyOtp = async ({ phone, otp, role = "customer", name }) => {
     await new Promise((r) => setTimeout(r, 600));
 
@@ -44,7 +49,7 @@ export function AuthProvider({ children }) {
     let drMatch = null;
     let vendorMatch = null;
 
-    // 1. Check if phone is an assigned active DR
+    //
     try {
       const savedDrs = localStorage.getItem("buildcity_admin_drs");
       const drs = savedDrs ? JSON.parse(savedDrs) : [];
@@ -53,7 +58,7 @@ export function AuthProvider({ children }) {
       drMatch = null;
     }
 
-    // 2. Check if phone belongs to a registered Vendor
+   
     try {
       const savedVendors = localStorage.getItem("buildcity_admin_vendors");
       const vendors = savedVendors ? JSON.parse(savedVendors) : [];
@@ -62,17 +67,17 @@ export function AuthProvider({ children }) {
       vendorMatch = null;
     }
 
-    // Evaluate Role & Status
+    // Step 3: Role resolution and approval status check karo 
     if (cleanPhone === "9999999999" || cleanPhone === "0000000000") {
       assignedRole = "admin";
     } else if (drMatch) {
       assignedRole = "dr";
     } else if (vendorMatch) {
       if (vendorMatch.status === "PENDING") {
-        throw new Error("Your vendor account is pending approval by DR or Admin.");
+        throw new Error("Aapka vendor account abhi DR ya Admin dwara approval ke liye pending hai.");
       }
       if (vendorMatch.status === "SUSPENDED") {
-        throw new Error("Your vendor account has been suspended. Contact support.");
+        throw new Error("Aapka vendor account suspend kar diya gaya hai. Support se sampark karein.");
       }
       if (vendorMatch.status === "APPROVED") {
         assignedRole = "vendor";
@@ -80,6 +85,7 @@ export function AuthProvider({ children }) {
     } else if (cleanPhone === "8888888888") {
       assignedRole = "vendor";
     }
+
 
     const defaultName =
       assignedRole === "admin"
@@ -102,11 +108,7 @@ export function AuthProvider({ children }) {
     return userObj;
   };
 
-  // TEMPORARY MOCK — replace body with a real
-  // POST /api/v1/auth/login call once the backend exists.
-  // Dev shortcut: email containing "vendor" or "admin" logs in
-  // with that role, so you can preview all three dashboards
-  // before the backend assigns real roles.
+  
   const login = async ({ email, password }) => {
     await new Promise((r) => setTimeout(r, 600));
     let role = "customer";
@@ -123,7 +125,7 @@ export function AuthProvider({ children }) {
     return userObj;
   };
 
-  // TEMPORARY MOCK — replace with POST /api/v1/auth/register
+  // New Customer Register function
   const register = async ({ name, email }) => {
     await new Promise((r) => setTimeout(r, 600));
     const userObj = {
@@ -136,12 +138,13 @@ export function AuthProvider({ children }) {
     return userObj;
   };
 
+  
   const logout = () => {
     setUser(null);
     localStorage.removeItem(STORAGE_KEY);
   };
 
-  // TEMPORARY MOCK — replace with PUT /api/v1/users/me once backend exists
+  // Profile Update helper hai  — user ki info (Name, Email) update karke save karta hai
   const updateProfile = (updates) => {
     const updated = { ...user, ...updates };
     persist(updated);
@@ -157,8 +160,9 @@ export function AuthProvider({ children }) {
   );
 }
 
+// Custom hook -> useAuth() dwara poore app me auth state use karo
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
+  if (!ctx) throw new Error("useAuth ko sirf AuthProvider ke andar hi use karein");
   return ctx;
 }

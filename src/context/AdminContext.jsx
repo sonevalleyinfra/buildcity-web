@@ -250,6 +250,7 @@ const seedProducts = [
   },
 ];
 
+// Helper function: LocalStorage se data load karo, agar nahi mile toh default seed array return karo
 function loadOrSeed(key, seed) {
   const saved = localStorage.getItem(key);
   if (saved) {
@@ -263,6 +264,7 @@ function loadOrSeed(key, seed) {
 }
 
 export function AdminProvider({ children }) {
+  // Master Platform Data States - DRs, Vendors, Orders, Categories, Regions, Master Products, Vendor Listings
   const [drs, setDrs] = useState(() => loadOrSeed(STORAGE_KEY + "_drs", seedDrs));
   const [vendors, setVendors] = useState(() => loadOrSeed(STORAGE_KEY + "_vendors", seedVendors));
   const [orders] = useState(() => loadOrSeed(STORAGE_KEY + "_orders", seedOrders));
@@ -271,6 +273,7 @@ export function AdminProvider({ children }) {
   const [masterProducts, setMasterProducts] = useState(() => loadOrSeed(STORAGE_KEY + "_master_products", seedMasterProducts));
   const [products, setProducts] = useState(() => loadOrSeed(STORAGE_KEY + "_products", seedProducts));
 
+  // Auto-sync states to localStorage jab bhi data change ho
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY + "_drs", JSON.stringify(drs));
   }, [drs]);
@@ -284,9 +287,13 @@ export function AdminProvider({ children }) {
     localStorage.setItem(STORAGE_KEY + "_regions", JSON.stringify(regions));
   }, [regions]);
   useEffect(() => {
+    localStorage.setItem(STORAGE_KEY + "_master_products", JSON.stringify(masterProducts));
+  }, [masterProducts]);
+  useEffect(() => {
     localStorage.setItem(STORAGE_KEY + "_products", JSON.stringify(products));
   }, [products]);
 
+  // 1. Naya DR (District Representative) add karne wala function
   const addDr = (drData) => {
     const regionObj = regions.find((r) => r.id === drData.regionId) || {};
     const newDr = {
@@ -304,6 +311,7 @@ export function AdminProvider({ children }) {
     return newDr;
   };
 
+  // DR ko Active/Inactive toggle karne wala function
   const toggleDrActive = (id) => {
     setDrs((prev) =>
       prev.map((d) =>
@@ -312,6 +320,7 @@ export function AdminProvider({ children }) {
     );
   };
 
+  // 2. Naya Vendor add karne wala function (DR ya Admin dwara)
   const addVendor = (vendorData) => {
     const regionObj = regions.find((r) => r.id === vendorData.regionId) || {};
     const newVendor = {
@@ -337,6 +346,7 @@ export function AdminProvider({ children }) {
     return newVendor;
   };
 
+  // Vendor status (APPROVED, PENDING, SUSPENDED) set karne wala helper
   const setVendorStatus = (id, status) => {
     setVendors((prev) => prev.map((v) => (v.id === id ? { ...v, status } : v)));
   };
@@ -451,6 +461,63 @@ export function AdminProvider({ children }) {
     );
   };
 
+  const updateDr = (id, updates) => {
+    const regionObj = updates.regionId ? regions.find((r) => r.id === updates.regionId) || {} : {};
+    setDrs((prev) =>
+      prev.map((d) =>
+        d.id === id
+          ? {
+              ...d,
+              ...updates,
+              regionName: regionObj.name || updates.regionName || d.regionName,
+            }
+          : d
+      )
+    );
+  };
+
+  const updateVendor = (id, updates) => {
+    const regionObj = updates.regionId ? regions.find((r) => r.id === updates.regionId) || {} : {};
+    setVendors((prev) =>
+      prev.map((v) =>
+        v.id === id
+          ? {
+              ...v,
+              ...updates,
+              regionName: regionObj.name || updates.regionName || v.regionName,
+            }
+          : v
+      )
+    );
+  };
+
+  const updateMasterProduct = (id, updates) => {
+    const catObj = updates.categoryId ? categories.find((c) => c.id === updates.categoryId) || {} : {};
+    setMasterProducts((prev) =>
+      prev.map((mp) =>
+        mp.id === id
+          ? {
+              ...mp,
+              ...updates,
+              categoryName: catObj.name || updates.categoryName || mp.categoryName,
+            }
+          : mp
+      )
+    );
+  };
+
+  const updateCategory = (id, updates) => {
+    setCategories((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, ...updates } : c))
+    );
+  };
+
+  const updateRegion = (id, updates) => {
+    setRegions((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, ...updates } : r))
+    );
+  };
+
   const stats = {
     totalOrders: orders.length,
     totalRevenue: orders
@@ -475,18 +542,23 @@ export function AdminProvider({ children }) {
         products,
         stats,
         addDr,
+        updateDr,
         toggleDrActive,
         addVendor,
+        updateVendor,
         setVendorStatus,
         addCategory,
+        updateCategory,
         toggleCategoryActive,
         addRegion,
+        updateRegion,
         toggleRegionActive,
         addMasterProduct,
+        updateMasterProduct,
         assignMasterProductToVendor,
         updateVendorProductListing,
         removeVendorProductListing,
-        addProduct: addMasterProduct, // Fallback alias
+        addProduct: addMasterProduct, // Fallback alias hai ye 
         toggleProductActive,
       }}
     >

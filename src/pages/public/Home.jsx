@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useCart } from "../../context/CartContext";
+import { useAdmin } from "../../context/AdminContext";
 import Navbar from "../../components/Navbar";
 import RegionPicker from "../../components/RegionPicker";
-import NotificationPanel from "../../components/NotificationPanel"; 
-// Category Tiles array  Homepage par category grid ke liye High-Res images ke saath
+import NotificationPanel from "../../components/NotificationPanel";
+
 const categoryTiles = [
   { name: "Paints", bg: "#EDE7F6", img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=500&q=80" },
   { name: "Electronics", bg: "#F1F5F9", img: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=500&q=80" },
@@ -14,7 +15,6 @@ const categoryTiles = [
   { name: "Plumbing", bg: "#EFF6FF", img: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=500&q=80" },
 ];
 
-// Top Brands array - District brand partners grid me rendering ke liye (UltraTech, Asian Paints, Tata Tiscon, etc.)
 const brands = [
   { name: "UltraTech", category: "Cement", short: "UltraTech", icon: "🏗️", color: "#F59E0B" },
   { name: "Asian Paints", category: "Paints", short: "Asian Paints", icon: "🎨", color: "#1E5FD9" },
@@ -27,36 +27,11 @@ const brands = [
   { name: "Kajaria", category: "Ceramics", short: "Kajaria", icon: "🧱", color: "#D97706" },
 ];
 
-// Building Material Categories array - Bulk pricing tags ke saath
-const categories = [
-  { name: "Cement", img: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=300&q=80", tag: "Bulk Prices" },
-  { name: "Tiling", img: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80", tag: "Bulk Prices" },
-  { name: "Painting", img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=300&q=80" },
-  { name: "Water Proofing", img: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=300&q=80" },
-  { name: "Plywood, MDF & HDHMR", img: "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=300&q=80" },
-  { name: "Adhesives", img: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=300&q=80" },
-  { name: "Wires, MCB & Boards", img: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=300&q=80" },
-  { name: "Kitchen Sinks & Faucets", img: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80" },
-  { name: "Sanitary & Bath Fittings", img: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80" },
-  { name: "Switches & Sockets", img: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=300&q=80" },
-  { name: "Hardware & Handles", img: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=300&q=80" },
-  { name: "Lighting", img: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=300&q=80" },
-];
-
-// Features - Fast Delivery, Verified Brands, Best Prices, Support
-const features = [
-  { title: "Fast Delivery", sub: "Across Varanasi", icon: "🚚", bg: "#DBEAFE" },
-  { title: "Verified", sub: "Trusted Brands", icon: "✅", bg: "#DCFCE7" },
-  { title: "Best Price", sub: "Guaranteed", icon: "🏷️", bg: "#FEF3C7" },
-  { title: "Support", sub: "24/7 Help", icon: "🎧", bg: "#EDE9FE" },
-];
-
 const services = [
   { title: "Site Visit", sub: "Professional Inspection", icon: "👷" },
   { title: "Web Development", sub: "Get your business online", icon: "💻" },
 ];
 
-// Hero Banners list - 4s timer slider ke saath change hone wale banners
 const banners = [
   {
     tag: "BUILD YOUR DREAM SPACE",
@@ -75,68 +50,22 @@ const banners = [
   },
 ];
 
-// Deals of the week products - Discount tags & cashback offers
-const deals = [
-  {
-    id: "deal-1",
-    name: "UltraTech Super PPC Cement, 50 Kg Bag",
-    brand: "UltraTech",
-    img: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=300&q=80",
-    mrp: 390,
-    price: 360,
-    discount: "8% OFF",
-    cashback: "₹1000 Cashback",
-  },
-  {
-    id: "deal-2",
-    name: "Asian Paints Royale Luxury Emulsion, 20L",
-    brand: "Asian Paints",
-    img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=300&q=80",
-    mrp: 3250,
-    price: 2950,
-    discount: "9% OFF",
-    cashback: "₹1000 Cashback",
-  },
-  {
-    id: "deal-3",
-    name: "Tata Tiscon 550D TMT Steel Rebar, 12mm",
-    brand: "Tata Tiscon",
-    img: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=300&q=80",
-    mrp: 720,
-    price: 650,
-    discount: "10% OFF",
-    cashback: "₹1000 Cashback",
-  },
-  {
-    id: "deal-4",
-    name: "Tractor Uno Acrylic Distemper Paint, White, 20kg",
-    brand: "Tractor",
-    img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=300&q=80",
-    mrp: 1580,
-    price: 980,
-    discount: "38% OFF",
-    cashback: "₹1000 Cashback",
-  },
-  {
-    id: "deal-5",
-    name: "Astral CPVC Pipe 1 Inch, Heavy Duty",
-    brand: "Astral",
-    img: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=300&q=80",
-    mrp: 450,
-    price: 320,
-    discount: "28% OFF",
-    cashback: "₹1000 Cashback",
-  },
-];
-
-// Main Homepage component
+// Main Customer Homepage Component — Live DB deals, category tiles, brand selection, aur structural skeleton loading
 export default function Home() {
   const { user } = useAuth();
   const { addItem, count } = useCart();
+  const { products = [], masterProducts = [], productsLoading } = useAdmin();
   const navigate = useNavigate();
+
+  // Supabase DB se Live Approved Vendor Products aur Master Catalog items combine karein (Strictly no seed 390 price fallbacks)
+  const liveVendorApproved = products.filter(
+    (p) => p.approvalStatus === "APPROVED" || p.approvalStatus === undefined || p.isActive === true
+  );
+
+  const liveDisplayProducts = liveVendorApproved;
+
   const [slide, setSlide] = useState(0);
-  const [qty, setQty] = useState(deals.map(() => 1));
-  const [justAdded, setJustAdded] = useState(deals.map(() => false));
+  const [justAddedId, setJustAddedId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   const handleSearch = (e) => {
@@ -151,42 +80,46 @@ export default function Home() {
     return () => clearInterval(id);
   }, []);
 
-  const changeQty = (i, delta) => {
-    setQty((q) => q.map((v, idx) => (idx === i ? Math.max(1, v + delta) : v)));
-  };
-
-  const handleAdd = (i, deal) => {
-    addItem(deal, qty[i]);
-    setJustAdded((prev) => prev.map((v, idx) => (idx === i ? true : v)));
-    setTimeout(() => {
-      setJustAdded((prev) => prev.map((v, idx) => (idx === i ? false : v)));
-    }, 1500);
+  const handleAddToCart = (p) => {
+    addItem(
+      {
+        id: p.id,
+        name: p.name,
+        price: p.price || p.suggestedPrice,
+        brand: p.brand,
+        img: p.imageUrl,
+        vendorName: p.vendorName || "Master Catalog",
+      },
+      1
+    );
+    setJustAddedId(p.id);
+    setTimeout(() => setJustAddedId(null), 1500);
   };
 
   return (
-    <div className="min-h-screen bg-surface pb-24 sm:pb-0">
-      {/* Desktop header - shared Navbar (logo, nav links, search, cart) */}
+    <div className="min-h-screen bg-surface pb-24 sm:pb-0 font-sans">
+      {/* Desktop header */}
       <div className="hidden lg:block">
         <Navbar />
       </div>
 
-      {/* Mobile header - navy hero + floating search card */}
+      {/* Mobile header */}
       <div className="lg:hidden">
         <div className="relative bg-navy-900 pt-4 pb-14 px-4 ">
           <div className="flex items-center justify-end gap-4">
             <Link to="/cart" className="relative text-white">
               <CartIcon />
               {count > 0 && (
-                <span className="absolute -top-1.5 -right-2 h-4 w-4 rounded-full bg-brand-500 text-white text-[10px] flex items-center justify-center">
+                <span className="absolute -top-1.5 -right-2 h-4 w-4 rounded-full bg-brand-500 text-white text-[10px] flex items-center justify-center font-bold">
                   {count}
                 </span>
               )}
             </Link>
-         <NotificationPanel className="relative text-white" />
+            <NotificationPanel className="relative text-white" />
           </div>
         </div>
 
-        {/* White card */}
+        {/* White header card */}
         <div className="max-w-6xl mx-auto px-8 -mt-12 relative z-10">
           <div className="relative">
             <div className="bg-white rounded-2xl shadow-lg px-4 py-4 flex flex-col items-left text-left">
@@ -196,7 +129,7 @@ export default function Home() {
                   Build <span className="text-brand-500">City</span>
                 </span>
               </div>
-           <RegionPicker
+              <RegionPicker
                 trigger={(r) => (
                   <span className="flex items-center gap-1 text-xs text-slate-500 mt-1">
                     <PinIcon />
@@ -208,7 +141,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Search bar + scan */}
+          {/* Search bar */}
           <form onSubmit={handleSearch} className="flex items-center gap-2 mt-3">
             <div className="flex-1 flex items-center gap-2 rounded-xl border border-slate-200 bg-white shadow-md px-3.5 py-3">
               <SearchIcon />
@@ -231,7 +164,7 @@ export default function Home() {
       </div>
 
       <main className="max-w-6xl mx-auto px-4 pt-5 space-y-8">
-        {/* Hero banner Hai */}
+        {/* Hero banner */}
         <div className="relative overflow-hidden rounded-2xl bg-navy-900 h-44 sm:h-56">
           {banners.map((b, i) => (
             <div
@@ -251,102 +184,65 @@ export default function Home() {
                     </span>
                   ))}
                 </h1>
-                <button className="bg-white text-navy-900 text-xs font-semibold rounded-xl px-4 py-2 flex items-center gap-1.5 w-fit">
-                  Shop Now <span>→</span>
-                </button>
               </div>
-              <div className="flex-1 relative overflow-hidden">
-                <img
-                  src={b.img}
-                  alt={b.title[0]}
-                  className="absolute inset-0 w-full h-full object-cover"
-                  style={{ clipPath: "polygon(20% 0, 100% 0, 100% 100%, 0% 100%)" }}
-                />
+              <div className="flex-1 relative hidden sm:block">
+                <img src={b.img} alt="Banner" className="w-full h-full object-cover" />
               </div>
             </div>
           ))}
 
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-20">
+          <div className="absolute bottom-3 left-6 flex gap-1.5 z-20">
             {banners.map((_, i) => (
               <button
                 key={i}
                 onClick={() => setSlide(i)}
-                className={`h-1.5 rounded-full transition-all ${
-                  slide === i ? "w-4 bg-white" : "w-1.5 bg-white/40"
+                className={`h-2 rounded-full transition-all cursor-pointer ${
+                  slide === i ? "w-6 bg-brand-500" : "w-2 bg-white/40"
                 }`}
               />
             ))}
           </div>
         </div>
 
-        {/* Feature strip */}
-        <div className="grid grid-cols-4 gap-2 sm:gap-4 bg-white rounded-xl border border-slate-200 p-3">
-          {features.map((f) => (
-            <div key={f.title} className="flex flex-col items-center text-center gap-1.5">
-              <div
-                className="h-10 w-10 rounded-full flex items-center justify-center text-lg"
-                style={{ backgroundColor: f.bg }}
-              >
-                {f.icon}
-              </div>
-              <div className="text-[11px] sm:text-xs font-semibold text-navy-900 leading-tight">
-                {f.title}
-              </div>
-              <div className="text-[9px] sm:text-[10px] text-slate-500 leading-tight">
-                {f.sub}
-              </div>
-            </div>
-          ))}
-        </div>
-
- {/* Shop by category - colored bg with image overlay */}
+        {/* Category Tiles */}
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-bold text-navy-900">Shop by Category</h2>
-           <Link to="/categories" className="text-xs font-medium text-brand-500">See all</Link>
+            <h2 className="text-base sm:text-lg font-black text-navy-900">Popular Categories</h2>
+            <Link to="/categories" className="text-xs font-bold text-brand-600 hover:underline">
+              All Categories →
+            </Link>
           </div>
-          <div className="grid grid-cols-5 gap-2 sm:gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             {categoryTiles.map((c) => (
               <Link
                 key={c.name}
-                to={`/category/${c.name.toLowerCase()}`}
-                className="flex flex-col items-center gap-1.5"
+                to={`/categories?cat=${encodeURIComponent(c.name)}`}
+                className="rounded-2xl p-3 flex flex-col justify-between h-28 border border-slate-200/80 shadow-2xs hover:shadow-md transition-all group"
+                style={{ backgroundColor: c.bg }}
               >
-                <div
-                  className="w-full aspect-square rounded-xl overflow-hidden flex items-center justify-center"
-                  style={{ backgroundColor: c.bg }}
-                >
-                  <img
-                    src={c.img}
-                    alt={c.name}
-                    className="w-full h-full object-cover mix-blend-multiply opacity-90"
-                    loading="lazy"
-                  />
-                </div>
-                <span className="text-[11px] font-medium text-navy-900">{c.name}</span>
+                <span className="text-xs font-extrabold text-navy-900">{c.name}</span>
+                <img src={c.img} alt={c.name} className="w-12 h-12 object-cover rounded-lg self-end group-hover:scale-105 transition-transform" />
               </Link>
             ))}
           </div>
         </section>
-        {/* Top Brands - Responsive Grid */}
+
+        {/* Top Brands Grid */}
         <section>
           <div className="flex items-center justify-between mb-3">
-            <div>
-              <h2 className="text-base font-bold text-navy-900">Top Brands</h2>
-              <p className="text-[11px] text-slate-500">Official manufacturers & verified district distributors</p>
-            </div>
-            <Link to="/categories" className="text-xs font-semibold text-brand-500 hover:underline">
-              See all →
-            </Link>
+            <h2 className="text-base sm:text-lg font-black text-navy-900">Top Brands</h2>
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-2 sm:gap-3">
+          <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-2.5">
             {brands.map((b) => (
               <Link
                 key={b.name}
-                to={`/search?q=${encodeURIComponent(b.name)}`}
-                className="bg-white rounded-2xl border border-slate-200 p-2.5 flex flex-col items-center justify-center text-center hover:border-brand-500 hover:shadow-md transition-all group"
+                to={`/categories?cat=${encodeURIComponent(b.category)}`}
+                className="bg-white border border-slate-200 rounded-xl p-2.5 flex flex-col items-center text-center shadow-2xs hover:border-brand-500 hover:shadow-xs transition-all group"
               >
-                <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-base mb-1.5 group-hover:scale-110 transition-transform">
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-base mb-1.5 shadow-2xs"
+                  style={{ backgroundColor: b.color + "15", color: b.color }}
+                >
                   {b.icon}
                 </div>
                 <span className="text-xs font-bold text-navy-900 leading-tight group-hover:text-brand-600 transition-colors">
@@ -360,81 +256,123 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Deals of the Week */}
-        <section>
-          <h2 className="text-lg font-bold text-navy-900">Deals Of The Week</h2>
-          <p className="text-xs text-slate-500 mb-3">5 products at our lowest ever price</p>
-          <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 sm:grid sm:grid-cols-5 sm:gap-3">
-            {deals.map((d, i) => (
-              <div
-                key={d.name}
-                className="bg-white rounded-xl border border-slate-200 p-3 w-40 sm:w-auto shrink-0 flex flex-col"
-              >
-                <div className="relative h-24 rounded-lg overflow-hidden bg-slate-100 mb-2">
-                  {d.discount && (
-                    <span className="absolute top-1 left-1 bg-warning text-navy-900 text-[9px] font-bold px-1.5 py-0.5 rounded">
-                      {d.discount}
-                    </span>
-                  )}
-                  <img src={d.img} alt={d.name} className="w-full h-full object-cover" loading="lazy" />
-                </div>
-
-                <div className="flex items-center gap-1 text-[9px] text-slate-500 mb-1">
-                  <ClockIcon /> 60 Mins &nbsp;·&nbsp; Pay on Delivery
-                </div>
-                <span className="inline-block w-fit bg-green-50 text-green-700 text-[8px] font-semibold px-1.5 py-0.5 rounded mb-1.5">
-                  Free Delivery above ₹1000
+        {/* DEALS OF THE WEEK & LIVE ADMIN/DR/VENDOR PRODUCTS (MAX 5-6 FEATURED ITEMS) */}
+        <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs">
+          <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2.5">
+            <div>
+              <h2 className="text-base sm:text-lg font-black text-navy-900 flex items-center gap-2">
+                <span>⚡ Deals Of The Week</span>
+                <span className="bg-warning text-navy-900 font-extrabold text-[10px] px-2 py-0.5 rounded-full">
+                  Top 5 Deals
                 </span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                5-6 featured construction products at our lowest ever wholesale prices.
+              </p>
+            </div>
+            <Link to="/categories" className="text-xs font-bold text-brand-600 hover:underline shrink-0">
+              View All →
+            </Link>
+          </div>
 
-                <p className="text-[11px] font-medium text-navy-900 leading-tight mb-1.5 line-clamp-2 flex-1">
-                  {d.name}
-                </p>
+          {productsLoading ? (
+            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 sm:grid sm:grid-cols-5 sm:gap-3 animate-pulse">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <div
+                  key={n}
+                  className="bg-white rounded-xl border border-slate-200 p-3 w-44 sm:w-auto shrink-0 flex flex-col justify-between shadow-2xs"
+                >
+                  <div>
+                    <div className="relative h-28 rounded-lg overflow-hidden bg-slate-200 mb-2 border border-slate-100 flex items-center justify-center">
+                      <span className="absolute top-1 left-1 bg-amber-200/80 text-amber-800 text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow-2xs">
+                        Material
+                      </span>
+                    </div>
 
-                <div className="flex items-baseline gap-1.5 mb-1">
-                  {d.mrp !== d.price && (
-                    <span className="text-[10px] text-slate-400 line-through">₹{d.mrp}</span>
-                  )}
-                  <span className="text-sm font-bold text-navy-900">₹{d.price}</span>
+                    <div className="h-2 bg-slate-200 rounded w-20 mb-1.5" />
+                    <div className="h-2.5 bg-green-100 rounded w-28 mb-1.5" />
+                    <div className="h-2 bg-slate-200 rounded w-24 mb-1" />
+                    <div className="h-3 bg-slate-200 rounded w-full mb-1" />
+                    <div className="h-3 bg-slate-200 rounded w-3/4 mb-2" />
+                  </div>
+
+                  <div>
+                    <div className="flex items-baseline justify-between mb-2">
+                      <div className="h-4 bg-slate-200 rounded w-12" />
+                      <div className="h-2 bg-slate-200 rounded w-8" />
+                    </div>
+                    <div className="w-full h-7 bg-amber-300/80 rounded-lg flex items-center justify-center font-extrabold text-xs text-navy-900 shadow-2xs">
+                      + ADD
+                    </div>
+                  </div>
                 </div>
-                <span className="text-[8px] text-amber-700 font-medium mb-2">{d.cashback}</span>
+              ))}
+            </div>
+          ) : liveDisplayProducts.length === 0 ? (
+            <div className="py-8 text-center text-slate-500 text-xs font-extrabold bg-slate-50 rounded-xl border border-slate-200">
+              📦 No live vendor deals available in this region yet.
+            </div>
+          ) : (
+            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 sm:grid sm:grid-cols-5 sm:gap-3">
+              {liveDisplayProducts.slice(0, 5).map((p, i) => (
+                <div
+                  key={p.id || i}
+                  className="bg-white rounded-xl border border-slate-200 p-3 w-44 sm:w-auto shrink-0 flex flex-col justify-between hover:shadow-md hover:border-brand-300 transition-all"
+                >
+                  <div>
+                    <div className="relative h-28 rounded-lg overflow-hidden bg-slate-100 mb-2 border border-slate-100">
+                      <span className="absolute top-1 left-1 bg-warning text-navy-900 text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow-xs">
+                        {p.categoryName || "Material"}
+                      </span>
+                      <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
+                    </div>
 
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center border border-slate-200 rounded-lg">
+                    <div className="flex items-center gap-1 text-[9px] text-slate-500 mb-1">
+                      <ClockIcon /> 60 Mins &nbsp;·&nbsp; Pay on Delivery
+                    </div>
+                    <span className="inline-block w-fit bg-green-50 text-green-700 text-[8px] font-semibold px-1.5 py-0.5 rounded mb-1.5">
+                      Free Delivery above ₹1000
+                    </span>
+
+                    <p className="text-[9px] font-extrabold text-brand-600 truncate mb-0.5">
+                      🏬 {p.vendorName || p.addedBy || "District Catalog"}
+                    </p>
+
+                    <p className="text-[11px] font-bold text-navy-900 leading-tight mb-1.5 line-clamp-2 min-h-[32px]">
+                      {p.name}
+                    </p>
+                  </div>
+
+                  <div>
+                    <div className="flex items-baseline justify-between mb-2">
+                      <span className="text-sm font-black text-navy-900">
+                        ₹{p.price || p.suggestedPrice}
+                      </span>
+                      <span className="text-[9px] text-slate-400">per {p.unit || "unit"}</span>
+                    </div>
+
                     <button
-                      onClick={() => changeQty(i, -1)}
-                      className="px-2 py-1 text-slate-500 text-sm"
+                      onClick={() => handleAddToCart(p)}
+                      className={`w-full text-xs font-bold rounded-lg py-1.5 transition-colors shadow-2xs cursor-pointer ${
+                        justAddedId === p.id
+                          ? "bg-success text-white"
+                          : "bg-warning text-navy-900 hover:bg-amber-400"
+                      }`}
                     >
-                      −
-                    </button>
-                    <span className="px-2 text-xs font-medium">{qty[i]}</span>
-                    <button
-                      onClick={() => changeQty(i, 1)}
-                      className="px-2 py-1 text-slate-500 text-sm"
-                    >
-                      +
+                      {justAddedId === p.id ? "Added ✓" : "+ ADD"}
                     </button>
                   </div>
-                  <button
-                    onClick={() => handleAdd(i, d)}
-                    className={`flex-1 text-xs font-bold rounded-lg py-1.5 ${
-                      justAdded[i]
-                        ? "bg-success text-white"
-                        : "bg-warning text-navy-900"
-                    }`}
-                  >
-                    {justAdded[i] ? "Added ✓" : "ADD"}
-                  </button>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* Popular services */}
         <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-base font-bold text-navy-900">Popular Services</h2>
-           <Link to="/categories" className="text-xs font-medium text-brand-500">See all</Link>
+            <Link to="/categories" className="text-xs font-medium text-brand-500">See all</Link>
           </div>
           <div className="grid grid-cols-2 gap-3">
             {services.map((s) => (
@@ -456,28 +394,19 @@ export default function Home() {
             ))}
           </div>
         </section>
-
-        {/* Exclusive deals */}
-        <div className="rounded-2xl bg-navy-900 px-6 py-6 flex items-center justify-between overflow-hidden relative">
-          <div className="relative z-10">
-            <h3 className="text-white font-bold text-base mb-1">Exclusive Deals</h3>
-            <p className="text-white/60 text-xs mb-3">Up to 20% OFF on selected products</p>
-            <button className="bg-white text-navy-900 text-xs font-semibold rounded-lg px-4 py-2">
-              Explore Offers →
-            </button>
-          </div>
-          <span className="relative z-10 text-warning font-extrabold text-lg bg-white/10 rounded-full h-16 w-16 flex items-center justify-center text-center leading-none shrink-0">
-            UP TO
-            <br />
-            20% OFF
-          </span>
-        </div>
       </main>
-
     </div>
   );
 }
 
+function ClockIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
+    </svg>
+  );
+}
 function PinIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -503,33 +432,20 @@ function SearchIcon() {
 }
 function ScanIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M3 8V5a2 2 0 0 1 2-2h3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M21 16v3a2 2 0 0 1-2 2h-3" />
-    </svg>
-  );
-}
-function BellIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9Z" />
-      <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+      <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+      <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+      <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
     </svg>
   );
 }
 function CartIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="9" cy="21" r="1" />
-      <circle cx="20" cy="21" r="1" />
-      <path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" />
-    </svg>
-  );
-}
-function ClockIcon() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="10" />
-      <path d="M12 6v6l4 2" />
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="8" cy="21" r="1" />
+      <circle cx="19" cy="21" r="1" />
+      <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
     </svg>
   );
 }

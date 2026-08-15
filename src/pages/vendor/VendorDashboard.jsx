@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardShell from "../../components/DashboardShell";
 import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
+import { useOrders } from "../../context/OrderContext";
 
 // Vendor Dashboard component — Vendor partner ka main portal (Master Catalog selection, Custom Price & Stock setting, Orders management)
 export default function VendorDashboard() {
@@ -9,14 +10,17 @@ export default function VendorDashboard() {
   const {
     masterProducts = [],
     products = [],
+    productsLoading,
     categories = [],
     assignMasterProductToVendor,
     updateVendorProductListing,
     removeVendorProductListing,
   } = useAdmin();
+  const { fetchVendorOrders, updateOrderStatus } = useOrders();
 
   // Tabs navigation state: "overview" -> Store Summary, "products" -> My Shop Items, "orders" -> Customer Orders
   const [activeTab, setActiveTab] = useState("overview");
+  const [vendorOrders, setVendorOrders] = useState([]);
 
   // Master Catalog — Admin/DR dwara banaye gaye Master Products select karne ke liye
   const [showCatalogModal, setShowCatalogModal] = useState(false);
@@ -38,6 +42,13 @@ export default function VendorDashboard() {
   const vendorPhone = user?.phone || vendorInfo.phone || "9876543210";
   const districtName = vendorInfo.regionName || "Varanasi";
   const vendorId = vendorInfo.id || "v1";
+
+  // Load ONLY THIS VENDOR'S ISOLATED ORDERS from Supabase Cloud DB
+  useEffect(() => {
+    fetchVendorOrders(vendorId).then((vOrds) => {
+      if (vOrds) setVendorOrders(vOrds);
+    });
+  }, [vendorId]);
 
   // Current vendor ki dukan par list huye products filter karo
   const vendorProducts = products.filter(
@@ -77,7 +88,7 @@ export default function VendorDashboard() {
 
     setSelectedMasterProd(null);
     setShowCatalogModal(false);
-    alert(`"${selectedMasterProd.name}" has been added to your store!`);
+    alert(`"${selectedMasterProd.name}" is submitted for Review!\n\nStatus: ⏳ Under Admin & DR Review\nAdmin aur DR dwara Approve hone ke baad yeh product customer store par live dikhega.`);
   };
 
   const handleUpdateListing = (e) => {
@@ -185,7 +196,7 @@ export default function VendorDashboard() {
             activeTab === "orders" ? "bg-navy-900 text-white shadow-xs" : "text-slate-600 hover:text-navy-900"
           }`}
         >
-          🛍️ Customer Orders ({sampleOrders.length})
+          🛍️ Customer Orders ({vendorOrders.length})
         </button>
       </div>
 
@@ -208,7 +219,23 @@ export default function VendorDashboard() {
                 </button>
               </div>
 
-              {vendorProducts.length === 0 ? (
+              {productsLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 animate-pulse">
+                  {[1, 2, 3, 4].map((n) => (
+                    <div key={n} className="border border-slate-200 rounded-xl p-3 flex gap-3 items-center bg-slate-50/50">
+                      <div className="w-12 h-12 rounded-lg bg-slate-200 shrink-0" />
+                      <div className="overflow-hidden flex-1 space-y-1.5">
+                        <div className="h-3.5 bg-slate-200 rounded w-3/4" />
+                        <div className="h-2.5 bg-slate-200 rounded w-1/2" />
+                        <div className="flex items-center justify-between pt-1">
+                          <div className="h-3.5 bg-slate-200 rounded w-16" />
+                          <div className="h-3 bg-green-100 rounded w-12" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : vendorProducts.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-2xl mb-1">📦</p>
                   <p className="text-xs font-bold text-navy-900">Your store has no products yet!</p>
@@ -335,6 +362,7 @@ export default function VendorDashboard() {
                     <th className="py-3 px-4">Product Details</th>
                     <th className="py-3 px-4">Category & Brand</th>
                     <th className="py-3 px-4">Type & Grade</th>
+                    <th className="py-3 px-4">Approval Status</th>
                     <th className="py-3 px-4">My Selling Price</th>
                     <th className="py-3 px-4">Stock Qty</th>
                     <th className="py-3 px-4 text-right">Actions</th>
@@ -363,6 +391,21 @@ export default function VendorDashboard() {
                         <span className="bg-amber-50 text-amber-700 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-amber-200 inline-block mt-0.5">
                           Grade: {p.grade}
                         </span>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {p.approvalStatus === "PENDING_REVIEW" ? (
+                          <span className="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded text-[11px] font-bold block w-fit">
+                            ⏳ Under Review
+                          </span>
+                        ) : p.approvalStatus === "REJECTED" ? (
+                          <span className="bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded text-[11px] font-bold block w-fit">
+                            🔴 Rejected
+                          </span>
+                        ) : (
+                          <span className="bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded text-[11px] font-bold block w-fit">
+                            🟢 Approved & Live
+                          </span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 font-extrabold text-navy-900 text-sm">
                         ₹{p.price} <span className="text-[10px] font-normal text-slate-400">/{p.unit}</span>
@@ -397,40 +440,79 @@ export default function VendorDashboard() {
         </div>
       )}
 
-      {/*  CUSTOMER ORDERS */}
+      {/* CUSTOMER ORDERS (ISOLATED FOR THIS VENDOR ONLY) */}
       {activeTab === "orders" && (
         <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
-          <div className="p-4 border-b border-slate-200">
-            <h3 className="font-extrabold text-navy-900 text-sm">Customer Orders for {shopName}</h3>
+          <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+            <div>
+              <h3 className="font-extrabold text-navy-900 text-sm">Customer Orders for {shopName}</h3>
+              <p className="text-[11px] text-slate-500">Only orders assigned to your shop ({shopName}) are visible here.</p>
+            </div>
+            <span className="bg-brand-50 text-brand-700 text-xs font-bold px-3 py-1 rounded-full border border-brand-200">
+              {vendorOrders.length} Shop Orders
+            </span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase">
-                  <th className="py-3 px-4">Order ID</th>
-                  <th className="py-3 px-4">Customer</th>
-                  <th className="py-3 px-4">Ordered Items</th>
-                  <th className="py-3 px-4">Total Amount</th>
-                  <th className="py-3 px-4">Order Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {sampleOrders.map((ord) => (
-                  <tr key={ord.id} className="hover:bg-slate-50">
-                    <td className="py-3.5 px-4 font-bold text-navy-900">{ord.id}</td>
-                    <td className="py-3.5 px-4 font-semibold text-slate-800">{ord.customer}</td>
-                    <td className="py-3.5 px-4 text-slate-600">{ord.items}</td>
-                    <td className="py-3.5 px-4 font-extrabold text-navy-900">{ord.total}</td>
-                    <td className="py-3.5 px-4">
-                      <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${ord.color}`}>
-                        {ord.status}
-                      </span>
-                    </td>
+          {vendorOrders.length === 0 ? (
+            <div className="text-center py-12 px-4">
+              <p className="text-3xl mb-2">🛍️</p>
+              <p className="text-sm font-bold text-navy-900">No orders for your store yet</p>
+              <p className="text-xs text-slate-500 mt-1">When customers order products from {shopName}, they will appear here in real-time.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase">
+                    <th className="py-3 px-4">Order ID</th>
+                    <th className="py-3 px-4">Customer Details</th>
+                    <th className="py-3 px-4">Ordered Items</th>
+                    <th className="py-3 px-4">Total Amount</th>
+                    <th className="py-3 px-4">Change Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {vendorOrders.map((ord) => {
+                    const orderTotal = ord.totalAmount || ord.total || 0;
+                    const itemsSummary = Array.isArray(ord.items)
+                      ? ord.items.map((i) => `${i.productName || i.name} (x${i.quantity})`).join(", ")
+                      : ord.items || "Order Items";
+                    const custName = ord.customer?.name || ord.customer || "Customer";
+
+                    return (
+                      <tr key={ord.id} className="hover:bg-slate-50">
+                        <td className="py-3.5 px-4 font-bold text-navy-900">{ord.id.slice(0, 8).toUpperCase()}</td>
+                        <td className="py-3.5 px-4 font-semibold text-slate-800">
+                          👤 {custName}
+                          {ord.customer?.phone && <p className="text-[10px] text-slate-400 font-normal">📱 {ord.customer.phone}</p>}
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-600 max-w-xs">{itemsSummary}</td>
+                        <td className="py-3.5 px-4 font-extrabold text-navy-900">₹{orderTotal}</td>
+                        <td className="py-3.5 px-4">
+                          <select
+                            value={ord.status || "PENDING"}
+                            onChange={async (e) => {
+                              const newSt = e.target.value;
+                              await updateOrderStatus(ord.id, newSt);
+                              setVendorOrders((prev) =>
+                                prev.map((o) => (o.id === ord.id ? { ...o, status: newSt } : o))
+                              );
+                            }}
+                            className="bg-slate-50 border border-slate-200 font-extrabold text-xs text-navy-900 rounded-lg px-2.5 py-1.5 outline-none focus:border-brand-500 cursor-pointer"
+                          >
+                            <option value="PENDING">⏳ PENDING</option>
+                            <option value="PROCESSING">⚙️ PROCESSING</option>
+                            <option value="OUT_FOR_DELIVERY">🚚 OUT FOR DELIVERY</option>
+                            <option value="DELIVERED">✅ DELIVERED</option>
+                            <option value="CANCELLED">❌ CANCELLED</option>
+                          </select>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

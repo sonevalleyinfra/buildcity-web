@@ -3,6 +3,7 @@ import { useNavigate, Navigate } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import { useCart } from "../../context/CartContext";
 import { useOrders } from "../../context/OrderContext";
+import { useAuth } from "../../context/AuthContext";
 
 const savedAddresses = [
   {
@@ -36,19 +37,26 @@ export default function Checkout() {
   const total = subtotal + deliveryCharge;
   const address = savedAddresses.find((a) => a.id === selectedAddr);
 
-  const handlePlaceOrder = () => {
+  const { user } = useAuth();
+
+  const handlePlaceOrder = async () => {
     setPlacing(true);
-    // Yad Rakhna : replace with POST /api/v1/orders once backend is ready
-    setTimeout(() => {
-      const order = placeOrder({
-        items,
-        address,
-        total,
-      });
-      clearCart();
-      setPlacing(false);
-      navigate(`/orders/${order.id}`, { replace: true });
-    }, 900);
+    const orderItems = items.map((i) => ({
+      name: i.name,
+      quantity: i.qty || i.quantity || 1,
+      price: i.price,
+      vendorId: i.vendorId || "v1",
+    }));
+
+    const order = await placeOrder({
+      customerId: user?.id,
+      items: orderItems,
+      address,
+      total,
+    });
+    clearCart();
+    setPlacing(false);
+    navigate(`/orders/${order.id}`, { replace: true });
   };
 
   return (

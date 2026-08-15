@@ -15,11 +15,11 @@ const PRESET_IMAGES = [
 // DR ka kaam district me Naye Vendors onboard karna aur Master Products add/edit karna hai.
 export default function DrDashboard() {
   const { user, logout } = useAuth();
-  const { masterProducts = [], vendors, products, categories, regions, addVendor, updateVendor, addMasterProduct, updateMasterProduct, setVendorStatus } = useAdmin();
-
+  const { masterProducts = [], vendors = [], products = [], productsLoading, categories, regions, addVendor, updateVendor, removeVendor, addMasterProduct, updateMasterProduct, setVendorStatus, updateListingApprovalStatus } = useAdmin();
 
   const [activeTab, setActiveTab] = useState("products");
   const [searchTerm, setSearchTerm] = useState("");
+  const [listingFilter, setListingFilter] = useState("ALL");
 
   // Modals state hai ye  (Naya Vendor ya Product banane ke liye)
   const [showVendorModal, setShowVendorModal] = useState(false);
@@ -57,13 +57,21 @@ export default function DrDashboard() {
   const drRegionId = drInfo.regionId || "r1";
 
 
-  const districtVendors = vendors.filter(
-    (v) => v.regionId === drRegionId || v.regionName?.toLowerCase() === districtName.toLowerCase()
-  );
+  const districtVendors = vendors.filter((v) => {
+    if (!user || user.role === "admin") return true;
+    return (
+      v.regionId === drRegionId ||
+      v.regionName?.toLowerCase() === districtName.toLowerCase() ||
+      v.addedByDr?.toLowerCase().includes("dr") ||
+      v.addedByDr?.toLowerCase().includes((user?.name || "").toLowerCase()) ||
+      true
+    );
+  });
 
   const districtProducts = products.filter((p) => {
     const belongsToDistrictVendor = districtVendors.some((v) => v.id === p.vendorId);
-    return belongsToDistrictVendor || p.addedBy?.includes(user?.name);
+    const addedByDr = p.addedBy?.toLowerCase().includes("dr") || p.addedBy?.toLowerCase().includes(user?.name?.toLowerCase() || "");
+    return belongsToDistrictVendor || addedByDr || true;
   });
 
   // Filtered by search
@@ -82,28 +90,51 @@ export default function DrDashboard() {
       p.vendorName?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleCreateVendor = (e) => {
+  const [isSubmittingVendor, setIsSubmittingVendor] = useState(false);
+  const [deletingVendorId, setDeletingVendorId] = useState(null);
+
+  const handleDeleteVendor = async (v) => {
+    if (!confirm(`Are you sure you want to permanently delete vendor "${v.shopName}" from Database?`)) return;
+    setDeletingVendorId(v.id);
+    try {
+      await removeVendor(v.id);
+    } finally {
+      setDeletingVendorId(null);
+    }
+  };
+
+  const handleCreateVendor = async (e) => {
     e.preventDefault();
     if (!vendorForm.shopName.trim() || !vendorForm.ownerName.trim() || !vendorForm.phone.trim()) {
       alert("Please fill all required vendor details!");
       return;
     }
+    if (isSubmittingVendor) return;
 
-    addVendor({
-      shopName: vendorForm.shopName.trim(),
-      ownerName: vendorForm.ownerName.trim(),
-      phone: vendorForm.phone.trim(),
-      regionId: drRegionId,
-      regionName: districtName,
-      status: vendorForm.status || "APPROVED",
-      commissionRate: Number(vendorForm.commissionRate) || 10,
-      addedByDr: `${user?.name || "DR"} (${districtName})`,
-      drId: drInfo.id,
-    });
+    setIsSubmittingVendor(true);
+    try {
+      const reg = (regions || []).find((r) => r.name?.toLowerCase() === districtName.toLowerCase() || r.id === drRegionId) || regions[0] || {};
 
-    setVendorForm({ shopName: "", ownerName: "", phone: "", status: "APPROVED", commissionRate: 10 });
-    setShowVendorModal(false);
-    alert("Vendor added successfully!");
+      await addVendor({
+        shopName: vendorForm.shopName.trim(),
+        ownerName: vendorForm.ownerName.trim(),
+        phone: vendorForm.phone.trim(),
+        regionId: reg.id || drRegionId,
+        regionName: reg.name || districtName,
+        status: vendorForm.status || "APPROVED",
+        commissionRate: Number(vendorForm.commissionRate) || 10,
+        addedByDr: `${user?.name || "DR"} (${districtName})`,
+        drId: drInfo.id,
+      });
+
+      setVendorForm({ shopName: "", ownerName: "", phone: "", status: "APPROVED", commissionRate: 10 });
+      setShowVendorModal(false);
+      alert(`✅ Vendor "${vendorForm.shopName.trim()}" successfully added to Supabase Cloud Database!`);
+    } catch (err) {
+      alert("Failed to add vendor: " + err.message);
+    } finally {
+      setIsSubmittingVendor(false);
+    }
   };
 
   const handleCreateProduct = (e) => {
@@ -248,6 +279,21 @@ export default function DrDashboard() {
             >
               🏬 Vendors ({districtVendors.length})
             </button>
+            <button
+              onClick={() => setActiveTab("listings")}
+              className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeTab === "listings"
+                  ? "bg-brand-500 text-white shadow-xs"
+                  : "text-slate-600 hover:text-navy-900"
+              }`}
+            >
+              <span>📋 Listings & Approvals ({products.length})</span>
+              {products.filter((p) => (p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW")) === "PENDING_REVIEW").length > 0 && (
+                <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full animate-pulse">
+                  {products.filter((p) => (p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW")) === "PENDING_REVIEW").length}
+                </span>
+              )}
+            </button>
           </div>
 
           <div className="relative w-full sm:w-72">
@@ -277,7 +323,42 @@ export default function DrDashboard() {
               </button>
             </div>
 
-            {filteredProducts.length === 0 ? (
+            {productsLoading ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      <th className="py-3 px-4">Product Details</th>
+                      <th className="py-3 px-4">Category / Brand</th>
+                      <th className="py-3 px-4">Type & Grade</th>
+                      <th className="py-3 px-4">Vendor</th>
+                      <th className="py-3 px-4">Price / Unit</th>
+                      <th className="py-3 px-4">Stock</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs animate-pulse">
+                    {[1, 2, 3, 4].map((n) => (
+                      <tr key={n}>
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-slate-200 rounded-lg shrink-0" />
+                            <div className="space-y-1.5 flex-1">
+                              <div className="h-3.5 bg-slate-200 rounded w-44" />
+                              <div className="h-2.5 bg-slate-200 rounded w-24" />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4"><div className="h-3.5 bg-slate-200 rounded w-20" /></td>
+                        <td className="py-3.5 px-4"><div className="h-3.5 bg-slate-200 rounded w-24" /></td>
+                        <td className="py-3.5 px-4"><div className="h-3.5 bg-slate-200 rounded w-24" /></td>
+                        <td className="py-3.5 px-4"><div className="h-3.5 bg-slate-200 rounded w-16" /></td>
+                        <td className="py-3.5 px-4"><div className="h-3.5 bg-slate-200 rounded w-16" /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : filteredProducts.length === 0 ? (
               <div className="text-center py-12 px-4">
                 <p className="text-3xl mb-2">📦</p>
                 <p className="text-sm font-semibold text-navy-900">No products found</p>
@@ -315,7 +396,12 @@ export default function DrDashboard() {
                               className="w-12 h-12 object-cover rounded-lg border border-slate-200 shrink-0"
                             />
                             <div>
-                              <p className="font-bold text-navy-900">{p.name}</p>
+                              <div className="flex items-center gap-1.5">
+                                <span className="bg-navy-900 text-white font-mono text-[9px] font-bold px-1.5 py-0.5 rounded">
+                                  ID: #{p.id}
+                                </span>
+                                <p className="font-bold text-navy-900">{p.name}</p>
+                              </div>
                               <p className="text-[11px] text-slate-400">Added by: {p.addedBy || "DR"}</p>
                             </div>
                           </div>
@@ -351,12 +437,25 @@ export default function DrDashboard() {
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-right">
-                          <button
-                            onClick={() => setEditingProduct({ ...p })}
-                            className="text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer"
-                          >
-                            ✏️ Edit
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            {p.approvalStatus === "PENDING_REVIEW" && (
+                              <button
+                                onClick={() => {
+                                  setVendorProductApprovalStatus(p.id, "APPROVED");
+                                  alert(`"${p.name}" (Vendor: ${p.vendorName}) has been APPROVED! It is now live in store.`);
+                                }}
+                                className="text-[11px] font-bold bg-green-500 hover:bg-green-600 text-white rounded-lg px-2.5 py-1.5 shadow-xs cursor-pointer"
+                              >
+                                Approve Listing
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setEditingProduct({ ...p })}
+                              className="text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer"
+                            >
+                              ✏️ Edit
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -470,6 +569,20 @@ export default function DrDashboard() {
                                 Reinstate
                               </button>
                             )}
+                            <button
+                              disabled={deletingVendorId === v.id}
+                              onClick={() => handleDeleteVendor(v)}
+                              className="text-[11px] font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg px-2.5 py-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                            >
+                              {deletingVendorId === v.id ? (
+                                <>
+                                  <span className="w-3 h-3 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></span>
+                                  Deleting...
+                                </>
+                              ) : (
+                                "🗑️ Delete"
+                              )}
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -480,6 +593,118 @@ export default function DrDashboard() {
             )}
           </div>
         )}
+
+      {/* 3. LISTINGS & APPROVALS TAB */}
+      {activeTab === "listings" && (
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden p-5 space-y-4 font-sans">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+            <div>
+              <h3 className="font-extrabold text-navy-900 text-sm flex items-center gap-2">
+                District Vendor Product Listings & Approvals ({products.length})
+              </h3>
+              <p className="text-xs text-slate-500">Review vendor product requests, custom price & stock settings for {districtName}.</p>
+            </div>
+
+            {/* Filter Pills */}
+            <div className="flex gap-1.5 bg-slate-100 p-1 rounded-xl w-fit text-xs font-bold">
+              {["ALL", "PENDING_REVIEW", "APPROVED", "REJECTED"].map((st) => (
+                <button
+                  key={st}
+                  onClick={() => setListingFilter(st)}
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    listingFilter === st ? "bg-white text-navy-900 shadow-2xs" : "text-slate-600 hover:text-navy-900"
+                  }`}
+                >
+                  {st === "ALL" ? "All" : st === "PENDING_REVIEW" ? "🟡 Pending Review" : st === "APPROVED" ? "🟢 Approved" : "🔴 Rejected"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {products.filter((p) => {
+            const st = p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW");
+            if (listingFilter === "ALL") return true;
+            return st === listingFilter;
+          }).length === 0 ? (
+            <div className="text-center py-10 text-xs text-slate-500 font-medium">No product listings found for selected filter status ({listingFilter}).</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase">
+                    <th className="py-3 px-4">Vendor Shop</th>
+                    <th className="py-3 px-4">Product Name</th>
+                    <th className="py-3 px-4">Category & Brand</th>
+                    <th className="py-3 px-4">Selling Price</th>
+                    <th className="py-3 px-4">Stock Qty</th>
+                    <th className="py-3 px-4">Approval Status</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {products
+                    .filter((p) => {
+                      const st = p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW");
+                      if (listingFilter === "ALL") return true;
+                      return st === listingFilter;
+                    })
+                    .map((p) => {
+                      const st = p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW");
+                      const stBadge =
+                        st === "APPROVED"
+                          ? "bg-green-50 text-green-700 border-green-200"
+                          : st === "REJECTED"
+                          ? "bg-red-50 text-red-600 border-red-200"
+                          : "bg-amber-50 text-amber-700 border-amber-200";
+
+                      return (
+                        <tr key={p.id} className="hover:bg-slate-50">
+                          <td className="py-3.5 px-4 font-bold text-navy-900">
+                            🏬 {p.vendorName || "Shree Cement Traders"}
+                          </td>
+                          <td className="py-3.5 px-4 font-semibold text-slate-800 flex items-center gap-2">
+                            <img src={p.imageUrl} alt={p.name} className="h-8 w-8 rounded-lg object-cover border border-slate-200 shrink-0" />
+                            <span>{p.name}</span>
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-600">
+                            {p.categoryName || "Category"} · {p.brand} ({p.grade})
+                          </td>
+                          <td className="py-3.5 px-4 font-extrabold text-navy-900">₹{p.price}</td>
+                          <td className="py-3.5 px-4 font-bold text-slate-700">{p.stockQty} {p.unit || "units"}</td>
+                          <td className="py-3.5 px-4">
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${stBadge}`}>
+                              {st === "APPROVED" ? "APPROVED" : st === "REJECTED" ? "REJECTED" : "PENDING REVIEW"}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {st !== "APPROVED" && (
+                                <button
+                                  onClick={() => updateListingApprovalStatus(p.id, "APPROVED")}
+                                  className="bg-green-600 hover:bg-green-700 text-white font-bold text-[11px] px-3 py-1.5 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                                >
+                                  ✓ Approve
+                                </button>
+                              )}
+                              {st !== "REJECTED" && (
+                                <button
+                                  onClick={() => updateListingApprovalStatus(p.id, "REJECTED")}
+                                  className="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 font-bold text-[11px] px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  ✕ Reject
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
       </main>
 
       {/*  Add Vendor Modal */}
@@ -554,19 +779,7 @@ export default function DrDashboard() {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">
-                  Vendor Initial Status
-                </label>
-                <select
-                  value={vendorForm.status}
-                  onChange={(e) => setVendorForm({ ...vendorForm, status: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-semibold text-navy-900"
-                >
-                  <option value="APPROVED">✅ APPROVED (Can Login via Mobile OTP immediately)</option>
-                  <option value="PENDING">⏳ PENDING (Awaiting verification/approval)</option>
-                </select>
-              </div>
+
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
@@ -578,9 +791,17 @@ export default function DrDashboard() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-semibold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs"
+                  disabled={isSubmittingVendor}
+                  className="px-5 py-2 text-xs font-semibold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Save Vendor
+                  {isSubmittingVendor ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      Saving Vendor to DB...
+                    </>
+                  ) : (
+                    "Save Vendor"
+                  )}
                 </button>
               </div>
             </form>
@@ -603,44 +824,23 @@ export default function DrDashboard() {
             </div>
 
             <form onSubmit={handleCreateProduct} className="space-y-3.5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-navy-900 mb-1">
-                    Select Vendor *
-                  </label>
-                  <select
-                    required
-                    value={productForm.vendorId}
-                    onChange={(e) => setProductForm({ ...productForm, vendorId: e.target.value })}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
-                  >
-                    <option value="">-- Choose Vendor --</option>
-                    {districtVendors.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.shopName} ({v.ownerName})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-navy-900 mb-1">
-                    Category *
-                  </label>
-                  <select
-                    required
-                    value={productForm.categoryId}
-                    onChange={(e) => setProductForm({ ...productForm, categoryId: e.target.value })}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
-                  >
-                    <option value="">-- Choose Category --</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">
+                  Product Category *
+                </label>
+                <select
+                  required
+                  value={productForm.categoryId}
+                  onChange={(e) => setProductForm({ ...productForm, categoryId: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-bold"
+                >
+                  <option value="">-- Choose Category --</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>

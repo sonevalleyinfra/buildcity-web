@@ -1,0 +1,288 @@
+// BuildCity — Prisma ORM Schema for Supabase PostgreSQL
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  CUSTOMER
+  VENDOR
+  DR
+  ADMIN
+}
+
+enum VendorStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+}
+
+enum ApprovalStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+// 1. User Account Entity
+model User {
+  id           String   @id @default(uuid())
+  phone        String   @unique
+  name         String?
+  email        String?
+  role         Role     @default(CUSTOMER)
+  tokenVersion Int      @default(1)
+  status       String   @default("ACTIVE")
+  productCount Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  vendors    Vendor[]
+  drs        DR[]
+  addresses  Address[]
+  orders     Order[]
+  auditLogs  AuditLog[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+// 2. OTP Verification Entity
+model OTPVerification {
+  id        String   @id @default(uuid())
+  phone     String
+  otp       String
+  isVerified Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("otp_verifications")
+}
+
+// 3. Region Zone Entity
+model Region {
+  id                 String   @id @default(uuid())
+  name               String   @unique
+  state              String   @default("Uttar Pradesh")
+  baseDeliveryCharge Decimal  @default(49.00)
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+
+  vendors   Vendor[]
+  drs       DR[]
+  addresses Address[]
+
+  @@map("regions")
+}
+
+// 4. District Representative Entity
+model DR {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  phone       String
+  regionId    String
+  region      Region   @relation(fields: [regionId], references: [id])
+  status      String   @default("ACTIVE")
+  joinedOn    DateTime @default(now())
+
+  @@map("district_representatives")
+}
+
+// 5. Vendor Store Profile Entity
+model Vendor {
+  id             String       @id @default(uuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shopName       String
+  ownerName      String
+  phone          String
+  regionId       String
+  region         Region       @relation(fields: [regionId], references: [id])
+  status         VendorStatus @default(PENDING)
+  commissionRate Decimal      @default(10.00)
+  addedByDr      String?
+  joinedOn       DateTime     @default(now())
+
+  vendorProducts VendorProduct[]
+  orderItems     OrderItem[]
+
+  @@map("vendors")
+}
+
+// 6. Master Category Entity
+model Category {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  gstRate      Decimal  @default(18.00)
+  productCount Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  masterProducts ProductMaster[]
+
+  @@map("categories")
+}
+
+// 7. Canonical Product Master Entity (Owned by Admin/DR)
+model ProductMaster {
+  id             String   @id @default(uuid())
+  name           String
+  categoryId     String
+  category       Category @relation(fields: [categoryId], references: [id])
+  brand          String   @default("Generic")
+  type           String   @default("Standard")
+  grade          String   @default("Standard Grade")
+  unit           String   @default("Unit")
+  suggestedPrice Decimal  @default(100.00)
+  imageUrl       String   @default("https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80")
+  addedBy        String   @default("Admin")
+  createdAt      DateTime @default(now())
+
+  vendorProducts ProductImage[]
+  listings       VendorProduct[]
+
+  @@map("product_masters")
+}
+
+// 8. Product Image Entity
+model ProductImage {
+  id              String        @id @default(uuid())
+  productMasterId String
+  productMaster   ProductMaster @relation(fields: [productMasterId], references: [id], onDelete: Cascade)
+  imageUrl        String
+  isPrimary       Boolean       @default(true)
+
+  @@map("product_images")
+}
+
+// 9. Vendor Store Product Offering (Linked to Product Master)
+model VendorProduct {
+  id              String         @id @default(uuid())
+  masterProductId String
+  masterProduct   ProductMaster  @relation(fields: [masterProductId], references: [id], onDelete: Cascade)
+  vendorId        String
+  vendor          Vendor         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  name            String
+  categoryId      String
+  categoryName    String
+  brand           String
+  type            String
+  grade           String
+  unit            String
+  price           Decimal
+  stockQty        Int            @default(100)
+  imageUrl        String
+  approvalStatus  ApprovalStatus @default(PENDING_REVIEW)
+  isActive        Boolean        @default(false)
+  addedBy         String         @default("Vendor Catalog Selection")
+  submittedOn     DateTime       @default(now())
+
+  orderItems OrderItem[]
+
+  @@map("vendor_products")
+}
+
+// 10. Customer Saved Address Entity
+model Address {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  regionId   String
+  region     Region   @relation(fields: [regionId], references: [id])
+  fullName   String
+  phone      String
+  street     String
+  city       String   @default("Varanasi")
+  state      String   @default("Uttar Pradesh")
+  pincode    String
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  orders Order[]
+
+  @@map("addresses")
+}
+
+// 11. Customer Order Entity
+model Order {
+  id             String      @id @default(uuid())
+  orderNumber    String      @unique @default(cuid())
+  customerId     String
+  customer       User        @relation(fields: [customerId], references: [id])
+  addressId      String?
+  address        Address?    @relation(fields: [addressId], references: [id])
+  totalAmount    Decimal
+  deliveryFee    Decimal     @default(49.00)
+  discountAmount Decimal     @default(0.00)
+  couponCode     String?
+  paymentMode    String      @default("COD")
+  status         OrderStatus @default(PENDING)
+  idempotencyKey String?     @unique
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  items OrderItem[]
+
+  @@map("orders")
+}
+
+// 12. Order Line Item Entity (Freezes priceAtPurchase)
+model OrderItem {
+  id              String        @id @default(uuid())
+  orderId         String
+  order           Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  vendorProductId String?
+  vendorProduct   VendorProduct? @relation(fields: [vendorProductId], references: [id])
+  vendorId        String
+  vendor          Vendor        @relation(fields: [vendorId], references: [id])
+  productName     String
+  priceAtPurchase Decimal
+  cgstAmount      Decimal       @default(0.00)
+  sgstAmount      Decimal       @default(0.00)
+  quantity        Int
+  totalPrice      Decimal
+
+  @@map("order_items")
+}
+
+// 13. Audit Log Entity
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  details   String
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+// 14. Notification Entity
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}

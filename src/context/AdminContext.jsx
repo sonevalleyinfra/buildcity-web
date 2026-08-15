@@ -1,49 +1,9 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
 const AdminContext = createContext(null);
-const STORAGE_KEY = "buildcity_admin";
 
-// TEMPORARY MOCK — replace with GET /api/v1/admin/vendors, /categories,
-// /regions once backend jab ban jayega .
-const seedDrs = [
-  {
-    id: "dr1",
-    name: "Ramesh Sharma",
-    phone: "7777777777",
-    regionId: "r1",
-    regionName: "Varanasi",
-    status: "ACTIVE",
-    vendorCount: 2,
-    productCount: 8,
-    joinedOn: "2026-05-10",
-  },
-  {
-    id: "dr2",
-    name: "Suresh Patel",
-    phone: "8888888888",
-    regionId: "r2",
-    regionName: "Mirzapur",
-    status: "ACTIVE",
-    vendorCount: 1,
-    productCount: 4,
-    joinedOn: "2026-06-15",
-  },
-];
-
-const seedVendors = [
-  { id: "v1", shopName: "Shree Cement Traders", ownerName: "Rakesh Gupta", phone: "9876543210", regionId: "r1", regionName: "Varanasi", status: "APPROVED", commissionRate: 10, productCount: 24, joinedOn: "2026-03-12", addedByDr: "Ramesh Sharma" },
-  { id: "v2", shopName: "Asian Paints Hub", ownerName: "Sunita Verma", phone: "9876501234", regionId: "r1", regionName: "Varanasi", status: "APPROVED", commissionRate: 12, productCount: 18, joinedOn: "2026-04-02", addedByDr: "Ramesh Sharma" },
-  { id: "v3", shopName: "SteelMart UP", ownerName: "Vikram Singh", phone: "9812345678", regionId: "r2", regionName: "Mirzapur", status: "PENDING", commissionRate: 10, productCount: 0, joinedOn: "2026-08-05", addedByDr: "Suresh Patel" },
-  { id: "v4", shopName: "BuildFast Hardware", ownerName: "Anil Kumar", phone: "9898989898", regionId: "r3", regionName: "Prayagraj", status: "PENDING", commissionRate: 10, productCount: 0, joinedOn: "2026-08-09", addedByDr: "Admin" },
-  { id: "v5", shopName: "Ganga Sanitary Store", ownerName: "Mohan Lal", phone: "9765432109", regionId: "r1", regionName: "Varanasi", status: "SUSPENDED", commissionRate: 10, productCount: 12, joinedOn: "2026-02-18", addedByDr: "Admin" },
-];
-
-const seedOrders = [
-  { id: "BC48213", customer: "Amit Sharma", vendor: "Shree Cement Traders", amount: 3560, status: "Delivered", date: "2026-08-08" },
-  { id: "BC48219", customer: "Priya Yadav", vendor: "Asian Paints Hub", amount: 2250, status: "Shipped", date: "2026-08-10" },
-  { id: "BC48225", customer: "Rakesh Tiwari", vendor: "SteelMart UP", amount: 8900, status: "Pending", date: "2026-08-11" },
-  { id: "BC48230", customer: "Neha Singh", vendor: "Ganga Sanitary Store", amount: 1450, status: "Cancelled", date: "2026-08-11" },
-];
+const seedDrs = [];
+const seedVendors = [];
 
 const seedCategories = [
   { id: "c1", name: "Cement", gstRate: 28, productCount: 120, isActive: true },
@@ -60,242 +20,161 @@ const seedRegions = [
   { id: "r4", name: "Jaunpur", state: "Uttar Pradesh", baseDeliveryCharge: 89, isActive: true },
 ];
 
-const seedMasterProducts = [
-  {
-    id: "mp1",
-    name: "UltraTech Super PPC Cement",
-    categoryId: "c1",
-    categoryName: "Cement",
-    brand: "UltraTech",
-    type: "PPC Cement",
-    grade: "OPC 53 Grade",
-    unit: "50kg Bag",
-    suggestedPrice: 390,
-    imageUrl: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
-    addedBy: "Admin",
-  },
-  {
-    id: "mp2",
-    name: "Ambuja Kawach Waterproof Cement",
-    categoryId: "c1",
-    categoryName: "Cement",
-    brand: "Ambuja",
-    type: "Waterproof PPC",
-    grade: "OPC 53 Grade",
-    unit: "50kg Bag",
-    suggestedPrice: 410,
-    imageUrl: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
-    addedBy: "Admin",
-  },
-  {
-    id: "mp3",
-    name: "Asian Paints Royale Luxury Emulsion",
-    categoryId: "c2",
-    categoryName: "Paints",
-    brand: "Asian Paints",
-    type: "Interior Emulsion",
-    grade: "Premium Shine",
-    unit: "20 Liter Bucket",
-    suggestedPrice: 2250,
-    imageUrl: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=400&q=80",
-    addedBy: "Ramesh Sharma (DR)",
-  },
-  {
-    id: "mp4",
-    name: "Berger Silk Glamor High Shine",
-    categoryId: "c2",
-    categoryName: "Paints",
-    brand: "Berger",
-    type: "Luxury Emulsion",
-    grade: "Smooth Silk",
-    unit: "20 Liter Bucket",
-    suggestedPrice: 2150,
-    imageUrl: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=400&q=80",
-    addedBy: "Admin",
-  },
-  {
-    id: "mp5",
-    name: "Tata Tiscon 550D TMT Rebar 12mm",
-    categoryId: "c3",
-    categoryName: "Steel",
-    brand: "Tata Tiscon",
-    type: "TMT Rebar",
-    grade: "Fe 550D",
-    unit: "12 Meter Rod",
-    suggestedPrice: 650,
-    imageUrl: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=400&q=80",
-    addedBy: "Admin",
-  },
-  {
-    id: "mp6",
-    name: "Jindal Panther 550D TMT Bar 16mm",
-    categoryId: "c3",
-    categoryName: "Steel",
-    brand: "Jindal Panther",
-    type: "TMT Rebar",
-    grade: "Fe 550D",
-    unit: "12 Meter Rod",
-    suggestedPrice: 890,
-    imageUrl: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=400&q=80",
-    addedBy: "Ramesh Sharma (DR)",
-  },
-  {
-    id: "mp7",
-    name: "Astral Silencio PVC Pipe 4 Inch",
-    categoryId: "c4",
-    categoryName: "Plumbing",
-    brand: "Astral",
-    type: "PVC Pipe",
-    grade: "Class 2 / 6kg",
-    unit: "10 Feet Pipe",
-    suggestedPrice: 480,
-    imageUrl: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=80",
-    addedBy: "Admin",
-  },
-  {
-    id: "mp8",
-    name: "Supreme SWR CPVC Pipe 1 Inch",
-    categoryId: "c4",
-    categoryName: "Plumbing",
-    brand: "Supreme",
-    type: "CPVC Hot & Cold",
-    grade: "SDR 11",
-    unit: "10 Feet Pipe",
-    suggestedPrice: 320,
-    imageUrl: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=80",
-    addedBy: "Admin",
-  },
-  {
-    id: "mp9",
-    name: "Finolex 1.5 sqmm Flame Retardant Wire",
-    categoryId: "c5",
-    categoryName: "Electrical",
-    brand: "Finolex",
-    type: "FR Copper Wire",
-    grade: "90 Meter Coil",
-    unit: "1 Coil",
-    suggestedPrice: 1450,
-    imageUrl: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=400&q=80",
-    addedBy: "Admin",
-  },
-  {
-    id: "mp10",
-    name: "Havells Coral Modular 6A Switch",
-    categoryId: "c5",
-    categoryName: "Electrical",
-    brand: "Havells",
-    type: "Modular Switch",
-    grade: "Heavy Duty 240V",
-    unit: "1 Box (20 Pcs)",
-    suggestedPrice: 580,
-    imageUrl: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=400&q=80",
-    addedBy: "Admin",
-  },
-];
-
-const seedProducts = [
-  {
-    id: "p1",
-    masterProductId: "mp1",
-    name: "UltraTech Super PPC Cement",
-    categoryId: "c1",
-    categoryName: "Cement",
-    brand: "UltraTech",
-    type: "PPC Cement",
-    grade: "OPC 53 Grade",
-    unit: "50kg Bag",
-    vendorId: "v1",
-    vendorName: "Shree Cement Traders",
-    price: 390,
-    stockQty: 500,
-    imageUrl: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
-    isActive: true,
-    addedBy: "Ramesh Sharma (DR)"
-  },
-  {
-    id: "p2",
-    masterProductId: "mp3",
-    name: "Asian Paints Royale Luxury Emulsion",
-    categoryId: "c2",
-    categoryName: "Paints",
-    brand: "Asian Paints",
-    type: "Interior Emulsion",
-    grade: "Premium Shine",
-    unit: "20 Liter Bucket",
-    vendorId: "v2",
-    vendorName: "Asian Paints Hub",
-    price: 2250,
-    stockQty: 60,
-    imageUrl: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=400&q=80",
-    isActive: true,
-    addedBy: "Ramesh Sharma (DR)"
-  },
-  {
-    id: "p3",
-    masterProductId: "mp5",
-    name: "Tata Tiscon 550D TMT Rebar 12mm",
-    categoryId: "c3",
-    categoryName: "Steel",
-    brand: "Tata Tiscon",
-    type: "TMT Rebar",
-    grade: "Fe 550D",
-    unit: "12 Meter Rod",
-    vendorId: "v3",
-    vendorName: "SteelMart UP",
-    price: 650,
-    stockQty: 200,
-    imageUrl: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=400&q=80",
-    isActive: true,
-    addedBy: "Admin"
-  },
-];
-
-// Helper function: LocalStorage se data load karo, agar nahi mile toh default seed array return karo
-function loadOrSeed(key, seed) {
-  const saved = localStorage.getItem(key);
-  if (saved) {
-    try {
-      return JSON.parse(saved);
-    } catch {
-      return seed;
-    }
-  }
-  return seed;
-}
+const seedMasterProducts = [];
+const seedProducts = [];
 
 export function AdminProvider({ children }) {
-  // Master Platform Data States - DRs, Vendors, Orders, Categories, Regions, Master Products, Vendor Listings
-  const [drs, setDrs] = useState(() => loadOrSeed(STORAGE_KEY + "_drs", seedDrs));
-  const [vendors, setVendors] = useState(() => loadOrSeed(STORAGE_KEY + "_vendors", seedVendors));
-  const [orders] = useState(() => loadOrSeed(STORAGE_KEY + "_orders", seedOrders));
-  const [categories, setCategories] = useState(() => loadOrSeed(STORAGE_KEY + "_categories", seedCategories));
-  const [regions, setRegions] = useState(() => loadOrSeed(STORAGE_KEY + "_regions", seedRegions));
-  const [masterProducts, setMasterProducts] = useState(() => loadOrSeed(STORAGE_KEY + "_master_products", seedMasterProducts));
-  const [products, setProducts] = useState(() => loadOrSeed(STORAGE_KEY + "_products", seedProducts));
+  const [drs, setDrs] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [categories, setCategories] = useState(seedCategories);
+  const [regions, setRegions] = useState(seedRegions);
+  const [masterProducts, setMasterProducts] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(true);
 
-  // Auto-sync states to localStorage jab bhi data change ho
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY + "_drs", JSON.stringify(drs));
-  }, [drs]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY + "_vendors", JSON.stringify(vendors));
-  }, [vendors]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY + "_categories", JSON.stringify(categories));
-  }, [categories]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY + "_regions", JSON.stringify(regions));
-  }, [regions]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY + "_master_products", JSON.stringify(masterProducts));
-  }, [masterProducts]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY + "_products", JSON.stringify(products));
-  }, [products]);
+  // Single Source of Truth: Supabase Cloud DB se live data sync karne ke liye (Zero flickering guard ke sath)
+  const fetchCloudData = async () => {
+    try {
+      const syncRes = await fetch("http://localhost:5000/api/v1/cloud-sync").then((r) => r.json()).catch(() => null);
+      if (!syncRes) return;
 
-  // 1. Naya DR (District Representative) add karne wala function
-  const addDr = (drData) => {
+      const { drs: drsRes, vendors: vendorsRes, masterProducts: masterRes, categories: categoriesRes, regions: regionsRes, orders: ordersRes, listings: listingsRes } = syncRes;
+
+      if (drsRes && Array.isArray(drsRes)) {
+        const formattedDrs = drsRes.map((d) => ({
+          id: d.id,
+          name: d.name,
+          phone: d.phone,
+          regionId: d.regionId,
+          regionName: d.region?.name || "Varanasi",
+          status: d.status || "ACTIVE",
+          vendorCount: 2,
+          productCount: 8,
+          joinedOn: d.joinedOn ? d.joinedOn.split("T")[0] : "2026-05-10",
+        }));
+        // JSON Memory Reference Guard: Data same hone par re-render skip karein (Flickering protection)
+        setDrs((prev) => (JSON.stringify(prev) === JSON.stringify(formattedDrs) ? prev : formattedDrs));
+      }
+
+      if (vendorsRes && Array.isArray(vendorsRes)) {
+        const formattedVendors = vendorsRes.map((v) => ({
+          id: v.id,
+          shopName: v.shopName,
+          ownerName: v.ownerName,
+          phone: v.phone,
+          regionId: v.regionId,
+          regionName: v.region?.name || "Varanasi",
+          status: v.status || "APPROVED",
+          commissionRate: Number(v.commissionRate) || 10,
+          productCount: Array.isArray(v.vendorProducts) ? v.vendorProducts.length : (v.user?.productCount || 0),
+          joinedOn: v.joinedOn ? v.joinedOn.split("T")[0] : "2026-03-12",
+          addedByDr: v.addedByDr || "Ramesh Sharma",
+        }));
+        // JSON Memory Reference Guard: Vendors array change na hone par re-render skip karein
+        setVendors((prev) => (JSON.stringify(prev) === JSON.stringify(formattedVendors) ? prev : formattedVendors));
+      }
+
+      if (masterRes && Array.isArray(masterRes)) {
+        const formattedMaster = masterRes.map((m) => ({
+          id: m.id,
+          name: m.name,
+          categoryId: m.categoryId,
+          categoryName: m.category?.name || "General",
+          brand: m.brand || "Generic",
+          type: m.type || "Standard",
+          grade: m.grade || "Standard Grade",
+          unit: m.unit || "Unit",
+          suggestedPrice: Number(m.suggestedPrice) || 100,
+          imageUrl: m.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+          addedBy: m.addedBy || "Admin",
+        }));
+        setMasterProducts((prev) => (JSON.stringify(prev) === JSON.stringify(formattedMaster) ? prev : formattedMaster));
+      }
+
+      if (categoriesRes && Array.isArray(categoriesRes)) {
+        const formattedCats = categoriesRes.map((c) => ({
+          id: c.id,
+          name: c.name,
+          gstRate: Number(c.gstRate) || 18,
+          productCount: c.productCount || 100,
+          isActive: c.isActive !== false,
+        }));
+        setCategories((prev) => (JSON.stringify(prev) === JSON.stringify(formattedCats) ? prev : formattedCats));
+      }
+
+      if (regionsRes && Array.isArray(regionsRes)) {
+        const formattedRegs = regionsRes.map((r) => ({
+          id: r.id,
+          name: r.name,
+          state: r.state || "Uttar Pradesh",
+          baseDeliveryCharge: Number(r.baseDeliveryCharge) || 49,
+          isActive: r.isActive !== false,
+        }));
+        setRegions((prev) => (JSON.stringify(prev) === JSON.stringify(formattedRegs) ? prev : formattedRegs));
+      }
+
+      if (ordersRes && Array.isArray(ordersRes)) {
+        setOrders((prev) => (JSON.stringify(prev) === JSON.stringify(ordersRes) ? prev : ordersRes));
+      }
+
+      if (listingsRes && Array.isArray(listingsRes)) {
+        const formattedListings = listingsRes.map((l) => ({
+          id: l.id,
+          masterProductId: l.masterProductId,
+          name: l.name || l.masterProduct?.name || "Product",
+          categoryId: l.categoryId || l.masterProduct?.categoryId,
+          categoryName: l.categoryName || l.masterProduct?.category?.name || "Material",
+          brand: l.brand || l.masterProduct?.brand || "Generic",
+          type: l.type || l.masterProduct?.type || "Standard",
+          grade: l.grade || l.masterProduct?.grade || "Standard Grade",
+          unit: l.unit || l.masterProduct?.unit || "Unit",
+          vendorId: l.vendorId,
+          vendorName: l.vendor?.shopName || l.vendorName || "Shree Cement Traders",
+          price: Number(l.price) || 100,
+          stockQty: Number(l.stockQty) || 100,
+          imageUrl: l.imageUrl || l.masterProduct?.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+          approvalStatus: l.approvalStatus || (l.isActive ? "APPROVED" : "PENDING_REVIEW"),
+          isActive: l.isActive !== undefined ? l.isActive : l.approvalStatus === "APPROVED",
+          addedBy: l.addedBy || "Vendor",
+        }));
+        setProducts((prev) => (JSON.stringify(prev) === JSON.stringify(formattedListings) ? prev : formattedListings));
+      }
+    } catch (err) {
+      console.warn("Cloud sync note:", err.message);
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+
+  // Continuous Live Auto Polling (2s) & Tab Storage Sync from Supabase Cloud DB
+  useEffect(() => {
+    fetchCloudData();
+    const interval = setInterval(fetchCloudData, 2000);
+
+    const handleStorage = () => fetchCloudData();
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
+  const addDr = async (drData) => {
     const regionObj = regions.find((r) => r.id === drData.regionId) || {};
+    try {
+      const res = await fetch("http://localhost:5000/api/v1/drs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: drData.name, phone: drData.phone.trim(), regionId: drData.regionId }),
+      });
+      if (res.ok) {
+        await fetchCloudData();
+        return;
+      }
+    } catch {}
+
     const newDr = {
       id: "dr-" + Date.now(),
       name: drData.name,
@@ -311,7 +190,6 @@ export function AdminProvider({ children }) {
     return newDr;
   };
 
-  // DR ko Active/Inactive toggle karne wala function
   const toggleDrActive = (id) => {
     setDrs((prev) =>
       prev.map((d) =>
@@ -320,9 +198,28 @@ export function AdminProvider({ children }) {
     );
   };
 
-  // 2. Naya Vendor add karne wala function (DR ya Admin dwara)
-  const addVendor = (vendorData) => {
+  const addVendor = async (vendorData) => {
     const regionObj = regions.find((r) => r.id === vendorData.regionId) || {};
+    try {
+      const res = await fetch("http://localhost:5000/api/v1/vendors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shopName: vendorData.shopName,
+          ownerName: vendorData.ownerName,
+          phone: vendorData.phone,
+          regionId: vendorData.regionId,
+          commissionRate: vendorData.commissionRate,
+          addedByDr: vendorData.addedByDr,
+        }),
+      });
+      if (res.ok) {
+        const createdV = await res.json();
+        await fetchCloudData();
+        return createdV;
+      }
+    } catch {}
+
     const newVendor = {
       id: "v-" + Date.now(),
       shopName: vendorData.shopName,
@@ -337,197 +234,166 @@ export function AdminProvider({ children }) {
       addedByDr: vendorData.addedByDr || "System",
     };
     setVendors((prev) => [newVendor, ...prev]);
-
-    if (vendorData.drId) {
-      setDrs((prev) =>
-        prev.map((d) => (d.id === vendorData.drId ? { ...d, vendorCount: d.vendorCount + 1 } : d))
-      );
-    }
     return newVendor;
   };
 
-  // Vendor status (APPROVED, PENDING, SUSPENDED) set karne wala helper
-  const setVendorStatus = (id, status) => {
-    setVendors((prev) => prev.map((v) => (v.id === id ? { ...v, status } : v)));
-  };
-
-  const addCategory = (cat) => {
-    setCategories((prev) => [
-      ...prev,
-      { id: "c-" + Date.now(), productCount: 0, isActive: true, ...cat },
-    ]);
-  };
-
-  const toggleCategoryActive = (id) => {
-    setCategories((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, isActive: !c.isActive } : c))
-    );
-  };
-
-  const addRegion = (region) => {
-    setRegions((prev) => [
-      ...prev,
-      { id: "r-" + Date.now(), isActive: true, ...region },
-    ]);
-  };
-
-  const toggleRegionActive = (id) => {
-    setRegions((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, isActive: !r.isActive } : r))
-    );
-  };
-
-  const addMasterProduct = (masterData) => {
-    const catObj = categories.find((c) => c.id === masterData.categoryId) || {};
-    const newMaster = {
-      id: "mp-" + Date.now(),
-      name: masterData.name,
-      categoryId: masterData.categoryId,
-      categoryName: catObj.name || masterData.categoryName || "General",
-      brand: masterData.brand || "Generic",
-      type: masterData.type || "Standard",
-      grade: masterData.grade || "Standard Grade",
-      unit: masterData.unit || "Unit",
-      suggestedPrice: Number(masterData.suggestedPrice || masterData.price) || 100,
-      imageUrl: masterData.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
-      addedBy: masterData.addedBy || "Admin",
-    };
-
-    setMasterProducts((prev) => [newMaster, ...prev]);
-
-    // If DR/Admin assigned it directly to a vendor upon creation:
-    if (masterData.vendorId) {
-      assignMasterProductToVendor({
-        masterProductId: newMaster.id,
-        vendorId: masterData.vendorId,
-        vendorName: masterData.vendorName,
-        price: masterData.price || newMaster.suggestedPrice,
-        stockQty: masterData.stockQty || 100,
-        drId: masterData.drId,
-        addedBy: masterData.addedBy,
-      });
-    }
-
-    return newMaster;
-  };
-
-  const assignMasterProductToVendor = ({ masterProductId, vendorId, vendorName, price, stockQty, drId, addedBy }) => {
-    const masterObj = masterProducts.find((mp) => mp.id === masterProductId) || {};
-    const vendorObj = vendors.find((v) => v.id === vendorId) || {};
-
-    const newProdListing = {
-      id: "p-" + Date.now(),
-      masterProductId: masterProductId || masterObj.id,
-      name: masterObj.name || "Master Product",
-      categoryId: masterObj.categoryId || "c1",
-      categoryName: masterObj.categoryName || "General",
-      brand: masterObj.brand || "Generic",
-      type: masterObj.type || "Standard",
-      grade: masterObj.grade || "Standard Grade",
-      unit: masterObj.unit || "Unit",
-      vendorId: vendorId,
-      vendorName: vendorObj.shopName || vendorName || "Vendor Store",
-      price: Number(price) || masterObj.suggestedPrice || 100,
-      stockQty: Number(stockQty) || 0,
-      imageUrl: masterObj.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
-      isActive: true,
-      addedBy: addedBy || "Vendor Catalog Selection",
-    };
-
-    setProducts((prev) => [newProdListing, ...prev]);
-
-    if (drId) {
-      setDrs((prev) =>
-        prev.map((d) => (d.id === drId ? { ...d, productCount: d.productCount + 1 } : d))
-      );
-    }
-
-    return newProdListing;
-  };
-
-  const updateVendorProductListing = (productId, updates) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === productId ? { ...p, ...updates } : p))
-    );
-  };
-
-  const removeVendorProductListing = (productId) => {
-    setProducts((prev) => prev.filter((p) => p.id !== productId));
-  };
-
-  const toggleProductActive = (id) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, isActive: !p.isActive } : p))
-    );
-  };
-
-  const updateDr = (id, updates) => {
-    const regionObj = updates.regionId ? regions.find((r) => r.id === updates.regionId) || {} : {};
-    setDrs((prev) =>
-      prev.map((d) =>
-        d.id === id
-          ? {
-              ...d,
-              ...updates,
-              regionName: regionObj.name || updates.regionName || d.regionName,
-            }
-          : d
-      )
-    );
-  };
-
-  const updateVendor = (id, updates) => {
-    const regionObj = updates.regionId ? regions.find((r) => r.id === updates.regionId) || {} : {};
+  const setVendorStatus = async (id, status) => {
     setVendors((prev) =>
-      prev.map((v) =>
-        v.id === id
-          ? {
-              ...v,
-              ...updates,
-              regionName: regionObj.name || updates.regionName || v.regionName,
-            }
-          : v
-      )
+      prev.map((v) => (v.id === id ? { ...v, status } : v))
+    );
+    try {
+      await fetch(`http://localhost:5000/api/v1/vendors/${id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      await fetchCloudData();
+    } catch {}
+  };
+
+  const removeVendor = async (id) => {
+    setVendors((prev) => prev.filter((v) => v.id !== id));
+    try {
+      const res = await fetch(`http://localhost:5000/api/v1/vendors/${id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        await fetchCloudData();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        console.warn("Delete vendor warning:", errData);
+      }
+    } catch (err) {
+      console.warn("Delete vendor network error:", err.message);
+    }
+  };
+
+  const addCategory = (categoryData) => {
+    const newCat = {
+      id: "c-" + Date.now(),
+      name: categoryData.name,
+      gstRate: Number(categoryData.gstRate) || 18,
+      productCount: 0,
+      isActive: true,
+    };
+    setCategories((prev) => [newCat, ...prev]);
+    return newCat;
+  };
+
+  const addRegion = (regionData) => {
+    const newReg = {
+      id: "r-" + Date.now(),
+      name: regionData.name,
+      state: regionData.state || "Uttar Pradesh",
+      baseDeliveryCharge: Number(regionData.baseDeliveryCharge) || 49,
+      isActive: true,
+    };
+    setRegions((prev) => [newReg, ...prev]);
+    return newReg;
+  };
+
+  const addMasterProduct = async (mpData) => {
+    try {
+      const res = await fetch("http://localhost:5000/api/v1/master-products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(mpData),
+      });
+      if (res.ok) {
+        await fetchCloudData();
+        return;
+      }
+    } catch {}
+
+    const catObj = categories.find((c) => c.id === mpData.categoryId) || {};
+    const newMp = {
+      id: mpData.id || "mp-" + Date.now(),
+      name: mpData.name,
+      categoryId: mpData.categoryId || "c1",
+      categoryName: catObj.name || mpData.categoryName || "General",
+      brand: mpData.brand || "Generic",
+      type: mpData.type || "Standard",
+      grade: mpData.grade || "Standard Grade",
+      unit: mpData.unit || "Unit",
+      suggestedPrice: Number(mpData.suggestedPrice) || 100,
+      imageUrl: mpData.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+      addedBy: mpData.addedBy || "Admin",
+    };
+    setMasterProducts((prev) => [newMp, ...prev]);
+    return newMp;
+  };
+
+  const assignMasterProductToVendor = async ({ masterProductId, vendorId, vendorName, price, stockQty, addedBy }) => {
+    try {
+      const res = await fetch("http://localhost:5000/api/v1/vendor/listings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ masterProductId, vendorId, price, stockQty, addedBy }),
+      });
+      if (res.ok) {
+        await fetchCloudData();
+        return;
+      }
+    } catch {}
+
+    const mp = masterProducts.find((m) => m.id === masterProductId);
+    const newListing = {
+      id: "p-" + Date.now(),
+      masterProductId: masterProductId || mp?.id,
+      name: mp ? mp.name : "Construction Material Product",
+      categoryId: mp ? mp.categoryId : "c1",
+      categoryName: mp ? mp.categoryName : "General",
+      brand: mp ? mp.brand : "Generic",
+      type: mp ? mp.type : "Standard",
+      grade: mp ? mp.grade : "Standard Grade",
+      unit: mp ? mp.unit : "Unit",
+      vendorId: vendorId || "v1",
+      vendorName: vendorName || "Vendor Store",
+      price: Number(price) || (mp ? mp.suggestedPrice : 100),
+      stockQty: Number(stockQty) || 100,
+      imageUrl: mp ? mp.imageUrl : "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+      isActive: (addedBy === "Admin" || addedBy === "DR") ? true : false,
+      approvalStatus: (addedBy === "Admin" || addedBy === "DR") ? "APPROVED" : "PENDING_REVIEW",
+      addedBy: addedBy || "Vendor",
+    };
+    setProducts((prev) => [newListing, ...prev]);
+    return newListing;
+  };
+
+  const updateVendorProductListing = (id, updates) => {
+    setProducts((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, ...updates } : p))
     );
   };
 
-  const updateMasterProduct = (id, updates) => {
-    const catObj = updates.categoryId ? categories.find((c) => c.id === updates.categoryId) || {} : {};
-    setMasterProducts((prev) =>
-      prev.map((mp) =>
-        mp.id === id
-          ? {
-              ...mp,
-              ...updates,
-              categoryName: catObj.name || updates.categoryName || mp.categoryName,
-            }
-          : mp
-      )
-    );
+  const removeVendorProductListing = (id) => {
+    setProducts((prev) => prev.filter((p) => p.id !== id));
   };
 
-  const updateCategory = (id, updates) => {
-    setCategories((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, ...updates } : c))
+  const updateListingApprovalStatus = async (id, approvalStatus) => {
+    setProducts((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, approvalStatus, isActive: approvalStatus === "APPROVED" } : p))
     );
-  };
 
-  const updateRegion = (id, updates) => {
-    setRegions((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, ...updates } : r))
-    );
+    try {
+      await fetch(`http://localhost:5000/api/v1/vendor/listings/${id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approvalStatus }),
+      });
+      await fetchCloudData();
+    } catch {}
   };
 
   const stats = {
-    totalOrders: orders.length,
-    totalRevenue: orders
-      .filter((o) => o.status !== "Cancelled")
-      .reduce((sum, o) => sum + o.amount, 0),
+    totalRevenue: orders.reduce((sum, o) => sum + (Number(o.totalAmount || o.total || o.amount) || 0), 0),
     approvedVendors: vendors.filter((v) => v.status === "APPROVED").length,
     pendingVendors: vendors.filter((v) => v.status === "PENDING").length,
-    activeProducts: products.length,
-    masterProductsCount: masterProducts.length,
-    totalDrs: drs.filter((d) => d.status === "ACTIVE").length,
+    activeVendors: vendors.filter((v) => v.status === "APPROVED").length,
+    activeDrs: drs.filter((d) => d.status === "ACTIVE").length,
+    totalMasterProducts: masterProducts.length,
+    totalListings: products.length,
+    totalOrders: orders.length,
   };
 
   return (
@@ -540,26 +406,21 @@ export function AdminProvider({ children }) {
         regions,
         masterProducts,
         products,
+        productsLoading,
         stats,
         addDr,
-        updateDr,
         toggleDrActive,
         addVendor,
-        updateVendor,
         setVendorStatus,
+        removeVendor,
         addCategory,
-        updateCategory,
-        toggleCategoryActive,
         addRegion,
-        updateRegion,
-        toggleRegionActive,
         addMasterProduct,
-        updateMasterProduct,
         assignMasterProductToVendor,
         updateVendorProductListing,
         removeVendorProductListing,
-        addProduct: addMasterProduct, // Fallback alias hai ye 
-        toggleProductActive,
+        updateListingApprovalStatus,
+        fetchCloudData,
       }}
     >
       {children}
@@ -569,6 +430,6 @@ export function AdminProvider({ children }) {
 
 export function useAdmin() {
   const ctx = useContext(AdminContext);
-  if (!ctx) throw new Error("useAdmin must be used inside AdminProvider");
+  if (!ctx) throw new Error("useAdmin must be used within AdminProvider");
   return ctx;
 }

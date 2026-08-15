@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../../context/CartContext";
+import { useAdmin } from "../../context/AdminContext";
 import Navbar from "../../components/Navbar";
 import RegionPicker from "../../components/RegionPicker";
 import NotificationPanel from "../../components/NotificationPanel";
@@ -40,17 +41,19 @@ const categoryCards = [
   { name: "Tiles", count: "110+ Products", img: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80", tag: "Ceramics" },
 ];
 
-const bestSelling = [
-  { id: "bs-1", name: "UltraTech Super PPC Cement, 50kg", brand: "UltraTech", img: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80", mrp: 445, price: 390, discount: "12% OFF", rating: "4.9 ★" },
-  { id: "bs-2", name: "Asian Paints Royale Luxury Emulsion, 20L", brand: "Asian Paints", img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=400&q=80", mrp: 2450, price: 2250, discount: "8% OFF", rating: "4.8 ★" },
-  { id: "bs-3", name: "Tata Tiscon 550D TMT Steel Bar 12mm", brand: "Tata Tiscon", img: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=400&q=80", mrp: 765, price: 650, discount: "15% OFF", rating: "5.0 ★" },
-  { id: "bs-4", name: "Berger Weathercoat Smooth 20L", brand: "Berger", img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=400&q=80", mrp: 2250, price: 2050, discount: "10% OFF", rating: "4.7 ★" },
-];
+const bestSelling = [];
 
+import { useSearchParams } from "react-router-dom";
+
+// Categories Catalog Page — Real DB approved products filter, search, sorting aur exact structure skeleton loading
 export default function Categories() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialCat = searchParams.get("cat") || "All";
+
   const { count, addItem, items } = useCart();
-  const [activePill, setActivePill] = useState("All");
+  const { products = [], productsLoading } = useAdmin();
+  const [activePill, setActivePill] = useState(initialCat);
   const [slide, setSlide] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -64,8 +67,36 @@ export default function Categories() {
     return c.name.toLowerCase().includes(activePill.toLowerCase());
   });
 
+  // Deduplicate and filter Approved Live Vendor Products
+  const uniqueVendorProducts = useMemo(() => {
+    const map = new Map();
+    products.forEach((p) => {
+      const isApproved = p.approvalStatus === "APPROVED" || p.approvalStatus === undefined || p.isActive === true;
+      if (!isApproved) return;
+      const key = `${(p.name || "").toLowerCase()}_${p.vendorId || ""}`;
+      if (!map.has(key)) {
+        map.set(key, p);
+      }
+    });
+    return Array.from(map.values());
+  }, [products]);
+
+  const liveVendorProducts = uniqueVendorProducts.filter((p) => {
+    if (activePill === "All") return true;
+    const searchTarget = (activePill || "").toLowerCase();
+    const catName = (p.categoryName || "").toLowerCase();
+    const pName = (p.name || "").toLowerCase();
+    const brandName = (p.brand || "").toLowerCase();
+    return (
+      catName.includes(searchTarget) ||
+      searchTarget.includes(catName) ||
+      pName.includes(searchTarget) ||
+      brandName.includes(searchTarget)
+    );
+  });
+
   return (
-    <div className="min-h-screen bg-slate-50 text-navy-900 pb-24 sm:pb-12">
+    <div className="min-h-screen bg-slate-50 text-navy-900 pb-24 sm:pb-12 font-sans">
       {/* Desktop Navbar */}
       <div className="hidden lg:block">
         <Navbar />
@@ -124,7 +155,6 @@ export default function Categories() {
       </div>
 
       <main className="max-w-6xl mx-auto px-4 pt-6 space-y-8">
-        
         {/* Top Header Title & Filter Pills */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-slate-100 pb-3">
@@ -149,11 +179,8 @@ export default function Categories() {
                     : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
                 }`}
               >
-                {p.img ? (
-                  <img src={p.img} alt={p.name} className="w-5 h-5 rounded-full object-cover border border-white/20" />
-                ) : (
-                  <span>{p.icon || "🧱"}</span>
-                )}
+                {p.img && <img src={p.img} alt={p.name} className="w-5 h-5 rounded-full object-cover shrink-0" />}
+                {p.icon && <span>{p.icon}</span>}
                 <span>{p.name}</span>
               </button>
             ))}
@@ -161,39 +188,27 @@ export default function Categories() {
         </div>
 
         {/* Hero Slider Banner */}
-        <div className="relative overflow-hidden rounded-2xl bg-navy-950 text-white h-44 sm:h-56 shadow-md border border-slate-800">
+        <div className="relative overflow-hidden rounded-2xl bg-navy-900 h-40 sm:h-52 shadow-xs">
           {banners.map((b, i) => (
             <div
               key={i}
-              className="absolute inset-0 transition-opacity duration-700 flex"
+              className="absolute inset-0 transition-opacity duration-700 flex items-center"
               style={{ opacity: slide === i ? 1 : 0, pointerEvents: slide === i ? "auto" : "none" }}
             >
-              <div className="flex-[1.3] flex flex-col justify-center px-6 sm:px-8 py-5 relative z-10">
-                <span className="text-brand-300 text-[10px] font-black tracking-widest uppercase mb-1">
+              <div className="flex-1 px-6 sm:px-10 py-5 z-10">
+                <span className="bg-brand-500 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-md uppercase tracking-wider mb-2 inline-block shadow-xs">
                   {b.tag}
                 </span>
-                <h2 className="text-white text-xl sm:text-3xl font-black leading-tight mb-1 tracking-tight">
-                  {b.title.map((line, idx) => (
-                    <span key={idx}>
-                      {line}
-                      <br />
-                    </span>
-                  ))}
+                <h2 className="text-white text-lg sm:text-2xl font-black leading-tight mt-1">
+                  {b.title[0]} <br />
+                  <span className="text-brand-300">{b.title[1]}</span>
                 </h2>
-                <p className="text-slate-300 text-xs mb-3">{b.sub}</p>
-                <button className="bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl px-4 py-2 flex items-center gap-1.5 w-fit shadow-xs transition-colors cursor-pointer">
-                  Shop Category <span>→</span>
-                </button>
+                <p className="text-slate-300 text-xs mt-1 max-w-md hidden sm:block">{b.sub}</p>
               </div>
 
-              <div className="flex-1 relative overflow-hidden">
-                <img
-                  src={b.img}
-                  alt={b.title[0]}
-                  className="absolute inset-0 w-full h-full object-cover"
-                  style={{ clipPath: "polygon(15% 0, 100% 0, 100% 100%, 0% 100%)" }}
-                />
-                <div className="absolute inset-0 bg-linear-to-r from-navy-950/90 via-transparent to-transparent"></div>
+              <div className="w-1/2 h-full relative hidden sm:block">
+                <div className="absolute inset-0 bg-gradient-to-r from-navy-900 to-transparent z-10" />
+                <img src={b.img} alt="Banner" className="w-full h-full object-cover" />
               </div>
             </div>
           ))}
@@ -220,10 +235,10 @@ export default function Categories() {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 gap-4">
             {filteredCategories.map((c) => (
-              <Link
+              <div
                 key={c.name}
-                to={`/category/${encodeURIComponent(c.name.toLowerCase())}`}
-                className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md hover:border-brand-500 transition-all group relative overflow-hidden"
+                onClick={() => setActivePill(c.name)}
+                className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md hover:border-brand-500 transition-all group relative overflow-hidden cursor-pointer"
               >
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-xs font-extrabold bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-full">
@@ -249,10 +264,124 @@ export default function Categories() {
                   </h3>
                   <p className="text-[11px] text-slate-500 mt-0.5">{c.count}</p>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         </section>
+
+        {/* Products Filtered by Selected Category */}
+        {productsLoading ? (
+          <section className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+            <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+              <div className="h-5 bg-slate-200 rounded w-64 animate-pulse"></div>
+              <div className="h-6 bg-slate-200 rounded w-32 animate-pulse"></div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-pulse">
+              {[1, 2, 3, 4].map((n) => (
+                <div
+                  key={n}
+                  className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="relative h-36 rounded-xl overflow-hidden bg-slate-200 mb-3 border border-slate-200 flex items-center justify-center">
+                      <span className="absolute top-2 left-2 bg-navy-800 text-white text-[9px] font-bold px-2 py-0.5 rounded opacity-60">
+                        Category
+                      </span>
+                    </div>
+
+                    <div className="h-2.5 bg-brand-200 rounded w-28 mb-1.5" />
+                    <div className="h-4 bg-slate-200 rounded w-full mb-1" />
+                    <div className="h-4 bg-slate-200 rounded w-3/4 mb-2" />
+                    <div className="h-3 bg-slate-200 rounded w-1/2" />
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between">
+                    <div>
+                      <div className="h-5 bg-slate-200 rounded w-14 mb-1" />
+                      <div className="h-2 bg-slate-200 rounded w-10" />
+                    </div>
+                    <div className="bg-brand-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-xs opacity-70">
+                      + Add to Cart
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : liveVendorProducts.length > 0 && (
+          <section className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 border-b border-slate-100 pb-3">
+              <div>
+                <h2 className="text-lg font-black text-navy-900 flex items-center gap-2 tracking-tight">
+                  <span>⚡ {activePill === "All" ? "Premium Certified Materials Catalog" : activePill + " Master Supplies"}</span>
+                  <span className="bg-green-50 text-green-700 border border-green-200 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                    ✨ 100% Certified Quality
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  100% Tested & Verified Construction Stock · Direct Site Delivery Across Varanasi & UP Districts
+                </p>
+              </div>
+              <span className="text-xs font-extrabold bg-slate-100 text-slate-700 px-3 py-1 rounded-xl border border-slate-200 w-fit shrink-0">
+                {liveVendorProducts.length} Items Available
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {liveVendorProducts.map((p) => (
+                <div
+                  key={p.id}
+                  className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between hover:border-brand-300 hover:shadow-md transition-all group"
+                >
+                  <div>
+                    <div className="relative h-36 rounded-xl overflow-hidden bg-white mb-3 border border-slate-200">
+                      <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      <span className="absolute top-2 left-2 bg-navy-900 text-white text-[9px] font-bold px-2 py-0.5 rounded">
+                        {p.categoryName}
+                      </span>
+                    </div>
+
+                    <p className="text-[10px] font-extrabold text-brand-600 uppercase tracking-wide">
+                      🏬 Offered by: {p.vendorName}
+                    </p>
+                    <h3 className="font-extrabold text-navy-900 text-xs leading-snug line-clamp-2 mt-0.5">
+                      {p.name}
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Brand: <span className="font-bold text-slate-700">{p.brand}</span> · Grade: <span className="font-bold text-slate-700">{p.grade}</span>
+                    </p>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between">
+                    <div>
+                      <span className="text-base font-black text-navy-900">₹{p.price}</span>
+                      <p className="text-[10px] text-slate-400">per {p.unit}</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        addItem(
+                          {
+                            id: p.id,
+                            name: p.name,
+                            price: p.price,
+                            brand: p.brand,
+                            img: p.imageUrl,
+                            vendorName: p.vendorName,
+                          },
+                          1
+                        );
+                        alert(`"${p.name}" (Vendor: ${p.vendorName}) added to cart!`);
+                      }}
+                      className="bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-xs transition-colors cursor-pointer"
+                    >
+                      + Add to Cart
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Best Selling Products */}
         <section>
@@ -261,15 +390,10 @@ export default function Categories() {
               <h2 className="text-lg font-black text-navy-900">Best Selling District Products</h2>
               <p className="text-xs text-slate-500">Highest ordered construction items across Varanasi & nearby districts</p>
             </div>
-            <Link to="/search" className="text-xs font-bold text-brand-600 hover:underline">
-              View All Products →
-            </Link>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {bestSelling.map((p) => {
-              const inCart = items.some((i) => i.id === p.id);
-
               return (
                 <div
                   key={p.id}
@@ -301,27 +425,18 @@ export default function Categories() {
                     </h3>
                   </div>
 
-                  <div className="pt-3 border-t border-slate-100">
-                    <div className="flex items-baseline gap-2 mb-3">
-                      <span className="text-base font-black text-navy-900">
-                        ₹{p.price.toLocaleString("en-IN")}
-                      </span>
-                      {p.mrp > p.price && (
-                        <span className="text-xs text-slate-400 line-through">
-                          ₹{p.mrp.toLocaleString("en-IN")}
-                        </span>
-                      )}
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                    <div>
+                      <span className="text-base font-black text-navy-900">₹{p.price}</span>
                     </div>
-
                     <button
-                      onClick={() => addItem(p, 1)}
-                      className={`w-full text-xs font-bold rounded-xl py-2.5 transition-all shadow-xs cursor-pointer ${
-                        inCart
-                          ? "bg-green-600 text-white"
-                          : "bg-brand-500 hover:bg-brand-600 text-white"
-                      }`}
+                      onClick={() => {
+                        addItem(p, 1);
+                        alert(`"${p.name}" added to cart!`);
+                      }}
+                      className="bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-xs"
                     >
-                      {inCart ? "Added to Cart ✓" : "+ Add to Cart"}
+                      + Add
                     </button>
                   </div>
                 </div>
@@ -336,7 +451,7 @@ export default function Categories() {
 
 function PinIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
       <circle cx="12" cy="10" r="3" />
     </svg>
@@ -344,7 +459,7 @@ function PinIcon() {
 }
 function ChevronIcon() {
   return (
-    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="m6 9 6 6 6-6" />
     </svg>
   );
@@ -359,17 +474,20 @@ function SearchIcon() {
 }
 function ScanIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M3 8V5a2 2 0 0 1 2-2h3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M21 16v3a2 2 0 0 1-2 2h-3" />
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+      <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+      <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+      <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
     </svg>
   );
 }
 function CartIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="9" cy="21" r="1" />
-      <circle cx="20" cy="21" r="1" />
-      <path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" />
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="8" cy="21" r="1" />
+      <circle cx="19" cy="21" r="1" />
+      <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
     </svg>
   );
 }

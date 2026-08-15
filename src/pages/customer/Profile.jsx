@@ -24,6 +24,7 @@ export default function Profile() {
 
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ name: user?.name || "", email: user?.email || "" });
+  const [successMsg, setSuccessMsg] = useState("");
 
   const handleLogout = () => {
     logout();
@@ -32,8 +33,10 @@ export default function Profile() {
 
   const handleSave = (e) => {
     e.preventDefault();
-    updateProfile(form);
+    updateProfile({ name: form.name.trim(), email: form.email.trim() });
     setEditing(false);
+    setSuccessMsg("✓ Profile changes saved successfully!");
+    setTimeout(() => setSuccessMsg(""), 4000);
   };
 
   return (
@@ -41,6 +44,13 @@ export default function Profile() {
       <Navbar />
 
       <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+        {successMsg && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold px-4 py-3 rounded-xl shadow-2xs flex items-center justify-between">
+            <span>{successMsg}</span>
+            <span className="text-emerald-500 font-extrabold">✓</span>
+          </div>
+        )}
+
         {/* Profile ha header Card */}
         <div className="relative overflow-hidden rounded-2xl bg-navy-950 p-6 text-white shadow-md border border-slate-800">
           <div className="relative z-10 flex items-center justify-between gap-4">

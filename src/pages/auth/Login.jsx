@@ -4,18 +4,20 @@ import AuthLayout from "../../layouts/AuthLayout";
 import Button from "../../components/Button";
 import { useAuth } from "../../context/AuthContext";
 
-// Login Page  — User / Vendor / DR / Admin ka universal login screen
+// Login Page component — User / Vendor / DR / Admin ka universal login screen
 export default function Login() {
   const navigate = useNavigate();
   const { requestOtp, verifyOtp } = useAuth();
 
-
-  const [step, setStep] = useState("phone");
+  // Screen State steps — Pehle "phone" input mode, phr "otp" verification mode
+  const [step, setStep] = useState("phone"); // "phone" | "otp"
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [role, setRole] = useState("customer");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const [demoOtp, setDemoOtp] = useState("");
 
   // Step 1: 10-digit Mobile number submit karke OTP request bhejna
   const handleSendOtp = async (e) => {
@@ -26,10 +28,15 @@ export default function Login() {
       return;
     }
     setLoading(true);
-    await requestOtp(phone.trim());
+    const resData = await requestOtp(phone.trim());
+    if (resData?.otp) {
+      setDemoOtp(resData.otp);
+    }
     setLoading(false);
-    setStep("otp"); 
+    setStep("otp"); // OTP step par switch karo
+  };
 
+  // Step 2: Received OTP verify karna aur dynamic role ke basis par redirect karna
   const handleVerify = async (e) => {
     e.preventDefault();
     setError("");
@@ -41,7 +48,7 @@ export default function Login() {
     try {
       const user = await verifyOtp({ phone: phone.trim(), otp: otp.trim(), role });
       
-      // Arrow mapping — User ki dynamic role (Admin/DR/Vendor/Customer) ke mutabiq homepage target karega 
+      // Arrow mapping — User ki dynamic role (Admin/DR/Vendor/Customer) ke mutabiq homepage target
       const home =
         user.role === "admin"
           ? "/admin/dashboard"
@@ -88,30 +95,25 @@ export default function Login() {
               onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
               placeholder="Enter 10-digit mobile number"
               className="w-full bg-transparent text-sm text-navy-900 placeholder:text-slate-400 outline-none"
+              autoFocus
             />
           </div>
 
           <Button type="submit" disabled={loading}>
-            {loading ? "Sending OTP..." : "Send OTP"}
+            {loading ? "Sending OTP..." : "Continue with OTP"}
           </Button>
 
-          <p className="text-center text-sm text-slate-500 mt-7">
-            Don&apos;t have an account?{" "}
-            <Link to="/register" className="text-brand-500 font-semibold hover:underline">
-              Sign Up
+          <p className="mt-6 text-center text-sm text-slate-500">
+            New to BuildCity?{" "}
+            <Link to="/register" className="font-semibold text-brand-500 hover:underline">
+              Create account
             </Link>
           </p>
-
-          <div className="mt-8 text-center border-t border-slate-100 pt-4">
-            <p className="text-xs text-slate-400">
-              Admin Access: Enter <strong>9999999999</strong> as phone number
-            </p>
-          </div>
         </form>
       ) : (
         <form onSubmit={handleVerify} noValidate>
           <label className="block text-sm font-medium text-navy-900 mb-1.5">
-            Enter OTP
+            One-Time Password
           </label>
           <input
             type="text"
@@ -123,6 +125,22 @@ export default function Login() {
             autoFocus
             className="w-full text-center tracking-[0.5em] text-lg font-semibold rounded-xl border border-slate-200 bg-white px-3.5 py-3 mb-4 outline-none focus:border-brand-500"
           />
+
+          {demoOtp && (
+            <div className="mb-4 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-left shadow-2xs">
+              <div>
+                <span className="text-[10px] uppercase tracking-wider font-extrabold text-emerald-700 block">📲 Generated OTP (Saved in Supabase DB)</span>
+                <span className="text-xl font-black text-navy-900 tracking-widest">{demoOtp}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOtp(demoOtp)}
+                className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-3 py-1.5 rounded-lg shadow-2xs cursor-pointer transition-all"
+              >
+                Auto Fill ✨
+              </button>
+            </div>
+          )}
 
           <Button type="submit" disabled={loading}>
             {loading ? "Verifying..." : "Verify & Login"}
@@ -136,20 +154,23 @@ export default function Login() {
                 setOtp("");
                 setError("");
               }}
-              className="text-sm font-medium text-slate-500 hover:text-navy-900"
+              className="text-sm font-medium text-slate-500 hover:text-navy-900 cursor-pointer"
             >
               ← Change number
             </button>
             <button
               type="button"
               onClick={handleSendOtp}
-              className="text-sm font-medium text-brand-500 hover:underline"
+              className="text-sm font-medium text-brand-500 hover:underline cursor-pointer"
             >
               Resend OTP
             </button>
           </div>
         </form>
       )}
+
+      {/* Firebase Invisible Recaptcha Container */}
+      <div id="recaptcha-container"></div>
     </AuthLayout>
   );
 }

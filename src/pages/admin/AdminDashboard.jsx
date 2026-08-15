@@ -8,6 +8,7 @@ const TABS = [
   { id: "District Reps (DR)", label: "📍 District Reps (DR)" },
   { id: "Vendors", label: "🏬 Vendors" },
   { id: "Products", label: "📦 Products" },
+  { id: "Listings", label: "📋 Listings & Approvals" },
   { id: "Orders", label: "🛒 Orders" },
   { id: "Categories", label: "🏷️ Categories" },
   { id: "Regions", label: "🗺️ Regions" },
@@ -36,7 +37,8 @@ export default function AdminDashboard() {
     categories,
     regions,
     masterProducts = [],
-    products,
+    products = [],
+    productsLoading,
     stats,
     addDr,
     updateDr,
@@ -44,20 +46,24 @@ export default function AdminDashboard() {
     addVendor,
     updateVendor,
     setVendorStatus,
+    removeVendor,
     addCategory,
     updateCategory,
     addRegion,
     updateRegion,
     addMasterProduct,
     updateMasterProduct,
+    updateListingApprovalStatus,
   } = useAdmin();
 
-  // Tab State: Overview, District Reps, Vendors, Products, Orders, Categories, Regions
+  // Tab State: Overview, District Reps, Vendors, Products, Listings, Orders, Categories, Regions
   const [tab, setTab] = useState("Overview");
   const [searchTerm, setSearchTerm] = useState("");
+  const [listingFilter, setListingFilter] = useState("ALL");
 
-  // Modals state (Naya DR, Category, Region, Product add karne ke liye)
+  // Modals state (Naya DR, Vendor, Category, Region, Product add karne ke liye)
   const [showDrForm, setShowDrForm] = useState(false);
+  const [showVendorForm, setShowVendorForm] = useState(false);
   const [showCatForm, setShowCatForm] = useState(false);
   const [showRegionForm, setShowRegionForm] = useState(false);
   const [showProductForm, setShowProductForm] = useState(false);
@@ -71,6 +77,7 @@ export default function AdminDashboard() {
 
   // Forms
   const [drForm, setDrForm] = useState({ name: "", phone: "", regionId: "" });
+  const [vendorForm, setVendorForm] = useState({ shopName: "", ownerName: "", phone: "", regionId: "", commissionRate: 10 });
   const [catForm, setCatForm] = useState({ name: "", gstRate: 18 });
   const [regionForm, setRegionForm] = useState({ name: "", state: "Uttar Pradesh", baseDeliveryCharge: 49 });
   const [productForm, setProductForm] = useState({
@@ -85,20 +92,77 @@ export default function AdminDashboard() {
     stockQty: "",
   });
 
-  const handleAddDr = (e) => {
+  const [isSubmittingVendor, setIsSubmittingVendor] = useState(false);
+  const [deletingVendorId, setDeletingVendorId] = useState(null);
+
+  // Vendor Delete Handler — Live spinner animation aur double-click protection ke sath vendor remove karein
+  const handleDeleteVendor = async (v) => {
+    if (!confirm(`Are you sure you want to permanently delete vendor "${v.shopName}" from Database?`)) return;
+    setDeletingVendorId(v.id);
+    try {
+      await removeVendor(v.id);
+    } finally {
+      setDeletingVendorId(null);
+    }
+  };
+
+  // Admin Add Vendor Handler — Direct APPROVED status aur submission spinner ke sath Naya Vendor save karein
+  const handleAddVendorSubmit = async (e) => {
+    e.preventDefault();
+    if (!vendorForm.shopName.trim() || !vendorForm.ownerName.trim() || !vendorForm.phone.trim()) {
+      alert("Please fill all Vendor details!");
+      return;
+    }
+    if (isSubmittingVendor) return;
+
+    setIsSubmittingVendor(true);
+    try {
+      const reg = regions.find((r) => r.id === vendorForm.regionId) || regions[0] || {};
+      await addVendor({
+        shopName: vendorForm.shopName.trim(),
+        ownerName: vendorForm.ownerName.trim(),
+        phone: vendorForm.phone.trim(),
+        regionId: reg.id || "r1",
+        regionName: reg.name || "Varanasi",
+        commissionRate: Number(vendorForm.commissionRate) || 10,
+        status: "APPROVED",
+        addedByDr: "Super Admin",
+      });
+      setVendorForm({ shopName: "", ownerName: "", phone: "", regionId: "", commissionRate: 10 });
+      setShowVendorForm(false);
+      alert(`✅ Vendor "${vendorForm.shopName.trim()}" successfully added to Supabase Cloud Database!`);
+    } catch (err) {
+      alert("Failed to add vendor: " + err.message);
+    } finally {
+      setIsSubmittingVendor(false);
+    }
+  };
+
+  const [isSubmittingDr, setIsSubmittingDr] = useState(false);
+
+  const handleAddDr = async (e) => {
     e.preventDefault();
     if (!drForm.name.trim() || !drForm.phone.trim() || !drForm.regionId) {
       alert("Please fill all DR details!");
       return;
     }
-    addDr({
-      name: drForm.name.trim(),
-      phone: drForm.phone.trim(),
-      regionId: drForm.regionId,
-    });
-    setDrForm({ name: "", phone: "", regionId: "" });
-    setShowDrForm(false);
-    alert("District Representative added successfully!");
+    if (isSubmittingDr) return;
+
+    setIsSubmittingDr(true);
+    try {
+      await addDr({
+        name: drForm.name.trim(),
+        phone: drForm.phone.trim(),
+        regionId: drForm.regionId,
+      });
+      setDrForm({ name: "", phone: "", regionId: "" });
+      setShowDrForm(false);
+      alert("✅ District Representative added to Database successfully!");
+    } catch (err) {
+      alert("Failed to add DR: " + err.message);
+    } finally {
+      setIsSubmittingDr(false);
+    }
   };
 
   const handleUpdateDrSubmit = (e) => {
@@ -180,6 +244,26 @@ export default function AdminDashboard() {
     alert("Master Product created successfully!");
   };
 
+  const filteredListings = products.filter((p) => {
+    const st = p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW");
+    if (listingFilter === "ALL") return true;
+    return st === listingFilter;
+  });
+
+  const renderTableSkeleton = (cols = 5) => (
+    <tbody className="divide-y divide-slate-100 animate-pulse">
+      {[1, 2, 3, 4].map((n) => (
+        <tr key={n}>
+          {Array.from({ length: cols }).map((_, i) => (
+            <td key={i} className="py-4 px-4">
+              <div className="h-3.5 bg-slate-200 rounded w-3/4" />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </tbody>
+  );
+
   return (
     <div className="min-h-screen bg-slate-50 text-navy-900 pb-16 font-sans">
       {/* Admin Sticky Header hai  */}
@@ -208,19 +292,30 @@ export default function AdminDashboard() {
 
         {/* Tabs Bar hai  */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-2 overflow-x-auto py-2 border-t border-slate-100">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap cursor-pointer ${
-                tab === t.id
-                  ? "bg-navy-900 text-white shadow-xs"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-navy-900"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+          {TABS.map((t) => {
+            const pendingCount = products.filter(
+              (p) => (p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW")) === "PENDING_REVIEW"
+            ).length;
+
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                  tab === t.id
+                    ? "bg-navy-900 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-navy-900"
+                }`}
+              >
+                <span>{t.label}</span>
+                {t.id === "Listings" && pendingCount > 0 && (
+                  <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full animate-pulse">
+                    {pendingCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </header>
 
@@ -237,8 +332,10 @@ export default function AdminDashboard() {
               </div>
               <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
                 <p className="text-xs font-medium text-slate-500">Approved Vendors</p>
-                <p className="text-xl font-extrabold text-navy-900 mt-1">{stats.approvedVendors}</p>
-                <span className="text-[10px] text-slate-500 font-semibold">{stats.pendingVendors} pending approval</span>
+                <p className="text-xl font-extrabold text-navy-900 mt-1">
+                  {stats?.approvedVendors ?? vendors.filter((v) => v.status === "APPROVED").length}
+                </p>
+                <span className="text-[10px] text-green-600 font-semibold">Active & Ready to Login</span>
               </div>
               <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
                 <p className="text-xs font-medium text-slate-500">District Reps (DR)</p>
@@ -336,7 +433,20 @@ export default function AdminDashboard() {
                 </div>
                 <div className="flex justify-end gap-2">
                   <button type="button" onClick={() => setShowDrForm(false)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl">Cancel</button>
-                  <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl shadow-xs hover:bg-brand-600">Save DR Access</button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingDr}
+                    className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl shadow-xs hover:bg-brand-600 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmittingDr ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        Saving DR Access...
+                      </>
+                    ) : (
+                      "Save DR Access"
+                    )}
+                  </button>
                 </div>
               </form>
             )}
@@ -353,47 +463,51 @@ export default function AdminDashboard() {
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {drs.map((d) => (
-                    <tr key={d.id} className="hover:bg-slate-50">
-                      <td className="py-3.5 px-4 font-bold text-navy-900">{d.name}</td>
-                      <td className="py-3.5 px-4 font-semibold text-slate-700">📱 {d.phone}</td>
-                      <td className="py-3.5 px-4">
-                        <span className="bg-slate-100 text-slate-800 font-bold px-2.5 py-0.5 rounded text-[11px]">
-                          📍 {d.regionName}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${STATUS_STYLE[d.status]}`}>
-                          {d.status}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-600">
-                        {d.vendorCount || 0} Vendors · {d.productCount || 0} Products
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => setEditingDr({ ...d })}
-                            className="text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer"
-                          >
-                            ✏️ Edit
-                          </button>
-                          <button
-                            onClick={() => toggleDrActive(d.id)}
-                            className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
-                              d.status === "ACTIVE"
-                                ? "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100"
-                                : "bg-green-500 text-white border-green-600 hover:bg-green-600"
-                            }`}
-                          >
-                            {d.status === "ACTIVE" ? "Deactivate" : "Activate"}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
+                {productsLoading ? (
+                  renderTableSkeleton(6)
+                ) : (
+                  <tbody className="divide-y divide-slate-100">
+                    {drs.map((d) => (
+                      <tr key={d.id} className="hover:bg-slate-50">
+                        <td className="py-3.5 px-4 font-bold text-navy-900">{d.name}</td>
+                        <td className="py-3.5 px-4 font-semibold text-slate-700">📱 {d.phone}</td>
+                        <td className="py-3.5 px-4">
+                          <span className="bg-slate-100 text-slate-800 font-bold px-2.5 py-0.5 rounded text-[11px]">
+                            📍 {d.regionName}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${STATUS_STYLE[d.status]}`}>
+                            {d.status}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-600">
+                          {d.vendorCount || 0} Vendors · {d.productCount || 0} Products
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => setEditingDr({ ...d })}
+                              className="text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer"
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button
+                              onClick={() => toggleDrActive(d.id)}
+                              className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                                d.status === "ACTIVE"
+                                  ? "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100"
+                                  : "bg-green-500 text-white border-green-600 hover:bg-green-600"
+                              }`}
+                            >
+                              {d.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                )}
               </table>
             </div>
           </div>
@@ -405,9 +519,91 @@ export default function AdminDashboard() {
             <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
               <div>
                 <h2 className="text-base font-extrabold text-navy-900">Vendor Management</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Approve, Edit, or Suspend marketplace vendors. Approved vendors can log in via Mobile OTP.</p>
+                <p className="text-xs text-slate-500 mt-0.5">Approve, Edit, Suspend, or Delete marketplace vendors. Approved vendors can log in via Mobile OTP.</p>
               </div>
+              <button
+                onClick={() => setShowVendorForm(true)}
+                className="bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors cursor-pointer shadow-xs"
+              >
+                + Add Vendor
+              </button>
             </div>
+
+            {/* Admin Add Vendor Modal / Form */}
+            {showVendorForm && (
+              <form onSubmit={handleAddVendorSubmit} className="p-5 bg-slate-50 border-b border-slate-200 space-y-4">
+                <h3 className="font-extrabold text-navy-900 text-xs uppercase tracking-wider">Add New Vendor Partner</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Shop / Business Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Shree Cement Traders"
+                      value={vendorForm.shopName}
+                      onChange={(e) => setVendorForm({ ...vendorForm, shopName: e.target.value })}
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Owner Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Rakesh Gupta"
+                      value={vendorForm.ownerName}
+                      onChange={(e) => setVendorForm({ ...vendorForm, ownerName: e.target.value })}
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Mobile Phone *</label>
+                    <input
+                      type="tel"
+                      required
+                      maxLength={10}
+                      placeholder="10-digit mobile number"
+                      value={vendorForm.phone}
+                      onChange={(e) => setVendorForm({ ...vendorForm, phone: e.target.value.replace(/\D/g, "") })}
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Assign District *</label>
+                    <select
+                      required
+                      value={vendorForm.regionId}
+                      onChange={(e) => setVendorForm({ ...vendorForm, regionId: e.target.value })}
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
+                    >
+                      <option value="">-- Select District --</option>
+                      {regions.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name} ({r.state})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setShowVendorForm(false)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl">Cancel</button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingVendor}
+                    className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl shadow-xs hover:bg-brand-600 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmittingVendor ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        Saving Vendor...
+                      </>
+                    ) : (
+                      "Save Vendor Partner"
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
 
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
@@ -416,59 +612,83 @@ export default function AdminDashboard() {
                     <th className="py-3 px-4">Shop Name</th>
                     <th className="py-3 px-4">Owner & Mobile</th>
                     <th className="py-3 px-4">District</th>
+                    <th className="py-3 px-4">Products Added</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4">Commission Rate</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {vendors.map((v) => (
-                    <tr key={v.id} className="hover:bg-slate-50">
-                      <td className="py-3.5 px-4 font-bold text-navy-900">{v.shopName}</td>
-                      <td className="py-3.5 px-4">
-                        <p className="font-semibold text-slate-800">{v.ownerName}</p>
-                        <p className="text-[11px] text-slate-500">📱 {v.phone}</p>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-semibold">
-                          📍 {v.regionName}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${STATUS_STYLE[v.status]}`}>
-                          {v.status}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 font-bold text-navy-900">{v.commissionRate || 10}%</td>
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => setEditingVendor({ ...v })}
-                            className="text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer"
-                          >
-                            ✏️ Edit
-                          </button>
-                          {v.status !== "APPROVED" && (
+                {productsLoading ? (
+                  renderTableSkeleton(7)
+                ) : (
+                  <tbody className="divide-y divide-slate-100">
+                    {vendors.map((v) => (
+                      <tr key={v.id} className="hover:bg-slate-50">
+                        <td className="py-3.5 px-4 font-bold text-navy-900">{v.shopName}</td>
+                        <td className="py-3.5 px-4">
+                          <p className="font-semibold text-slate-800">{v.ownerName}</p>
+                          <p className="text-[11px] text-slate-500">📱 {v.phone}</p>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-semibold">
+                            📍 {v.regionName}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 font-extrabold text-navy-900">
+                          <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded text-[11px]">
+                            📦 {v.productCount || 0} Items
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${STATUS_STYLE[v.status]}`}>
+                            {v.status}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 font-bold text-navy-900">{v.commissionRate || 10}%</td>
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
                             <button
-                              onClick={() => setVendorStatus(v.id, "APPROVED")}
-                              className="text-[11px] font-bold bg-green-500 hover:bg-green-600 text-white rounded-lg px-2.5 py-1.5 shadow-xs cursor-pointer"
+                              onClick={() => setEditingVendor({ ...v })}
+                              className="text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer"
                             >
-                              Approve
+                              ✏️ Edit
                             </button>
-                          )}
-                          {v.status !== "SUSPENDED" && (
+                            {v.status !== "APPROVED" && (
+                              <button
+                                onClick={() => setVendorStatus(v.id, "APPROVED")}
+                                className="text-[11px] font-bold bg-green-500 hover:bg-green-600 text-white rounded-lg px-2.5 py-1.5 shadow-xs cursor-pointer"
+                              >
+                                Approve
+                              </button>
+                            )}
+                            {v.status !== "SUSPENDED" && (
+                              <button
+                                onClick={() => setVendorStatus(v.id, "SUSPENDED")}
+                                className="text-[11px] font-semibold border border-red-300 text-red-600 hover:bg-red-50 rounded-lg px-2.5 py-1.5 cursor-pointer"
+                              >
+                                Suspend
+                              </button>
+                            )}
                             <button
-                              onClick={() => setVendorStatus(v.id, "SUSPENDED")}
-                              className="text-[11px] font-semibold border border-red-300 text-red-600 hover:bg-red-50 rounded-lg px-2.5 py-1.5 cursor-pointer"
+                              disabled={deletingVendorId === v.id}
+                              onClick={() => handleDeleteVendor(v)}
+                              className="text-[11px] font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg px-2.5 py-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                             >
-                              Suspend
+                              {deletingVendorId === v.id ? (
+                                <>
+                                  <span className="w-3 h-3 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></span>
+                                  Deleting...
+                                </>
+                              ) : (
+                                "🗑️ Delete"
+                              )}
                             </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                )}
               </table>
             </div>
           </div>
@@ -539,6 +759,7 @@ export default function AdminDashboard() {
               </form>
             )}
 
+            {/* MASTER PRODUCT CATALOG */}
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
@@ -550,66 +771,193 @@ export default function AdminDashboard() {
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {masterProducts.map((p) => (
-                    <tr key={p.id} className="hover:bg-slate-50">
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-3">
-                          <img src={p.imageUrl} alt={p.name} className="w-10 h-10 object-cover rounded-lg border border-slate-200 shrink-0" />
-                          <div>
-                            <p className="font-bold text-navy-900">{p.name}</p>
-                            <p className="text-[10px] text-slate-400">Packaging: {p.unit}</p>
+                {productsLoading ? (
+                  renderTableSkeleton(5)
+                ) : (
+                  <tbody className="divide-y divide-slate-100">
+                    {masterProducts.map((p) => (
+                      <tr key={p.id} className="hover:bg-slate-50">
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-3">
+                            <img src={p.imageUrl} alt={p.name} className="w-10 h-10 object-cover rounded-lg border border-slate-200 shrink-0" />
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="bg-navy-900 text-white font-mono text-[9px] font-bold px-1.5 py-0.5 rounded">
+                                  ID: #{p.id}
+                                </span>
+                                <p className="font-bold text-navy-900">{p.name}</p>
+                              </div>
+                              <p className="text-[10px] text-slate-400">Packaging: {p.unit}</p>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-semibold">
-                          {p.categoryName}
-                        </span>
-                        <p className="text-slate-700 font-medium mt-0.5">🏷️ {p.brand}</p>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <p className="font-semibold text-slate-800">{p.type}</p>
-                        <span className="bg-amber-50 text-amber-700 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-amber-200 inline-block mt-0.5">
-                          Grade: {p.grade}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className="font-extrabold text-navy-900 text-sm">₹{p.suggestedPrice || p.price}</span>
-                        <span className="text-[11px] text-slate-500"> /{p.unit}</span>
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <button
-                          onClick={() => setEditingProduct({ ...p })}
-                          className="text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer"
-                        >
-                          ✏️ Edit
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-semibold">
+                            {p.categoryName}
+                          </span>
+                          <p className="text-slate-700 font-medium mt-0.5">🏷️ {p.brand}</p>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <p className="font-semibold text-slate-800">{p.type}</p>
+                          <span className="bg-amber-50 text-amber-700 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-amber-200 inline-block mt-0.5">
+                            Grade: {p.grade}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className="font-extrabold text-navy-900 text-sm">₹{p.suggestedPrice || p.price}</span>
+                          <span className="text-[11px] text-slate-500"> /{p.unit}</span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <button
+                            onClick={() => setEditingProduct({ ...p })}
+                            className="text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer"
+                          >
+                            ✏️ Edit
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                )}
               </table>
             </div>
+          </div>
+        )}
+
+        {/* LISTINGS & APPROVALS TAB */}
+        {tab === "Listings" && (
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden p-5 space-y-4 font-sans">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-base font-extrabold text-navy-900 flex items-center gap-2">
+                  Vendor Listings & Approvals
+                  <span className="bg-brand-50 text-brand-700 text-xs font-bold px-2.5 py-0.5 rounded-full border border-brand-200">
+                    {products.length} Total Offerings
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-500">Review, approve, or reject vendor custom product price & stock offerings across all districts.</p>
+              </div>
+
+              {/* Filter Pills */}
+              <div className="flex gap-1.5 bg-slate-100 p-1 rounded-xl w-fit text-xs font-bold">
+                {["ALL", "PENDING_REVIEW", "APPROVED", "REJECTED"].map((st) => (
+                  <button
+                    key={st}
+                    onClick={() => setListingFilter(st)}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      listingFilter === st ? "bg-white text-navy-900 shadow-2xs" : "text-slate-600 hover:text-navy-900"
+                    }`}
+                  >
+                    {st === "ALL" ? "All" : st === "PENDING_REVIEW" ? "🟡 Pending Review" : st === "APPROVED" ? "🟢 Approved" : "🔴 Rejected"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Listings Table */}
+            {filteredListings.length === 0 ? (
+              <div className="text-center py-10 text-xs text-slate-500 font-medium">No product listings found for selected filter status ({listingFilter}).</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase">
+                      <th className="py-3 px-4">Vendor Shop</th>
+                      <th className="py-3 px-4">Product Name</th>
+                      <th className="py-3 px-4">Category & Brand</th>
+                      <th className="py-3 px-4">Selling Price</th>
+                      <th className="py-3 px-4">Stock Qty</th>
+                      <th className="py-3 px-4">Approval Status</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredListings.map((p) => {
+                      const st = p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW");
+                      const stBadge =
+                        st === "APPROVED"
+                          ? "bg-green-50 text-green-700 border-green-200"
+                          : st === "REJECTED"
+                          ? "bg-red-50 text-red-600 border-red-200"
+                          : "bg-amber-50 text-amber-700 border-amber-200";
+
+                      return (
+                        <tr key={p.id} className="hover:bg-slate-50">
+                          <td className="py-3.5 px-4 font-bold text-navy-900">
+                            🏬 {p.vendorName || "Shree Cement Traders"}
+                          </td>
+                          <td className="py-3.5 px-4 font-semibold text-slate-800 flex items-center gap-2">
+                            <img src={p.imageUrl} alt={p.name} className="h-8 w-8 rounded-lg object-cover border border-slate-200 shrink-0" />
+                            <span>{p.name}</span>
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-600">
+                            {p.categoryName || "Category"} · {p.brand} ({p.grade})
+                          </td>
+                          <td className="py-3.5 px-4 font-extrabold text-navy-900">₹{p.price}</td>
+                          <td className="py-3.5 px-4 font-bold text-slate-700">{p.stockQty} {p.unit || "units"}</td>
+                          <td className="py-3.5 px-4">
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${stBadge}`}>
+                              {st === "APPROVED" ? "APPROVED" : st === "REJECTED" ? "REJECTED" : "PENDING REVIEW"}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {st !== "APPROVED" && (
+                                <button
+                                  onClick={() => updateListingApprovalStatus(p.id, "APPROVED")}
+                                  className="bg-green-600 hover:bg-green-700 text-white font-bold text-[11px] px-3 py-1.5 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                                >
+                                  ✓ Approve
+                                </button>
+                              )}
+                              {st !== "REJECTED" && (
+                                <button
+                                  onClick={() => updateListingApprovalStatus(p.id, "REJECTED")}
+                                  className="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 font-bold text-[11px] px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  ✕ Reject
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
         {/* ORDERS TAB */}
         {tab === "Orders" && (
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden p-5">
-            <h2 className="text-base font-extrabold text-navy-900 mb-4">Customer Orders & Fulfillment</h2>
-            <div className="divide-y divide-slate-100">
-              {orders.map((o) => (
-                <div key={o.id} className="py-3.5 flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-extrabold text-navy-900">{o.id}</span>
-                    <span className={`ml-2 px-2 py-0.5 rounded text-[10px] font-bold border ${STATUS_STYLE[o.status]}`}>{o.status}</span>
-                    <p className="text-slate-500 mt-0.5">Vendor: {o.vendorName} · Total Amount: ₹{o.amount.toLocaleString()}</p>
-                  </div>
-                  <span className="text-slate-400 text-[11px]">{o.date}</span>
-                </div>
-              ))}
-            </div>
+            <h2 className="text-base font-extrabold text-navy-900 mb-4">Customer Orders & Fulfillment ({orders.length})</h2>
+            {orders.length === 0 ? (
+              <div className="text-center py-8 text-xs text-slate-500 font-medium">No orders recorded in system yet.</div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {orders.map((o) => {
+                  const displayAmt = Number(o.totalAmount || o.total || o.amount || 0);
+                  const displayCust = o.customer?.name || o.customer || "Customer";
+                  const displayVendor = o.vendorName || o.vendor || "Vendor Store";
+                  const displayDate = o.createdAt ? new Date(o.createdAt).toLocaleDateString("en-IN") : o.date || "Today";
+                  const statusStyle = STATUS_STYLE[o.status] || "bg-amber-50 text-amber-700 border-amber-200";
+
+                  return (
+                    <div key={o.id} className="py-3.5 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-extrabold text-navy-900">{o.id?.slice(0, 8).toUpperCase()}</span>
+                        <span className={`ml-2 px-2 py-0.5 rounded text-[10px] font-bold border ${statusStyle}`}>{o.status || "PENDING"}</span>
+                        <p className="text-slate-500 mt-0.5">Customer: <strong>{displayCust}</strong> · Vendor: <strong>{displayVendor}</strong> · Total: <strong>₹{displayAmt.toLocaleString("en-IN")}</strong></p>
+                      </div>
+                      <span className="text-slate-400 text-[11px]">{displayDate}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -882,6 +1230,16 @@ export default function AdminDashboard() {
                   value={editingProduct.suggestedPrice || editingProduct.price}
                   onChange={(e) => setEditingProduct({ ...editingProduct, suggestedPrice: e.target.value, price: e.target.value })}
                   className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Product Image URL</label>
+                <input
+                  type="url"
+                  placeholder="https://images.unsplash.com/..."
+                  value={editingProduct.imageUrl || ""}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, imageUrl: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-medium"
                 />
               </div>
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">

@@ -5,9 +5,12 @@ import BottomNav from "../../components/BottomNav";
 import ProductCard from "../../components/ProductCard";
 import FilterSidebar from "../../components/FilterSidebar";
 import { useRegion } from "../../context/RegionContext";
+import { useAdmin } from "../../context/AdminContext";
 
 const CATEGORY_LABELS = {
+  cement: "Cement",
   paints: "Paints",
+  steel: "Steel",
   electronics: "Electronics",
   furniture: "Furniture",
   hardware: "Hardware",
@@ -15,14 +18,16 @@ const CATEGORY_LABELS = {
 };
 
 const BRAND_POOL = {
+  cement: ["UltraTech", "Ambuja", "ACC", "Shree Cement"],
   paints: ["Asian Paints", "Berger", "Nerolac", "Dulux"],
+  steel: ["Tata Tiscon", "Jindal Panther", "Kamdhenu", "SAIL"],
   electronics: ["Havells", "Bosch", "Philips", "Crompton"],
   furniture: ["Godrej Interio", "Nilkamal", "Durian", "Urban Ladder"],
   hardware: ["Bosch", "Stanley", "Taparia", "Black+Decker"],
   plumbing: ["Cera", "Jaquar", "Somany", "Astral"],
 };
 
-// Mock product generator kiya hai AI ki help se Maine   - replace with GET /api/v1/products?category=slug once backend is ready
+// Fallback product generator
 function generateProducts(slug, priceFactor = 1) {
   const brandList = BRAND_POOL[slug] || ["Generic Brand"];
   const label = CATEGORY_LABELS[slug] || slug;
@@ -49,11 +54,43 @@ const PAGE_SIZE = 9;
 export default function CategoryListing() {
   const { slug } = useParams();
   const { region } = useRegion();
-  const label = CATEGORY_LABELS[slug] || "Products";
-  const allProducts = useMemo(
-    () => generateProducts(slug, region.priceFactor),
-    [slug, region]
-  );
+  const { products = [] } = useAdmin();
+  const label = CATEGORY_LABELS[slug] || slug || "Products";
+
+  const allProducts = useMemo(() => {
+    const slugLower = (slug || "").toLowerCase();
+    const map = new Map();
+
+    products.forEach((p) => {
+      const isApproved = p.approvalStatus === "APPROVED" || p.approvalStatus === undefined || p.isActive === true;
+      if (!isApproved) return;
+      if (slugLower && slugLower !== "all") {
+        const catName = (p.categoryName || "").toLowerCase();
+        const catId = (p.categoryId || "").toLowerCase();
+        const pName = (p.name || "").toLowerCase();
+        const matches = catName.includes(slugLower) || slugLower.includes(catName) || catId === slugLower || pName.includes(slugLower);
+        if (!matches) return;
+      }
+
+      const key = `${(p.name || "").toLowerCase()}_${p.vendorId || ""}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          id: p.id,
+          name: p.name,
+          brand: p.brand || "Generic",
+          img: p.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+          mrp: Math.round(Number(p.price) * 1.15),
+          price: Number(p.price) || 100,
+          rating: "4.9",
+          reviews: 42,
+          vendorName: p.vendorName,
+          vendorId: p.vendorId,
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [slug, products]);
   const brands = BRAND_POOL[slug] || [];
 
   const [selectedBrands, setSelectedBrands] = useState([]);

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
+// CartContext Provider — Customer shopping cart, items quantity increment/decrement, aur total calculation handle karta hai
 const CartContext = createContext(null);
 const STORAGE_KEY = "buildcity_cart";
 

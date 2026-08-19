@@ -537,19 +537,20 @@ export default function VendorDashboard() {
                     const isObj = typeof rawAddr === "object" && rawAddr !== null;
                     const isStr = typeof rawAddr === "string" && rawAddr.trim().length > 0;
 
-                    let custFullName = (isObj && (rawAddr.fullName || rawAddr.name)) || ord.customer?.name || (typeof ord.customer === "string" ? ord.customer : `Customer ${ord.id ? ord.id.slice(0, 4) : ""}`);
+                    let custFullName = (isObj && (rawAddr.fullName || rawAddr.name)) || ord.customer?.name || (typeof ord.customer === "string" ? ord.customer : "Customer");
                     let custPhone = (isObj && rawAddr.phone) || ord.customer?.phone || ord.phone || "";
 
                     let streetAddr = isObj ? (rawAddr.street || rawAddr.line || rawAddr.address) : (isStr ? rawAddr : null);
                     let cityAddr = isObj ? rawAddr.city : (ord.districtName || ord.regionName || "");
                     let pincodeAddr = isObj ? rawAddr.pincode : "";
+                    let stateAddr = (isObj && rawAddr.state) || "Uttar Pradesh";
 
-                    // Filter out generic placeholders like "Site Delivery Address" or "Main Delivery Address"
-                    if (!streetAddr || streetAddr.includes("Site Delivery Address") || streetAddr.includes("Main Delivery Address")) {
-                      if (ord.customer?.address && !ord.customer.address.includes("Site Delivery Address")) {
+                    // Fallback only if no address object is present on older order records
+                    if (!streetAddr) {
+                      if (ord.customer?.address) {
                         streetAddr = ord.customer.address;
                       } else if (custPhone) {
-                        streetAddr = `Site Delivery Location (Customer: ${custPhone})`;
+                        streetAddr = `Site Delivery Location (Mobile: ${custPhone})`;
                       } else {
                         streetAddr = `Site Delivery Location (${cityAddr || 'Mirzapur'})`;
                       }
@@ -558,8 +559,6 @@ export default function VendorDashboard() {
                     if (!cityAddr || cityAddr.toLowerCase() === "district") {
                       cityAddr = ord.districtName || ord.regionName || "Mirzapur";
                     }
-
-                    const stateAddr = (isObj && rawAddr.state) || "Uttar Pradesh";
 
                     const formattedOrderId = ord.orderNumber || (ord.id ? `#ORD-${ord.id.slice(0, 8).toUpperCase()}` : "#ORD-NEW");
 

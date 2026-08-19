@@ -31,9 +31,9 @@ export default function Navbar() {
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-white border-b border-slate-200">
+    <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-4">
-        <Link to="/">
+        <Link to="/" className="active:scale-[0.98] transition-all duration-200 shrink-0">
           <Logo size="sm" />
         </Link>
 
@@ -42,20 +42,23 @@ export default function Navbar() {
             <Link
               key={link.label}
               to={link.to}
-              className={`text-sm font-medium ${
+              className={`text-sm font-semibold tracking-tight transition-colors duration-150 relative py-1 ${
                 pathname === link.to
-                  ? "text-brand-500"
+                  ? "text-brand-600 font-bold"
                   : "text-slate-600 hover:text-navy-900"
               }`}
             >
               {link.label}
+              {pathname === link.to && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 rounded-full" />
+              )}
             </Link>
           ))}
         </nav>
 
         <RegionPicker
           trigger={(region) => (
-            <span className="hidden sm:flex items-center gap-1 text-sm text-slate-600 hover:text-navy-900 shrink-0">
+            <span className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-navy-900 shrink-0 px-3 py-1.5 rounded-xl bg-slate-100/70 hover:bg-slate-100 border border-slate-200/80 active:scale-[0.98] transition-all duration-200 cursor-pointer shadow-2xs">
               <PinIcon />
               {region.name}
               <ChevronIcon />
@@ -64,33 +67,36 @@ export default function Navbar() {
         />
 
         <form onSubmit={handleSearch} className="flex-1 max-w-xl mx-auto">
-          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-surface px-3.5 py-2">
+          <div className="flex items-center gap-2.5 rounded-xl border border-slate-200/90 bg-slate-50/80 hover:bg-white focus-within:bg-white focus-within:ring-4 focus-within:ring-brand-500/10 focus-within:border-brand-500 px-3.5 py-2 transition-all duration-200 shadow-2xs">
             <SearchIcon />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               type="text"
               placeholder="Search for products, brands, services..."
-              className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
+              className="w-full bg-transparent text-xs font-medium text-navy-900 outline-none placeholder:text-slate-400"
             />
           </div>
         </form>
 
         <div className="flex items-center gap-4 shrink-0">
-        <NotificationPanel />
-          <Link to="/cart" className="relative text-slate-600 hover:text-navy-900">
+          <NotificationPanel />
+          <Link
+            to="/cart"
+            className="relative text-slate-600 hover:text-navy-900 active:scale-[0.95] transition-all duration-200 p-1.5 rounded-xl hover:bg-slate-100/80"
+          >
             <CartIcon />
             {count > 0 && (
-              <span className="absolute -top-2 -right-2 h-4 w-4 rounded-full bg-brand-500 text-white text-[10px] flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 h-4.5 min-w-[18px] px-1 rounded-full bg-brand-600 text-white text-[10px] font-black flex items-center justify-center shadow-xs ring-2 ring-white animate-pulse">
                 {count}
               </span>
             )}
           </Link>
           <div className="hidden lg:flex items-center gap-3 pl-3 border-l border-slate-200">
-            <span className="text-sm text-slate-600">{user?.name}</span>
+            <span className="text-xs font-semibold text-slate-700 tracking-tight">{user?.name}</span>
             <button
               onClick={handleLogout}
-              className="text-sm font-medium text-red-500 hover:underline"
+              className="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200/80 px-3 py-1.2 rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer shadow-2xs"
             >
               Logout
             </button>

@@ -29,11 +29,14 @@ export default function NotificationPanel({ className }) {
       <button
         type="button"
         onClick={handleOpen}
-        className={className || "relative text-slate-600 hover:text-navy-900"}
+        className={className || "relative text-slate-600 hover:text-navy-900 active:scale-[0.95] transition-all duration-200 p-1.5 rounded-xl hover:bg-slate-100/80"}
       >
         <BellIcon />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500" />
+          <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500 shadow-xs"></span>
+          </span>
         )}
       </button>
 
@@ -42,18 +45,18 @@ export default function NotificationPanel({ className }) {
           <div className="fixed inset-0 z-[999]">
             {/* Backdrop */}
             <div
-              className={`absolute inset-0 bg-black/30 transition-opacity duration-200 ${
+              className={`absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity duration-200 ${
                 visible ? "opacity-100" : "opacity-0"
               }`}
               onClick={handleClose}
             />
 
-            {/* Panel- slides down from the top kar diya hai  */}
+            {/* Panel - elevated glassmorphic panel */}
             <div
-            className={`fixed top-14 right-3 left-3 sm:left-auto w-auto sm:w-80 max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden transition-all duration-200 ease-out ${
-            visible
-                  ? "translate-y-0 opacity-100"
-                  : "-translate-y-6 opacity-0"
+              className={`fixed top-14 right-3 left-3 sm:left-auto w-auto sm:w-80 max-w-sm bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl shadow-2xl overflow-hidden transition-all duration-200 ease-out ${
+                visible
+                  ? "translate-y-0 opacity-100 scale-100"
+                  : "-translate-y-6 opacity-0 scale-95"
               }`}
             >
               <div className="flex items-center justify-between px-4 py-3.5 border-b border-slate-100 bg-white">

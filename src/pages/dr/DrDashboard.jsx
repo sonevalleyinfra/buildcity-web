@@ -2,6 +2,7 @@ import { useState } from "react";
 import Logo from "../../components/Logo";
 import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
+import { useOrders } from "../../context/OrderContext";
 
 const PRESET_IMAGES = [
   { label: "Cement Bag", url: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80" },
@@ -12,10 +13,10 @@ const PRESET_IMAGES = [
 ];
 
 // District Representative (DR) Dashboard component — Ground Agent Portal
-// DR ka kaam district me Naye Vendors onboard karna aur Master Products add/edit karna hai.
 export default function DrDashboard() {
   const { user, logout } = useAuth();
   const { masterProducts = [], vendors = [], products = [], productsLoading, categories, regions, addVendor, updateVendor, removeVendor, addMasterProduct, updateMasterProduct, setVendorStatus, updateListingApprovalStatus } = useAdmin();
+  const { orders = [] } = useOrders();
 
   const [activeTab, setActiveTab] = useState("products");
   const [searchTerm, setSearchTerm] = useState("");
@@ -56,6 +57,11 @@ export default function DrDashboard() {
   const districtName = drInfo.regionName || "Varanasi";
   const drRegionId = drInfo.regionId || "r1";
 
+  // DR Assigned Region Orders Filter
+  const districtOrders = orders.filter((o) => {
+    const oDist = (o.districtName || o.address?.city || "Varanasi").toLowerCase();
+    return oDist.includes(districtName.toLowerCase()) || districtName.toLowerCase().includes(oDist);
+  });
 
   const districtVendors = vendors.filter((v) => {
     if (!user || user.role === "admin") return true;
@@ -113,17 +119,20 @@ export default function DrDashboard() {
 
     setIsSubmittingVendor(true);
     try {
-      const reg = (regions || []).find((r) => r.name?.toLowerCase() === districtName.toLowerCase() || r.id === drRegionId) || regions[0] || {};
+      const matchedReg = (regions || []).find((r) => r.name?.toLowerCase() === districtName.toLowerCase() || r.id === drRegionId);
+      const targetRegionId = matchedReg ? matchedReg.id : (drRegionId || "r2");
+      const targetRegionName = matchedReg ? matchedReg.name : (districtName || "Mirzapur");
 
       await addVendor({
         shopName: vendorForm.shopName.trim(),
         ownerName: vendorForm.ownerName.trim(),
         phone: vendorForm.phone.trim(),
-        regionId: reg.id || drRegionId,
-        regionName: reg.name || districtName,
+        regionId: targetRegionId,
+        regionName: targetRegionName,
+        districtName: targetRegionName,
         status: vendorForm.status || "APPROVED",
         commissionRate: Number(vendorForm.commissionRate) || 10,
-        addedByDr: `${user?.name || "DR"} (${districtName})`,
+        addedByDr: `${user?.name || "DR"} (${targetRegionName})`,
         drId: drInfo.id,
       });
 
@@ -208,27 +217,27 @@ export default function DrDashboard() {
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 mt-6">
         {/* District Banner & Stats */}
-        <div className="bg-linear-to-r from-navy-900 to-navy-800 rounded-2xl p-6 text-white shadow-md mb-6">
+        <div className="bg-gradient-to-r from-navy-950 via-navy-900 to-slate-900 border border-navy-800/60 rounded-2xl p-6 text-white shadow-md mb-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <span className="text-xs font-semibold uppercase tracking-wider text-brand-300">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-brand-300">
                 District Representative Dashboard
               </span>
-              <h1 className="text-2xl font-extrabold mt-1">{districtName} District Portal</h1>
-              <p className="text-xs text-slate-300 mt-1">
+              <h1 className="text-2xl font-black tracking-tight mt-1">{districtName} District Portal</h1>
+              <p className="text-xs text-slate-300 font-medium mt-1">
                 Manage vendors, add construction products, category, brands, grade & images for {districtName}.
               </p>
             </div>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowVendorModal(true)}
-                className="bg-white text-navy-900 font-semibold text-xs px-4 py-2.5 rounded-xl hover:bg-slate-100 transition-colors flex items-center gap-2 shadow-xs cursor-pointer"
+                className="bg-white text-navy-950 font-extrabold text-xs px-4 py-2.5 rounded-xl hover:bg-slate-100 active:scale-[0.98] transition-all duration-200 flex items-center gap-2 shadow-xs cursor-pointer"
               >
                 <span>➕</span> Add New Vendor
               </button>
               <button
                 onClick={() => setShowProductModal(true)}
-                className="bg-brand-500 text-white font-semibold text-xs px-4 py-2.5 rounded-xl hover:bg-brand-600 transition-colors flex items-center gap-2 shadow-xs cursor-pointer"
+                className="bg-brand-500 hover:bg-brand-600 active:scale-[0.98] transition-all duration-200 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-xs cursor-pointer"
               >
                 <span>📦</span> Add New Product
               </button>
@@ -237,54 +246,54 @@ export default function DrDashboard() {
 
           {/* Quick Metrics */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-5 border-t border-slate-700/60">
-            <div className="bg-white/10 rounded-xl p-3.5 backdrop-blur-xs">
-              <p className="text-xs text-slate-300 font-medium">Assigned District</p>
-              <p className="text-lg font-bold mt-0.5">{districtName}</p>
+            <div className="bg-white/10 rounded-xl p-3.5 backdrop-blur-xs border border-white/10">
+              <p className="text-[11px] text-slate-300 font-medium">Assigned District</p>
+              <p className="text-lg font-black mt-0.5 tracking-tight">{districtName}</p>
             </div>
-            <div className="bg-white/10 rounded-xl p-3.5 backdrop-blur-xs">
-              <p className="text-xs text-slate-300 font-medium">Active Vendors</p>
-              <p className="text-lg font-bold mt-0.5">{districtVendors.length}</p>
+            <div className="bg-white/10 rounded-xl p-3.5 backdrop-blur-xs border border-white/10">
+              <p className="text-[11px] text-slate-300 font-medium">Active Vendors</p>
+              <p className="text-lg font-black mt-0.5 tracking-tight">{districtVendors.length}</p>
             </div>
-            <div className="bg-white/10 rounded-xl p-3.5 backdrop-blur-xs">
-              <p className="text-xs text-slate-300 font-medium">Total Products</p>
-              <p className="text-lg font-bold mt-0.5">{districtProducts.length}</p>
+            <div className="bg-white/10 rounded-xl p-3.5 backdrop-blur-xs border border-white/10">
+              <p className="text-[11px] text-slate-300 font-medium">Total Products</p>
+              <p className="text-lg font-black mt-0.5 tracking-tight">{districtProducts.length}</p>
             </div>
-            <div className="bg-white/10 rounded-xl p-3.5 backdrop-blur-xs">
-              <p className="text-xs text-slate-300 font-medium">Assigned Mobile</p>
-              <p className="text-lg font-bold mt-0.5">{user?.phone}</p>
+            <div className="bg-white/10 rounded-xl p-3.5 backdrop-blur-xs border border-white/10">
+              <p className="text-[11px] text-slate-300 font-medium">Assigned Mobile</p>
+              <p className="text-lg font-black mt-0.5 tracking-tight">{user?.phone}</p>
             </div>
           </div>
         </div>
 
         {/* Navigation Tabs & Search */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-6">
-          <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200 shadow-2xs">
             <button
               onClick={() => setActiveTab("products")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer ${
                 activeTab === "products"
-                  ? "bg-brand-500 text-white shadow-xs"
-                  : "text-slate-600 hover:text-navy-900"
+                  ? "bg-brand-600 text-white shadow-xs"
+                  : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
               }`}
             >
               📦 Products ({districtProducts.length})
             </button>
             <button
               onClick={() => setActiveTab("vendors")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer ${
                 activeTab === "vendors"
-                  ? "bg-brand-500 text-white shadow-xs"
-                  : "text-slate-600 hover:text-navy-900"
+                  ? "bg-brand-600 text-white shadow-xs"
+                  : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
               }`}
             >
               🏬 Vendors ({districtVendors.length})
             </button>
             <button
               onClick={() => setActiveTab("listings")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
+              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center gap-1.5 ${
                 activeTab === "listings"
-                  ? "bg-brand-500 text-white shadow-xs"
-                  : "text-slate-600 hover:text-navy-900"
+                  ? "bg-brand-600 text-white shadow-xs"
+                  : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
               }`}
             >
               <span>📋 Listings & Approvals ({products.length})</span>
@@ -294,6 +303,16 @@ export default function DrDashboard() {
                 </span>
               )}
             </button>
+            <button
+              onClick={() => setActiveTab("orders")}
+              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer ${
+                activeTab === "orders"
+                  ? "bg-brand-600 text-white shadow-xs"
+                  : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
+              }`}
+            >
+              🛍️ District Orders ({districtOrders.length})
+            </button>
           </div>
 
           <div className="relative w-full sm:w-72">
@@ -302,7 +321,7 @@ export default function DrDashboard() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder={`Search ${activeTab}...`}
-              className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3.5 py-2.5 pl-9 outline-none focus:border-brand-500 shadow-xs"
+              className="w-full bg-white text-xs border border-slate-200/90 rounded-xl px-3.5 py-2.5 pl-9 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 shadow-2xs transition-all duration-200"
             />
             <span className="absolute left-3 top-2.5 text-slate-400 text-xs">🔍</span>
           </div>
@@ -631,7 +650,7 @@ export default function DrDashboard() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase">
+                  <tr className="border-b border-slate-200/90 bg-slate-50/90 text-[11px] font-black text-slate-500 uppercase tracking-wider">
                     <th className="py-3 px-4">Vendor Shop</th>
                     <th className="py-3 px-4">Product Name</th>
                     <th className="py-3 px-4">Category & Brand</th>
@@ -652,13 +671,13 @@ export default function DrDashboard() {
                       const st = p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW");
                       const stBadge =
                         st === "APPROVED"
-                          ? "bg-green-50 text-green-700 border-green-200"
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-bold"
                           : st === "REJECTED"
-                          ? "bg-red-50 text-red-600 border-red-200"
-                          : "bg-amber-50 text-amber-700 border-amber-200";
+                          ? "bg-rose-50 text-rose-700 border border-rose-200/80 font-bold"
+                          : "bg-amber-50 text-amber-700 border border-amber-200/80 font-bold";
 
                       return (
-                        <tr key={p.id} className="hover:bg-slate-50">
+                        <tr key={p.id} className="hover:bg-slate-50/80 transition-colors duration-150">
                           <td className="py-3.5 px-4 font-bold text-navy-900">
                             🏬 {p.vendorName || "Shree Cement Traders"}
                           </td>
@@ -672,7 +691,7 @@ export default function DrDashboard() {
                           <td className="py-3.5 px-4 font-extrabold text-navy-900">₹{p.price}</td>
                           <td className="py-3.5 px-4 font-bold text-slate-700">{p.stockQty} {p.unit || "units"}</td>
                           <td className="py-3.5 px-4">
-                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${stBadge}`}>
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${stBadge}`}>
                               {st === "APPROVED" ? "APPROVED" : st === "REJECTED" ? "REJECTED" : "PENDING REVIEW"}
                             </span>
                           </td>
@@ -681,7 +700,7 @@ export default function DrDashboard() {
                               {st !== "APPROVED" && (
                                 <button
                                   onClick={() => updateListingApprovalStatus(p.id, "APPROVED")}
-                                  className="bg-green-600 hover:bg-green-700 text-white font-bold text-[11px] px-3 py-1.5 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                                  className="bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold text-[11px] px-3 py-1.5 rounded-lg transition-all duration-200 cursor-pointer shadow-2xs"
                                 >
                                   ✓ Approve
                                 </button>
@@ -689,7 +708,7 @@ export default function DrDashboard() {
                               {st !== "REJECTED" && (
                                 <button
                                   onClick={() => updateListingApprovalStatus(p.id, "REJECTED")}
-                                  className="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 font-bold text-[11px] px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                                  className="bg-rose-50 text-rose-700 border border-rose-200/80 hover:bg-rose-100 active:scale-[0.98] font-bold text-[11px] px-3 py-1.5 rounded-lg transition-all duration-200 cursor-pointer"
                                 >
                                   ✕ Reject
                                 </button>
@@ -705,11 +724,79 @@ export default function DrDashboard() {
           )}
         </div>
       )}
+
+      {/* Tab 4: District Orders */}
+      {activeTab === "orders" && (
+        <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden">
+          <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+            <div>
+              <h3 className="font-extrabold text-navy-900 text-sm">Customer Orders in {districtName} District</h3>
+              <p className="text-[11px] text-slate-500">Live marketplace orders placed within {districtName} jurisdiction.</p>
+            </div>
+            <span className="bg-brand-50 text-brand-700 text-xs font-bold px-3 py-1 rounded-full border border-brand-200/80 shadow-2xs">
+              {districtOrders.length} District Orders
+            </span>
+          </div>
+          {districtOrders.length === 0 ? (
+            <div className="text-center py-12 px-4">
+              <p className="text-3xl mb-2">🛍️</p>
+              <p className="text-sm font-bold text-navy-900">No orders placed in {districtName} yet</p>
+              <p className="text-xs text-slate-500 mt-1">Orders placed by customers in {districtName} will appear here in real-time.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200/90 bg-slate-50/90 text-[11px] font-black text-slate-500 uppercase tracking-wider">
+                    <th className="py-3 px-4">Order ID</th>
+                    <th className="py-3 px-4">Customer Details</th>
+                    <th className="py-3 px-4">District</th>
+                    <th className="py-3 px-4">Items Summary</th>
+                    <th className="py-3 px-4">Total Amount</th>
+                    <th className="py-3 px-4">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {districtOrders.map((ord) => {
+                    const orderTotal = ord.totalAmount || ord.total || 0;
+                    const itemsSummary = Array.isArray(ord.items)
+                      ? ord.items.map((i) => `${i.productName || i.name} (x${i.quantity})`).join(", ")
+                      : ord.items || "Order Items";
+                    const custName = ord.customer?.name || ord.customer || "Customer";
+
+                    return (
+                      <tr key={ord.id} className="hover:bg-slate-50/80 transition-colors duration-150">
+                        <td className="py-3.5 px-4 font-bold text-navy-900">{ord.id.slice(0, 8).toUpperCase()}</td>
+                        <td className="py-3.5 px-4 font-semibold text-slate-800">
+                          👤 {custName}
+                          {ord.customer?.phone && <p className="text-[10px] text-slate-400 font-normal">📱 {ord.customer.phone}</p>}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className="bg-amber-50 text-amber-700 font-bold px-2 py-0.5 rounded text-[10px] border border-amber-200/80">
+                            📍 {ord.districtName || districtName}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-600 max-w-xs">{itemsSummary}</td>
+                        <td className="py-3.5 px-4 font-extrabold text-navy-900">₹{orderTotal}</td>
+                        <td className="py-3.5 px-4">
+                          <span className="bg-blue-50 text-blue-700 border border-blue-200/80 px-2.5 py-1 rounded-full text-[11px] font-bold">
+                            {ord.status || "Pending"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
       </main>
 
       {/*  Add Vendor Modal */}
       {showVendorModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
               <h3 className="font-bold text-navy-900 text-base">Add Vendor to {districtName}</h3>

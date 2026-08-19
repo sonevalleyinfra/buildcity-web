@@ -11,13 +11,13 @@ import NotificationPanel from "../../components/NotificationPanel";
 const TABS = ["All", "Pending", "Processing", "Out for Delivery", "Delivered", "Cancelled"];
 
 const STATUS_MAP = {
-  PENDING: { label: "Pending", color: "bg-amber-50 text-amber-700 border-amber-200" },
-  PROCESSING: { label: "Processing", color: "bg-blue-50 text-blue-700 border-blue-200" },
-  CONFIRMED: { label: "Confirmed", color: "bg-blue-50 text-blue-700 border-blue-200" },
-  SHIPPED: { label: "Shipped", color: "bg-indigo-50 text-indigo-700 border-indigo-200" },
-  OUT_FOR_DELIVERY: { label: "Out for Delivery", color: "bg-purple-50 text-purple-700 border-purple-200" },
-  DELIVERED: { label: "Delivered", color: "bg-green-50 text-green-700 border-green-200" },
-  CANCELLED: { label: "Cancelled", color: "bg-red-50 text-red-600 border-red-200" },
+  PENDING: { label: "Pending", color: "bg-amber-50 text-amber-700 border-amber-200/80", pulse: true },
+  PROCESSING: { label: "Processing", color: "bg-blue-50 text-blue-700 border-blue-200/80", pulse: true },
+  CONFIRMED: { label: "Confirmed", color: "bg-blue-50 text-blue-700 border-blue-200/80", pulse: false },
+  SHIPPED: { label: "Shipped", color: "bg-indigo-50 text-indigo-700 border-indigo-200/80", pulse: true },
+  OUT_FOR_DELIVERY: { label: "Out for Delivery", color: "bg-purple-50 text-purple-700 border-purple-200/80", pulse: true },
+  DELIVERED: { label: "Delivered", color: "bg-emerald-50 text-emerald-700 border-emerald-200/80", pulse: false },
+  CANCELLED: { label: "Cancelled", color: "bg-rose-50 text-rose-600 border-rose-200/80", pulse: false },
 };
 
 function PinIcon() {
@@ -50,7 +50,7 @@ export default function Orders() {
 
   // STRICT CUSTOMER ISOLATION: Show ONLY orders belonging to the logged-in customer
   const customerOrders = useMemo(() => {
-    if (!customerPhone && !customerId) return orders;
+    if (!customerPhone && !customerId) return [];
     return orders.filter((o) => {
       const oPhone = (o.userPhone || o.phone || o.customer?.phone || "").trim();
       const oUserId = o.userId || o.customerId || o.customer?.id;
@@ -61,7 +61,7 @@ export default function Orders() {
       if (customerId && oUserId) {
         return oUserId === customerId;
       }
-      return true;
+      return false;
     });
   }, [orders, customerPhone, customerId]);
 
@@ -116,7 +116,7 @@ export default function Orders() {
         {/* Header Title */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-extrabold text-navy-900 tracking-tight">
+            <h1 className="text-xl font-black text-navy-900 tracking-tight">
               My Orders & Fulfillment
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -125,22 +125,22 @@ export default function Orders() {
           </div>
           <button
             onClick={() => navigate("/categories")}
-            className="text-xs font-bold bg-brand-500 hover:bg-brand-600 text-white px-3.5 py-2 rounded-xl transition-colors cursor-pointer shadow-2xs"
+            className="text-xs font-black bg-brand-500 hover:bg-brand-600 active:scale-[0.98] text-white px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-xs"
           >
             + New Order
           </button>
         </div>
 
         {/* Status Filter Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-slate-200">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1.5 border-b border-slate-200/90 no-scrollbar">
           {TABS.map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap cursor-pointer ${
+              className={`px-3.5 py-2 text-xs font-bold rounded-xl active:scale-[0.98] transition-all whitespace-nowrap cursor-pointer ${
                 tab === t
-                  ? "bg-navy-900 text-white shadow-2xs"
-                  : "text-slate-600 bg-white border border-slate-200 hover:bg-slate-100"
+                  ? "bg-navy-900 text-white shadow-xs"
+                  : "text-slate-600 bg-white border border-slate-200/90 hover:bg-slate-100"
               }`}
             >
               {t}
@@ -182,7 +182,7 @@ export default function Orders() {
             </p>
             <button
               onClick={() => navigate("/categories")}
-              className="mt-4 inline-block bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
+              className="mt-4 inline-block bg-brand-500 hover:bg-brand-600 active:scale-[0.98] text-white text-xs font-bold px-4.5 py-2.5 rounded-xl transition-all cursor-pointer shadow-2xs"
             >
               Browse Catalog & Order Now
             </button>
@@ -198,7 +198,7 @@ export default function Orders() {
                 <Link
                   key={order.id}
                   to={`/orders/${order.id}`}
-                  className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 hover:border-brand-500 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 group shadow-2xs block"
+                  className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 hover:border-brand-400 hover:shadow-md active:scale-[0.99] transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 group shadow-2xs block"
                 >
                   <div className="flex gap-4 items-center">
                     <div className="h-12 w-12 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-xl shrink-0 group-hover:bg-brand-50 transition-colors">
@@ -206,7 +206,8 @@ export default function Orders() {
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${statusInfo.color}`}>
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${statusInfo.color}`}>
+                          {statusInfo.pulse && <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />}
                           {statusInfo.label}
                         </span>
                         <span className="text-[11px] text-slate-400 font-medium">
@@ -218,20 +219,20 @@ export default function Orders() {
                         </span>
                       </div>
 
-                      <h3 className="text-xs font-extrabold text-navy-900 leading-snug group-hover:text-brand-600 transition-colors">
+                      <h3 className="text-xs font-black text-navy-900 leading-snug group-hover:text-brand-600 transition-colors tracking-tight">
                         {order.items?.[0]?.name || order.items?.[0]?.productName || "Order Item"}
                         {order.items && order.items.length > 1 && ` + ${order.items.length - 1} more items`}
                       </h3>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Order ID: <strong>#{order.id?.slice(0, 8) || "ORD"}</strong></p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Order ID: <strong className="font-mono text-brand-700 font-extrabold">{order.orderNumber || (order.id ? `#ORD-${order.id.slice(0, 8).toUpperCase()}` : "#ORD-NEW")}</strong></p>
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                     <div className="text-left sm:text-right">
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">Total Amount</p>
-                      <p className="text-base font-black text-navy-900">₹{displayTotal.toLocaleString("en-IN")}</p>
+                      <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">Total Amount</p>
+                      <p className="text-base font-black text-navy-900 tabular-nums">₹{displayTotal.toLocaleString("en-IN")}</p>
                     </div>
-                    <span className="text-xs font-bold text-brand-600 bg-brand-50 border border-brand-200 px-3.5 py-2 rounded-xl group-hover:bg-brand-500 group-hover:text-white transition-colors shrink-0">
+                    <span className="text-xs font-bold text-brand-600 bg-brand-50 border border-brand-200 px-3.5 py-2 rounded-xl group-hover:bg-brand-500 group-hover:text-white transition-colors shrink-0 shadow-2xs">
                       View Details →
                     </span>
                   </div>

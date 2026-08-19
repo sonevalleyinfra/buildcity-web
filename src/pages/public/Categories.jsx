@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useCart } from "../../context/CartContext";
 import { useAdmin } from "../../context/AdminContext";
+import { useRegion } from "../../context/RegionContext";
 import Navbar from "../../components/Navbar";
 import RegionPicker from "../../components/RegionPicker";
 import NotificationPanel from "../../components/NotificationPanel";
@@ -43,9 +44,7 @@ const categoryCards = [
 
 const bestSelling = [];
 
-import { useSearchParams } from "react-router-dom";
-
-// Categories Catalog Page — Real DB approved products filter, search, sorting aur exact structure skeleton loading
+// Categories Catalog Page — region based live product pricing and filter
 export default function Categories() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -53,6 +52,7 @@ export default function Categories() {
 
   const { count, addItem, items } = useCart();
   const { products = [], productsLoading } = useAdmin();
+  const { region } = useRegion();
   const [activePill, setActivePill] = useState(initialCat);
   const [slide, setSlide] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
@@ -67,19 +67,30 @@ export default function Categories() {
     return c.name.toLowerCase().includes(activePill.toLowerCase());
   });
 
-  // Deduplicate and filter Approved Live Vendor Products
+  // Deduplicate and filter Approved Live Vendor Products with region price factor & strict region isolation
   const uniqueVendorProducts = useMemo(() => {
     const map = new Map();
     products.forEach((p) => {
-      const isApproved = p.approvalStatus === "APPROVED" || p.approvalStatus === undefined || p.isActive === true;
-      if (!isApproved) return;
+      if (p.isActive === false && p.approvalStatus === "REJECTED") return;
+
+      const activeRegName = (region?.name || "Varanasi").toLowerCase().trim();
+      const pRegName = (p.regionName || p.districtName || p.vendor?.region?.name || "varanasi").toLowerCase().trim();
+
+      const matches = pRegName === activeRegName || pRegName.includes(activeRegName) || activeRegName.includes(pRegName);
+      if (!matches) return;
+
       const key = `${(p.name || "").toLowerCase()}_${p.vendorId || ""}`;
       if (!map.has(key)) {
-        map.set(key, p);
+        map.set(key, {
+          ...p,
+          price: (p.price !== undefined && p.price !== null && !isNaN(Number(p.price)))
+            ? Math.round(Number(p.price))
+            : Math.round(Number(p.suggestedPrice || 100) * (region?.priceFactor || 1)),
+        });
       }
     });
     return Array.from(map.values());
-  }, [products]);
+  }, [products, region]);
 
   const liveVendorProducts = uniqueVendorProducts.filter((p) => {
     if (activePill === "All") return true;
@@ -138,14 +149,14 @@ export default function Categories() {
 
         {/* Mobile Search Bar */}
         <form onSubmit={handleSearch} className="max-w-6xl mx-auto px-4 pb-3">
-          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 focus-within:bg-white focus-within:ring-4 focus-within:ring-brand-500/10 focus-within:border-brand-500 px-3.5 py-2.5 transition-all duration-200">
             <SearchIcon />
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               type="text"
               placeholder="Search category, brand, material..."
-              className="w-full bg-transparent text-xs outline-none placeholder:text-slate-400 font-medium"
+              className="w-full bg-transparent text-xs outline-none placeholder:text-slate-400 font-medium text-navy-900"
             />
             <button type="button" className="text-slate-400">
               <ScanIcon />
@@ -154,32 +165,35 @@ export default function Categories() {
         </form>
       </div>
 
-      <main className="max-w-6xl mx-auto px-4 pt-6 space-y-8">
+      <main className="max-w-6xl mx-auto px-4 pt-6 space-y-8 relative">
+        {/* Ambient section glow */}
+        <div className="absolute top-10 left-1/2 -translate-x-1/2 w-full max-w-4xl h-72 bg-brand-500/5 blur-3xl pointer-events-none rounded-full" />
+
         {/* Top Header Title & Filter Pills */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-slate-100 pb-3">
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs relative z-10">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-slate-100 pb-3.5">
             <div>
               <h1 className="text-xl font-black text-navy-900 tracking-tight">Browse All Building Categories</h1>
-              <p className="text-xs text-slate-500">Certified construction supplies directly from verified district distributors</p>
+              <p className="text-xs font-medium text-slate-500 mt-0.5">Certified construction supplies directly from verified district distributors</p>
             </div>
-            <span className="text-xs font-bold bg-brand-50 text-brand-700 px-3 py-1 rounded-full border border-brand-200 w-fit">
+            <span className="text-xs font-bold bg-brand-50 text-brand-700 px-3 py-1 rounded-full border border-brand-200/80 w-fit shrink-0 shadow-2xs">
               {filteredCategories.length} Categories Available
             </span>
           </div>
 
           {/* Filter Pills */}
-          <div className="flex items-center gap-3 overflow-x-auto pb-1">
+          <div className="flex items-center gap-2.5 overflow-x-auto pb-1.5 no-scrollbar">
             {filterPills.map((p) => (
               <button
                 key={p.name}
                 onClick={() => setActivePill(p.name)}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl border transition-all cursor-pointer shrink-0 text-xs font-bold ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all duration-200 cursor-pointer shrink-0 text-xs font-bold tracking-tight active:scale-[0.98] ${
                   activePill === p.name
-                    ? "bg-navy-900 text-white border-navy-900 shadow-xs"
-                    : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                    ? "bg-navy-900 text-white border-navy-900 shadow-md ring-1 ring-navy-900/10"
+                    : "bg-slate-100/90 text-slate-700 border-slate-200/90 hover:bg-slate-200/70 hover:text-navy-900"
                 }`}
               >
-                {p.img && <img src={p.img} alt={p.name} className="w-5 h-5 rounded-full object-cover shrink-0" />}
+                {p.img && <img src={p.img} alt={p.name} className="w-5 h-5 rounded-full object-cover shrink-0 shadow-2xs" />}
                 {p.icon && <span>{p.icon}</span>}
                 <span>{p.name}</span>
               </button>
@@ -188,7 +202,7 @@ export default function Categories() {
         </div>
 
         {/* Hero Slider Banner */}
-        <div className="relative overflow-hidden rounded-2xl bg-navy-900 h-40 sm:h-52 shadow-xs">
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-navy-950 via-navy-900 to-slate-900 h-40 sm:h-56 shadow-md border border-navy-800/60 z-10">
           {banners.map((b, i) => (
             <div
               key={i}
@@ -196,30 +210,30 @@ export default function Categories() {
               style={{ opacity: slide === i ? 1 : 0, pointerEvents: slide === i ? "auto" : "none" }}
             >
               <div className="flex-1 px-6 sm:px-10 py-5 z-10">
-                <span className="bg-brand-500 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-md uppercase tracking-wider mb-2 inline-block shadow-xs">
+                <span className="bg-brand-500 text-white text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider mb-2.5 inline-block shadow-xs">
                   {b.tag}
                 </span>
-                <h2 className="text-white text-lg sm:text-2xl font-black leading-tight mt-1">
+                <h2 className="text-white text-lg sm:text-2xl font-black leading-tight tracking-tight mt-1">
                   {b.title[0]} <br />
                   <span className="text-brand-300">{b.title[1]}</span>
                 </h2>
-                <p className="text-slate-300 text-xs mt-1 max-w-md hidden sm:block">{b.sub}</p>
+                <p className="text-slate-300 text-xs font-medium mt-1.5 max-w-md hidden sm:block">{b.sub}</p>
               </div>
 
               <div className="w-1/2 h-full relative hidden sm:block">
-                <div className="absolute inset-0 bg-gradient-to-r from-navy-900 to-transparent z-10" />
+                <div className="absolute inset-0 bg-gradient-to-r from-navy-950 via-navy-950/70 to-transparent z-10" />
                 <img src={b.img} alt="Banner" className="w-full h-full object-cover" />
               </div>
             </div>
           ))}
 
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-20">
+          <div className="absolute bottom-3.5 left-1/2 -translate-x-1/2 flex gap-1.5 z-20">
             {banners.map((_, i) => (
               <button
                 key={i}
                 onClick={() => setSlide(i)}
                 className={`h-2 rounded-full transition-all cursor-pointer ${
-                  slide === i ? "w-6 bg-brand-500" : "w-2 bg-white/40"
+                  slide === i ? "w-6 bg-brand-400" : "w-2 bg-white/30 hover:bg-white/50"
                 }`}
               />
             ))}
@@ -227,21 +241,21 @@ export default function Categories() {
         </div>
 
         {/* Shop by Category Grid */}
-        <section>
+        <section className="relative z-10">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-black text-navy-900">Explore Materials by Category</h2>
+            <h2 className="text-lg font-black text-navy-900 tracking-tight">Explore Materials by Category</h2>
             <span className="text-xs text-slate-500 font-medium">Click category to view products</span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 gap-4">
+          <div className="flex gap-3 overflow-x-auto pb-3 pt-1 -mx-1 px-1 no-scrollbar scroll-smooth sm:grid sm:grid-cols-4 sm:gap-4">
             {filteredCategories.map((c) => (
               <div
                 key={c.name}
                 onClick={() => setActivePill(c.name)}
-                className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md hover:border-brand-500 transition-all group relative overflow-hidden cursor-pointer"
+                className="bg-white border border-slate-200/90 rounded-2xl p-4 w-44 sm:w-auto shrink-0 flex flex-col justify-between shadow-2xs hover:shadow-md hover:border-brand-400 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 group relative overflow-hidden cursor-pointer"
               >
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-extrabold bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-full">
+                  <span className="text-[11px] font-black bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-full">
                     {c.tag}
                   </span>
                   <span className="text-xs text-brand-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">
@@ -259,10 +273,10 @@ export default function Categories() {
                 </div>
 
                 <div>
-                  <h3 className="font-extrabold text-navy-900 text-sm group-hover:text-brand-600 transition-colors">
+                  <h3 className="font-extrabold text-navy-900 text-sm tracking-tight group-hover:text-brand-600 transition-colors">
                     {c.name}
                   </h3>
-                  <p className="text-[11px] text-slate-500 mt-0.5">{c.count}</p>
+                  <p className="text-[11px] font-medium text-slate-500 mt-0.5">{c.count}</p>
                 </div>
               </div>
             ))}
@@ -271,7 +285,7 @@ export default function Categories() {
 
         {/* Products Filtered by Selected Category */}
         {productsLoading ? (
-          <section className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+          <section className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs relative z-10">
             <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
               <div className="h-5 bg-slate-200 rounded w-64 animate-pulse"></div>
               <div className="h-6 bg-slate-200 rounded w-32 animate-pulse"></div>
@@ -309,76 +323,79 @@ export default function Categories() {
             </div>
           </section>
         ) : liveVendorProducts.length > 0 && (
-          <section className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+          <section className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs relative z-10">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 border-b border-slate-100 pb-3">
               <div>
                 <h2 className="text-lg font-black text-navy-900 flex items-center gap-2 tracking-tight">
                   <span>⚡ {activePill === "All" ? "Premium Certified Materials Catalog" : activePill + " Master Supplies"}</span>
-                  <span className="bg-green-50 text-green-700 border border-green-200 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
                     ✨ 100% Certified Quality
                   </span>
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  100% Tested & Verified Construction Stock · Direct Site Delivery Across Varanasi & UP Districts
+                  100% Tested & Verified Construction Stock · Direct Site Delivery Across {region?.name || "Varanasi"} & UP Districts
                 </p>
               </div>
-              <span className="text-xs font-extrabold bg-slate-100 text-slate-700 px-3 py-1 rounded-xl border border-slate-200 w-fit shrink-0">
-                {liveVendorProducts.length} Items Available
+              <span className="text-xs font-extrabold bg-slate-100 text-slate-700 px-3 py-1 rounded-xl border border-slate-200/80 w-fit shrink-0 shadow-2xs">
+                {liveVendorProducts.length} Items Available in {region?.name || "Region"}
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {liveVendorProducts.map((p) => (
-                <div
-                  key={p.id}
-                  className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between hover:border-brand-300 hover:shadow-md transition-all group"
-                >
-                  <div>
-                    <div className="relative h-36 rounded-xl overflow-hidden bg-white mb-3 border border-slate-200">
-                      <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                      <span className="absolute top-2 left-2 bg-navy-900 text-white text-[9px] font-bold px-2 py-0.5 rounded">
-                        {p.categoryName}
-                      </span>
-                    </div>
-
-                    <p className="text-[10px] font-extrabold text-brand-600 uppercase tracking-wide">
-                      🏬 Offered by: {p.vendorName}
-                    </p>
-                    <h3 className="font-extrabold text-navy-900 text-xs leading-snug line-clamp-2 mt-0.5">
-                      {p.name}
-                    </h3>
-                    <p className="text-[11px] text-slate-500 mt-1">
-                      Brand: <span className="font-bold text-slate-700">{p.brand}</span> · Grade: <span className="font-bold text-slate-700">{p.grade}</span>
-                    </p>
-                  </div>
-
-                  <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between">
+            <div className="max-h-[640px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent rounded-2xl border border-slate-200/80 p-2 bg-slate-50/50">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {liveVendorProducts.map((p) => (
+                  <div
+                    key={p.id}
+                    className="bg-white border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between hover:border-brand-300 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200 group"
+                  >
                     <div>
-                      <span className="text-base font-black text-navy-900">₹{p.price}</span>
-                      <p className="text-[10px] text-slate-400">per {p.unit}</p>
+                      <div className="relative h-36 rounded-xl overflow-hidden bg-slate-50 mb-3 border border-slate-200">
+                        <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        <span className="absolute top-2 left-2 bg-navy-900 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow-2xs">
+                          {p.categoryName}
+                        </span>
+                      </div>
+
+                      <p className="text-[10px] font-black text-brand-600 uppercase tracking-wide">
+                        🏬 Offered by: {p.vendorName}
+                      </p>
+                      <h3 className="font-extrabold text-navy-900 text-xs leading-snug line-clamp-2 mt-0.5 tracking-tight">
+                        {p.name}
+                      </h3>
+                      <p className="text-[11px] font-medium text-slate-500 mt-1">
+                        Brand: <span className="font-bold text-slate-700">{p.brand}</span> · Grade: <span className="font-bold text-slate-700">{p.grade}</span>
+                      </p>
                     </div>
-                    <button
-                      onClick={() => {
-                        addItem(
-                          {
-                            id: p.id,
-                            name: p.name,
-                            price: p.price,
-                            brand: p.brand,
-                            img: p.imageUrl,
-                            vendorName: p.vendorName,
-                          },
-                          1
-                        );
-                        alert(`"${p.name}" (Vendor: ${p.vendorName}) added to cart!`);
-                      }}
-                      className="bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-xs transition-colors cursor-pointer"
-                    >
-                      + Add to Cart
-                    </button>
+
+                    <div className="mt-4 pt-3 border-t border-slate-200/90 flex items-center justify-between">
+                      <div>
+                        <span className="text-base font-black text-navy-900 tracking-tight tabular-nums">₹{p.price}</span>
+                        <p className="text-[10px] font-medium text-slate-400">per {p.unit}</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          addItem(
+                            {
+                              id: p.id,
+                              name: p.name,
+                              price: p.price,
+                              brand: p.brand,
+                              img: p.imageUrl,
+                              vendorId: p.vendorId,
+                              vendorName: p.vendorName || "District Vendor",
+                            },
+                            1
+                          );
+                          alert(`"${p.name}" (Vendor: ${p.vendorName || "District Vendor"}) added to cart!`);
+                        }}
+                        className="bg-brand-500 hover:bg-brand-600 active:scale-[0.98] transition-all duration-200 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-xs cursor-pointer"
+                      >
+                        + Add to Cart
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </section>
         )}
@@ -434,7 +451,7 @@ export default function Categories() {
                         addItem(p, 1);
                         alert(`"${p.name}" added to cart!`);
                       }}
-                      className="bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-xs"
+                      className="bg-brand-500 hover:bg-brand-600 active:scale-[0.97] transition-all text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-xs cursor-pointer"
                     >
                       + Add
                     </button>

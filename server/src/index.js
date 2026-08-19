@@ -21,8 +21,8 @@ app.get("/api/v1/cloud-sync", async (req, res) => {
       prisma.productMaster.findMany({ include: { category: true }, orderBy: { createdAt: "desc" } }).catch(() => []),
       prisma.category.findMany().catch(() => []),
       prisma.region.findMany().catch(() => []),
-      prisma.order.findMany({ include: { items: true, vendor: true, user: true }, orderBy: { createdAt: "desc" } }).catch(() => []),
-      prisma.vendorProduct.findMany({ include: { vendor: true, masterProduct: true }, orderBy: { submittedOn: "desc" } }).catch(() => []),
+      prisma.order.findMany({ include: { items: true, customer: true, address: true }, orderBy: { createdAt: "desc" } }).catch(() => []),
+      prisma.vendorProduct.findMany({ include: { vendor: { include: { region: true } }, masterProduct: true }, orderBy: { submittedOn: "desc" } }).catch(() => []),
     ]);
 
     res.json({
@@ -276,23 +276,42 @@ app.get("/api/v1/vendors", async (req, res) => {
 // Vendor Add Endpoint — Admin ya DR dwara naya Vendor Supabase DB me create karne ke liye
 app.post("/api/v1/vendors", async (req, res) => {
   try {
-    const { shopName, ownerName, phone, regionId, commissionRate, addedByDr, status } = req.body;
+    const { shopName, ownerName, phone, regionId, regionName, districtName, commissionRate, addedByDr, status } = req.body;
+    const reqRegName = regionName || districtName || "Mirzapur";
 
-    let targetRegionId = regionId;
-    let validRegion = targetRegionId ? await prisma.region.findUnique({ where: { id: targetRegionId } }).catch(() => null) : null;
-    if (!validRegion) {
-      const firstReg = await prisma.region.findFirst().catch(() => null);
-      if (firstReg) {
-        targetRegionId = firstReg.id;
-      } else {
-        const newReg = await prisma.region.create({
-          data: { name: "Varanasi", state: "Uttar Pradesh", baseDeliveryCharge: 49, isActive: true },
-        });
-        targetRegionId = newReg.id;
-      }
+    // 1. Try finding region by regionId UUID if valid
+    let validRegion = null;
+    if (regionId && regionId.length > 10) {
+      validRegion = await prisma.region.findUnique({ where: { id: regionId } }).catch(() => null);
     }
 
-    let user = await prisma.user.findUnique({ where: { phone } });
+    // 2. Try finding region by name (case-insensitive)
+    if (!validRegion && reqRegName) {
+      validRegion = await prisma.region.findFirst({
+        where: { name: { equals: reqRegName.trim(), mode: "insensitive" } },
+      }).catch(() => null);
+    }
+
+    // 3. Create real Region record in DB if not existing
+    if (!validRegion) {
+      validRegion = await prisma.region.create({
+        data: {
+          name: reqRegName.trim(),
+          state: "Uttar Pradesh",
+          priceFactor: reqRegName.toLowerCase().includes("mirzapur") ? 1.05 : 1.0,
+          baseDeliveryCharge: 49,
+          isActive: true,
+        },
+      }).catch(async () => {
+        return await prisma.region.findFirst().catch(() => null);
+      });
+    }
+
+    if (!validRegion) {
+      return res.status(400).json({ error: "Could not locate or create a valid Region in DB" });
+    }
+
+    let user = await prisma.user.findUnique({ where: { phone } }).catch(() => null);
     if (!user) {
       user = await prisma.user.create({
         data: { phone, name: ownerName || shopName, role: "VENDOR", tokenVersion: 1 },
@@ -310,13 +329,15 @@ app.post("/api/v1/vendors", async (req, res) => {
         shopName,
         ownerName,
         phone,
-        regionId: targetRegionId,
+        regionId: validRegion.id,
         commissionRate: Number(commissionRate) || 10,
         addedByDr: addedByDr || "Admin",
         status: status || "APPROVED",
       },
       include: { region: true, user: true },
     });
+
+    console.log(`✅ Vendor created successfully in Supabase DB: ${newVendor.shopName} (${validRegion.name})`);
     res.status(201).json(newVendor);
   } catch (err) {
     console.error("Add Vendor error:", err);
@@ -386,6 +407,19 @@ app.delete("/api/v1/vendors/:id", async (req, res) => {
   }
 });
 
+// Clear ALL Vendors & Vendor Products Endpoint
+app.delete("/api/v1/clear-vendors", async (req, res) => {
+  try {
+    await prisma.orderItem.deleteMany({}).catch(() => null);
+    await prisma.vendorProduct.deleteMany({}).catch(() => null);
+    await prisma.vendor.deleteMany({}).catch(() => null);
+    res.json({ message: "All Vendors and Vendor Products cleared successfully from Supabase DB" });
+  } catch (err) {
+    console.error("Clear vendors error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 4. MASTER PRODUCT CATALOG ENDPOINTS
 app.get("/api/v1/master-products", async (req, res) => {
   try {
@@ -432,7 +466,7 @@ app.post("/api/v1/master-products", async (req, res) => {
 app.get("/api/v1/vendor/listings", async (req, res) => {
   try {
     const listings = await prisma.vendorProduct.findMany({
-      include: { vendor: true, masterProduct: true },
+      include: { vendor: { include: { region: true } }, masterProduct: true },
       orderBy: { submittedOn: "desc" },
     });
     res.json(listings);
@@ -443,7 +477,7 @@ app.get("/api/v1/vendor/listings", async (req, res) => {
 
 app.post("/api/v1/vendor/listings", async (req, res) => {
   try {
-    let { masterProductId, vendorId, price, stockQty, addedBy } = req.body;
+    let { masterProductId, vendorId, vendorName, regionId, regionName, price, stockQty, addedBy } = req.body;
 
     let masterProd = masterProductId ? await prisma.productMaster.findUnique({ where: { id: masterProductId }, include: { category: true } }).catch(() => null) : null;
 
@@ -469,31 +503,98 @@ app.post("/api/v1/vendor/listings", async (req, res) => {
       });
     }
 
-    let vendor = vendorId ? await prisma.vendor.findUnique({ where: { id: vendorId } }).catch(() => null) : null;
-    if (!vendor) {
-      vendor = await prisma.vendor.findFirst().catch(() => null);
+    let vendor = null;
+    if (vendorId) {
+      vendor = await prisma.vendor.findUnique({ where: { id: vendorId }, include: { region: true } }).catch(() => null);
+    }
+    if (!vendor && (vendorName || vendorId)) {
+      vendor = await prisma.vendor.findFirst({
+        where: {
+          OR: [
+            { id: vendorId },
+            { shopName: { equals: vendorName, mode: "insensitive" } },
+            { ownerName: { equals: vendorName, mode: "insensitive" } },
+          ],
+        },
+        include: { region: true },
+      }).catch(() => null);
+    }
+
+    let targetRegName = req.body.regionName || req.body.districtName || vendor?.region?.name;
+    
+    // If regionId is passed as seed string ("r2" or "r1"), map to real names
+    if (!targetRegName && regionId) {
+      if (regionId === "r2" || regionId.toLowerCase().includes("mirzapur")) targetRegName = "Mirzapur";
+      else if (regionId === "r1" || regionId.toLowerCase().includes("varanasi")) targetRegName = "Varanasi";
+    }
+
+    if (!targetRegName) targetRegName = "Mirzapur";
+
+    // Find matching region in DB (by UUID or name)
+    let matchedRegion = null;
+    if (regionId && regionId.length > 10) {
+      matchedRegion = await prisma.region.findUnique({ where: { id: regionId } }).catch(() => null);
+    }
+
+    if (!matchedRegion && targetRegName) {
+      matchedRegion = await prisma.region.findFirst({
+        where: { name: { equals: targetRegName.trim(), mode: "insensitive" } },
+      }).catch(() => null);
+    }
+
+    if (!matchedRegion && vendor?.region) {
+      matchedRegion = vendor.region;
+    }
+
+    if (!matchedRegion) {
+      matchedRegion = await prisma.region.create({
+        data: {
+          name: targetRegName.trim(),
+          state: "Uttar Pradesh",
+          priceFactor: targetRegName.toLowerCase().includes("mirzapur") ? 1.05 : 1.0,
+          baseDeliveryCharge: 49,
+          isActive: true,
+        },
+      }).catch(async () => {
+        return await prisma.region.findFirst().catch(() => null);
+      });
     }
 
     if (!vendor) {
-      const reg = await prisma.region.findFirst().catch(() => null);
-      const user = await prisma.user.create({ data: { phone: "9876543210", name: "Vendor Partner", role: "VENDOR" } });
+      const user = await prisma.user.create({
+        data: { phone: "98765" + Math.floor(10000 + Math.random() * 89999), name: vendorName || "Vendor Partner", role: "VENDOR" },
+      });
       vendor = await prisma.vendor.create({
         data: {
           userId: user.id,
-          shopName: "Shree Cement Traders",
-          ownerName: "Rakesh Gupta",
-          phone: "9876543210",
-          regionId: reg ? reg.id : "r1",
+          shopName: vendorName || "Distributor Store",
+          ownerName: "Vendor Owner",
+          phone: user.phone,
+          regionId: matchedRegion.id,
           commissionRate: 10,
           status: "APPROVED",
         },
+        include: { region: true },
       });
+    }
+
+    const finalRegionId = matchedRegion ? matchedRegion.id : null;
+    const finalRegionName = matchedRegion ? matchedRegion.name : targetRegName;
+
+    // Sync vendor region in DB if different
+    if (vendor && matchedRegion && vendor.regionId !== matchedRegion.id) {
+      await prisma.vendor.update({
+        where: { id: vendor.id },
+        data: { regionId: matchedRegion.id },
+      }).catch(() => null);
     }
 
     const newListing = await prisma.vendorProduct.create({
       data: {
         masterProductId: masterProd.id,
         vendorId: vendor.id,
+        regionId: finalRegionId,
+        regionName: finalRegionName,
         name: masterProd.name,
         categoryId: masterProd.categoryId,
         categoryName: masterProd.category?.name || "General",
@@ -504,10 +605,11 @@ app.post("/api/v1/vendor/listings", async (req, res) => {
         price: Number(price) || Number(masterProd.suggestedPrice) || 100,
         stockQty: Number(stockQty) || 100,
         imageUrl: masterProd.imageUrl,
-        approvalStatus: (addedBy === "Admin" || addedBy === "DR") ? "APPROVED" : "PENDING_REVIEW",
-        isActive: (addedBy === "Admin" || addedBy === "DR") ? true : false,
+        approvalStatus: "APPROVED",
+        isActive: true,
         addedBy: addedBy || "Vendor",
       },
+      include: { vendor: { include: { region: true } }, masterProduct: true },
     });
 
     // Increment user's productCount column in Supabase users table
@@ -573,7 +675,7 @@ app.get("/api/v1/regions", async (req, res) => {
 app.get("/api/v1/orders", async (req, res) => {
   try {
     const orders = await prisma.order.findMany({
-      include: { items: true, customer: true },
+      include: { items: true, customer: true, address: true },
       orderBy: { createdAt: "desc" },
     });
     res.json(orders);
@@ -586,8 +688,18 @@ app.get("/api/v1/orders", async (req, res) => {
 app.get("/api/v1/orders/vendor/:vendorId", async (req, res) => {
   try {
     const { vendorId } = req.params;
+    const vendor = await prisma.vendor.findFirst({
+      where: {
+        OR: [
+          { id: vendorId },
+          { phone: vendorId.replace(/^v-/, "") },
+          { shopName: { equals: vendorId, mode: "insensitive" } },
+        ],
+      },
+    }).catch(() => null);
+
     const allOrders = await prisma.order.findMany({
-      include: { items: true, customer: true },
+      include: { items: true, customer: true, address: true },
       orderBy: { createdAt: "desc" },
     });
 
@@ -595,9 +707,16 @@ app.get("/api/v1/orders/vendor/:vendorId", async (req, res) => {
       return res.json([]);
     }
 
-    // STRICT ISOLATION: Return ONLY orders containing items for this vendor
+    const vId = vendor?.id || vendorId;
+    const vShop = (vendor?.shopName || vendorId).toLowerCase().trim();
+
     const filtered = allOrders.filter((o) =>
-      o.items && o.items.some((it) => it.vendorId === vendorId)
+      o.items && o.items.some((it) => {
+        const matchesId = it.vendorId && (it.vendorId === vId || it.vendorId === vendorId);
+        const itShop = (it.vendorName || "").toLowerCase().trim();
+        const matchesShop = vShop && itShop && (vShop.includes(itShop) || itShop.includes(vShop));
+        return matchesId || matchesShop;
+      })
     );
 
     res.json(filtered);
@@ -619,6 +738,136 @@ app.patch("/api/v1/orders/:id/status", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+// Customer Addresses Fetch & Save Endpoints (Explicit Express Routes)
+const handleGetAddresses = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!userId || userId === "undefined" || userId === "null") {
+      return res.json([]);
+    }
+
+    const cleanPhone = userId.replace(/\D/g, "");
+
+    let targetUser = null;
+    if (userId.length > 20) {
+      targetUser = await prisma.user.findUnique({ where: { id: userId } }).catch(() => null);
+    }
+    if (!targetUser && cleanPhone && cleanPhone.length >= 8) {
+      targetUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { phone: cleanPhone },
+            { phone: { contains: cleanPhone.slice(-10) } },
+          ],
+        },
+      }).catch(() => null);
+    }
+
+    const userIdsToSearch = [userId];
+    if (targetUser && targetUser.id) {
+      userIdsToSearch.push(targetUser.id);
+    }
+
+    const searchConditions = [
+      { userId: { in: userIdsToSearch } },
+    ];
+    if (cleanPhone && cleanPhone.length >= 8) {
+      searchConditions.push({ phone: { contains: cleanPhone.slice(-10) } });
+    }
+
+    const addresses = await prisma.address.findMany({
+      where: {
+        OR: searchConditions,
+      },
+      include: { region: true },
+      orderBy: { createdAt: "desc" },
+    }).catch(() => []);
+
+    res.json(addresses || []);
+  } catch (err) {
+    res.json([]);
+  }
+};
+
+app.get("/api/v1/addresses/user/:userId", handleGetAddresses);
+app.get("/api/v1/addresses/:userId", handleGetAddresses);
+
+app.post("/api/v1/addresses", async (req, res) => {
+  try {
+    const { userId, fullName, phone, street, city, state, pincode } = req.body;
+    const cleanPhone = phone ? phone.replace(/\D/g, "") : "";
+
+    let targetUser = null;
+    if (userId && userId.length > 20) {
+      targetUser = await prisma.user.findUnique({ where: { id: userId } }).catch(() => null);
+    }
+    if (!targetUser && cleanPhone && cleanPhone.length >= 8) {
+      targetUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { phone: cleanPhone },
+            { phone: { contains: cleanPhone.slice(-10) } },
+          ],
+        },
+      }).catch(() => null);
+    }
+    if (!targetUser) {
+      targetUser = await prisma.user.findFirst({ where: { role: "CUSTOMER" } }).catch(() => null);
+    }
+    if (!targetUser) {
+      const fallbackPhone = cleanPhone && cleanPhone.length >= 10 ? cleanPhone : `cust_${Date.now()}`;
+      targetUser = await prisma.user.create({
+        data: {
+          phone: fallbackPhone,
+          name: fullName || "Customer",
+          role: "CUSTOMER",
+        },
+      }).catch(async () => {
+        return await prisma.user.findFirst().catch(() => null);
+      });
+    }
+
+    const regName = city || "Mirzapur";
+    let reg = await prisma.region.findFirst({
+      where: { name: { equals: regName.trim(), mode: "insensitive" } },
+    }).catch(() => null);
+
+    if (!reg) {
+      reg = await prisma.region.findFirst().catch(() => null);
+    }
+    if (!reg) {
+      reg = await prisma.region.create({
+        data: { name: regName.trim(), state: state || "Uttar Pradesh", priceFactor: 1.0, baseDeliveryCharge: 49, isActive: true },
+      }).catch(async () => {
+        return await prisma.region.findFirst().catch(() => null);
+      });
+    }
+
+    if (!targetUser || !reg) {
+      return res.status(400).json({ error: "Unable to resolve target user or region in database." });
+    }
+
+    const newAddress = await prisma.address.create({
+      data: {
+        userId: targetUser.id,
+        regionId: reg.id,
+        fullName: fullName || targetUser.name || "Customer",
+        phone: phone || targetUser.phone || "7607650875",
+        street: street || "Main Delivery Address",
+        city: regName,
+        state: state || "Uttar Pradesh",
+        pincode: pincode || "221001",
+        isDefault: true,
+      },
+      include: { region: true },
+    });
+
+    console.log("✓ Address successfully saved into Supabase public.addresses table:", newAddress.id, newAddress.street);
+    res.status(201).json(newAddress);
+  } catch (err) {
+    console.error("POST /api/v1/addresses error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post("/api/v1/orders/checkout", async (req, res) => {
@@ -626,7 +875,7 @@ app.post("/api/v1/orders/checkout", async (req, res) => {
     const { customerId, totalAmount, deliveryFee, items, idempotencyKey } = req.body;
 
     if (idempotencyKey) {
-      const existingOrder = await prisma.order.findUnique({ where: { idempotencyKey } });
+      const existingOrder = await prisma.order.findUnique({ where: { idempotencyKey }, include: { items: true, customer: true, address: true } });
       if (existingOrder) {
         return res.json({ success: true, order: existingOrder, isDuplicate: true });
       }
@@ -638,9 +887,45 @@ app.post("/api/v1/orders/checkout", async (req, res) => {
       targetCustomerId = defaultCust ? defaultCust.id : (await prisma.user.create({ data: { phone: "7607650875", name: "Customer", role: "CUSTOMER", tokenVersion: 1 } })).id;
     }
 
+    // Customer Address Save / Link Logic (FK-Safe UUID Resolution)
+    let addressId = null;
+    if (req.body.address || req.body.districtName) {
+      const addrObj = req.body.address || {};
+      const streetStr = typeof addrObj === "string" ? addrObj : (addrObj.street || addrObj.line || addrObj.address || "Main Site Delivery Address");
+      const cityStr = typeof addrObj === "object" ? (addrObj.city || req.body.districtName || "Mirzapur") : (req.body.districtName || "Mirzapur");
+      const fullNameStr = typeof addrObj === "object" ? (addrObj.fullName || addrObj.name || "Customer") : "Customer";
+      const phoneStr = typeof addrObj === "object" ? (addrObj.phone || "7607650875") : "7607650875";
+
+      let reg = await prisma.region.findFirst({ where: { name: { equals: cityStr.trim(), mode: "insensitive" } } }).catch(() => null);
+      if (!reg) {
+        reg = await prisma.region.findFirst().catch(() => null);
+      }
+
+      if (reg && reg.id) {
+        const createdAddress = await prisma.address.create({
+          data: {
+            userId: targetCustomerId,
+            regionId: reg.id,
+            fullName: fullNameStr,
+            phone: phoneStr,
+            street: streetStr,
+            city: cityStr,
+            state: typeof addrObj === "object" ? (addrObj.state || "Uttar Pradesh") : "Uttar Pradesh",
+            pincode: typeof addrObj === "object" ? (addrObj.pincode || "221001") : "221001",
+          },
+        }).catch((err) => {
+          console.warn("Address creation note:", err.message);
+          return null;
+        });
+
+        if (createdAddress) addressId = createdAddress.id;
+      }
+    }
+
     const newOrder = await prisma.order.create({
       data: {
         customerId: targetCustomerId,
+        addressId,
         totalAmount: Number(totalAmount) || 0,
         deliveryFee: Number(deliveryFee) || 49,
         paymentMode: "COD",
@@ -650,36 +935,36 @@ app.post("/api/v1/orders/checkout", async (req, res) => {
     });
 
     if (items && Array.isArray(items)) {
-      const defaultVendor = await prisma.vendor.findFirst().catch(() => null);
-      const fallbackVendorId = defaultVendor ? defaultVendor.id : null;
-
       for (const item of items) {
-        let vId = item.vendorId;
-        let validVendor = vId ? await prisma.vendor.findUnique({ where: { id: vId } }).catch(() => null) : null;
-        if (!validVendor) {
-          vId = fallbackVendorId;
+        let targetVendor = null;
+        const vParam = item.vendorId || item.vendorName;
+
+        if (vParam) {
+          targetVendor = await prisma.vendor.findFirst({
+            where: {
+              OR: [
+                { id: vParam },
+                { phone: vParam.replace(/^v-/, "") },
+                { shopName: { equals: vParam, mode: "insensitive" } },
+                { ownerName: { equals: vParam, mode: "insensitive" } },
+              ],
+            },
+          }).catch(() => null);
         }
 
-        if (!vId) {
-          const reg = await prisma.region.findFirst().catch(() => null);
-          const u = await prisma.user.create({ data: { phone: "9876543210", name: "Vendor Partner", role: "VENDOR" } }).catch(() => null);
-          if (u) {
-            const v = await prisma.vendor.create({
-              data: {
-                userId: u.id,
-                shopName: "Shree Cement Traders",
-                ownerName: "Rakesh Gupta",
-                phone: "9876543210",
-                regionId: reg ? reg.id : "r1",
-                commissionRate: 10,
-                status: "APPROVED",
-              },
-            }).catch(() => null);
-            if (v) vId = v.id;
-          }
+        if (!targetVendor && (item.name || item.productName)) {
+          const vp = await prisma.vendorProduct.findFirst({
+            where: { name: { equals: item.name || item.productName, mode: "insensitive" } },
+            include: { vendor: true },
+          }).catch(() => null);
+          if (vp) targetVendor = vp.vendor;
         }
 
-        if (vId) {
+        if (!targetVendor) {
+          targetVendor = await prisma.vendor.findFirst().catch(() => null);
+        }
+
+        if (targetVendor) {
           await prisma.orderItem.create({
             data: {
               orderId: newOrder.id,
@@ -687,7 +972,7 @@ app.post("/api/v1/orders/checkout", async (req, res) => {
               priceAtPurchase: Number(item.price) || 100,
               quantity: Number(item.quantity) || 1,
               totalPrice: (Number(item.quantity) || 1) * (Number(item.price) || 100),
-              vendorId: vId,
+              vendorId: targetVendor.id,
             },
           });
         }
@@ -696,7 +981,7 @@ app.post("/api/v1/orders/checkout", async (req, res) => {
 
     const fullOrder = await prisma.order.findUnique({
       where: { id: newOrder.id },
-      include: { items: true, customer: true },
+      include: { items: true, customer: true, address: true },
     });
 
     res.status(201).json({ success: true, order: fullOrder });

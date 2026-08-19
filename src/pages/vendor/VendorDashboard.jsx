@@ -9,6 +9,7 @@ export default function VendorDashboard() {
   const { user } = useAuth();
   const {
     masterProducts = [],
+    vendors = [],
     products = [],
     productsLoading,
     categories = [],
@@ -16,7 +17,7 @@ export default function VendorDashboard() {
     updateVendorProductListing,
     removeVendorProductListing,
   } = useAdmin();
-  const { fetchVendorOrders, updateOrderStatus } = useOrders();
+  const { orders = [], fetchVendorOrders, updateOrderStatus } = useOrders();
 
   // Tabs navigation state: "overview" -> Store Summary, "products" -> My Shop Items, "orders" -> Customer Orders
   const [activeTab, setActiveTab] = useState("overview");
@@ -35,25 +36,50 @@ export default function VendorDashboard() {
   // Edit Listing - Custom selling price aur stock modify karne ke liye
   const [editingProduct, setEditingProduct] = useState(null);
 
-  // Logged-in Vendor Info details extraction
-  const vendorInfo = user?.vendorInfo || {};
-  const shopName = vendorInfo.shopName || user?.name || "Shree Cement Traders";
-  const ownerName = vendorInfo.ownerName || "Vendor Owner";
-  const vendorPhone = user?.phone || vendorInfo.phone || "9876543210";
-  const districtName = vendorInfo.regionName || "Varanasi";
-  const vendorId = vendorInfo.id || "v1";
+  // Logged-in Vendor Info details extraction matching DB Vendors
+  const matchedVendorObj = (vendors || []).find((v) => {
+    const userPhoneClean = user?.phone ? user.phone.replace(/\D/g, "") : "";
+    const vPhoneClean = v.phone ? v.phone.replace(/\D/g, "") : "";
+    const vUserPhoneClean = v.user?.phone ? v.user.phone.replace(/\D/g, "") : "";
 
-  // Load ONLY THIS VENDOR'S ISOLATED ORDERS from Supabase Cloud DB
+    const phoneMatches = userPhoneClean && (vPhoneClean === userPhoneClean || vUserPhoneClean === userPhoneClean);
+    const idMatches = (user?.vendorInfo?.id && v.id === user.vendorInfo.id) || (user?.vendorId && v.id === user.vendorId);
+
+    return phoneMatches || idMatches;
+  }) || user?.vendorInfo || {};
+
+  const shopName = matchedVendorObj.shopName || user?.vendorInfo?.shopName || user?.shopName || user?.name || "Distributor Store";
+  const ownerName = matchedVendorObj.ownerName || user?.vendorInfo?.ownerName || user?.name || "Vendor Owner";
+  const vendorPhone = matchedVendorObj.phone || user?.phone || user?.vendorInfo?.phone || "9876543210";
+  const districtName = matchedVendorObj.region?.name || matchedVendorObj.regionName || matchedVendorObj.districtName || user?.vendorInfo?.region?.name || user?.vendorInfo?.regionName || "Mirzapur";
+  const vendorId = matchedVendorObj.id || user?.vendorInfo?.id || user?.vendorId || user?.id || (user?.phone ? `v-${user.phone}` : `v-${Date.now()}`);
+
+  // vendor isolated orders fetch - no flash on refresh
   useEffect(() => {
+    let isMounted = true;
     fetchVendorOrders(vendorId).then((vOrds) => {
-      if (vOrds) setVendorOrders(vOrds);
-    });
-  }, [vendorId]);
+      if (!isMounted) return;
+      const sourceOrds = Array.isArray(vOrds) && vOrds.length > 0 ? vOrds : orders;
+      const filtered = (sourceOrds || []).filter((o) => {
+        const matchesVendor = o.items && o.items.some((it) => it.vendorId === vendorId || (it.vendorName || "").toLowerCase().trim() === shopName.toLowerCase().trim());
+        return matchesVendor;
+      });
+      setVendorOrders(filtered);
+    }).catch(() => {});
+    return () => { isMounted = false; };
+  }, [vendorId, shopName]);
 
-  // Current vendor ki dukan par list huye products filter karo
-  const vendorProducts = products.filter(
-    (p) => p.vendorId === vendorId || p.vendorName?.toLowerCase() === shopName.toLowerCase()
-  );
+  // Current vendor ki dukan par list huye products filter karo (Flexible DB Match)
+  const vendorProducts = products.filter((p) => {
+    if (!p) return false;
+    const matchesId = p.vendorId && (p.vendorId === vendorId || p.vendorId === matchedVendorObj.id || p.vendorId === user?.id);
+    const pShop = (p.vendorName || p.vendor?.shopName || "").toLowerCase().trim();
+    const curShop = shopName.toLowerCase().trim();
+    const curOwner = ownerName.toLowerCase().trim();
+    const matchesShop = curShop && pShop && (pShop.includes(curShop) || curShop.includes(pShop));
+    const matchesOwner = curOwner && p.vendor?.ownerName && p.vendor.ownerName.toLowerCase().includes(curOwner);
+    return matchesId || matchesShop || matchesOwner;
+  });
 
   // Category aur search term ke mutabiq Master Catalog products filter karo
   const filteredMasterProducts = masterProducts.filter((mp) => {
@@ -81,6 +107,9 @@ export default function VendorDashboard() {
       masterProductId: selectedMasterProd.id,
       vendorId: vendorId,
       vendorName: shopName,
+      regionId: matchedVendorObj.regionId || user?.vendorInfo?.regionId,
+      regionName: districtName || matchedVendorObj.regionName || "Mirzapur",
+      districtName: districtName || matchedVendorObj.regionName || "Mirzapur",
       price: Number(vendorSellingPrice),
       stockQty: Number(vendorStockQty) || 0,
       addedBy: `Vendor (${shopName})`,
@@ -110,90 +139,94 @@ export default function VendorDashboard() {
     }
   };
 
-  const sampleOrders = [
-    { id: "ORD-9081", customer: "Rahul Kumar", items: "UltraTech Cement x5", total: "₹1,950", status: "Pending", date: "Today, 02:30 PM", color: "bg-amber-50 text-amber-700 border-amber-200" },
-    { id: "ORD-9080", customer: "Amit Singh", items: "Asian Paints 20L x1", total: "₹2,250", status: "Ready for Pickup", date: "Today, 11:15 AM", color: "bg-blue-50 text-blue-700 border-blue-200" },
-    { id: "ORD-9079", customer: "Neha Sharma", items: "TMT Steel Bar x10", total: "₹6,500", status: "Delivered", date: "Yesterday", color: "bg-green-50 text-green-700 border-green-200" },
-  ];
+  // Real DB stats calculation
+  const totalRevenue = vendorOrders.reduce((sum, ord) => {
+    return sum + Number(ord.totalAmount || ord.total || 0);
+  }, 0);
+
+  const activeOrdersCount = vendorOrders.filter((o) => {
+    const st = (o.status || "").toUpperCase();
+    return st === "PENDING" || st === "PROCESSING" || st === "OUT_FOR_DELIVERY";
+  }).length;
 
   return (
     <DashboardShell badge="Vendor Partner" badgeColor="#10B981">
       {/* Vendor Hero Banner */}
-      <div className="bg-linear-to-r from-navy-900 via-navy-800 to-slate-900 rounded-2xl p-6 text-white shadow-md mb-6 relative overflow-hidden">
+      <div className="bg-gradient-to-r from-navy-950 via-navy-900 to-slate-900 border border-navy-800/60 rounded-2xl p-6 text-white shadow-md mb-6 relative overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
           <div>
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="bg-green-500/20 text-green-300 border border-green-500/30 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-extrabold px-3 py-0.5 rounded-full flex items-center gap-1.5 backdrop-blur-md">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                 STORE STATUS: APPROVED
               </span>
-              <span className="bg-white/10 text-slate-300 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
+              <span className="bg-white/10 text-slate-300 text-[11px] font-bold px-3 py-0.5 rounded-full border border-white/10">
                 📍 {districtName}
               </span>
             </div>
-            <h1 className="text-2xl font-black text-white tracking-tight">{shopName}</h1>
-            <p className="text-xs text-slate-300 mt-1">
-              Owner: <strong>{ownerName}</strong> · Mobile: <strong>{vendorPhone}</strong> · Commission Rate: <strong>{vendorInfo.commissionRate || 10}%</strong>
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">{shopName}</h1>
+            <p className="text-xs text-slate-300 font-medium mt-1">
+              Owner: <strong>{ownerName}</strong> · Mobile: <strong>{vendorPhone}</strong> · Commission Rate: <strong>{matchedVendorObj.commissionRate || user?.vendorInfo?.commissionRate || 10}%</strong>
             </p>
           </div>
 
           <div className="flex items-center gap-3">
             <button
               onClick={() => setShowCatalogModal(true)}
-              className="bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+              className="bg-brand-500 hover:bg-brand-600 active:scale-[0.98] text-white font-extrabold text-xs px-4.5 py-2.5 rounded-xl transition-all duration-200 shadow-xs hover:shadow-md flex items-center gap-2 cursor-pointer"
             >
               🔍 Choose from Master Catalog
             </button>
           </div>
         </div>
 
-        {/* Quick Metrics Bar */}
+        {/* Quick Metrics Bar - Real DB Data */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-slate-700/60 relative z-10">
-          <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3">
-            <p className="text-[11px] font-medium text-slate-300">Today&apos;s Revenue</p>
-            <p className="text-lg font-bold text-white mt-0.5">₹14,850</p>
-            <span className="text-[10px] text-green-400 font-semibold">↑ +18% vs yesterday</span>
+          <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3.5 border border-white/10">
+            <p className="text-[11px] font-medium text-slate-300">Total Store Revenue</p>
+            <p className="text-lg font-black text-white mt-0.5 tracking-tight">₹{totalRevenue.toLocaleString()}</p>
+            <span className="text-[10px] text-emerald-400 font-extrabold">Real-time DB Sales</span>
           </div>
-          <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3">
+          <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3.5 border border-white/10">
             <p className="text-[11px] font-medium text-slate-300">Active Orders</p>
-            <p className="text-lg font-bold text-white mt-0.5">3 Orders</p>
-            <span className="text-[10px] text-amber-300 font-semibold">Ready for pickup</span>
+            <p className="text-lg font-black text-white mt-0.5 tracking-tight">{activeOrdersCount} Orders</p>
+            <span className="text-[10px] text-amber-300 font-extrabold">Live Orders in DB</span>
           </div>
-          <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3">
+          <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3.5 border border-white/10">
             <p className="text-[11px] font-medium text-slate-300">My Store Products</p>
-            <p className="text-lg font-bold text-white mt-0.5">{vendorProducts.length} Items</p>
-            <span className="text-[10px] text-brand-300 font-semibold">Picked from Master Catalog</span>
+            <p className="text-lg font-black text-white mt-0.5 tracking-tight">{vendorProducts.length} Items</p>
+            <span className="text-[10px] text-brand-300 font-extrabold">Picked from Master Catalog</span>
           </div>
-          <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3">
+          <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3.5 border border-white/10">
             <p className="text-[11px] font-medium text-slate-300">Master Catalog Available</p>
-            <p className="text-lg font-bold text-amber-300 mt-0.5">{masterProducts.length} Pre-built Products</p>
-            <span className="text-[10px] text-slate-300 font-semibold">Created by Admin & DR</span>
+            <p className="text-lg font-black text-amber-300 mt-0.5 tracking-tight">{masterProducts.length} Pre-built Products</p>
+            <span className="text-[10px] text-slate-300 font-medium">Created by Admin & DR</span>
           </div>
         </div>
       </div>
 
       {/* Tabs Bar */}
-      <div className="flex items-center gap-2 mb-6 bg-white p-1.5 rounded-xl border border-slate-200 shadow-xs w-fit">
+      <div className="flex items-center gap-2 mb-6 bg-white p-1.5 rounded-xl border border-slate-200/90 shadow-2xs w-fit">
         <button
           onClick={() => setActiveTab("overview")}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-            activeTab === "overview" ? "bg-navy-900 text-white shadow-xs" : "text-slate-600 hover:text-navy-900"
+          className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer ${
+            activeTab === "overview" ? "bg-navy-900 text-white shadow-xs" : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
           }`}
         >
           📊 Store Overview
         </button>
         <button
           onClick={() => setActiveTab("products")}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-            activeTab === "products" ? "bg-navy-900 text-white shadow-xs" : "text-slate-600 hover:text-navy-900"
+          className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer ${
+            activeTab === "products" ? "bg-navy-900 text-white shadow-xs" : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
           }`}
         >
           📦 My Store Products ({vendorProducts.length})
         </button>
         <button
           onClick={() => setActiveTab("orders")}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-            activeTab === "orders" ? "bg-navy-900 text-white shadow-xs" : "text-slate-600 hover:text-navy-900"
+          className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer ${
+            activeTab === "orders" ? "bg-navy-900 text-white shadow-xs" : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
           }`}
         >
           🛍️ Customer Orders ({vendorOrders.length})
@@ -268,24 +301,48 @@ export default function VendorDashboard() {
               )}
             </div>
 
-            {/* Recent Orders List */}
+            {/* Recent Orders List - Real DB Orders */}
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
-              <h3 className="font-extrabold text-navy-900 text-sm mb-3">Recent Customer Orders</h3>
-              <div className="divide-y divide-slate-100">
-                {sampleOrders.map((ord) => (
-                  <div key={ord.id} className="py-3 flex items-center justify-between gap-3 text-xs">
-                    <div>
-                      <span className="font-bold text-navy-900">{ord.id}</span>
-                      <span className={`ml-2 px-2 py-0.5 rounded text-[10px] font-bold border ${ord.color}`}>{ord.status}</span>
-                      <p className="text-slate-600 mt-0.5">👤 {ord.customer} · {ord.items}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-extrabold text-navy-900 text-sm">{ord.total}</p>
-                      <p className="text-[10px] text-slate-400">{ord.date}</p>
-                    </div>
-                  </div>
-                ))}
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-extrabold text-navy-900 text-sm">Recent Customer Orders</h3>
+                <button
+                  onClick={() => setActiveTab("orders")}
+                  className="text-xs font-bold text-brand-600 hover:underline"
+                >
+                  View All ({vendorOrders.length}) →
+                </button>
               </div>
+              {vendorOrders.length === 0 ? (
+                <div className="text-center py-6 text-xs text-slate-500 font-medium">
+                  📦 No orders placed for {shopName} in {districtName} yet.
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {vendorOrders.slice(0, 5).map((ord) => {
+                    const orderTotal = ord.totalAmount || ord.total || 0;
+                    const itemsSummary = Array.isArray(ord.items)
+                      ? ord.items.map((i) => `${i.productName || i.name} (x${i.quantity})`).join(", ")
+                      : ord.items || "Order Items";
+                    const custName = ord.customer?.name || ord.customer || "Customer";
+
+                    return (
+                      <div key={ord.id} className="py-3 flex items-center justify-between gap-3 text-xs">
+                        <div>
+                          <span className="font-bold text-navy-900">{ord.id.slice(0, 8).toUpperCase()}</span>
+                          <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-bold border bg-blue-50 text-blue-700 border-blue-200">
+                            {ord.status || "Pending"}
+                          </span>
+                          <p className="text-slate-600 mt-0.5">👤 {custName} · {itemsSummary}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-extrabold text-navy-900 text-sm">₹{orderTotal}</p>
+                          <p className="text-[10px] text-slate-400">📍 {ord.districtName || districtName}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
@@ -358,7 +415,7 @@ export default function VendorDashboard() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase">
+                  <tr className="border-b border-slate-200/90 bg-slate-50/90 text-[11px] font-black text-slate-500 uppercase tracking-wider">
                     <th className="py-3 px-4">Product Details</th>
                     <th className="py-3 px-4">Category & Brand</th>
                     <th className="py-3 px-4">Type & Grade</th>
@@ -394,15 +451,15 @@ export default function VendorDashboard() {
                       </td>
                       <td className="py-3.5 px-4">
                         {p.approvalStatus === "PENDING_REVIEW" ? (
-                          <span className="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded text-[11px] font-bold block w-fit">
+                          <span className="bg-amber-50 text-amber-700 border border-amber-200/80 px-2.5 py-1 rounded-full text-[11px] font-bold block w-fit">
                             ⏳ Under Review
                           </span>
                         ) : p.approvalStatus === "REJECTED" ? (
-                          <span className="bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded text-[11px] font-bold block w-fit">
+                          <span className="bg-rose-50 text-rose-700 border border-rose-200/80 px-2.5 py-1 rounded-full text-[11px] font-bold block w-fit">
                             🔴 Rejected
                           </span>
                         ) : (
-                          <span className="bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded text-[11px] font-bold block w-fit">
+                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/80 px-2.5 py-1 rounded-full text-[11px] font-bold block w-fit">
                             🟢 Approved & Live
                           </span>
                         )}
@@ -411,7 +468,7 @@ export default function VendorDashboard() {
                         ₹{p.price} <span className="text-[10px] font-normal text-slate-400">/{p.unit}</span>
                       </td>
                       <td className="py-3.5 px-4">
-                        <span className={`px-2 py-1 rounded text-xs font-semibold ${p.stockQty > 0 ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-600 border border-red-200"}`}>
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${p.stockQty > 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80" : "bg-rose-50 text-rose-700 border border-rose-200/80"}`}>
                           {p.stockQty} in stock
                         </span>
                       </td>
@@ -419,13 +476,13 @@ export default function VendorDashboard() {
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => setEditingProduct({ ...p })}
-                            className="text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 transition-colors cursor-pointer"
+                            className="text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer"
                           >
                             ✏️ Edit Price/Stock
                           </button>
                           <button
                             onClick={() => handleRemoveListing(p.id, p.name)}
-                            className="text-[11px] font-semibold text-red-600 hover:bg-red-50 rounded-lg px-2.5 py-1.5 transition-colors cursor-pointer"
+                            className="text-[11px] font-semibold text-rose-600 hover:bg-rose-50 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer"
                           >
                             Remove
                           </button>
@@ -442,13 +499,13 @@ export default function VendorDashboard() {
 
       {/* CUSTOMER ORDERS (ISOLATED FOR THIS VENDOR ONLY) */}
       {activeTab === "orders" && (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+        <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden">
           <div className="p-4 border-b border-slate-200 flex items-center justify-between">
             <div>
               <h3 className="font-extrabold text-navy-900 text-sm">Customer Orders for {shopName}</h3>
               <p className="text-[11px] text-slate-500">Only orders assigned to your shop ({shopName}) are visible here.</p>
             </div>
-            <span className="bg-brand-50 text-brand-700 text-xs font-bold px-3 py-1 rounded-full border border-brand-200">
+            <span className="bg-brand-50 text-brand-700 text-xs font-bold px-3 py-1 rounded-full border border-brand-200/80 shadow-2xs">
               {vendorOrders.length} Shop Orders
             </span>
           </div>
@@ -462,9 +519,9 @@ export default function VendorDashboard() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase">
+                  <tr className="border-b border-slate-200/90 bg-slate-50/90 text-[11px] font-black text-slate-500 uppercase tracking-wider">
                     <th className="py-3 px-4">Order ID</th>
-                    <th className="py-3 px-4">Customer Details</th>
+                    <th className="py-3 px-4 min-w-[220px]">Customer Details & Delivery Address</th>
                     <th className="py-3 px-4">Ordered Items</th>
                     <th className="py-3 px-4">Total Amount</th>
                     <th className="py-3 px-4">Change Status</th>
@@ -476,14 +533,52 @@ export default function VendorDashboard() {
                     const itemsSummary = Array.isArray(ord.items)
                       ? ord.items.map((i) => `${i.productName || i.name} (x${i.quantity})`).join(", ")
                       : ord.items || "Order Items";
-                    const custName = ord.customer?.name || ord.customer || "Customer";
+                    const rawAddr = ord.address;
+                    const isObj = typeof rawAddr === "object" && rawAddr !== null;
+                    const isStr = typeof rawAddr === "string" && rawAddr.trim().length > 0;
+
+                    let custFullName = (isObj && (rawAddr.fullName || rawAddr.name)) || ord.customer?.name || (typeof ord.customer === "string" ? ord.customer : `Customer ${ord.id ? ord.id.slice(0, 4) : ""}`);
+                    let custPhone = (isObj && rawAddr.phone) || ord.customer?.phone || ord.phone || "";
+
+                    let streetAddr = isObj ? (rawAddr.street || rawAddr.line || rawAddr.address) : (isStr ? rawAddr : null);
+                    let cityAddr = isObj ? rawAddr.city : (ord.districtName || ord.regionName || "");
+                    let pincodeAddr = isObj ? rawAddr.pincode : "";
+
+                    // Filter out generic placeholders like "Site Delivery Address" or "Main Delivery Address"
+                    if (!streetAddr || streetAddr.includes("Site Delivery Address") || streetAddr.includes("Main Delivery Address")) {
+                      if (ord.customer?.address && !ord.customer.address.includes("Site Delivery Address")) {
+                        streetAddr = ord.customer.address;
+                      } else if (custPhone) {
+                        streetAddr = `Site Delivery Location (Customer: ${custPhone})`;
+                      } else {
+                        streetAddr = `Site Delivery Location (${cityAddr || 'Mirzapur'})`;
+                      }
+                    }
+
+                    if (!cityAddr || cityAddr.toLowerCase() === "district") {
+                      cityAddr = ord.districtName || ord.regionName || "Mirzapur";
+                    }
+
+                    const stateAddr = (isObj && rawAddr.state) || "Uttar Pradesh";
+
+                    const formattedOrderId = ord.orderNumber || (ord.id ? `#ORD-${ord.id.slice(0, 8).toUpperCase()}` : "#ORD-NEW");
 
                     return (
-                      <tr key={ord.id} className="hover:bg-slate-50">
-                        <td className="py-3.5 px-4 font-bold text-navy-900">{ord.id.slice(0, 8).toUpperCase()}</td>
-                        <td className="py-3.5 px-4 font-semibold text-slate-800">
-                          👤 {custName}
-                          {ord.customer?.phone && <p className="text-[10px] text-slate-400 font-normal">📱 {ord.customer.phone}</p>}
+                      <tr key={ord.id} className="hover:bg-slate-50/80 transition-colors duration-150">
+                        <td className="py-3.5 px-4 font-extrabold text-brand-700 tracking-wide text-xs">{formattedOrderId}</td>
+                        <td className="py-3.5 px-4 text-slate-800 min-w-[260px]">
+                          <p className="font-extrabold text-navy-900 text-xs">👤 Recipient: {custFullName}</p>
+                          {custPhone && (
+                            <p className="text-[11px] text-slate-700 font-bold mt-0.5">📱 Contact: {custPhone}</p>
+                          )}
+                          <div className="mt-2 p-2.5 bg-brand-50/50 border border-brand-200/80 rounded-xl text-xs text-navy-900 leading-relaxed shadow-2xs">
+                            <div className="flex items-center justify-between border-b border-brand-200/60 pb-1 mb-1 font-extrabold text-[10px] text-brand-800 uppercase tracking-wider">
+                              <span>📍 FULL DELIVERY ADDRESS</span>
+                              {pincodeAddr && <span className="bg-brand-600 text-white px-1.5 py-0.5 rounded text-[10px]">PIN: {pincodeAddr}</span>}
+                            </div>
+                            <p className="font-extrabold text-navy-900 text-xs mt-1 whitespace-normal break-words">🏢 {streetAddr}</p>
+                            <p className="font-semibold text-slate-700 text-[11px] mt-1 whitespace-normal">🏙️ {cityAddr}, {stateAddr} {pincodeAddr ? `- ${pincodeAddr}` : ""}</p>
+                          </div>
                         </td>
                         <td className="py-3.5 px-4 text-slate-600 max-w-xs">{itemsSummary}</td>
                         <td className="py-3.5 px-4 font-extrabold text-navy-900">₹{orderTotal}</td>
@@ -497,7 +592,7 @@ export default function VendorDashboard() {
                                 prev.map((o) => (o.id === ord.id ? { ...o, status: newSt } : o))
                               );
                             }}
-                            className="bg-slate-50 border border-slate-200 font-extrabold text-xs text-navy-900 rounded-lg px-2.5 py-1.5 outline-none focus:border-brand-500 cursor-pointer"
+                            className="bg-slate-50 border border-slate-200/90 font-extrabold text-xs text-navy-900 rounded-lg px-2.5 py-1.5 outline-none focus:border-brand-500 cursor-pointer shadow-2xs"
                           >
                             <option value="PENDING">⏳ PENDING</option>
                             <option value="PROCESSING">⚙️ PROCESSING</option>
@@ -518,7 +613,7 @@ export default function VendorDashboard() {
 
       {/* MODAL 1: CHOOSE FROM MASTER CATALOG MODAL */}
       {showCatalogModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-3xl w-full p-4 sm:p-6 shadow-2xl border border-slate-100 my-auto max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
               <div>
@@ -538,12 +633,12 @@ export default function VendorDashboard() {
 
             {/* Filter controls */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4">
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
                 <button
                   onClick={() => setSelectedCategoryFilter("ALL")}
-                  className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors cursor-pointer ${
+                  className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all duration-200 cursor-pointer active:scale-[0.98] ${
                     selectedCategoryFilter === "ALL"
-                      ? "bg-navy-900 text-white border-navy-900"
+                      ? "bg-navy-900 text-white border-navy-900 shadow-2xs"
                       : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
                   }`}
                 >
@@ -553,9 +648,9 @@ export default function VendorDashboard() {
                   <button
                     key={c.id}
                     onClick={() => setSelectedCategoryFilter(c.id)}
-                    className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors cursor-pointer whitespace-nowrap ${
+                    className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all duration-200 cursor-pointer whitespace-nowrap active:scale-[0.98] ${
                       selectedCategoryFilter === c.id
-                        ? "bg-navy-900 text-white border-navy-900"
+                        ? "bg-navy-900 text-white border-navy-900 shadow-2xs"
                         : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
                     }`}
                   >
@@ -569,12 +664,12 @@ export default function VendorDashboard() {
                 value={catalogSearch}
                 onChange={(e) => setCatalogSearch(e.target.value)}
                 placeholder="Search brand, product, type..."
-                className="bg-slate-50 text-xs border border-slate-200 rounded-xl px-3.5 py-2 outline-none focus:border-brand-500 w-full sm:w-60"
+                className="bg-slate-50 text-xs border border-slate-200/90 rounded-xl px-3.5 py-2 outline-none focus:border-brand-500 w-full sm:w-60 shadow-2xs"
               />
             </div>
 
             {/* Master Products List */}
-            <div className="max-h-96 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl mb-4">
+            <div className="max-h-96 overflow-y-auto divide-y divide-slate-100 border border-slate-200/90 rounded-xl mb-4">
               {filteredMasterProducts.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-xs text-slate-500 font-semibold">No master products found in this filter.</p>
@@ -586,7 +681,7 @@ export default function VendorDashboard() {
                   );
 
                   return (
-                    <div key={mp.id} className="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50 transition-colors">
+                    <div key={mp.id} className="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/80 transition-colors duration-150">
                       <div className="flex items-center gap-3">
                         <img src={mp.imageUrl} alt={mp.name} className="w-12 h-12 object-cover rounded-lg border border-slate-200 shrink-0" />
                         <div>
@@ -609,13 +704,13 @@ export default function VendorDashboard() {
                         <p className="text-xs font-semibold text-slate-500">Suggested Price</p>
                         <p className="font-extrabold text-navy-900 text-sm">₹{mp.suggestedPrice}</p>
                         {alreadyInStore ? (
-                          <span className="text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-lg inline-block mt-1">
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg inline-block mt-1">
                             ✓ In Your Store
                           </span>
                         ) : (
                           <button
                             onClick={() => handleOpenMasterProductSelect(mp)}
-                            className="mt-1 bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-xs transition-colors cursor-pointer"
+                            className="mt-1 bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-xs active:scale-[0.98] transition-all duration-200 cursor-pointer"
                           >
                             + Add to My Store
                           </button>
@@ -629,7 +724,7 @@ export default function VendorDashboard() {
 
             {/* Sub-M / Form for Price & Stock when Master Product selected */}
             {selectedMasterProd && (
-              <form onSubmit={handleAddMasterProductToStore} className="bg-brand-50/50 border border-brand-200 rounded-xl p-4 space-y-3">
+              <form onSubmit={handleAddMasterProductToStore} className="bg-brand-50/50 border border-brand-200/80 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between border-b border-brand-200/60 pb-2">
                   <p className="text-xs font-bold text-brand-900">Set Your Price & Stock for &quot;{selectedMasterProd.name}&quot;</p>
                   <button type="button" onClick={() => setSelectedMasterProd(null)} className="text-xs font-semibold text-slate-500">Cancel selection</button>
@@ -670,7 +765,7 @@ export default function VendorDashboard() {
                 <div className="flex justify-end gap-2 pt-1">
                   <button
                     type="submit"
-                    className="bg-brand-500 text-white font-bold text-xs px-5 py-2 rounded-xl shadow-xs hover:bg-brand-600"
+                    className="bg-brand-500 hover:bg-brand-600 active:scale-[0.98] transition-all duration-200 text-white font-bold text-xs px-5 py-2 rounded-xl shadow-xs"
                   >
                     Confirm & Add to My Store Listing
                   </button>
@@ -683,7 +778,7 @@ export default function VendorDashboard() {
 
       {/* M 2: EDIT LISTING PRICE & STOCK */}
       {editingProduct && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
               <h3 className="font-bold text-navy-900 text-base">Edit Selling Price & Stock</h3>

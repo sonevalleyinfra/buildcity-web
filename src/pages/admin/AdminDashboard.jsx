@@ -15,15 +15,15 @@ const TABS = [
 ];
 
 const STATUS_STYLE = {
-  APPROVED: "bg-green-50 text-green-700 border-green-200",
-  PENDING: "bg-amber-50 text-amber-700 border-amber-200",
-  SUSPENDED: "bg-red-50 text-red-600 border-red-200",
-  ACTIVE: "bg-green-50 text-green-700 border-green-200",
-  INACTIVE: "bg-red-50 text-red-600 border-red-200",
-  Delivered: "bg-green-50 text-green-700 border-green-200",
-  Shipped: "bg-blue-50 text-brand-600 border-blue-200",
-  Pending: "bg-amber-50 text-amber-700 border-amber-200",
-  Cancelled: "bg-red-50 text-red-600 border-red-200",
+  APPROVED: "bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-bold",
+  PENDING: "bg-amber-50 text-amber-700 border border-amber-200/80 font-bold",
+  SUSPENDED: "bg-rose-50 text-rose-700 border border-rose-200/80 font-bold",
+  ACTIVE: "bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-bold",
+  INACTIVE: "bg-rose-50 text-rose-700 border border-rose-200/80 font-bold",
+  Delivered: "bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-bold",
+  Shipped: "bg-blue-50 text-blue-700 border border-blue-200/80 font-bold",
+  Pending: "bg-amber-50 text-amber-700 border border-amber-200/80 font-bold",
+  Cancelled: "bg-rose-50 text-rose-700 border border-rose-200/80 font-bold",
 };
 
 // Super Admin Dashboard component — Master Control Center for platform operations
@@ -47,6 +47,7 @@ export default function AdminDashboard() {
     updateVendor,
     setVendorStatus,
     removeVendor,
+    clearAllVendorsAndProducts,
     addCategory,
     updateCategory,
     addRegion,
@@ -54,6 +55,7 @@ export default function AdminDashboard() {
     addMasterProduct,
     updateMasterProduct,
     updateListingApprovalStatus,
+    updateOrderStatus,
   } = useAdmin();
 
   // Tab State: Overview, District Reps, Vendors, Products, Listings, Orders, Categories, Regions
@@ -117,13 +119,17 @@ export default function AdminDashboard() {
 
     setIsSubmittingVendor(true);
     try {
-      const reg = regions.find((r) => r.id === vendorForm.regionId) || regions[0] || {};
+      const selectedReg = regions.find((r) => r.id === vendorForm.regionId || (r.name || "").toLowerCase() === (vendorForm.regionId || "").toLowerCase());
+      const finalRegId = selectedReg ? selectedReg.id : (vendorForm.regionId || undefined);
+      const finalRegName = selectedReg ? selectedReg.name : "Mirzapur";
+
       await addVendor({
         shopName: vendorForm.shopName.trim(),
         ownerName: vendorForm.ownerName.trim(),
         phone: vendorForm.phone.trim(),
-        regionId: reg.id || "r1",
-        regionName: reg.name || "Varanasi",
+        regionId: finalRegId,
+        regionName: finalRegName,
+        districtName: finalRegName,
         commissionRate: Number(vendorForm.commissionRate) || 10,
         status: "APPROVED",
         addedByDr: "Super Admin",
@@ -290,8 +296,8 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Tabs Bar hai  */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-2 overflow-x-auto py-2 border-t border-slate-100">
+        {/* Tabs Bar */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-2 overflow-x-auto py-2 border-t border-slate-100 no-scrollbar">
           {TABS.map((t) => {
             const pendingCount = products.filter(
               (p) => (p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW")) === "PENDING_REVIEW"
@@ -301,7 +307,7 @@ export default function AdminDashboard() {
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                className={`px-3.5 py-2 text-xs font-bold rounded-xl active:scale-[0.98] transition-all duration-200 whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
                   tab === t.id
                     ? "bg-navy-900 text-white shadow-xs"
                     : "text-slate-600 hover:bg-slate-100 hover:text-navy-900"
@@ -325,45 +331,50 @@ export default function AdminDashboard() {
         {tab === "Overview" && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-                <p className="text-xs font-medium text-slate-500">Total Revenue</p>
-                <p className="text-xl font-extrabold text-navy-900 mt-1">₹{stats.totalRevenue.toLocaleString("en-IN")}</p>
-                <span className="text-[10px] text-green-600 font-semibold">From completed orders</span>
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-4.5 shadow-2xs hover:shadow-md hover:border-brand-300 transition-all duration-200 relative overflow-hidden group">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brand-500 to-brand-600" />
+                <p className="text-xs font-semibold text-slate-500 tracking-tight">Total Revenue</p>
+                <p className="text-2xl font-black text-navy-900 tracking-tight mt-1">₹{stats.totalRevenue.toLocaleString("en-IN")}</p>
+                <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold inline-block mt-1">From completed orders</span>
               </div>
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-                <p className="text-xs font-medium text-slate-500">Approved Vendors</p>
-                <p className="text-xl font-extrabold text-navy-900 mt-1">
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-4.5 shadow-2xs hover:shadow-md hover:border-brand-300 transition-all duration-200 relative overflow-hidden group">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
+                <p className="text-xs font-semibold text-slate-500 tracking-tight">Approved Vendors</p>
+                <p className="text-2xl font-black text-navy-900 tracking-tight mt-1">
                   {stats?.approvedVendors ?? vendors.filter((v) => v.status === "APPROVED").length}
                 </p>
-                <span className="text-[10px] text-green-600 font-semibold">Active & Ready to Login</span>
+                <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold inline-block mt-1">Active & Ready to Login</span>
               </div>
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-                <p className="text-xs font-medium text-slate-500">District Reps (DR)</p>
-                <p className="text-xl font-extrabold text-navy-900 mt-1">{drs.length}</p>
-                <span className="text-[10px] text-brand-600 font-semibold">Active ground agents</span>
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-4.5 shadow-2xs hover:shadow-md hover:border-brand-300 transition-all duration-200 relative overflow-hidden group">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 to-orange-500" />
+                <p className="text-xs font-semibold text-slate-500 tracking-tight">District Reps (DR)</p>
+                <p className="text-2xl font-black text-navy-900 tracking-tight mt-1">{drs.length}</p>
+                <span className="text-[10px] text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full font-bold inline-block mt-1">Active ground agents</span>
               </div>
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-                <p className="text-xs font-medium text-slate-500">Active Products</p>
-                <p className="text-xl font-extrabold text-navy-900 mt-1">{products.length}</p>
-                <span className="text-[10px] text-slate-500 font-semibold">{categories.length} categories</span>
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-4.5 shadow-2xs hover:shadow-md hover:border-brand-300 transition-all duration-200 relative overflow-hidden group">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600" />
+                <p className="text-xs font-semibold text-slate-500 tracking-tight">Active Products</p>
+                <p className="text-2xl font-black text-navy-900 tracking-tight mt-1">{products.length}</p>
+                <span className="text-[10px] text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full font-bold inline-block mt-1">{categories.length} categories</span>
               </div>
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-                <p className="text-xs font-medium text-slate-500">Covered Regions</p>
-                <p className="text-xl font-extrabold text-navy-900 mt-1">{regions.length}</p>
-                <span className="text-[10px] text-slate-500 font-semibold">Uttar Pradesh</span>
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-4.5 shadow-2xs hover:shadow-md hover:border-brand-300 transition-all duration-200 relative overflow-hidden group">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 to-pink-500" />
+                <p className="text-xs font-semibold text-slate-500 tracking-tight">Covered Regions</p>
+                <p className="text-2xl font-black text-navy-900 tracking-tight mt-1">{regions.length}</p>
+                <span className="text-[10px] text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full font-bold inline-block mt-1">Uttar Pradesh</span>
               </div>
             </div>
 
-            <div className="bg-linear-to-r from-navy-900 to-slate-900 rounded-2xl p-6 text-white shadow-md flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="bg-gradient-to-r from-navy-950 via-navy-900 to-slate-900 border border-navy-800/60 rounded-2xl p-6 text-white shadow-md flex flex-col sm:flex-row items-center justify-between gap-4">
               <div>
-                <h2 className="text-lg font-bold">Admin Management Shortcuts</h2>
-                <p className="text-xs text-slate-300 mt-0.5">Quickly assign DRs, manage vendors, and inspect live marketplace transactions.</p>
+                <h2 className="text-lg font-black tracking-tight">Admin Management Shortcuts</h2>
+                <p className="text-xs text-slate-300 font-medium mt-0.5">Quickly assign DRs, manage vendors, and inspect live marketplace transactions.</p>
               </div>
-              <div className="flex gap-2 shrink-0">
-                <button onClick={() => setTab("District Reps (DR)")} className="bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs">
+              <div className="flex gap-2.5 shrink-0">
+                <button onClick={() => setTab("District Reps (DR)")} className="bg-brand-500 hover:bg-brand-600 active:scale-[0.98] transition-all duration-200 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs cursor-pointer">
                   + Add District Rep (DR)
                 </button>
-                <button onClick={() => setTab("Vendors")} className="bg-white text-navy-900 font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs hover:bg-slate-100">
+                <button onClick={() => setTab("Vendors")} className="bg-white text-navy-950 hover:bg-slate-100 active:scale-[0.98] transition-all duration-200 font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs cursor-pointer">
                   Manage Vendors
                 </button>
               </div>
@@ -454,7 +465,7 @@ export default function AdminDashboard() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase">
+                  <tr className="border-b border-slate-200/90 bg-slate-50/90 text-[11px] font-black text-slate-500 uppercase tracking-wider">
                     <th className="py-3 px-4">DR Representative</th>
                     <th className="py-3 px-4">Assigned Mobile</th>
                     <th className="py-3 px-4">Assigned District</th>
@@ -468,7 +479,7 @@ export default function AdminDashboard() {
                 ) : (
                   <tbody className="divide-y divide-slate-100">
                     {drs.map((d) => (
-                      <tr key={d.id} className="hover:bg-slate-50">
+                      <tr key={d.id} className="hover:bg-slate-50/80 transition-colors duration-150">
                         <td className="py-3.5 px-4 font-bold text-navy-900">{d.name}</td>
                         <td className="py-3.5 px-4 font-semibold text-slate-700">📱 {d.phone}</td>
                         <td className="py-3.5 px-4">
@@ -477,7 +488,7 @@ export default function AdminDashboard() {
                           </span>
                         </td>
                         <td className="py-3.5 px-4">
-                          <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${STATUS_STYLE[d.status]}`}>
+                          <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${STATUS_STYLE[d.status]}`}>
                             {d.status}
                           </span>
                         </td>
@@ -488,16 +499,16 @@ export default function AdminDashboard() {
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               onClick={() => setEditingDr({ ...d })}
-                              className="text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer"
+                              className="text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer"
                             >
                               ✏️ Edit
                             </button>
                             <button
                               onClick={() => toggleDrActive(d.id)}
-                              className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                              className={`text-xs font-semibold px-3 py-1.5 rounded-lg border active:scale-[0.98] transition-all duration-200 cursor-pointer ${
                                 d.status === "ACTIVE"
                                   ? "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100"
-                                  : "bg-green-500 text-white border-green-600 hover:bg-green-600"
+                                  : "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 shadow-2xs"
                               }`}
                             >
                               {d.status === "ACTIVE" ? "Deactivate" : "Activate"}
@@ -521,12 +532,14 @@ export default function AdminDashboard() {
                 <h2 className="text-base font-extrabold text-navy-900">Vendor Management</h2>
                 <p className="text-xs text-slate-500 mt-0.5">Approve, Edit, Suspend, or Delete marketplace vendors. Approved vendors can log in via Mobile OTP.</p>
               </div>
-              <button
-                onClick={() => setShowVendorForm(true)}
-                className="bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors cursor-pointer shadow-xs"
-              >
-                + Add Vendor
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowVendorForm(true)}
+                  className="bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl active:scale-[0.98] transition-all duration-200 cursor-pointer shadow-xs hover:shadow-md"
+                >
+                  + Add Vendor
+                </button>
+              </div>
             </div>
 
             {/* Admin Add Vendor Modal / Form */}
@@ -586,11 +599,11 @@ export default function AdminDashboard() {
                   </div>
                 </div>
                 <div className="flex justify-end gap-2">
-                  <button type="button" onClick={() => setShowVendorForm(false)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl">Cancel</button>
+                  <button type="button" onClick={() => setShowVendorForm(false)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl active:scale-[0.98] transition-all duration-200 cursor-pointer">Cancel</button>
                   <button
                     type="submit"
                     disabled={isSubmittingVendor}
-                    className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl shadow-xs hover:bg-brand-600 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-5 py-2 text-xs font-bold text-white bg-brand-600 rounded-xl shadow-xs hover:bg-brand-700 active:scale-[0.98] transition-all duration-200 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSubmittingVendor ? (
                       <>
@@ -608,7 +621,7 @@ export default function AdminDashboard() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase">
+                  <tr className="border-b border-slate-200/90 bg-slate-50/90 text-[11px] font-black text-slate-500 uppercase tracking-wider">
                     <th className="py-3 px-4">Shop Name</th>
                     <th className="py-3 px-4">Owner & Mobile</th>
                     <th className="py-3 px-4">District</th>
@@ -622,71 +635,77 @@ export default function AdminDashboard() {
                   renderTableSkeleton(7)
                 ) : (
                   <tbody className="divide-y divide-slate-100">
-                    {vendors.map((v) => (
-                      <tr key={v.id} className="hover:bg-slate-50">
-                        <td className="py-3.5 px-4 font-bold text-navy-900">{v.shopName}</td>
-                        <td className="py-3.5 px-4">
-                          <p className="font-semibold text-slate-800">{v.ownerName}</p>
-                          <p className="text-[11px] text-slate-500">📱 {v.phone}</p>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-semibold">
-                            📍 {v.regionName}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 font-extrabold text-navy-900">
-                          <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded text-[11px]">
-                            📦 {v.productCount || 0} Items
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${STATUS_STYLE[v.status]}`}>
-                            {v.status}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 font-bold text-navy-900">{v.commissionRate || 10}%</td>
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => setEditingVendor({ ...v })}
-                              className="text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer"
-                            >
-                              ✏️ Edit
-                            </button>
-                            {v.status !== "APPROVED" && (
+                    {vendors.map((v) => {
+                      const vItemCount = products.filter(
+                        (p) => p.vendorId === v.id || (p.vendorName || "").toLowerCase() === (v.shopName || "").toLowerCase()
+                      ).length;
+
+                      return (
+                        <tr key={v.id} className="hover:bg-slate-50/80 transition-colors duration-150">
+                          <td className="py-3.5 px-4 font-bold text-navy-900">{v.shopName}</td>
+                          <td className="py-3.5 px-4">
+                            <p className="font-semibold text-slate-800">{v.ownerName}</p>
+                            <p className="text-[11px] text-slate-500">📱 {v.phone}</p>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-semibold">
+                              📍 {v.regionName}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 font-extrabold text-navy-900">
+                            <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded text-[11px]">
+                              📦 {vItemCount} Items
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${STATUS_STYLE[v.status]}`}>
+                              {v.status}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 font-bold text-navy-900">{v.commissionRate || 10}%</td>
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
                               <button
-                                onClick={() => setVendorStatus(v.id, "APPROVED")}
-                                className="text-[11px] font-bold bg-green-500 hover:bg-green-600 text-white rounded-lg px-2.5 py-1.5 shadow-xs cursor-pointer"
+                                onClick={() => setEditingVendor({ ...v })}
+                                className="text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer"
                               >
-                                Approve
+                                ✏️ Edit
                               </button>
-                            )}
-                            {v.status !== "SUSPENDED" && (
-                              <button
-                                onClick={() => setVendorStatus(v.id, "SUSPENDED")}
-                                className="text-[11px] font-semibold border border-red-300 text-red-600 hover:bg-red-50 rounded-lg px-2.5 py-1.5 cursor-pointer"
-                              >
-                                Suspend
-                              </button>
-                            )}
-                            <button
-                              disabled={deletingVendorId === v.id}
-                              onClick={() => handleDeleteVendor(v)}
-                              className="text-[11px] font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg px-2.5 py-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                            >
-                              {deletingVendorId === v.id ? (
-                                <>
-                                  <span className="w-3 h-3 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></span>
-                                  Deleting...
-                                </>
-                              ) : (
-                                "🗑️ Delete"
+                              {v.status !== "APPROVED" && (
+                                <button
+                                  onClick={() => setVendorStatus(v.id, "APPROVED")}
+                                  className="text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-2.5 py-1.5 shadow-2xs active:scale-[0.98] transition-all duration-200 cursor-pointer"
+                                >
+                                  Approve
+                                </button>
                               )}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                              {v.status !== "SUSPENDED" && (
+                                <button
+                                  onClick={() => setVendorStatus(v.id, "SUSPENDED")}
+                                  className="text-[11px] font-semibold border border-amber-300 text-amber-700 hover:bg-amber-50 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer"
+                                >
+                                  Suspend
+                                </button>
+                              )}
+                              <button
+                                disabled={deletingVendorId === v.id}
+                                onClick={() => handleDeleteVendor(v)}
+                                className="text-[11px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                              >
+                                {deletingVendorId === v.id ? (
+                                  <>
+                                    <span className="w-3 h-3 border-2 border-rose-600 border-t-transparent rounded-full animate-spin"></span>
+                                    Deleting...
+                                  </>
+                                ) : (
+                                  "🗑️ Delete"
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 )}
               </table>
@@ -763,7 +782,7 @@ export default function AdminDashboard() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase">
+                  <tr className="border-b border-slate-200/90 bg-slate-50/90 text-[11px] font-black text-slate-500 uppercase tracking-wider">
                     <th className="py-3 px-4">Product Details</th>
                     <th className="py-3 px-4">Category & Brand</th>
                     <th className="py-3 px-4">Type & Grade</th>
@@ -930,32 +949,127 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ORDERS TAB */}
+        {/* ORDERS TAB — Super Admin Master View */}
         {tab === "Orders" && (
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden p-5">
-            <h2 className="text-base font-extrabold text-navy-900 mb-4">Customer Orders & Fulfillment ({orders.length})</h2>
-            {orders.length === 0 ? (
-              <div className="text-center py-8 text-xs text-slate-500 font-medium">No orders recorded in system yet.</div>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {orders.map((o) => {
-                  const displayAmt = Number(o.totalAmount || o.total || o.amount || 0);
-                  const displayCust = o.customer?.name || o.customer || "Customer";
-                  const displayVendor = o.vendorName || o.vendor || "Vendor Store";
-                  const displayDate = o.createdAt ? new Date(o.createdAt).toLocaleDateString("en-IN") : o.date || "Today";
-                  const statusStyle = STATUS_STYLE[o.status] || "bg-amber-50 text-amber-700 border-amber-200";
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden p-5 space-y-4 font-sans">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-base font-extrabold text-navy-900 flex items-center gap-2">
+                  <span>🛒 All Platform Customer Orders</span>
+                  <span className="bg-brand-50 text-brand-700 border border-brand-200 text-xs font-extrabold px-2.5 py-0.5 rounded-full">
+                    {orders.length} Total Orders
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-500">Super Admin Overview: Real-time tracking of all construction material orders across all district vendors.</p>
+              </div>
+            </div>
 
-                  return (
-                    <div key={o.id} className="py-3.5 flex items-center justify-between text-xs">
-                      <div>
-                        <span className="font-extrabold text-navy-900">{o.id?.slice(0, 8).toUpperCase()}</span>
-                        <span className={`ml-2 px-2 py-0.5 rounded text-[10px] font-bold border ${statusStyle}`}>{o.status || "PENDING"}</span>
-                        <p className="text-slate-500 mt-0.5">Customer: <strong>{displayCust}</strong> · Vendor: <strong>{displayVendor}</strong> · Total: <strong>₹{displayAmt.toLocaleString("en-IN")}</strong></p>
-                      </div>
-                      <span className="text-slate-400 text-[11px]">{displayDate}</span>
-                    </div>
-                  );
-                })}
+            {orders.length === 0 ? (
+              <div className="text-center py-12 text-xs text-slate-500 font-medium">
+                No customer orders recorded in system yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-black text-slate-500 uppercase tracking-wider">
+                    <tr>
+                      <th className="py-3 px-4">Order ID & Date</th>
+                      <th className="py-3 px-4">Customer Info</th>
+                      <th className="py-3 px-4">Delivery Address</th>
+                      <th className="py-3 px-4">Ordered Items & Vendor</th>
+                      <th className="py-3 px-4">Total Amount</th>
+                      <th className="py-3 px-4">Status & Control</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {orders.map((o) => {
+                      const displayAmt = Number(o.totalAmount || o.total || o.amount || 0);
+                      const custName = o.customer?.name || o.customerName || "Verified Customer";
+                      const custPhone = o.customer?.phone || o.customerPhone || "7607650875";
+                      const rawAddr = o.address;
+                      const isObj = typeof rawAddr === "object" && rawAddr !== null;
+                      const isStr = typeof rawAddr === "string" && rawAddr.trim().length > 0;
+
+                      let streetAddr = isObj ? (rawAddr.street || rawAddr.line || rawAddr.address) : (isStr ? rawAddr : null);
+                      let cityAddr = isObj ? rawAddr.city : (o.districtName || o.regionName || "");
+                      let pincodeAddr = isObj ? rawAddr.pincode : "";
+
+                      if (!streetAddr || streetAddr.includes("Site Delivery Address") || streetAddr.includes("Main Delivery Address")) {
+                        if (o.customer?.address && !o.customer.address.includes("Site Delivery Address")) {
+                          streetAddr = o.customer.address;
+                        } else if (custPhone) {
+                          streetAddr = `Site Location for Mobile ${custPhone}`;
+                        } else {
+                          streetAddr = `Site Delivery Location (${cityAddr || 'Mirzapur'})`;
+                        }
+                      }
+
+                      if (!cityAddr || cityAddr.toLowerCase() === "district") {
+                        cityAddr = o.districtName || o.regionName || "Mirzapur";
+                      }
+
+                      const dateStr = o.createdAt ? new Date(o.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "Today";
+                      const statusStyle = STATUS_STYLE[o.status] || "bg-amber-50 text-amber-700 border-amber-200";
+
+                      return (
+                        <tr key={o.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3.5 px-4">
+                            <span className="font-extrabold text-brand-700 block text-xs">{o.orderNumber || (o.id ? "#ORD-" + o.id.slice(0, 8).toUpperCase() : "#ORD-NEW")}</span>
+                            <span className="text-[11px] text-slate-400 font-medium">{dateStr}</span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className="font-bold text-navy-900 block">👤 {custName}</span>
+                            <span className="text-[11px] text-slate-500 font-semibold">📱 {custPhone}</span>
+                          </td>
+                          <td className="py-3.5 px-4 min-w-[220px]">
+                            <div className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+                              <p className="font-bold text-navy-900 leading-snug whitespace-normal break-words">🏢 {streetAddr}</p>
+                              <p className="text-[11px] text-slate-600 font-medium mt-0.5">🏙️ {cityAddr} {pincodeAddr ? `- ${pincodeAddr}` : ""}</p>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            {Array.isArray(o.items) && o.items.length > 0 ? (
+                              <div className="space-y-1">
+                                {o.items.map((it, idx) => (
+                                  <div key={idx} className="text-[11px]">
+                                    <span className="font-bold text-slate-800">• {it.productName || it.name}</span>
+                                    <span className="text-slate-500 font-medium ml-1">x{it.quantity} (₹{it.priceAtPurchase || it.price})</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-slate-500 font-medium">Construction Materials Order</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className="font-black text-navy-900 text-sm">₹{displayAmt.toLocaleString("en-IN")}</span>
+                            <span className="block text-[10px] font-bold text-emerald-600 uppercase">💵 COD</span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-2">
+                              <span className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold border ${statusStyle}`}>
+                                {o.status || "PENDING"}
+                              </span>
+                              {updateOrderStatus && (
+                                <select
+                                  value={o.status || "PENDING"}
+                                  onChange={(e) => updateOrderStatus(o.id, e.target.value)}
+                                  className="text-[11px] font-bold bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 outline-none text-navy-900 cursor-pointer"
+                                >
+                                  <option value="PENDING">PENDING</option>
+                                  <option value="PROCESSING">PROCESSING</option>
+                                  <option value="OUT_FOR_DELIVERY">OUT FOR DELIVERY</option>
+                                  <option value="DELIVERED">DELIVERED</option>
+                                  <option value="CANCELLED">CANCELLED</option>
+                                </select>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>

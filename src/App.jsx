@@ -44,10 +44,10 @@ function CatchAll() {
 export default function App() {
   return (
     <AuthProvider>
-      <CartProvider>
-        <OrderProvider>
-          <AddressProvider>
-            <RegionProvider>
+      <RegionProvider>
+        <CartProvider>
+          <OrderProvider>
+            <AddressProvider>
               <NotificationProvider>
                 <AdminProvider>
                 <BrowserRouter>
@@ -174,10 +174,10 @@ export default function App() {
               </BrowserRouter>
               </AdminProvider>
               </NotificationProvider>
-            </RegionProvider>
-          </AddressProvider>
-        </OrderProvider>
-      </CartProvider>
+              </AddressProvider>
+            </OrderProvider>
+          </CartProvider>
+        </RegionProvider>
     </AuthProvider>
   );
 }

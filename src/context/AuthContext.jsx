@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { API_BASE_URL } from "../config/api";
 
 // AuthContext setup — User authentication state, Mobile OTP verification, Supabase DB sync aur role-based routing handle karta hai
 const AuthContext = createContext(null);
@@ -17,7 +18,7 @@ export function AuthProvider({ children }) {
         setUser(parsed);
         // Background me Supabase Cloud DB se latest user profile profile sync karein
         if (parsed.phone) {
-          fetch(`http://localhost:5000/api/v1/users/by-phone/${parsed.phone}`)
+          fetch(`${API_BASE_URL}/api/v1/users/by-phone/${parsed.phone}`)
             .then((r) => r.json())
             .then((dbUser) => {
               if (dbUser && dbUser.name) {
@@ -43,7 +44,7 @@ export function AuthProvider({ children }) {
   const requestOtp = async (phone) => {
     const cleanPhone = phone.trim();
     try {
-      const response = await fetch("http://localhost:5000/api/v1/auth/otp/request", {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/otp/request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: cleanPhone }),
@@ -61,7 +62,7 @@ export function AuthProvider({ children }) {
     const cleanOtp = otp.trim();
 
     // Verify strictly with Express REST API & Supabase PostgreSQL Database
-    const apiRes = await fetch("http://localhost:5000/api/v1/auth/otp/verify", {
+    const apiRes = await fetch(`${API_BASE_URL}/api/v1/auth/otp/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone: cleanPhone, otp: cleanOtp }),
@@ -85,11 +86,20 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      const savedVendors = localStorage.getItem("buildcity_admin_vendors");
-      const vendors = savedVendors ? JSON.parse(savedVendors) : [];
-      vendorMatch = vendors.find((v) => v.phone.trim() === cleanPhone);
-    } catch {
-      vendorMatch = null;
+      const vRes = await fetch(`${API_BASE_URL}/api/v1/vendors`).then((r) => r.json()).catch(() => []);
+      if (Array.isArray(vRes) && vRes.length > 0) {
+        vendorMatch = vRes.find((v) => (v.phone || "").trim() === cleanPhone || (v.user?.phone || "").trim() === cleanPhone);
+      }
+    } catch {}
+
+    if (!vendorMatch) {
+      try {
+        const savedVendors = localStorage.getItem("buildcity_admin_vendors");
+        const vendors = savedVendors ? JSON.parse(savedVendors) : [];
+        vendorMatch = vendors.find((v) => (v.phone || "").trim() === cleanPhone);
+      } catch {
+        vendorMatch = null;
+      }
     }
 
     if (cleanPhone === "9999999999" || cleanPhone === "0000000000" || fetchedDbUser?.role === "ADMIN") {
@@ -147,7 +157,7 @@ export function AuthProvider({ children }) {
 
     // Save Profile directly to Supabase Cloud PostgreSQL DB
     try {
-      await fetch("http://localhost:5000/api/v1/users/profile", {
+      await fetch(`${API_BASE_URL}/api/v1/users/profile`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

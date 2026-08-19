@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { API_BASE_URL } from "../config/api";
 
 const AdminContext = createContext(null);
 
@@ -36,7 +37,7 @@ export function AdminProvider({ children }) {
   // Single Source of Truth: Supabase Cloud DB se live data sync karne ke liye (Zero flickering guard ke sath)
   const fetchCloudData = async () => {
     try {
-      const syncRes = await fetch("http://localhost:5000/api/v1/cloud-sync").then((r) => r.json()).catch(() => null);
+      const syncRes = await fetch(`${API_BASE_URL}/api/v1/cloud-sync`).then((r) => r.json()).catch(() => null);
       if (!syncRes) return;
 
       const { drs: drsRes, vendors: vendorsRes, masterProducts: masterRes, categories: categoriesRes, regions: regionsRes, orders: ordersRes, listings: listingsRes } = syncRes;
@@ -58,20 +59,23 @@ export function AdminProvider({ children }) {
       }
 
       if (vendorsRes && Array.isArray(vendorsRes)) {
-        const formattedVendors = vendorsRes.map((v) => ({
-          id: v.id,
-          shopName: v.shopName,
-          ownerName: v.ownerName,
-          phone: v.phone,
-          regionId: v.regionId,
-          regionName: v.region?.name || "Varanasi",
-          status: v.status || "APPROVED",
-          commissionRate: Number(v.commissionRate) || 10,
-          productCount: Array.isArray(v.vendorProducts) ? v.vendorProducts.length : (v.user?.productCount || 0),
-          joinedOn: v.joinedOn ? v.joinedOn.split("T")[0] : "2026-03-12",
-          addedByDr: v.addedByDr || "Ramesh Sharma",
-        }));
-        // JSON Memory Reference Guard: Vendors array change na hone par re-render skip karein
+        const formattedVendors = vendorsRes.map((v) => {
+          const resolvedRegName = v.regionName || v.districtName || v.region?.name || (v.regionId === "r2" ? "Mirzapur" : "Varanasi");
+          return {
+            id: v.id,
+            shopName: v.shopName,
+            ownerName: v.ownerName,
+            phone: v.phone,
+            regionId: v.regionId,
+            regionName: resolvedRegName,
+            districtName: resolvedRegName,
+            status: v.status || "APPROVED",
+            commissionRate: Number(v.commissionRate) || 10,
+            productCount: Array.isArray(v.vendorProducts) ? v.vendorProducts.length : (v.user?.productCount || 0),
+            joinedOn: v.joinedOn ? v.joinedOn.split("T")[0] : "2026-03-12",
+            addedByDr: v.addedByDr || "Admin",
+          };
+        });
         setVendors((prev) => (JSON.stringify(prev) === JSON.stringify(formattedVendors) ? prev : formattedVendors));
       }
 
@@ -114,30 +118,43 @@ export function AdminProvider({ children }) {
         setRegions((prev) => (JSON.stringify(prev) === JSON.stringify(formattedRegs) ? prev : formattedRegs));
       }
 
-      if (ordersRes && Array.isArray(ordersRes)) {
-        setOrders((prev) => (JSON.stringify(prev) === JSON.stringify(ordersRes) ? prev : ordersRes));
+      let fetchedOrders = ordersRes;
+      if (!Array.isArray(fetchedOrders) || fetchedOrders.length === 0) {
+        fetchedOrders = await fetch(`${API_BASE_URL}/api/v1/orders`).then((r) => r.json()).catch(() => []);
+      }
+      if (Array.isArray(fetchedOrders) && fetchedOrders.length > 0) {
+        setOrders((prev) => (JSON.stringify(prev) === JSON.stringify(fetchedOrders) ? prev : fetchedOrders));
       }
 
       if (listingsRes && Array.isArray(listingsRes)) {
-        const formattedListings = listingsRes.map((l) => ({
-          id: l.id,
-          masterProductId: l.masterProductId,
-          name: l.name || l.masterProduct?.name || "Product",
-          categoryId: l.categoryId || l.masterProduct?.categoryId,
-          categoryName: l.categoryName || l.masterProduct?.category?.name || "Material",
-          brand: l.brand || l.masterProduct?.brand || "Generic",
-          type: l.type || l.masterProduct?.type || "Standard",
-          grade: l.grade || l.masterProduct?.grade || "Standard Grade",
-          unit: l.unit || l.masterProduct?.unit || "Unit",
-          vendorId: l.vendorId,
-          vendorName: l.vendor?.shopName || l.vendorName || "Shree Cement Traders",
-          price: Number(l.price) || 100,
-          stockQty: Number(l.stockQty) || 100,
-          imageUrl: l.imageUrl || l.masterProduct?.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
-          approvalStatus: l.approvalStatus || (l.isActive ? "APPROVED" : "PENDING_REVIEW"),
-          isActive: l.isActive !== undefined ? l.isActive : l.approvalStatus === "APPROVED",
-          addedBy: l.addedBy || "Vendor",
-        }));
+        const formattedListings = listingsRes.map((l) => {
+          const matchedVendor = vendorsRes?.find((v) => v.id === l.vendorId);
+          const resolvedRegionName = l.regionName || l.districtName || l.vendor?.region?.name || matchedVendor?.region?.name || matchedVendor?.regionName || "Mirzapur";
+          const resolvedRegionId = l.regionId || l.vendor?.regionId || matchedVendor?.regionId || matchedVendor?.region?.id || "mirzapur";
+
+          return {
+            id: l.id,
+            masterProductId: l.masterProductId,
+            name: l.name || l.masterProduct?.name || "Product",
+            categoryId: l.categoryId || l.masterProduct?.categoryId,
+            categoryName: l.categoryName || l.masterProduct?.category?.name || "Material",
+            brand: l.brand || l.masterProduct?.brand || "Generic",
+            type: l.type || l.masterProduct?.type || "Standard",
+            grade: l.grade || l.masterProduct?.grade || "Standard Grade",
+            unit: l.unit || l.masterProduct?.unit || "Unit",
+            vendorId: l.vendorId,
+            vendorName: l.vendor?.shopName || matchedVendor?.shopName || l.vendorName || "District Vendor",
+            regionId: resolvedRegionId,
+            regionName: resolvedRegionName,
+            districtName: resolvedRegionName,
+            price: Number(l.price) || 100,
+            stockQty: Number(l.stockQty) || 100,
+            imageUrl: l.imageUrl || l.masterProduct?.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+            approvalStatus: l.approvalStatus || (l.isActive ? "APPROVED" : "PENDING_REVIEW"),
+            isActive: l.isActive !== undefined ? l.isActive : l.approvalStatus === "APPROVED",
+            addedBy: l.addedBy || "Vendor",
+          };
+        });
         setProducts((prev) => (JSON.stringify(prev) === JSON.stringify(formattedListings) ? prev : formattedListings));
       }
     } catch (err) {
@@ -164,7 +181,7 @@ export function AdminProvider({ children }) {
   const addDr = async (drData) => {
     const regionObj = regions.find((r) => r.id === drData.regionId) || {};
     try {
-      const res = await fetch("http://localhost:5000/api/v1/drs", {
+      const res = await fetch(`${API_BASE_URL}/api/v1/drs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: drData.name, phone: drData.phone.trim(), regionId: drData.regionId }),
@@ -199,9 +216,11 @@ export function AdminProvider({ children }) {
   };
 
   const addVendor = async (vendorData) => {
-    const regionObj = regions.find((r) => r.id === vendorData.regionId) || {};
+    const regionObj = regions.find((r) => r.id === vendorData.regionId || r.name?.toLowerCase() === (vendorData.regionName || "").toLowerCase()) || {};
+    const targetRegionName = regionObj.name || vendorData.regionName || vendorData.districtName || "Mirzapur";
+
     try {
-      const res = await fetch("http://localhost:5000/api/v1/vendors", {
+      const res = await fetch(`${API_BASE_URL}/api/v1/vendors`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -209,6 +228,8 @@ export function AdminProvider({ children }) {
           ownerName: vendorData.ownerName,
           phone: vendorData.phone,
           regionId: vendorData.regionId,
+          regionName: targetRegionName,
+          districtName: targetRegionName,
           commissionRate: vendorData.commissionRate,
           addedByDr: vendorData.addedByDr,
         }),
@@ -242,7 +263,7 @@ export function AdminProvider({ children }) {
       prev.map((v) => (v.id === id ? { ...v, status } : v))
     );
     try {
-      await fetch(`http://localhost:5000/api/v1/vendors/${id}/status`, {
+      await fetch(`${API_BASE_URL}/api/v1/vendors/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
@@ -254,7 +275,7 @@ export function AdminProvider({ children }) {
   const removeVendor = async (id) => {
     setVendors((prev) => prev.filter((v) => v.id !== id));
     try {
-      const res = await fetch(`http://localhost:5000/api/v1/vendors/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/vendors/${id}`, {
         method: "DELETE",
       });
       if (res.ok) {
@@ -294,7 +315,7 @@ export function AdminProvider({ children }) {
 
   const addMasterProduct = async (mpData) => {
     try {
-      const res = await fetch("http://localhost:5000/api/v1/master-products", {
+      const res = await fetch(`${API_BASE_URL}/api/v1/master-products`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(mpData),
@@ -323,12 +344,16 @@ export function AdminProvider({ children }) {
     return newMp;
   };
 
-  const assignMasterProductToVendor = async ({ masterProductId, vendorId, vendorName, price, stockQty, addedBy }) => {
+  const assignMasterProductToVendor = async ({ masterProductId, vendorId, vendorName, regionId, regionName, districtName, price, stockQty, addedBy }) => {
+    const matchedVendor = vendors.find((v) => v.id === vendorId || (vendorName && (v.shopName || "").toLowerCase() === vendorName.toLowerCase()));
+    const regName = regionName || districtName || matchedVendor?.regionName || matchedVendor?.districtName || matchedVendor?.region?.name || "Mirzapur";
+    const validUuidRegionId = (regionId && regionId.length > 10) ? regionId : (matchedVendor?.regionId && matchedVendor.regionId.length > 10) ? matchedVendor.regionId : undefined;
+
     try {
-      const res = await fetch("http://localhost:5000/api/v1/vendor/listings", {
+      const res = await fetch(`${API_BASE_URL}/api/v1/vendor/listings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ masterProductId, vendorId, price, stockQty, addedBy }),
+        body: JSON.stringify({ masterProductId, vendorId, vendorName, regionId: validUuidRegionId, regionName: regName, districtName: regName, price, stockQty, addedBy }),
       });
       if (res.ok) {
         await fetchCloudData();
@@ -347,8 +372,11 @@ export function AdminProvider({ children }) {
       type: mp ? mp.type : "Standard",
       grade: mp ? mp.grade : "Standard Grade",
       unit: mp ? mp.unit : "Unit",
-      vendorId: vendorId || "v1",
-      vendorName: vendorName || "Vendor Store",
+      vendorId: vendorId || ("v-" + Date.now()),
+      vendorName: vendorName || "District Vendor",
+      regionId: regionId || "r1",
+      regionName: regName,
+      districtName: regName,
       price: Number(price) || (mp ? mp.suggestedPrice : 100),
       stockQty: Number(stockQty) || 100,
       imageUrl: mp ? mp.imageUrl : "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
@@ -376,7 +404,7 @@ export function AdminProvider({ children }) {
     );
 
     try {
-      await fetch(`http://localhost:5000/api/v1/vendor/listings/${id}/status`, {
+      await fetch(`${API_BASE_URL}/api/v1/vendor/listings/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ approvalStatus }),
@@ -396,6 +424,31 @@ export function AdminProvider({ children }) {
     totalOrders: orders.length,
   };
 
+  const updateOrderStatus = async (orderId, newStatus) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/orders/${orderId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (res.ok) {
+        await fetchCloudData();
+        return;
+      }
+    } catch {}
+
+    setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)));
+  };
+
+  const clearAllVendorsAndProducts = async () => {
+    setVendors([]);
+    setProducts([]);
+    try {
+      await fetch(`${API_BASE_URL}/api/v1/clear-vendors`, { method: "DELETE" });
+      await fetchCloudData();
+    } catch {}
+  };
+
   return (
     <AdminContext.Provider
       value={{
@@ -413,6 +466,7 @@ export function AdminProvider({ children }) {
         addVendor,
         setVendorStatus,
         removeVendor,
+        clearAllVendorsAndProducts,
         addCategory,
         addRegion,
         addMasterProduct,
@@ -420,6 +474,7 @@ export function AdminProvider({ children }) {
         updateVendorProductListing,
         removeVendorProductListing,
         updateListingApprovalStatus,
+        updateOrderStatus,
         fetchCloudData,
       }}
     >

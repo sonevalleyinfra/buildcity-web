@@ -178,6 +178,8 @@ model VendorProduct {
   masterProduct   ProductMaster  @relation(fields: [masterProductId], references: [id], onDelete: Cascade)
   vendorId        String
   vendor          Vendor         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  regionId        String?
+  regionName      String?        @default("Varanasi")
   name            String
   categoryId      String
   categoryName    String

@@ -738,6 +738,8 @@ app.patch("/api/v1/orders/:id/status", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
 // Customer Addresses Fetch & Save Endpoints (Explicit Express Routes)
 const handleGetAddresses = async (req, res) => {
   try {

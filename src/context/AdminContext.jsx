@@ -154,7 +154,15 @@ export function AdminProvider({ children }) {
             addedBy: l.addedBy || "Vendor",
           };
         });
-        setProducts((prev) => (JSON.stringify(prev) === JSON.stringify(formattedListings) ? prev : formattedListings));
+        setProducts((prev) => {
+          if (prev.length !== formattedListings.length) return formattedListings;
+          const mapPrev = new Map(prev.map((p) => [p.id, p]));
+          const hasChanged = formattedListings.some((f) => {
+            const p = mapPrev.get(f.id);
+            return !p || p.approvalStatus !== f.approvalStatus || p.price !== f.price || p.stockQty !== f.stockQty || p.isActive !== f.isActive;
+          });
+          return hasChanged ? formattedListings : prev;
+        });
       }
     } catch (err) {
       console.warn("Cloud sync note:", err.message);
@@ -412,18 +420,44 @@ export function AdminProvider({ children }) {
   };
 
   const updateListingApprovalStatus = async (id, approvalStatus) => {
+    const targetProd = products.find((p) => p.id === id);
+
+    // Instant optimistic UI update
     setProducts((prev) =>
       prev.map((p) => (p.id === id ? { ...p, approvalStatus, isActive: approvalStatus === "APPROVED" } : p))
     );
 
     try {
-      await fetch(`${API_BASE_URL}/api/v1/vendor/listings/${id}/status`, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/vendor/listings/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ approvalStatus }),
+        body: JSON.stringify({
+          approvalStatus,
+          name: targetProd?.name,
+          masterProductId: targetProd?.masterProductId,
+        }),
       });
-      await fetchCloudData();
-    } catch {}
+
+      if (res.ok) {
+        const updatedItem = await res.json().catch(() => null);
+        if (updatedItem && (updatedItem.id || updatedItem.approvalStatus)) {
+          setProducts((prev) =>
+            prev.map((p) =>
+              p.id === id || (updatedItem.id && p.id === updatedItem.id) || (targetProd && p.name === targetProd.name)
+                ? {
+                    ...p,
+                    id: updatedItem.id || p.id,
+                    approvalStatus: updatedItem.approvalStatus || approvalStatus,
+                    isActive: updatedItem.isActive !== undefined ? updatedItem.isActive : (approvalStatus === "APPROVED"),
+                  }
+                : p
+            )
+          );
+        }
+      }
+    } catch (err) {
+      console.warn("Live status update note:", err.message);
+    }
   };
 
   const stats = {

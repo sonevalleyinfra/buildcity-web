@@ -388,10 +388,24 @@ export function AdminProvider({ children }) {
     return newListing;
   };
 
-  const updateVendorProductListing = (id, updates) => {
+  const updateVendorProductListing = async (id, updates) => {
     setProducts((prev) =>
       prev.map((p) => (p.id === id ? { ...p, ...updates } : p))
     );
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/vendor/listings/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+
+      if (res.ok) {
+        await fetchCloudData();
+      }
+    } catch (err) {
+      console.warn("Live listing price update note:", err.message);
+    }
   };
 
   const removeVendorProductListing = (id) => {

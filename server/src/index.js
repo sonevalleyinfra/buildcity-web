@@ -625,6 +625,41 @@ app.post("/api/v1/vendor/listings", async (req, res) => {
   }
 });
 
+// Vendor Update Product Listing (Price & Stock Live Update)
+app.patch("/api/v1/vendor/listings/:id", async (req, res) => {
+  try {
+    const rawId = req.params.id;
+    const { price, stockQty, approvalStatus, isActive } = req.body;
+
+    let listing = await prisma.vendorProduct.findUnique({ where: { id: rawId } }).catch(() => null);
+
+    if (listing) {
+      const updateData = {};
+      if (price !== undefined && !isNaN(Number(price))) updateData.price = Number(price);
+      if (stockQty !== undefined && !isNaN(Number(stockQty))) updateData.stockQty = Number(stockQty);
+      if (approvalStatus !== undefined) {
+        updateData.approvalStatus = approvalStatus;
+        updateData.isActive = approvalStatus === "APPROVED";
+      }
+      if (isActive !== undefined) updateData.isActive = isActive;
+
+      const updatedListing = await prisma.vendorProduct.update({
+        where: { id: listing.id },
+        data: updateData,
+        include: { vendor: { include: { region: true } }, masterProduct: true },
+      });
+
+      console.log(`✓ Live price update: Vendor listing ${listing.id} price set to ₹${updatedListing.price} in Supabase DB`);
+      return res.json(updatedListing);
+    }
+
+    res.status(404).json({ error: "Vendor product listing not found" });
+  } catch (err) {
+    console.error("Patch listing error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.patch("/api/v1/vendor/listings/:id/status", async (req, res) => {
   try {
     const rawId = req.params.id;

@@ -88,13 +88,18 @@ export default function DrDashboard() {
       v.phone.includes(searchTerm)
   );
 
-  const filteredProducts = districtProducts.filter(
-    (p) =>
+  const filteredProducts = districtProducts.filter((p) => {
+    const matchesSearch =
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.categoryName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.vendorName?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+      p.vendorName?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const st = p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW");
+    const matchesStatus = listingFilter === "ALL" ? true : st === listingFilter;
+
+    return matchesSearch && matchesStatus;
+  });
 
   const [isSubmittingVendor, setIsSubmittingVendor] = useState(false);
   const [deletingVendorId, setDeletingVendorId] = useState(null);
@@ -330,16 +335,33 @@ export default function DrDashboard() {
         {/* Tab 1: Products Section */}
         {activeTab === "products" && (
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
-            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+            <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
               <h2 className="text-sm font-bold text-navy-900">
                 Products in {districtName}
               </h2>
-              <button
-                onClick={() => setShowProductModal(true)}
-                className="text-xs bg-brand-500 hover:bg-brand-600 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-              >
-                + Add Product
-              </button>
+
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1 bg-slate-200/70 p-1 rounded-xl text-xs font-bold">
+                  {["ALL", "PENDING_REVIEW", "APPROVED", "REJECTED"].map((st) => (
+                    <button
+                      key={st}
+                      onClick={() => setListingFilter(st)}
+                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                        listingFilter === st ? "bg-white text-navy-900 shadow-2xs" : "text-slate-600 hover:text-navy-900"
+                      }`}
+                    >
+                      {st === "ALL" ? "All" : st === "PENDING_REVIEW" ? "🟡 Pending" : st === "APPROVED" ? "🟢 Approved" : "🔴 Rejected"}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => setShowProductModal(true)}
+                  className="text-xs bg-brand-500 hover:bg-brand-600 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+                >
+                  + Add Product
+                </button>
+              </div>
             </div>
 
             {productsLoading ? (
@@ -457,16 +479,20 @@ export default function DrDashboard() {
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            {p.approvalStatus === "PENDING_REVIEW" && (
+                            {p.approvalStatus === "PENDING_REVIEW" ? (
                               <button
                                 onClick={() => {
-                                  setVendorProductApprovalStatus(p.id, "APPROVED");
+                                  updateListingApprovalStatus(p.id, "APPROVED");
                                   alert(`"${p.name}" (Vendor: ${p.vendorName}) has been APPROVED! It is now live in store.`);
                                 }}
-                                className="text-[11px] font-bold bg-green-500 hover:bg-green-600 text-white rounded-lg px-2.5 py-1.5 shadow-xs cursor-pointer"
+                                className="text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-1.5 shadow-2xs cursor-pointer active:scale-[0.98] transition-all"
                               >
-                                Approve Listing
+                                ✓ Approve Listing
                               </button>
+                            ) : (
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-full">
+                                🟢 Approved & Live
+                              </span>
                             )}
                             <button
                               onClick={() => setEditingProduct({ ...p })}

@@ -54,10 +54,10 @@ export default function Home() {
   const { products = [], masterProducts = [], productsLoading } = useAdmin();
   const navigate = useNavigate();
 
-  // Strict region based products filter & dynamic price factor
   const liveVendorApproved = products
     .filter((p) => {
-      if (p.isActive === false && p.approvalStatus === "REJECTED") return false;
+      // Require Admin/DR approval before displaying on storefront
+      if (p.approvalStatus !== "APPROVED" || p.isActive !== true) return false;
 
       const activeRegName = (region?.name || "Varanasi").toLowerCase().trim();
       const pRegName = (p.regionName || p.districtName || p.vendor?.region?.name || "varanasi").toLowerCase().trim();

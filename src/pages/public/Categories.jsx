@@ -67,11 +67,11 @@ export default function Categories() {
     return c.name.toLowerCase().includes(activePill.toLowerCase());
   });
 
-  // Deduplicate and filter Approved Live Vendor Products with region price factor & strict region isolation
   const uniqueVendorProducts = useMemo(() => {
     const map = new Map();
     products.forEach((p) => {
-      if (p.isActive === false && p.approvalStatus === "REJECTED") return;
+      // Require Admin/DR approval before displaying on storefront
+      if (p.approvalStatus !== "APPROVED" || p.isActive !== true) return;
 
       const activeRegName = (region?.name || "Varanasi").toLowerCase().trim();
       const pRegName = (p.regionName || p.districtName || p.vendor?.region?.name || "varanasi").toLowerCase().trim();

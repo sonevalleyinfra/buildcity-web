@@ -589,6 +589,8 @@ app.post("/api/v1/vendor/listings", async (req, res) => {
       }).catch(() => null);
     }
 
+    const isAutoApproved = addedBy === "Admin" || addedBy === "DR";
+
     const newListing = await prisma.vendorProduct.create({
       data: {
         masterProductId: masterProd.id,
@@ -605,8 +607,8 @@ app.post("/api/v1/vendor/listings", async (req, res) => {
         price: Number(price) || Number(masterProd.suggestedPrice) || 100,
         stockQty: Number(stockQty) || 100,
         imageUrl: masterProd.imageUrl,
-        approvalStatus: "APPROVED",
-        isActive: true,
+        approvalStatus: isAutoApproved ? "APPROVED" : "PENDING_REVIEW",
+        isActive: isAutoApproved ? true : false,
         addedBy: addedBy || "Vendor",
       },
       include: { vendor: { include: { region: true } }, masterProduct: true },
@@ -666,23 +668,33 @@ app.patch("/api/v1/vendor/listings/:id/status", async (req, res) => {
     const { approvalStatus } = req.body; // PENDING_REVIEW | APPROVED | REJECTED
 
     let listing = await prisma.vendorProduct.findUnique({ where: { id: rawId } }).catch(() => null);
-    if (!listing) {
-      listing = await prisma.vendorProduct.findFirst().catch(() => null);
+    if (!listing && rawId) {
+      listing = await prisma.vendorProduct.findFirst({
+        where: {
+          OR: [
+            { id: rawId },
+            { masterProductId: rawId },
+          ],
+        },
+      }).catch(() => null);
     }
 
     if (listing) {
+      const isApproved = approvalStatus === "APPROVED";
       const updatedListing = await prisma.vendorProduct.update({
         where: { id: listing.id },
         data: {
-          approvalStatus,
-          isActive: approvalStatus === "APPROVED",
+          approvalStatus: approvalStatus || "PENDING_REVIEW",
+          isActive: isApproved,
         },
       });
+      console.log(`✓ Listing ${listing.id} status updated to ${approvalStatus} (isActive: ${isApproved})`);
       return res.json(updatedListing);
     }
 
-    res.json({ message: "Listing approval status updated", approvalStatus });
+    res.status(404).json({ error: "Product listing not found" });
   } catch (err) {
+    console.error("Update listing status error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });

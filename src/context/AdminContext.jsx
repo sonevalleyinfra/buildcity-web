@@ -149,9 +149,8 @@ export function AdminProvider({ children }) {
             districtName: resolvedRegionName,
             price: Number(l.price) || 100,
             stockQty: Number(l.stockQty) || 100,
-            imageUrl: l.imageUrl || l.masterProduct?.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
-            approvalStatus: l.approvalStatus || (l.isActive ? "APPROVED" : "PENDING_REVIEW"),
-            isActive: l.isActive !== undefined ? l.isActive : l.approvalStatus === "APPROVED",
+            approvalStatus: l.approvalStatus || "PENDING_REVIEW",
+            isActive: l.approvalStatus === "APPROVED" && l.isActive !== false,
             addedBy: l.addedBy || "Vendor",
           };
         });

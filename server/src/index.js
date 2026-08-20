@@ -665,22 +665,13 @@ app.patch("/api/v1/vendor/listings/:id", async (req, res) => {
 app.patch("/api/v1/vendor/listings/:id/status", async (req, res) => {
   try {
     const rawId = req.params.id;
-    const { approvalStatus, name, masterProductId } = req.body; // PENDING_REVIEW | APPROVED | REJECTED
+    const { approvalStatus } = req.body; // PENDING_REVIEW | APPROVED | REJECTED
 
-    let listing = null;
-    if (rawId && rawId.length > 15) {
-      listing = await prisma.vendorProduct.findUnique({ where: { id: rawId } }).catch(() => null);
-    }
+    let listing = await prisma.vendorProduct.findUnique({ where: { id: rawId } }).catch(() => null);
 
-    if (!listing && (rawId || masterProductId || name)) {
-      const searchTerms = [];
-      if (rawId) searchTerms.push({ id: rawId }, { masterProductId: rawId }, { name: { equals: rawId, mode: "insensitive" } });
-      if (masterProductId) searchTerms.push({ masterProductId });
-      if (name) searchTerms.push({ name: { equals: name, mode: "insensitive" } });
-
+    if (!listing && rawId) {
       listing = await prisma.vendorProduct.findFirst({
-        where: { OR: searchTerms },
-        orderBy: { submittedOn: "desc" },
+        where: { id: rawId },
       }).catch(() => null);
     }
 

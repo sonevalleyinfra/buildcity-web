@@ -96,6 +96,7 @@ export default function AdminDashboard() {
 
   const [isSubmittingVendor, setIsSubmittingVendor] = useState(false);
   const [deletingVendorId, setDeletingVendorId] = useState(null);
+  const [busyListingId, setBusyListingId] = useState(null);
 
   // Vendor Delete Handler — Live spinner animation aur double-click protection ke sath vendor remove karein
   const handleDeleteVendor = async (v) => {
@@ -921,22 +922,57 @@ export default function AdminDashboard() {
                           </td>
                           <td className="py-3.5 px-4 text-right">
                             <div className="flex items-center justify-end gap-2">
-                              {st !== "APPROVED" && (
-                                <button
-                                  onClick={() => updateListingApprovalStatus(p.id, "APPROVED")}
-                                  className="bg-green-600 hover:bg-green-700 text-white font-bold text-[11px] px-3 py-1.5 rounded-lg transition-colors cursor-pointer shadow-2xs"
-                                >
-                                  ✓ Approve
-                                </button>
-                              )}
-                              {st !== "REJECTED" && (
-                                <button
-                                  onClick={() => updateListingApprovalStatus(p.id, "REJECTED")}
-                                  className="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 font-bold text-[11px] px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-                                >
-                                  ✕ Reject
-                                </button>
-                              )}
+                              <button
+                                disabled={busyListingId === p.id || st === "APPROVED"}
+                                onClick={async () => {
+                                  if (busyListingId) return;
+                                  setBusyListingId(p.id);
+                                  try {
+                                    await updateListingApprovalStatus(p.id, "APPROVED");
+                                  } finally {
+                                    setBusyListingId(null);
+                                  }
+                                }}
+                                className={`min-w-[92px] text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition-all flex items-center justify-center gap-1 ${
+                                  st === "APPROVED"
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed opacity-80"
+                                    : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                }`}
+                              >
+                                {busyListingId === p.id ? (
+                                  <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                ) : st === "APPROVED" ? (
+                                  "✓ Approved"
+                                ) : (
+                                  "✓ Approve"
+                                )}
+                              </button>
+
+                              <button
+                                disabled={busyListingId === p.id || st === "REJECTED"}
+                                onClick={async () => {
+                                  if (busyListingId) return;
+                                  setBusyListingId(p.id);
+                                  try {
+                                    await updateListingApprovalStatus(p.id, "REJECTED");
+                                  } finally {
+                                    setBusyListingId(null);
+                                  }
+                                }}
+                                className={`min-w-[85px] text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition-all flex items-center justify-center gap-1 ${
+                                  st === "REJECTED"
+                                    ? "bg-rose-50 text-rose-600 border border-rose-200 cursor-not-allowed opacity-80"
+                                    : "bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                }`}
+                              >
+                                {busyListingId === p.id ? (
+                                  <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                ) : st === "REJECTED" ? (
+                                  "✕ Rejected"
+                                ) : (
+                                  "✕ Reject"
+                                )}
+                              </button>
                             </div>
                           </td>
                         </tr>

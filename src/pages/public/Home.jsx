@@ -9,11 +9,12 @@ import RegionPicker from "../../components/RegionPicker";
 import NotificationPanel from "../../components/NotificationPanel";
 
 const categoryTiles = [
-  { name: "Paints", bg: "#EDE7F6", img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=500&q=80" },
-  { name: "Electronics", bg: "#F1F5F9", img: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=500&q=80" },
-  { name: "Furniture", bg: "#E3F2FD", img: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=500&q=80" },
-  { name: "Hardware", bg: "#FFF3E0", img: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=500&q=80" },
-  { name: "Plumbing", bg: "#EFF6FF", img: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=500&q=80" },
+  { name: "Paints", tag: "Coatings & Finishes", bg: "#F5F3FF", img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=600&q=80" },
+  { name: "Electronics", tag: "Wiring & Lighting", bg: "#F1F5F9", img: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=600&q=80" },
+  { name: "Furniture", tag: "Office & Fixtures", bg: "#EFF6FF", img: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=600&q=80" },
+  { name: "Hardware", tag: "Tools & Fasteners", bg: "#FFF7ED", img: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80" },
+  { name: "Plumbing", tag: "Pipes & Fittings", bg: "#ECFDF5", img: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80" },
+  { name: "Cement", tag: "Structural Grade", bg: "#FEF3C7", img: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=600&q=80" },
 ];
 
 const brands = [
@@ -43,6 +44,11 @@ const banners = [
     tag: "WHOLESALE PRICES",
     title: ["Direct From", "Verified Suppliers"],
     img: "https://images.unsplash.com/photo-1541888946425-d0fbb186a5b2?auto=format&fit=crop&w=1200&q=80",
+  },
+  {
+    tag: "100% CERTIFIED MATERIALS",
+    title: ["Lab Tested", "Steel, Cement & Fittings"],
+    img: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1200&q=80",
   },
 ];
 
@@ -178,19 +184,20 @@ export default function Home() {
         {/* Ambient subtle background section glow */}
         <div className="absolute top-10 left-1/2 -translate-x-1/2 w-full max-w-4xl h-72 bg-brand-500/5 blur-3xl pointer-events-none rounded-full" />
 
-        {/* Hero banner */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-navy-950 via-navy-900 to-slate-900 h-48 sm:h-60 shadow-md border border-navy-800/60">
+        {/* Compact & Sleek Hero Banner */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-navy-950 via-navy-900 to-slate-900 h-36 sm:h-44 md:h-48 shadow-sm border border-navy-800/60">
           {banners.map((b, i) => (
             <div
               key={i}
-              className="absolute inset-0 transition-opacity duration-700 flex items-center"
+              className="absolute inset-0 transition-opacity duration-700 flex items-stretch"
               style={{ opacity: slide === i ? 1 : 0, pointerEvents: slide === i ? "auto" : "none" }}
             >
-              <div className="flex-[1.4] flex flex-col justify-center px-6 sm:px-8 py-4 sm:py-5 relative z-10 pb-8 sm:pb-5">
-                <span className="inline-flex items-center gap-1.5 bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[10px] font-extrabold px-3 py-0.5 rounded-full w-fit mb-2 backdrop-blur-md uppercase tracking-wider shadow-2xs">
+              {/* Left 50% Content */}
+              <div className="w-1/2 sm:w-7/12 flex flex-col justify-center px-3.5 sm:px-7 py-2.5 sm:py-4 relative z-10">
+                <span className="inline-flex items-center gap-1 bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[8px] sm:text-[10px] font-extrabold px-2 sm:px-2.5 py-0.5 rounded-full w-fit mb-1 sm:mb-1.5 backdrop-blur-md uppercase tracking-wider">
                   ✨ {b.tag}
                 </span>
-                <h1 className="text-white text-lg sm:text-3xl font-black leading-tight tracking-tight mb-2.5 sm:mb-3">
+                <h1 className="text-white text-xs sm:text-lg md:text-xl font-black leading-tight tracking-tight mb-1.5 sm:mb-2.5">
                   {b.title.map((line, idx) => (
                     <span key={idx}>
                       {line}
@@ -200,26 +207,32 @@ export default function Home() {
                 </h1>
                 <Link
                   to="/categories"
-                  className="inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-navy-950 font-black text-xs px-3.5 py-2 rounded-xl shadow-xs hover:shadow-md active:scale-[0.98] transition-all duration-200 cursor-pointer w-fit z-20"
+                  className="inline-flex items-center gap-1 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-navy-950 font-black text-[9px] sm:text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg shadow-xs active:scale-[0.98] transition-all cursor-pointer w-fit z-20"
                 >
                   Shop Now ➔
                 </Link>
               </div>
-              <div className="flex-1 h-full relative hidden sm:block">
-                <div className="absolute inset-0 bg-gradient-to-r from-navy-950 via-navy-950/70 to-transparent z-10" />
-                <img src={b.img} alt="Banner" className="w-full h-full object-cover" />
+
+              {/* Right 50% Image — VISIBLE & SLENDER ON MOBILE & DESKTOP */}
+              <div className="w-1/2 sm:w-5/12 h-full relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-navy-950 via-navy-950/20 to-transparent z-10 pointer-events-none" />
+                <img
+                  src={b.img}
+                  alt="Banner"
+                  className="w-full h-full object-cover object-center transform hover:scale-105 transition-transform duration-500"
+                />
               </div>
             </div>
           ))}
 
-          {/* Slider Dot Indicators — Shifted to Right side so it never overlaps Shop Now button */}
-          <div className="absolute bottom-3.5 right-6 sm:right-8 flex gap-1.5 z-30">
+          {/* Slider Dot Indicators */}
+          <div className="absolute bottom-2.5 right-3.5 sm:right-6 flex gap-1 z-30">
             {banners.map((_, i) => (
               <button
                 key={i}
                 onClick={() => setSlide(i)}
-                className={`h-2 rounded-full transition-all cursor-pointer ${
-                  slide === i ? "w-6 bg-amber-400" : "w-2 bg-white/30 hover:bg-white/50"
+                className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                  slide === i ? "w-5 bg-amber-400" : "w-1.5 bg-white/30 hover:bg-white/50"
                 }`}
               />
             ))}
@@ -258,24 +271,49 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Category Tiles */}
+        {/* Category Tiles — 50-50 Split Cards */}
         <section className="relative z-10">
           <div className="flex items-center justify-between mb-3.5">
-            <h2 className="text-base sm:text-lg font-black text-navy-900 tracking-tight">Popular Categories</h2>
+            <div>
+              <h2 className="text-base sm:text-lg font-black text-navy-900 tracking-tight">Popular Categories</h2>
+              <p className="text-[11px] text-slate-500 font-medium hidden sm:block">Explore certified building materials & supplies</p>
+            </div>
             <Link to="/categories" className="text-xs font-bold text-brand-600 hover:text-brand-700 active:scale-[0.98] transition-all duration-200">
               All Categories →
             </Link>
           </div>
-          <div className="flex gap-3 overflow-x-auto pb-2 pt-1 -mx-1 px-1 no-scrollbar scroll-smooth sm:grid sm:grid-cols-5 sm:gap-3">
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {categoryTiles.map((c) => (
               <Link
                 key={c.name}
                 to={`/categories?cat=${encodeURIComponent(c.name)}`}
-                className="rounded-2xl p-3.5 flex flex-col justify-between h-30 w-36 sm:w-auto shrink-0 border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-brand-300 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 group relative overflow-hidden"
-                style={{ backgroundColor: c.bg }}
+                className="h-28 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-md hover:border-brand-300 active:scale-[0.98] transition-all duration-200 group overflow-hidden flex items-stretch bg-white"
               >
-                <span className="text-xs font-extrabold text-navy-900 tracking-tight">{c.name}</span>
-                <img src={c.img} alt={c.name} className="w-13 h-13 object-cover rounded-xl self-end group-hover:scale-105 transition-transform duration-300 shadow-2xs" />
+                {/* Left 50% Content */}
+                <div className="w-1/2 p-3.5 flex flex-col justify-between h-full relative z-10" style={{ backgroundColor: c.bg + "60" }}>
+                  <div>
+                    <span className="text-[9px] font-extrabold uppercase tracking-wider text-brand-700 bg-white/80 border border-brand-200/60 px-2 py-0.5 rounded-md inline-block mb-1 shadow-2xs">
+                      {c.tag || "Catalog"}
+                    </span>
+                    <h3 className="text-sm font-black text-navy-900 leading-tight group-hover:text-brand-600 transition-colors">
+                      {c.name}
+                    </h3>
+                  </div>
+                  <span className="text-[11px] font-extrabold text-brand-600 group-hover:translate-x-1 transition-transform flex items-center gap-1">
+                    Explore ➔
+                  </span>
+                </div>
+
+                {/* Right 50% Image */}
+                <div className="w-1/2 h-full relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-r from-slate-100/30 to-transparent z-10 pointer-events-none" />
+                  <img
+                    src={c.img}
+                    alt={c.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                </div>
               </Link>
             ))}
           </div>
@@ -378,7 +416,12 @@ export default function Home() {
                       <span className="absolute top-1.5 left-1.5 bg-amber-400 text-navy-950 text-[9px] font-black px-2 py-0.5 rounded shadow-2xs">
                         {p.categoryName || "Material"}
                       </span>
-                      <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                      <img
+                        src={p.imageUrl || p.img || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80"}
+                        alt={p.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                      />
                     </div>
 
                     <div className="flex items-center gap-1 text-[9px] font-medium text-slate-500 mb-1">

@@ -149,19 +149,37 @@ export function AdminProvider({ children }) {
             districtName: resolvedRegionName,
             price: Number(l.price) || 100,
             stockQty: Number(l.stockQty) || 100,
+            imageUrl: l.imageUrl || l.masterProduct?.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80",
             approvalStatus: l.approvalStatus || "PENDING_REVIEW",
             isActive: l.approvalStatus === "APPROVED" && l.isActive !== false,
             addedBy: l.addedBy || "Vendor",
           };
         });
         setProducts((prev) => {
-          if (prev.length !== formattedListings.length) return formattedListings;
-          const mapPrev = new Map(prev.map((p) => [p.id, p]));
-          const hasChanged = formattedListings.some((f) => {
-            const p = mapPrev.get(f.id);
-            return !p || p.approvalStatus !== f.approvalStatus || p.price !== f.price || p.stockQty !== f.stockQty || p.isActive !== f.isActive;
+          const prevMap = new Map(prev.map((p) => [p.id, p]));
+          let hasChanged = prev.length !== formattedListings.length;
+
+          const merged = formattedListings.map((f) => {
+            const p = prevMap.get(f.id);
+            if (!p) {
+              hasChanged = true;
+              return f;
+            }
+            if (
+              p.approvalStatus !== f.approvalStatus ||
+              p.price !== f.price ||
+              p.stockQty !== f.stockQty ||
+              p.isActive !== f.isActive ||
+              p.name !== f.name ||
+              p.vendorName !== f.vendorName
+            ) {
+              hasChanged = true;
+              return f;
+            }
+            return p;
           });
-          return hasChanged ? formattedListings : prev;
+
+          return hasChanged ? merged : prev;
         });
       }
     } catch (err) {
@@ -420,9 +438,7 @@ export function AdminProvider({ children }) {
   };
 
   const updateListingApprovalStatus = async (id, approvalStatus) => {
-    const targetProd = products.find((p) => p.id === id);
-
-    // Instant optimistic UI update
+    // 1. Instant optimistic UI update strictly for targeted item ID
     setProducts((prev) =>
       prev.map((p) => (p.id === id ? { ...p, approvalStatus, isActive: approvalStatus === "APPROVED" } : p))
     );
@@ -431,22 +447,18 @@ export function AdminProvider({ children }) {
       const res = await fetch(`${API_BASE_URL}/api/v1/vendor/listings/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          approvalStatus,
-          name: targetProd?.name,
-          masterProductId: targetProd?.masterProductId,
-        }),
+        body: JSON.stringify({ approvalStatus }),
       });
 
       if (res.ok) {
         const updatedItem = await res.json().catch(() => null);
-        if (updatedItem && (updatedItem.id || updatedItem.approvalStatus)) {
+        if (updatedItem && updatedItem.id) {
           setProducts((prev) =>
             prev.map((p) =>
-              p.id === id || (updatedItem.id && p.id === updatedItem.id) || (targetProd && p.name === targetProd.name)
+              p.id === id || p.id === updatedItem.id
                 ? {
                     ...p,
-                    id: updatedItem.id || p.id,
+                    id: updatedItem.id,
                     approvalStatus: updatedItem.approvalStatus || approvalStatus,
                     isActive: updatedItem.isActive !== undefined ? updatedItem.isActive : (approvalStatus === "APPROVED"),
                   }

@@ -705,10 +705,114 @@ app.get("/api/v1/categories", async (req, res) => {
   }
 });
 
+app.post("/api/v1/categories", async (req, res) => {
+  try {
+    const { name, gstRate, productCount } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: "Category name required" });
+    }
+    const existing = await prisma.category.findFirst({ where: { name: { equals: name.trim(), mode: "insensitive" } } });
+    if (existing) {
+      return res.json(existing);
+    }
+    const newCategory = await prisma.category.create({
+      data: {
+        name: name.trim(),
+        gstRate: Number(gstRate) || 18.0,
+        productCount: Number(productCount) || 0,
+      },
+    });
+    res.status(201).json(newCategory);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch("/api/v1/categories/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, gstRate, productCount } = req.body;
+    const updated = await prisma.category.update({
+      where: { id },
+      data: {
+        ...(name ? { name: name.trim() } : {}),
+        ...(gstRate !== undefined ? { gstRate: Number(gstRate) } : {}),
+        ...(productCount !== undefined ? { productCount: Number(productCount) } : {}),
+      },
+    });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/v1/categories/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.category.delete({ where: { id } }).catch(() => null);
+    res.json({ success: true, message: "Category deleted" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/v1/regions", async (req, res) => {
   try {
     const regions = await prisma.region.findMany({ orderBy: { name: "asc" } });
     res.json(regions);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/v1/regions", async (req, res) => {
+  try {
+    const { name, state, baseDeliveryCharge, isActive } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: "District region name required" });
+    }
+    const existing = await prisma.region.findFirst({ where: { name: { equals: name.trim(), mode: "insensitive" } } });
+    if (existing) {
+      return res.json(existing);
+    }
+    const newRegion = await prisma.region.create({
+      data: {
+        name: name.trim(),
+        state: state || "Uttar Pradesh",
+        baseDeliveryCharge: Number(baseDeliveryCharge) || 49.0,
+        isActive: isActive !== false,
+      },
+    });
+    res.status(201).json(newRegion);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch("/api/v1/regions/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, state, baseDeliveryCharge, isActive } = req.body;
+    const updated = await prisma.region.update({
+      where: { id },
+      data: {
+        ...(name ? { name: name.trim() } : {}),
+        ...(state ? { state } : {}),
+        ...(baseDeliveryCharge !== undefined ? { baseDeliveryCharge: Number(baseDeliveryCharge) } : {}),
+        ...(isActive !== undefined ? { isActive: Boolean(isActive) } : {}),
+      },
+    });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/v1/regions/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.region.delete({ where: { id } }).catch(() => null);
+    res.json({ success: true, message: "Region deleted" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

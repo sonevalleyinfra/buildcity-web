@@ -653,6 +653,7 @@ export function AdminProvider({ children }) {
           const filtered = prev.filter((c) => c.code !== cleanCode);
           const updated = [savedDbCp, ...filtered];
           localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(updated));
+          window.dispatchEvent(new Event("buildcity_coupons_updated"));
           return updated;
         });
         return savedDbCp;
@@ -670,6 +671,7 @@ export function AdminProvider({ children }) {
       const filtered = prev.filter((c) => c.code !== cleanCode);
       const updated = [fallbackCp, ...filtered];
       localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event("buildcity_coupons_updated"));
       return updated;
     });
 
@@ -680,6 +682,7 @@ export function AdminProvider({ children }) {
     setCoupons((prev) => {
       const updated = prev.map((c) => (c.id === id || c.code === id ? { ...c, ...updates } : c));
       localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event("buildcity_coupons_updated"));
       return updated;
     });
     try {
@@ -708,6 +711,7 @@ export function AdminProvider({ children }) {
         return c;
       });
       localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event("buildcity_coupons_updated"));
       return updated;
     });
 
@@ -732,6 +736,7 @@ export function AdminProvider({ children }) {
         return true;
       });
       localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event("buildcity_coupons_updated"));
       return updated;
     });
 

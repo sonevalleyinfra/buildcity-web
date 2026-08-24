@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import { useCart } from "../../context/CartContext";
 import { useAdmin } from "../../context/AdminContext";
+import { API_BASE_URL } from "../../config/api";
 
 const AVAILABLE_COUPONS = [
   { code: "BUILDCITY100", title: "Flat ₹100 OFF", minOrder: 1000, discountAmount: 100, expiryDate: "2026-12-31", isActive: true, desc: "Valid on orders above ₹1,000" },
@@ -12,8 +13,11 @@ const AVAILABLE_COUPONS = [
 
 export default function Cart() {
   const { items, updateQty, removeItem, subtotal, mrpTotal } = useCart();
-  const { coupons = [] } = useAdmin();
+  const { coupons: adminCoupons = [] } = useAdmin();
   const navigate = useNavigate();
+
+  // Live DB Coupons state
+  const [dbCoupons, setDbCoupons] = useState(adminCoupons);
 
   // Coupon State
   const [couponCode, setCouponCode] = useState("");
@@ -21,7 +25,39 @@ export default function Cart() {
   const [couponError, setCouponError] = useState("");
   const [showCouponsModal, setShowCouponsModal] = useState(false);
 
-  const availableCouponsList = Array.isArray(coupons) && coupons.length > 0 ? coupons : AVAILABLE_COUPONS;
+  // Live polling & Event Sync from GET /api/v1/coupons
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchLiveCoupons = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/v1/coupons`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && Array.isArray(data) && data.length > 0) {
+            setDbCoupons((prev) => (JSON.stringify(prev) === JSON.stringify(data) ? prev : data));
+          }
+        }
+      } catch {}
+    };
+
+    fetchLiveCoupons();
+    const interval = setInterval(fetchLiveCoupons, 5000);
+
+    const onSync = () => fetchLiveCoupons();
+    window.addEventListener("focus", onSync);
+    window.addEventListener("buildcity_coupons_updated", onSync);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener("focus", onSync);
+      window.removeEventListener("buildcity_coupons_updated", onSync);
+    };
+  }, []);
+
+  const activeSource = dbCoupons.length > 0 ? dbCoupons : adminCoupons;
+  const availableCouponsList = Array.isArray(activeSource) && activeSource.length > 0 ? activeSource : AVAILABLE_COUPONS;
 
   const handleApplyCoupon = (codeToApply) => {
     const targetCode = (codeToApply || couponCode).trim().toUpperCase();

@@ -12,10 +12,16 @@ app.use(cors());
 app.use(express.json());
 
 // Health Check Endpoint
+let couponsList = [
+  { id: "cp-1", code: "BUILDCITY100", title: "Flat ₹100 OFF", minOrder: 1000, discountAmount: 100, expiryDate: "2026-12-31", isActive: true, desc: "Valid on orders above ₹1,000" },
+  { id: "cp-2", code: "SUPER500", title: "Flat ₹500 OFF", minOrder: 5000, discountAmount: 500, expiryDate: "2026-12-31", isActive: true, desc: "Bulk order discount above ₹5,000" },
+  { id: "cp-3", code: "WELCOME200", title: "Flat ₹200 OFF", minOrder: 1500, discountAmount: 200, expiryDate: "2026-12-31", isActive: true, desc: "Special welcome coupon for new site orders" },
+];
+
 // Single Unified Cloud Sync Endpoint (Replaces 7 separate HTTP requests with 1 request to free browser TCP sockets)
 app.get("/api/v1/cloud-sync", async (req, res) => {
   try {
-    const [drs, vendors, masterProducts, categories, regions, orders, listings] = await Promise.all([
+    const [drs, vendors, masterProducts, categories, regions, orders, listings, coupons] = await Promise.all([
       prisma.dR.findMany({ include: { region: true }, orderBy: { joinedOn: "desc" } }).catch(() => []),
       prisma.vendor.findMany({ include: { region: true, user: true, vendorProducts: true }, orderBy: { joinedOn: "desc" } }).catch(() => []),
       prisma.productMaster.findMany({ include: { category: true }, orderBy: { createdAt: "desc" } }).catch(() => []),
@@ -23,7 +29,10 @@ app.get("/api/v1/cloud-sync", async (req, res) => {
       prisma.region.findMany().catch(() => []),
       prisma.order.findMany({ include: { items: true, customer: true, address: true }, orderBy: { createdAt: "desc" } }).catch(() => []),
       prisma.vendorProduct.findMany({ include: { vendor: { include: { region: true } }, masterProduct: true }, orderBy: { submittedOn: "desc" } }).catch(() => []),
+      prisma.coupon.findMany({ orderBy: { createdAt: "desc" } }).catch(() => []),
     ]);
+
+    const activeCouponsList = coupons && coupons.length > 0 ? coupons : couponsList;
 
     res.json({
       drs,
@@ -33,10 +42,135 @@ app.get("/api/v1/cloud-sync", async (req, res) => {
       regions,
       orders,
       listings,
+      coupons: activeCouponsList,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Coupons Endpoints with Prisma PostgreSQL DB
+app.get("/api/v1/coupons", async (req, res) => {
+  try {
+    const dbCoupons = await prisma.coupon.findMany({ orderBy: { createdAt: "desc" } }).catch(() => []);
+    if (dbCoupons && dbCoupons.length > 0) return res.json(dbCoupons);
+    res.json(couponsList);
+  } catch {
+    res.json(couponsList);
+  }
+});
+
+app.post("/api/v1/coupons", async (req, res) => {
+  const { code, title, discountAmount, minOrder, expiryDate, desc, isActive } = req.body;
+  if (!code || !code.trim()) {
+    return res.status(400).json({ error: "Coupon code is required" });
+  }
+  const cleanCode = code.trim().toUpperCase();
+
+  try {
+    const created = await prisma.coupon.create({
+      data: {
+        code: cleanCode,
+        title: title ? title.trim() : `Flat ₹${discountAmount || 100} OFF`,
+        discountAmount: Number(discountAmount) || 100,
+        minOrder: Number(minOrder) || 1000,
+        expiryDate: expiryDate || "2026-12-31",
+        desc: desc || `Valid on orders above ₹${minOrder || 1000}`,
+        isActive: isActive !== false,
+      },
+    });
+
+    couponsList = couponsList.filter((c) => c.code !== cleanCode);
+    couponsList.unshift(created);
+
+    res.status(201).json(created);
+  } catch (err) {
+    console.error("Create coupon DB note:", err.message);
+    const newCoupon = {
+      id: "cp-" + Date.now(),
+      code: cleanCode,
+      title: title ? title.trim() : `Flat ₹${discountAmount || 100} OFF`,
+      discountAmount: Number(discountAmount) || 100,
+      minOrder: Number(minOrder) || 1000,
+      expiryDate: expiryDate || "2026-12-31",
+      desc: desc || `Valid on orders above ₹${minOrder || 1000}`,
+      isActive: isActive !== false,
+    };
+    couponsList = couponsList.filter((c) => c.code !== cleanCode);
+    couponsList.unshift(newCoupon);
+    res.status(201).json(newCoupon);
+  }
+});
+
+app.patch("/api/v1/coupons/:id", async (req, res) => {
+  const { id } = req.params;
+  const { code, title, discountAmount, minOrder, expiryDate, desc, isActive } = req.body;
+
+  let targetCoupon = await prisma.coupon.findFirst({
+    where: { OR: [{ id }, { code: { equals: id.trim(), mode: "insensitive" } }] },
+  }).catch(() => null);
+
+  const cleanCode = code ? code.trim().toUpperCase() : undefined;
+
+  if (targetCoupon) {
+    try {
+      const updated = await prisma.coupon.update({
+        where: { id: targetCoupon.id },
+        data: {
+          ...(cleanCode ? { code: cleanCode } : {}),
+          ...(title ? { title: title.trim() } : {}),
+          ...(discountAmount !== undefined ? { discountAmount: Number(discountAmount) } : {}),
+          ...(minOrder !== undefined ? { minOrder: Number(minOrder) } : {}),
+          ...(expiryDate !== undefined ? { expiryDate } : {}),
+          ...(desc !== undefined ? { desc: desc.trim() } : {}),
+          ...(isActive !== undefined ? { isActive: Boolean(isActive) } : {}),
+        },
+      });
+
+      couponsList = couponsList.map((c) => (c.id === updated.id || c.code === updated.code ? updated : c));
+      return res.json(updated);
+    } catch (err) {
+      console.error("Patch coupon DB error:", err.message);
+    }
+  }
+
+  const index = couponsList.findIndex((c) => c.id === id || c.code === id.toUpperCase());
+  if (index !== -1) {
+    const current = couponsList[index];
+    const updated = {
+      ...current,
+      ...(cleanCode ? { code: cleanCode } : {}),
+      ...(title ? { title: title.trim() } : {}),
+      ...(discountAmount !== undefined ? { discountAmount: Number(discountAmount) } : {}),
+      ...(minOrder !== undefined ? { minOrder: Number(minOrder) } : {}),
+      ...(expiryDate !== undefined ? { expiryDate } : {}),
+      ...(desc !== undefined ? { desc: desc.trim() } : {}),
+      ...(isActive !== undefined ? { isActive: Boolean(isActive) } : {}),
+    };
+    couponsList[index] = updated;
+    return res.json(updated);
+  }
+
+  res.status(404).json({ error: "Coupon not found" });
+});
+
+app.delete("/api/v1/coupons/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const targetCoupon = await prisma.coupon.findFirst({
+      where: { OR: [{ id }, { code: { equals: id.trim(), mode: "insensitive" } }] },
+    }).catch(() => null);
+
+    if (targetCoupon) {
+      await prisma.coupon.delete({ where: { id: targetCoupon.id } }).catch(() => null);
+    }
+  } catch (err) {
+    console.error("Delete coupon DB error:", err.message);
+  }
+
+  couponsList = couponsList.filter((c) => c.id !== id && c.code !== id.toUpperCase());
+  res.json({ success: true, message: "Coupon deleted" });
 });
 
 const { sendRealSMSOTP } = require("./smsService");

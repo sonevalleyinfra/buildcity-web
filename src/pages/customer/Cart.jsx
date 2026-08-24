@@ -2,15 +2,17 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import { useCart } from "../../context/CartContext";
+import { useAdmin } from "../../context/AdminContext";
 
 const AVAILABLE_COUPONS = [
-  { code: "BUILDCITY100", title: "Flat ₹100 OFF", minOrder: 1000, discountAmount: 100, desc: "Valid on orders above ₹1,000" },
-  { code: "SUPER500", title: "Flat ₹500 OFF", minOrder: 5000, discountAmount: 500, desc: "Bulk order discount above ₹5,000" },
-  { code: "WELCOME200", title: "Flat ₹200 OFF", minOrder: 1500, discountAmount: 200, desc: "Special welcome coupon for new site orders" },
+  { code: "BUILDCITY100", title: "Flat ₹100 OFF", minOrder: 1000, discountAmount: 100, expiryDate: "2026-12-31", isActive: true, desc: "Valid on orders above ₹1,000" },
+  { code: "SUPER500", title: "Flat ₹500 OFF", minOrder: 5000, discountAmount: 500, expiryDate: "2026-12-31", isActive: true, desc: "Bulk order discount above ₹5,000" },
+  { code: "WELCOME200", title: "Flat ₹200 OFF", minOrder: 1500, discountAmount: 200, expiryDate: "2026-12-31", isActive: true, desc: "Special welcome coupon for new site orders" },
 ];
 
 export default function Cart() {
   const { items, updateQty, removeItem, subtotal, mrpTotal } = useCart();
+  const { coupons = [] } = useAdmin();
   const navigate = useNavigate();
 
   // Coupon State
@@ -19,13 +21,23 @@ export default function Cart() {
   const [couponError, setCouponError] = useState("");
   const [showCouponsModal, setShowCouponsModal] = useState(false);
 
+  const availableCouponsList = Array.isArray(coupons) && coupons.length > 0 ? coupons : AVAILABLE_COUPONS;
+
   const handleApplyCoupon = (codeToApply) => {
     const targetCode = (codeToApply || couponCode).trim().toUpperCase();
     setCouponError("");
 
-    const matched = AVAILABLE_COUPONS.find((c) => c.code === targetCode);
+    const matched = availableCouponsList.find((c) => c.code === targetCode);
     if (!matched) {
-      setCouponError("Invalid Coupon Code! Try BUILDCITY100 or SUPER500.");
+      setCouponError(`Invalid Coupon Code "${targetCode}". Please enter a valid code.`);
+      return;
+    }
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    const isExpired = matched.expiryDate && matched.expiryDate < todayStr;
+
+    if (matched.isActive === false || isExpired) {
+      setCouponError(`Coupon code "${matched.code}" is expired or inactive.`);
       return;
     }
 
@@ -259,14 +271,19 @@ export default function Cart() {
             </div>
 
             <div className="space-y-3 max-h-80 overflow-y-auto">
-              {AVAILABLE_COUPONS.map((c) => (
+              {availableCouponsList.filter((c) => {
+                const todayStr = new Date().toISOString().split("T")[0];
+                const isExpired = c.expiryDate && c.expiryDate < todayStr;
+                return c.isActive !== false && !isExpired;
+              }).map((c) => (
                 <div key={c.code} className="border border-slate-200/90 rounded-xl p-3.5 flex items-center justify-between hover:border-brand-500 transition-colors shadow-2xs">
                   <div>
                     <span className="bg-navy-900 text-white text-[10px] font-black px-2 py-0.5 rounded">
                       {c.code}
                     </span>
                     <p className="text-xs font-bold text-navy-900 mt-1">{c.title}</p>
-                    <p className="text-[10px] text-slate-500">{c.desc}</p>
+                    <p className="text-[10px] text-slate-500">{c.desc || `Valid on orders above ₹${c.minOrder}`}</p>
+                    <p className="text-[9px] text-slate-400 mt-0.5">Expires: {c.expiryDate || "Never"}</p>
                   </div>
 
                   <button

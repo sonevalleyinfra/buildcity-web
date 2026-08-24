@@ -14,22 +14,90 @@ const seedCategories = [
   { id: "c5", name: "Electrical", gstRate: 18, productCount: 120, isActive: true },
 ];
 
-const seedRegions = [
-  { id: "r1", name: "Varanasi", state: "Uttar Pradesh", baseDeliveryCharge: 49, isActive: true },
-  { id: "r2", name: "Mirzapur", state: "Uttar Pradesh", baseDeliveryCharge: 79, isActive: true },
-  { id: "r3", name: "Prayagraj", state: "Uttar Pradesh", baseDeliveryCharge: 69, isActive: true },
-  { id: "r4", name: "Jaunpur", state: "Uttar Pradesh", baseDeliveryCharge: 89, isActive: true },
-];
+const seedRegions = [];
 
 const seedMasterProducts = [];
 const seedProducts = [];
 
+const CATS_STORAGE_KEY = "buildcity_admin_categories";
+const REGS_STORAGE_KEY = "buildcity_admin_regions";
+const DRS_STORAGE_KEY = "buildcity_admin_drs";
+const VENDORS_STORAGE_KEY = "buildcity_admin_vendors";
+
+const loadInitialCategories = () => {
+  try {
+    const saved = localStorage.getItem(CATS_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return Array.from(new Map(parsed.map((c) => [c.name.toLowerCase().trim(), c])).values());
+      }
+    }
+  } catch {}
+  return seedCategories;
+};
+
+const loadInitialRegions = () => {
+  try {
+    const saved = localStorage.getItem(REGS_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return Array.from(new Map(parsed.map((r) => [r.name.toLowerCase().trim(), r])).values());
+      }
+    }
+  } catch {}
+  return [];
+};
+
+const loadInitialDrs = () => {
+  try {
+    const saved = localStorage.getItem(DRS_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
+};
+
+const loadInitialVendors = () => {
+  try {
+    const saved = localStorage.getItem(VENDORS_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
+};
+
+const COUPONS_STORAGE_KEY = "buildcity_admin_coupons";
+
+const seedCoupons = [
+  { id: "cp-1", code: "BUILDCITY100", title: "Flat ₹100 OFF", minOrder: 1000, discountAmount: 100, expiryDate: "2026-12-31", isActive: true, desc: "Valid on orders above ₹1,000" },
+  { id: "cp-2", code: "SUPER500", title: "Flat ₹500 OFF", minOrder: 5000, discountAmount: 500, expiryDate: "2026-12-31", isActive: true, desc: "Bulk order discount above ₹5,000" },
+  { id: "cp-3", code: "WELCOME200", title: "Flat ₹200 OFF", minOrder: 1500, discountAmount: 200, expiryDate: "2026-12-31", isActive: true, desc: "Special welcome coupon for new site orders" },
+];
+
+const loadInitialCoupons = () => {
+  try {
+    const saved = localStorage.getItem(COUPONS_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return seedCoupons;
+};
+
 export function AdminProvider({ children }) {
-  const [drs, setDrs] = useState([]);
-  const [vendors, setVendors] = useState([]);
+  const [drs, setDrs] = useState(loadInitialDrs);
+  const [vendors, setVendors] = useState(loadInitialVendors);
   const [orders, setOrders] = useState([]);
-  const [categories, setCategories] = useState(seedCategories);
-  const [regions, setRegions] = useState(seedRegions);
+  const [categories, setCategories] = useState(loadInitialCategories);
+  const [regions, setRegions] = useState(loadInitialRegions);
+  const [coupons, setCoupons] = useState(loadInitialCoupons);
   const [masterProducts, setMasterProducts] = useState([]);
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
@@ -40,7 +108,12 @@ export function AdminProvider({ children }) {
       const syncRes = await fetch(`${API_BASE_URL}/api/v1/cloud-sync`).then((r) => r.json()).catch(() => null);
       if (!syncRes) return;
 
-      const { drs: drsRes, vendors: vendorsRes, masterProducts: masterRes, categories: categoriesRes, regions: regionsRes, orders: ordersRes, listings: listingsRes } = syncRes;
+      const { drs: drsRes, vendors: vendorsRes, masterProducts: masterRes, categories: categoriesRes, regions: regionsRes, orders: ordersRes, listings: listingsRes, coupons: couponsRes } = syncRes;
+
+      if (couponsRes && Array.isArray(couponsRes) && couponsRes.length > 0) {
+        localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(couponsRes));
+        setCoupons((prev) => (JSON.stringify(prev) === JSON.stringify(couponsRes) ? prev : couponsRes));
+      }
 
       if (drsRes && Array.isArray(drsRes)) {
         const formattedDrs = drsRes.map((d) => ({
@@ -54,7 +127,7 @@ export function AdminProvider({ children }) {
           productCount: 8,
           joinedOn: d.joinedOn ? d.joinedOn.split("T")[0] : "2026-05-10",
         }));
-        // JSON Memory Reference Guard: Data same hone par re-render skip karein (Flickering protection)
+        localStorage.setItem(DRS_STORAGE_KEY, JSON.stringify(formattedDrs));
         setDrs((prev) => (JSON.stringify(prev) === JSON.stringify(formattedDrs) ? prev : formattedDrs));
       }
 
@@ -76,6 +149,7 @@ export function AdminProvider({ children }) {
             addedByDr: v.addedByDr || "Admin",
           };
         });
+        localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(formattedVendors));
         setVendors((prev) => (JSON.stringify(prev) === JSON.stringify(formattedVendors) ? prev : formattedVendors));
       }
 
@@ -101,21 +175,42 @@ export function AdminProvider({ children }) {
           id: c.id,
           name: c.name,
           gstRate: Number(c.gstRate) || 18,
-          productCount: c.productCount || 100,
+          productCount: c.productCount || 0,
           isActive: c.isActive !== false,
         }));
-        setCategories((prev) => (JSON.stringify(prev) === JSON.stringify(formattedCats) ? prev : formattedCats));
+
+        const map = new Map();
+        formattedCats.forEach((c) => {
+          map.set(c.name.toLowerCase().trim(), c);
+        });
+        const deduplicated = Array.from(map.values());
+        setCategories(deduplicated);
+        localStorage.setItem(CATS_STORAGE_KEY, JSON.stringify(deduplicated));
+        window.dispatchEvent(new Event("buildcity_categories_updated"));
       }
 
-      if (regionsRes && Array.isArray(regionsRes)) {
-        const formattedRegs = regionsRes.map((r) => ({
+      let fetchedRegsList = regionsRes;
+      if (!Array.isArray(fetchedRegsList) || fetchedRegsList.length === 0) {
+        fetchedRegsList = await fetch(`${API_BASE_URL}/api/v1/regions`).then((r) => r.json()).catch(() => []);
+      }
+
+      if (Array.isArray(fetchedRegsList) && fetchedRegsList.length > 0) {
+        const formattedRegs = fetchedRegsList.map((r) => ({
           id: r.id,
           name: r.name,
           state: r.state || "Uttar Pradesh",
           baseDeliveryCharge: Number(r.baseDeliveryCharge) || 49,
           isActive: r.isActive !== false,
         }));
-        setRegions((prev) => (JSON.stringify(prev) === JSON.stringify(formattedRegs) ? prev : formattedRegs));
+
+        const map = new Map();
+        formattedRegs.forEach((r) => {
+          map.set(r.name.toLowerCase().trim(), r);
+        });
+        const deduplicated = Array.from(map.values());
+        setRegions(deduplicated);
+        localStorage.setItem(REGS_STORAGE_KEY, JSON.stringify(deduplicated));
+        window.dispatchEvent(new Event("buildcity_regions_updated"));
       }
 
       let fetchedOrders = ordersRes;
@@ -189,10 +284,10 @@ export function AdminProvider({ children }) {
     }
   };
 
-  // Continuous Live Auto Polling (2s) & Tab Storage Sync from Supabase Cloud DB
+  // Continuous Live Auto Polling (6s) & Tab Storage Sync from Supabase Cloud DB
   useEffect(() => {
     fetchCloudData();
-    const interval = setInterval(fetchCloudData, 2000);
+    const interval = setInterval(fetchCloudData, 6000);
 
     const handleStorage = () => fetchCloudData();
     window.addEventListener("storage", handleStorage);
@@ -314,7 +409,7 @@ export function AdminProvider({ children }) {
     }
   };
 
-  const addCategory = (categoryData) => {
+  const addCategory = async (categoryData) => {
     const newCat = {
       id: "c-" + Date.now(),
       name: categoryData.name,
@@ -322,20 +417,332 @@ export function AdminProvider({ children }) {
       productCount: 0,
       isActive: true,
     };
-    setCategories((prev) => [newCat, ...prev]);
+
+    setCategories((prev) => {
+      const updated = [newCat, ...prev];
+      localStorage.setItem(CATS_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event("buildcity_categories_updated"));
+      return updated;
+    });
+
+    try {
+      await fetch(`${API_BASE_URL}/api/v1/categories`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(categoryData),
+      });
+      fetchCloudData();
+    } catch {}
+
     return newCat;
   };
 
-  const addRegion = (regionData) => {
-    const newReg = {
-      id: "r-" + Date.now(),
+  const updateCategory = async (id, updates) => {
+    setCategories((prev) => {
+      const updated = prev.map((c) => (c.id === id ? { ...c, ...updates } : c));
+      localStorage.setItem(CATS_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event("buildcity_categories_updated"));
+      return updated;
+    });
+    try {
+      await fetch(`${API_BASE_URL}/api/v1/categories/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+    } catch (err) {
+      console.warn("Update category note:", err.message);
+    }
+  };
+
+  const removeCategory = async (catTarget) => {
+    const catId = typeof catTarget === "object" ? catTarget.id : catTarget;
+    const catName = typeof catTarget === "object" ? catTarget.name : null;
+
+    setCategories((prev) => {
+      const updated = prev.filter((c) => {
+        if (catId && c.id === catId) return false;
+        if (catName && c.name.toLowerCase().trim() === catName.toLowerCase().trim()) return false;
+        return true;
+      });
+      localStorage.setItem(CATS_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event("buildcity_categories_updated"));
+      return updated;
+    });
+
+    try {
+      const targetParam = catId || catName;
+      if (targetParam) {
+        await fetch(`${API_BASE_URL}/api/v1/categories/${encodeURIComponent(targetParam)}`, {
+          method: "DELETE",
+        });
+      }
+    } catch (err) {
+      console.warn("Delete category note:", err.message);
+    }
+  };
+
+  const toggleCategoryActive = (catTarget) => {
+    const catId = typeof catTarget === "object" ? catTarget.id : catTarget;
+    const catName = typeof catTarget === "object" ? catTarget.name : null;
+
+    let nextState = true;
+    setCategories((prev) => {
+      const target = prev.find((c) => (catId && c.id === catId) || (catName && c.name.toLowerCase().trim() === catName.toLowerCase().trim()));
+      nextState = target ? (target.isActive === false ? true : false) : true;
+      const updated = prev.map((c) => {
+        if ((catId && c.id === catId) || (catName && c.name.toLowerCase().trim() === catName.toLowerCase().trim())) {
+          return { ...c, isActive: nextState };
+        }
+        return c;
+      });
+      localStorage.setItem(CATS_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event("buildcity_categories_updated"));
+      return updated;
+    });
+
+    const targetParam = catId || catName;
+    if (targetParam) {
+      fetch(`${API_BASE_URL}/api/v1/categories/${encodeURIComponent(targetParam)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: nextState }),
+      }).catch((err) => console.warn("Toggle category DB note:", err.message));
+    }
+  };
+
+  const addRegion = async (regionData) => {
+    const payload = {
       name: regionData.name,
       state: regionData.state || "Uttar Pradesh",
       baseDeliveryCharge: Number(regionData.baseDeliveryCharge) || 49,
       isActive: true,
     };
-    setRegions((prev) => [newReg, ...prev]);
-    return newReg;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/regions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const savedDbReg = await res.json();
+        setRegions((prev) => {
+          const filtered = prev.filter((r) => r.name.toLowerCase().trim() !== payload.name.toLowerCase().trim());
+          const updated = [savedDbReg, ...filtered];
+          localStorage.setItem(REGS_STORAGE_KEY, JSON.stringify(updated));
+          window.dispatchEvent(new Event("buildcity_regions_updated"));
+          return updated;
+        });
+        return savedDbReg;
+      }
+    } catch (err) {
+      console.warn("DB Region save note:", err.message);
+    }
+
+    const fallbackReg = {
+      id: "r-" + Date.now(),
+      ...payload,
+    };
+
+    setRegions((prev) => {
+      const filtered = prev.filter((r) => r.name.toLowerCase().trim() !== payload.name.toLowerCase().trim());
+      const updated = [fallbackReg, ...filtered];
+      localStorage.setItem(REGS_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event("buildcity_regions_updated"));
+      return updated;
+    });
+
+    return fallbackReg;
+  };
+
+  const updateRegion = async (id, updates) => {
+    setRegions((prev) => {
+      const updated = prev.map((r) => (r.id === id ? { ...r, ...updates } : r));
+      localStorage.setItem(REGS_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event("buildcity_regions_updated"));
+      return updated;
+    });
+    try {
+      await fetch(`${API_BASE_URL}/api/v1/regions/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+    } catch (err) {
+      console.warn("Update region note:", err.message);
+    }
+  };
+
+  const removeRegion = async (regTarget) => {
+    const regId = typeof regTarget === "object" ? regTarget.id : regTarget;
+    const regName = typeof regTarget === "object" ? regTarget.name : null;
+
+    setRegions((prev) => {
+      const updated = prev.filter((r) => {
+        if (regId && r.id === regId) return false;
+        if (regName && r.name.toLowerCase().trim() === regName.toLowerCase().trim()) return false;
+        return true;
+      });
+      localStorage.setItem(REGS_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event("buildcity_regions_updated"));
+      return updated;
+    });
+
+    try {
+      if (regId) {
+        await fetch(`${API_BASE_URL}/api/v1/regions/${regId}`, {
+          method: "DELETE",
+        });
+      }
+    } catch (err) {
+      console.warn("Delete region note:", err.message);
+    }
+  };
+
+  const toggleRegionActive = (regTarget) => {
+    const regId = typeof regTarget === "object" ? regTarget.id : regTarget;
+    const regName = typeof regTarget === "object" ? regTarget.name : null;
+
+    let nextState = true;
+    setRegions((prev) => {
+      const target = prev.find((r) => (regId && r.id === regId) || (regName && r.name.toLowerCase().trim() === regName.toLowerCase().trim()));
+      nextState = target ? (target.isActive === false ? true : false) : true;
+      const updated = prev.map((r) => {
+        if ((regId && r.id === regId) || (regName && r.name.toLowerCase().trim() === regName.toLowerCase().trim())) {
+          return { ...r, isActive: nextState };
+        }
+        return r;
+      });
+      localStorage.setItem(REGS_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event("buildcity_regions_updated"));
+      return updated;
+    });
+
+    const targetParam = regId || regName;
+    if (targetParam) {
+      fetch(`${API_BASE_URL}/api/v1/regions/${encodeURIComponent(targetParam)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: nextState }),
+      }).catch((err) => console.warn("Toggle region DB note:", err.message));
+    }
+  };
+
+  const addCoupon = async (couponData) => {
+    const cleanCode = (couponData.code || "").trim().toUpperCase();
+    const payload = {
+      code: cleanCode,
+      title: couponData.title ? couponData.title.trim() : `Flat ₹${couponData.discountAmount || 100} OFF`,
+      discountAmount: Number(couponData.discountAmount) || 100,
+      minOrder: Number(couponData.minOrder) || 1000,
+      expiryDate: couponData.expiryDate || "2026-12-31",
+      desc: couponData.desc || `Valid on orders above ₹${couponData.minOrder || 1000}`,
+      isActive: couponData.isActive !== false,
+    };
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/coupons`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const savedDbCp = await res.json();
+        setCoupons((prev) => {
+          const filtered = prev.filter((c) => c.code !== cleanCode);
+          const updated = [savedDbCp, ...filtered];
+          localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(updated));
+          return updated;
+        });
+        return savedDbCp;
+      }
+    } catch (err) {
+      console.warn("DB Coupon save note:", err.message);
+    }
+
+    const fallbackCp = {
+      id: "cp-" + Date.now(),
+      ...payload,
+    };
+
+    setCoupons((prev) => {
+      const filtered = prev.filter((c) => c.code !== cleanCode);
+      const updated = [fallbackCp, ...filtered];
+      localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+
+    return fallbackCp;
+  };
+
+  const updateCoupon = async (id, updates) => {
+    setCoupons((prev) => {
+      const updated = prev.map((c) => (c.id === id || c.code === id ? { ...c, ...updates } : c));
+      localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+    try {
+      await fetch(`${API_BASE_URL}/api/v1/coupons/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+    } catch (err) {
+      console.warn("Update coupon note:", err.message);
+    }
+  };
+
+  const toggleCouponActive = (target) => {
+    const cpId = typeof target === "object" ? target.id : target;
+    const cpCode = typeof target === "object" ? target.code : null;
+
+    let nextState = true;
+    setCoupons((prev) => {
+      const item = prev.find((c) => (cpId && c.id === cpId) || (cpCode && c.code === cpCode));
+      nextState = item ? (item.isActive === false ? true : false) : true;
+      const updated = prev.map((c) => {
+        if ((cpId && c.id === cpId) || (cpCode && c.code === cpCode)) {
+          return { ...c, isActive: nextState };
+        }
+        return c;
+      });
+      localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+
+    const param = cpId || cpCode;
+    if (param) {
+      fetch(`${API_BASE_URL}/api/v1/coupons/${encodeURIComponent(param)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: nextState }),
+      }).catch(() => {});
+    }
+  };
+
+  const removeCoupon = async (target) => {
+    const cpId = typeof target === "object" ? target.id : target;
+    const cpCode = typeof target === "object" ? target.code : null;
+
+    setCoupons((prev) => {
+      const updated = prev.filter((c) => {
+        if (cpId && c.id === cpId) return false;
+        if (cpCode && c.code === cpCode) return false;
+        return true;
+      });
+      localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+
+    const param = cpId || cpCode;
+    if (param) {
+      try {
+        await fetch(`${API_BASE_URL}/api/v1/coupons/${encodeURIComponent(param)}`, {
+          method: "DELETE",
+        });
+      } catch {}
+    }
   };
 
   const addMasterProduct = async (mpData) => {
@@ -452,13 +859,12 @@ export function AdminProvider({ children }) {
 
       if (res.ok) {
         const updatedItem = await res.json().catch(() => null);
-        if (updatedItem && updatedItem.id) {
+        if (updatedItem) {
           setProducts((prev) =>
             prev.map((p) =>
-              p.id === id || p.id === updatedItem.id
+              p.id === id || (updatedItem.id && p.id === updatedItem.id)
                 ? {
                     ...p,
-                    id: updatedItem.id,
                     approvalStatus: updatedItem.approvalStatus || approvalStatus,
                     isActive: updatedItem.isActive !== undefined ? updatedItem.isActive : (approvalStatus === "APPROVED"),
                   }
@@ -516,6 +922,7 @@ export function AdminProvider({ children }) {
         orders,
         categories,
         regions,
+        coupons,
         masterProducts,
         products,
         productsLoading,
@@ -527,7 +934,17 @@ export function AdminProvider({ children }) {
         removeVendor,
         clearAllVendorsAndProducts,
         addCategory,
+        updateCategory,
+        removeCategory,
+        toggleCategoryActive,
         addRegion,
+        updateRegion,
+        removeRegion,
+        toggleRegionActive,
+        addCoupon,
+        updateCoupon,
+        toggleCouponActive,
+        removeCoupon,
         addMasterProduct,
         assignMasterProductToVendor,
         updateVendorProductListing,

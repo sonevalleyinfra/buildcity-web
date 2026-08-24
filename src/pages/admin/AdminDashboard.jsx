@@ -2,6 +2,7 @@ import { useState } from "react";
 import Logo from "../../components/Logo";
 import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
+import { formatShortId } from "../../utils/formatId";
 
 const TABS = [
   { id: "Overview", label: "📊 Overview" },
@@ -12,6 +13,7 @@ const TABS = [
   { id: "Orders", label: "🛒 Orders" },
   { id: "Categories", label: "🏷️ Categories" },
   { id: "Regions", label: "🗺️ Regions" },
+  { id: "Coupons", label: "🎟️ Coupons" },
 ];
 
 const STATUS_STYLE = {
@@ -36,6 +38,7 @@ export default function AdminDashboard() {
     orders,
     categories,
     regions,
+    coupons = [],
     masterProducts = [],
     products = [],
     productsLoading,
@@ -50,8 +53,16 @@ export default function AdminDashboard() {
     clearAllVendorsAndProducts,
     addCategory,
     updateCategory,
+    removeCategory,
+    toggleCategoryActive,
     addRegion,
     updateRegion,
+    removeRegion,
+    toggleRegionActive,
+    addCoupon,
+    updateCoupon,
+    removeCoupon,
+    toggleCouponActive,
     addMasterProduct,
     updateMasterProduct,
     updateListingApprovalStatus,
@@ -76,12 +87,75 @@ export default function AdminDashboard() {
   const [editingProduct, setEditingProduct] = useState(null);
   const [editingCategory, setEditingCategory] = useState(null);
   const [editingRegion, setEditingRegion] = useState(null);
+  const [editingCoupon, setEditingCoupon] = useState(null);
 
   // Forms
   const [drForm, setDrForm] = useState({ name: "", phone: "", regionId: "" });
   const [vendorForm, setVendorForm] = useState({ shopName: "", ownerName: "", phone: "", regionId: "", commissionRate: 10 });
   const [catForm, setCatForm] = useState({ name: "", gstRate: 18 });
   const [regionForm, setRegionForm] = useState({ name: "", state: "Uttar Pradesh", baseDeliveryCharge: 49 });
+  const [couponForm, setCouponForm] = useState({
+    code: "",
+    title: "",
+    discountAmount: 100,
+    minOrder: 1000,
+    expiryDate: "2026-12-31",
+    desc: "",
+  });
+  const [showCouponForm, setShowCouponForm] = useState(false);
+  const [isSubmittingCoupon, setIsSubmittingCoupon] = useState(false);
+  const [deletingCouponId, setDeletingCouponId] = useState(null);
+
+  const handleAddCoupon = async (e) => {
+    e.preventDefault();
+    if (!couponForm.code.trim()) {
+      alert("Please enter Coupon Code!");
+      return;
+    }
+    setIsSubmittingCoupon(true);
+    try {
+      await addCoupon({
+        code: couponForm.code.trim(),
+        title: couponForm.title.trim() || `Flat ₹${couponForm.discountAmount} OFF`,
+        discountAmount: Number(couponForm.discountAmount) || 100,
+        minOrder: Number(couponForm.minOrder) || 1000,
+        expiryDate: couponForm.expiryDate || "2026-12-31",
+        desc: couponForm.desc.trim() || `Valid on orders above ₹${couponForm.minOrder || 1000}`,
+      });
+      setCouponForm({ code: "", title: "", discountAmount: 100, minOrder: 1000, expiryDate: "2026-12-31", desc: "" });
+      setShowCouponForm(false);
+      alert(`Coupon "${couponForm.code.trim().toUpperCase()}" created & activated successfully!`);
+    } catch (err) {
+      alert("Error adding coupon: " + (err.message || err));
+    } finally {
+      setIsSubmittingCoupon(false);
+    }
+  };
+
+  const handleUpdateCouponSubmit = async (e) => {
+    e.preventDefault();
+    if (!editingCoupon) return;
+    setIsSubmittingCoupon(true);
+    try {
+      await updateCoupon(editingCoupon.id, editingCoupon);
+      setEditingCoupon(null);
+      alert("Coupon updated in Database successfully!");
+    } catch (err) {
+      alert("Error updating coupon: " + (err.message || err));
+    } finally {
+      setIsSubmittingCoupon(false);
+    }
+  };
+
+  const handleDeleteCoupon = async (c) => {
+    if (!confirm(`Are you sure you want to delete coupon "${c.code}"?`)) return;
+    setDeletingCouponId(c.id);
+    try {
+      await removeCoupon(c);
+    } finally {
+      setDeletingCouponId(null);
+    }
+  };
   const [productForm, setProductForm] = useState({
     name: "",
     categoryId: "",
@@ -96,6 +170,8 @@ export default function AdminDashboard() {
 
   const [isSubmittingVendor, setIsSubmittingVendor] = useState(false);
   const [deletingVendorId, setDeletingVendorId] = useState(null);
+  const [deletingCatId, setDeletingCatId] = useState(null);
+  const [deletingRegionId, setDeletingRegionId] = useState(null);
   const [busyListingId, setBusyListingId] = useState(null);
 
   // Vendor Delete Handler — Live spinner animation aur double-click protection ke sath vendor remove karein
@@ -204,28 +280,58 @@ export default function AdminDashboard() {
     setShowCatForm(false);
   };
 
-  const handleUpdateCategorySubmit = (e) => {
+  const [isSubmittingCat, setIsSubmittingCat] = useState(false);
+
+  const handleUpdateCategorySubmit = async (e) => {
     e.preventDefault();
     if (!editingCategory) return;
-    updateCategory(editingCategory.id, editingCategory);
-    setEditingCategory(null);
-    alert("Category updated!");
+    setIsSubmittingCat(true);
+    try {
+      await updateCategory(editingCategory.id, editingCategory);
+      setEditingCategory(null);
+      alert(`Category "${editingCategory.name}" updated in Database successfully!`);
+    } catch (err) {
+      alert("Error updating category: " + (err.message || err));
+    } finally {
+      setIsSubmittingCat(false);
+    }
   };
 
-  const handleAddRegion = (e) => {
+  const [isSubmittingRegion, setIsSubmittingRegion] = useState(false);
+
+  const handleAddRegion = async (e) => {
     e.preventDefault();
     if (!regionForm.name.trim()) return;
-    addRegion({ name: regionForm.name, state: regionForm.state, baseDeliveryCharge: Number(regionForm.baseDeliveryCharge) });
-    setRegionForm({ name: "", state: "Uttar Pradesh", baseDeliveryCharge: 49 });
-    setShowRegionForm(false);
+    setIsSubmittingRegion(true);
+    try {
+      await addRegion({
+        name: regionForm.name.trim(),
+        state: regionForm.state || "Uttar Pradesh",
+        baseDeliveryCharge: Number(regionForm.baseDeliveryCharge) || 49,
+      });
+      setRegionForm({ name: "", state: "Uttar Pradesh", baseDeliveryCharge: 49 });
+      setShowRegionForm(false);
+      alert(`District Region "${regionForm.name.trim()}" saved to Database successfully!`);
+    } catch (err) {
+      alert("Error adding district region: " + (err.message || err));
+    } finally {
+      setIsSubmittingRegion(false);
+    }
   };
 
-  const handleUpdateRegionSubmit = (e) => {
+  const handleUpdateRegionSubmit = async (e) => {
     e.preventDefault();
     if (!editingRegion) return;
-    updateRegion(editingRegion.id, editingRegion);
-    setEditingRegion(null);
-    alert("District Region updated!");
+    setIsSubmittingRegion(true);
+    try {
+      await updateRegion(editingRegion.id, editingRegion);
+      setEditingRegion(null);
+      alert("District Region updated in Database successfully!");
+    } catch (err) {
+      alert("Error updating district region: " + (err.message || err));
+    } finally {
+      setIsSubmittingRegion(false);
+    }
   };
 
   const handleAddProduct = (e) => {
@@ -803,7 +909,7 @@ export default function AdminDashboard() {
                             <div>
                               <div className="flex items-center gap-1.5">
                                 <span className="bg-navy-900 text-white font-mono text-[9px] font-bold px-1.5 py-0.5 rounded">
-                                  ID: #{p.id}
+                                  {formatShortId(p.id, "PRD")}
                                 </span>
                                 <p className="font-bold text-navy-900">{p.name}</p>
                               </div>
@@ -924,23 +1030,29 @@ export default function AdminDashboard() {
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 disabled={busyListingId === p.id || st === "APPROVED"}
-                                onClick={async () => {
+                                onClick={async (e) => {
+                                  e.preventDefault();
                                   if (busyListingId) return;
                                   setBusyListingId(p.id);
                                   try {
                                     await updateListingApprovalStatus(p.id, "APPROVED");
                                   } finally {
-                                    setBusyListingId(null);
+                                    setTimeout(() => setBusyListingId(null), 300);
                                   }
                                 }}
-                                className={`min-w-[92px] text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition-all flex items-center justify-center gap-1 ${
+                                className={`min-w-[95px] text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 select-none ${
                                   st === "APPROVED"
-                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed opacity-80"
-                                    : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default opacity-90 pointer-events-none"
+                                    : busyListingId === p.id
+                                    ? "bg-emerald-600/90 text-white cursor-wait pointer-events-none"
+                                    : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs active:scale-[0.98] cursor-pointer"
                                 }`}
                               >
                                 {busyListingId === p.id ? (
-                                  <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                  <>
+                                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    <span>...</span>
+                                  </>
                                 ) : st === "APPROVED" ? (
                                   "✓ Approved"
                                 ) : (
@@ -950,23 +1062,29 @@ export default function AdminDashboard() {
 
                               <button
                                 disabled={busyListingId === p.id || st === "REJECTED"}
-                                onClick={async () => {
+                                onClick={async (e) => {
+                                  e.preventDefault();
                                   if (busyListingId) return;
                                   setBusyListingId(p.id);
                                   try {
                                     await updateListingApprovalStatus(p.id, "REJECTED");
                                   } finally {
-                                    setBusyListingId(null);
+                                    setTimeout(() => setBusyListingId(null), 300);
                                   }
                                 }}
-                                className={`min-w-[85px] text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition-all flex items-center justify-center gap-1 ${
+                                className={`min-w-[90px] text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 select-none ${
                                   st === "REJECTED"
-                                    ? "bg-rose-50 text-rose-600 border border-rose-200 cursor-not-allowed opacity-80"
-                                    : "bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                    ? "bg-rose-50 text-rose-600 border border-rose-200 cursor-default opacity-90 pointer-events-none"
+                                    : busyListingId === p.id
+                                    ? "bg-rose-100 text-rose-700 cursor-wait pointer-events-none"
+                                    : "bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 active:scale-[0.98] cursor-pointer"
                                 }`}
                               >
                                 {busyListingId === p.id ? (
-                                  <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                  <>
+                                    <span className="w-3 h-3 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
+                                    <span>...</span>
+                                  </>
                                 ) : st === "REJECTED" ? (
                                   "✕ Rejected"
                                 ) : (
@@ -1050,7 +1168,7 @@ export default function AdminDashboard() {
                       return (
                         <tr key={o.id} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-3.5 px-4">
-                            <span className="font-extrabold text-brand-700 block text-xs">{o.orderNumber || (o.id ? "#ORD-" + o.id.slice(0, 8).toUpperCase() : "#ORD-NEW")}</span>
+                            <span className="font-extrabold text-brand-700 block text-xs">{formatShortId(o.id || o.orderNumber, "ORD")}</span>
                             <span className="text-[11px] text-slate-400 font-medium">{dateStr}</span>
                           </td>
                           <td className="py-3.5 px-4">
@@ -1146,25 +1264,74 @@ export default function AdminDashboard() {
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {categories.map((c) => (
-                <div key={c.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-center justify-between">
-                  <div>
-                    <h3 className="font-bold text-navy-900 text-sm">{c.name}</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">{c.productCount} products listed</p>
+              {Array.from(new Map(categories.map((c) => [c.name.toLowerCase().trim(), c])).values()).map((c) => {
+                const isActive = c.isActive !== false;
+                const realCount = masterProducts.filter(
+                  (m) =>
+                    m.categoryId === c.id ||
+                    (m.categoryName && m.categoryName.toLowerCase().trim() === c.name.toLowerCase().trim())
+                ).length + products.filter(
+                  (p) =>
+                    p.categoryId === c.id ||
+                    (p.categoryName && p.categoryName.toLowerCase().trim() === c.name.toLowerCase().trim())
+                ).length;
+
+                return (
+                  <div key={c.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-navy-900 text-sm">{c.name}</h3>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isActive ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-600 border border-rose-200"}`}>
+                            {isActive ? "ACTIVE" : "INACTIVE"}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">{realCount} products listed</p>
+                      </div>
+                      <span className="bg-brand-50 text-brand-700 text-xs font-bold px-2.5 py-1 rounded-full border border-brand-200 shrink-0">
+                        {c.gstRate || 18}% GST
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100">
+                      <button
+                        onClick={() => toggleCategoryActive(c)}
+                        className={`text-[11px] font-extrabold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${isActive ? "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100" : "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"}`}
+                      >
+                        {isActive ? "Deactivate" : "Activate"}
+                      </button>
+                      <button
+                        onClick={() => setEditingCategory({ ...c })}
+                        className="text-[11px] font-extrabold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1 cursor-pointer"
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        disabled={deletingCatId === c.id}
+                        onClick={async () => {
+                          if (!confirm(`Are you sure you want to delete category "${c.name}"?`)) return;
+                          setDeletingCatId(c.id);
+                          try {
+                            await removeCategory(c);
+                          } finally {
+                            setDeletingCatId(null);
+                          }
+                        }}
+                        className="text-[11px] font-extrabold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg px-2.5 py-1 cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                      >
+                        {deletingCatId === c.id ? (
+                          <>
+                            <span className="w-3 h-3 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
+                            <span>Deleting...</span>
+                          </>
+                        ) : (
+                          "🗑️ Delete"
+                        )}
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="bg-brand-50 text-brand-700 text-xs font-bold px-2.5 py-1 rounded-full border border-brand-200">
-                      {c.gstRate}% GST
-                    </span>
-                    <button
-                      onClick={() => setEditingCategory({ ...c })}
-                      className="text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1 cursor-pointer"
-                    >
-                      ✏️
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -1199,30 +1366,295 @@ export default function AdminDashboard() {
                   onChange={(e) => setRegionForm({ ...regionForm, baseDeliveryCharge: e.target.value })}
                   className="bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 w-36"
                 />
-                <button type="submit" className="bg-brand-500 text-white text-xs font-bold px-4 py-2 rounded-xl">Save</button>
+                <button type="submit" disabled={isSubmittingRegion} className="bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-4 py-2 rounded-xl disabled:opacity-50 flex items-center gap-1.5 cursor-pointer">
+                  {isSubmittingRegion ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    "Save"
+                  )}
+                </button>
               </form>
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {regions.map((r) => (
-                <div key={r.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-center justify-between">
-                  <div>
-                    <h3 className="font-bold text-navy-900 text-sm">📍 {r.name}</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">{r.state}</p>
-                    <p className="text-xs font-bold text-brand-600 mt-1">Delivery: ₹{r.baseDeliveryCharge}</p>
+              {Array.from(new Map(regions.map((r) => [r.name.toLowerCase().trim(), r])).values()).map((r) => {
+                const isActive = r.isActive !== false;
+                return (
+                  <div key={r.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-navy-900 text-sm flex items-center gap-1">📍 {r.name}</h3>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isActive ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-600 border border-rose-200"}`}>
+                          {isActive ? "ACTIVE" : "INACTIVE"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">{r.state || "Uttar Pradesh"}</p>
+                      <p className="text-xs font-bold text-brand-600 mt-1">Delivery Charge: ₹{r.baseDeliveryCharge || 49}</p>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100">
+                      <button
+                        onClick={() => toggleRegionActive(r)}
+                        className={`text-[11px] font-extrabold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${isActive ? "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100" : "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"}`}
+                      >
+                        {isActive ? "Deactivate" : "Activate"}
+                      </button>
+                      <button
+                        onClick={() => setEditingRegion({ ...r })}
+                        className="text-[11px] font-extrabold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1 cursor-pointer"
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        disabled={deletingRegionId === r.id}
+                        onClick={async () => {
+                          if (!confirm(`Are you sure you want to delete district region "${r.name}"?`)) return;
+                          setDeletingRegionId(r.id);
+                          try {
+                            await removeRegion(r);
+                          } finally {
+                            setDeletingRegionId(null);
+                          }
+                        }}
+                        className="text-[11px] font-extrabold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg px-2.5 py-1 cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                      >
+                        {deletingRegionId === r.id ? (
+                          <>
+                            <span className="w-3 h-3 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
+                            <span>Deleting...</span>
+                          </>
+                        ) : (
+                          "🗑️ Delete"
+                        )}
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => setEditingRegion({ ...r })}
-                    className="text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer"
-                  >
-                    ✏️ Edit
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* COUPONS TAB */}
+        {tab === "Coupons" && (
+          <div className="space-y-4 font-sans">
+            <div className="flex items-center justify-between bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+              <div>
+                <h2 className="text-base font-extrabold text-navy-900">Discount Coupons & Offers</h2>
+                <p className="text-xs text-slate-500">Create promotional discount codes and manage coupon expiry for cart checkout.</p>
+              </div>
+              <button onClick={() => setShowCouponForm((v) => !v)} className="bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer">
+                + Create New Coupon
+              </button>
+            </div>
+
+            {showCouponForm && (
+              <form onSubmit={handleAddCoupon} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
+                <h4 className="font-bold text-navy-900 text-xs uppercase tracking-wider">Create New Promotional Coupon</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Coupon Code *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. SUMMER200"
+                      value={couponForm.code}
+                      onChange={(e) => setCouponForm({ ...couponForm, code: e.target.value.toUpperCase() })}
+                      className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold uppercase"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Discount Amount (₹) *</label>
+                    <input
+                      type="number"
+                      required
+                      placeholder="200"
+                      value={couponForm.discountAmount}
+                      onChange={(e) => setCouponForm({ ...couponForm, discountAmount: e.target.value })}
+                      className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Minimum Order Value (₹) *</label>
+                    <input
+                      type="number"
+                      required
+                      placeholder="1500"
+                      value={couponForm.minOrder}
+                      onChange={(e) => setCouponForm({ ...couponForm, minOrder: e.target.value })}
+                      className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Expiry Date *</label>
+                    <input
+                      type="date"
+                      required
+                      value={couponForm.expiryDate}
+                      onChange={(e) => setCouponForm({ ...couponForm, expiryDate: e.target.value })}
+                      className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Offer Title / Heading</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Flat ₹200 OFF on Construction Materials"
+                      value={couponForm.title}
+                      onChange={(e) => setCouponForm({ ...couponForm, title: e.target.value })}
+                      className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button type="button" onClick={() => setShowCouponForm(false)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                  <button type="submit" disabled={isSubmittingCoupon} className="px-5 py-2 text-xs font-bold text-white bg-brand-500 hover:bg-brand-600 rounded-xl shadow-xs disabled:opacity-50 flex items-center gap-1.5 cursor-pointer">
+                    {isSubmittingCoupon ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Saving Coupon...</span>
+                      </>
+                    ) : (
+                      "Save & Activate Coupon"
+                    )}
                   </button>
                 </div>
-              ))}
+              </form>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {(coupons || []).map((cp) => {
+                const todayStr = new Date().toISOString().split("T")[0];
+                const isExpired = cp.expiryDate && cp.expiryDate < todayStr;
+                const isActive = cp.isActive !== false && !isExpired;
+
+                return (
+                  <div key={cp.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col justify-between space-y-4 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 right-0 h-1 bg-brand-500" />
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="bg-brand-50 text-brand-700 font-extrabold px-3 py-1 rounded-xl text-xs border border-brand-200 flex items-center gap-1 tracking-wider">
+                          🎟️ {cp.code}
+                        </span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${isActive ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-600 border border-rose-200"}`}>
+                          {isExpired ? "EXPIRED" : isActive ? "ACTIVE" : "INACTIVE"}
+                        </span>
+                      </div>
+                      <h3 className="font-extrabold text-navy-900 text-sm mt-3">{cp.title || `Flat ₹${cp.discountAmount} OFF`}</h3>
+                      <p className="text-xs font-bold text-emerald-600 mt-1">Discount: ₹{cp.discountAmount} OFF</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Min Order: ₹{cp.minOrder?.toLocaleString("en-IN") || 1000}</p>
+                      <p className="text-[11px] text-slate-400 mt-1">Expires On: {cp.expiryDate || "Never"}</p>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-1.5 pt-3 border-t border-slate-100">
+                      <button
+                        onClick={() => toggleCouponActive(cp)}
+                        className={`text-[11px] font-extrabold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${isActive ? "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100" : "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"}`}
+                      >
+                        {isActive ? "Expire / Deactivate" : "Activate"}
+                      </button>
+                      <button
+                        onClick={() => setEditingCoupon({ ...cp })}
+                        className="text-[11px] font-extrabold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1 cursor-pointer"
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        disabled={deletingCouponId === cp.id}
+                        onClick={() => handleDeleteCoupon(cp)}
+                        className="text-[11px] font-extrabold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg px-2.5 py-1 cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                      >
+                        {deletingCouponId === cp.id ? (
+                          <>
+                            <span className="w-3 h-3 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
+                            <span>Deleting...</span>
+                          </>
+                        ) : (
+                          "🗑️ Delete"
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
       </main>
+
+      {/* EDIT MODAL: COUPON */}
+      {editingCoupon && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <h3 className="font-bold text-navy-900 text-base">Edit Coupon Details</h3>
+              <button onClick={() => setEditingCoupon(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none">✕</button>
+            </div>
+            <form onSubmit={handleUpdateCouponSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Coupon Code *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingCoupon.code}
+                  onChange={(e) => setEditingCoupon({ ...editingCoupon, code: e.target.value.toUpperCase() })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold uppercase"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Discount Amount (₹) *</label>
+                <input
+                  type="number"
+                  required
+                  value={editingCoupon.discountAmount}
+                  onChange={(e) => setEditingCoupon({ ...editingCoupon, discountAmount: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Minimum Order Value (₹) *</label>
+                <input
+                  type="number"
+                  required
+                  value={editingCoupon.minOrder}
+                  onChange={(e) => setEditingCoupon({ ...editingCoupon, minOrder: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Expiry Date *</label>
+                <input
+                  type="date"
+                  required
+                  value={editingCoupon.expiryDate}
+                  onChange={(e) => setEditingCoupon({ ...editingCoupon, expiryDate: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onClick={() => setEditingCoupon(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" disabled={isSubmittingCoupon} className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs disabled:opacity-50 flex items-center gap-1.5 cursor-pointer">
+                  {isSubmittingCoupon ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Saving Changes...</span>
+                    </>
+                  ) : (
+                    "Save Coupon"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* EDIT MODAL: DR */}
       {editingDr && (
@@ -1431,7 +1863,16 @@ export default function AdminDashboard() {
               </div>
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button type="button" onClick={() => setEditingCategory(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
-                <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs">Save Category</button>
+                <button type="submit" disabled={isSubmittingCat} className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs disabled:opacity-50 flex items-center gap-1.5 cursor-pointer">
+                  {isSubmittingCat ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Saving Changes...</span>
+                    </>
+                  ) : (
+                    "Save Category"
+                  )}
+                </button>
               </div>
             </form>
           </div>
@@ -1468,7 +1909,16 @@ export default function AdminDashboard() {
               </div>
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button type="button" onClick={() => setEditingRegion(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
-                <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs">Save District Region</button>
+                <button type="submit" disabled={isSubmittingRegion} className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs disabled:opacity-50 flex items-center gap-1.5 cursor-pointer">
+                  {isSubmittingRegion ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Saving Changes...</span>
+                    </>
+                  ) : (
+                    "Save District Region"
+                  )}
+                </button>
               </div>
             </form>
           </div>

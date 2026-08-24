@@ -288,3 +288,18 @@ model Notification {
 
   @@map("notifications")
 }
+
+// 15. Coupon Entity
+model Coupon {
+  id             String   @id @default(uuid())
+  code           String   @unique
+  title          String
+  discountAmount Decimal  @default(100.00)
+  minOrder       Decimal  @default(1000.00)
+  expiryDate     String?  @default("2026-12-31")
+  desc           String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  @@map("coupons")
+}

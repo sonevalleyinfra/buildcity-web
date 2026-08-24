@@ -748,10 +748,41 @@ app.patch("/api/v1/categories/:id", async (req, res) => {
 
 app.delete("/api/v1/categories/:id", async (req, res) => {
   try {
-    const { id } = req.params;
-    await prisma.category.delete({ where: { id } }).catch(() => null);
-    res.json({ success: true, message: "Category deleted" });
+    const rawId = req.params.id;
+    if (!rawId) {
+      return res.status(400).json({ error: "Category ID or Name required" });
+    }
+
+    let cat = await prisma.category.findUnique({ where: { id: rawId } }).catch(() => null);
+    if (!cat) {
+      cat = await prisma.category.findFirst({
+        where: {
+          OR: [
+            { id: rawId },
+            { name: { equals: rawId.trim(), mode: "insensitive" } },
+          ],
+        },
+      }).catch(() => null);
+    }
+
+    if (!cat) {
+      return res.json({ success: true, message: "Category removed" });
+    }
+
+    // Unlink or delete referencing master products first to avoid FK errors
+    await prisma.productMaster.deleteMany({
+      where: { categoryId: cat.id },
+    }).catch(() => null);
+
+    // Delete the category row from Supabase DB
+    await prisma.category.delete({
+      where: { id: cat.id },
+    });
+
+    console.log(`✓ Category "${cat.name}" (${cat.id}) deleted from DB`);
+    res.json({ success: true, message: `Category "${cat.name}" deleted from DB` });
   } catch (err) {
+    console.error("Delete category error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -810,10 +841,47 @@ app.patch("/api/v1/regions/:id", async (req, res) => {
 
 app.delete("/api/v1/regions/:id", async (req, res) => {
   try {
-    const { id } = req.params;
-    await prisma.region.delete({ where: { id } }).catch(() => null);
-    res.json({ success: true, message: "Region deleted" });
+    const rawId = req.params.id;
+    if (!rawId) {
+      return res.status(400).json({ error: "Region ID or Name required" });
+    }
+
+    let reg = await prisma.region.findUnique({ where: { id: rawId } }).catch(() => null);
+    if (!reg) {
+      reg = await prisma.region.findFirst({
+        where: {
+          OR: [
+            { id: rawId },
+            { name: { equals: rawId.trim(), mode: "insensitive" } },
+          ],
+        },
+      }).catch(() => null);
+    }
+
+    if (!reg) {
+      return res.json({ success: true, message: "Region removed" });
+    }
+
+    // Unlink DRs & Vendors referencing this region
+    await prisma.dR.updateMany({
+      where: { regionId: reg.id },
+      data: { regionId: null },
+    }).catch(() => null);
+
+    await prisma.vendor.updateMany({
+      where: { regionId: reg.id },
+      data: { regionId: null },
+    }).catch(() => null);
+
+    // Delete region row from Supabase DB
+    await prisma.region.delete({
+      where: { id: reg.id },
+    });
+
+    console.log(`✓ Region "${reg.name}" (${reg.id}) deleted from DB`);
+    res.json({ success: true, message: `Region "${reg.name}" deleted from DB` });
   } catch (err) {
+    console.error("Delete region error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });

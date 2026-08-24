@@ -191,7 +191,13 @@ export default function Cart() {
                   onClick={() => setShowCouponsModal((v) => !v)}
                   className="text-[11px] font-bold text-brand-600 hover:underline cursor-pointer active:scale-95 transition-transform"
                 >
-                  View Offers ({AVAILABLE_COUPONS.length})
+                  View Offers ({
+                    availableCouponsList.filter((c) => {
+                      const todayStr = new Date().toISOString().split("T")[0];
+                      const isExpired = c.expiryDate && c.expiryDate < todayStr;
+                      return c.isActive !== false && !isExpired;
+                    }).length
+                  })
                 </button>
               </div>
 
@@ -228,15 +234,21 @@ export default function Cart() {
               {/* Quick Click Coupon */}
               {!appliedCoupon && (
                 <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  {AVAILABLE_COUPONS.map((c) => (
-                    <button
-                      key={c.code}
-                      onClick={() => handleApplyCoupon(c.code)}
-                      className="bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg active:scale-[0.98] transition-all cursor-pointer shadow-2xs"
-                    >
-                      🏷️ {c.code} (Save ₹{c.discountAmount})
-                    </button>
-                  ))}
+                  {availableCouponsList
+                    .filter((c) => {
+                      const todayStr = new Date().toISOString().split("T")[0];
+                      const isExpired = c.expiryDate && c.expiryDate < todayStr;
+                      return c.isActive !== false && !isExpired;
+                    })
+                    .map((c) => (
+                      <button
+                        key={c.code}
+                        onClick={() => handleApplyCoupon(c.code)}
+                        className="bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg active:scale-[0.98] transition-all cursor-pointer shadow-2xs"
+                      >
+                        🏷️ {c.code} (Save ₹{c.discountAmount})
+                      </button>
+                    ))}
                 </div>
               )}
             </div>

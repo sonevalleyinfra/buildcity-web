@@ -12,8 +12,18 @@ const AVAILABLE_COUPONS = [
 ];
 
 export default function Cart() {
-  const { items, updateQty, removeItem, subtotal, mrpTotal } = useCart();
-  const { coupons: adminCoupons = [] } = useAdmin();
+  const { 
+    items, 
+    updateQty, 
+    removeItem, 
+    subtotal, 
+    mrpTotal,
+    hasRegionMismatch,
+    cartRegionName,
+    currentRegionName,
+    updateCartToCurrentRegion,
+  } = useCart();
+  const { coupons: adminCoupons = [], products = [] } = useAdmin();
   const navigate = useNavigate();
 
   // Live DB Coupons state
@@ -93,10 +103,10 @@ export default function Cart() {
     setCouponError("");
   };
 
-  const mrpDiscount = mrpTotal - subtotal;
+  const deliveryCharge = subtotal >= 999 ? 0 : 49;
   const couponDiscount = appliedCoupon ? appliedCoupon.discountAmount : 0;
-  const deliveryCharge = subtotal >= 999 || items.length === 0 ? 0 : 49;
-  const total = Math.max(0, subtotal - couponDiscount + deliveryCharge);
+  const total = Math.max(0, subtotal + deliveryCharge - couponDiscount);
+  const mrpDiscount = Math.max(0, mrpTotal - subtotal);
 
   if (items.length === 0) {
     return (
@@ -135,6 +145,39 @@ export default function Cart() {
             </span>
           )}
         </div>
+
+        {/* 📍 REGION MISMATCH & PRICE RECALCULATION BANNER */}
+        {hasRegionMismatch && (
+          <div className="bg-amber-50 border-2 border-amber-300/80 rounded-2xl p-4.5 mb-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in duration-200">
+            <div className="flex items-start gap-3">
+              <div className="bg-amber-100 text-amber-900 p-2.5 rounded-xl shrink-0 text-lg font-bold">
+                📍
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-black text-amber-950 uppercase tracking-wider">
+                    District Region Changed to {currentRegionName}
+                  </h4>
+                  <span className="bg-amber-200/80 text-amber-900 text-[10px] font-extrabold px-2 py-0.5 rounded-md">
+                    Price Update Available
+                  </span>
+                </div>
+                <p className="text-xs font-bold text-amber-800 mt-1">
+                  Cart items were added in <span className="underline font-black">{cartRegionName}</span>. Prices & district supplier rates vary for {currentRegionName}.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                updateCartToCurrentRegion(products);
+                alert(`Cart prices and vendor listings successfully updated for ${currentRegionName}!`);
+              }}
+              className="w-full sm:w-auto bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-[0.98] text-white text-xs font-black px-4.5 py-2.5 rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+            >
+              🔄 Update Cart Prices to {currentRegionName}
+            </button>
+          </div>
+        )}
 
         <div className="grid md:grid-cols-3 gap-6">
           {/* Cart Items List */}

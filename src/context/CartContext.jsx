@@ -31,22 +31,6 @@ export function CartProvider({ children }) {
     }
   }, [cartStorageKey]);
 
-  // region change hone par cart price auto refresh
-  useEffect(() => {
-    if (region && items.length > 0) {
-      setItems((prev) =>
-        prev.map((i) => {
-          const base = i.basePrice || i.price;
-          return {
-            ...i,
-            basePrice: base,
-            price: Math.round(base * (region.priceFactor || 1)),
-          };
-        })
-      );
-    }
-  }, [region?.id]);
-
   // Persist cart items to user-specific storage key
   useEffect(() => {
     if (cartStorageKey) {
@@ -60,12 +44,27 @@ export function CartProvider({ children }) {
       const existing = prev.find((i) => i.id === product.id);
       const base = product.basePrice || product.price;
       const calculatedPrice = Math.round(base * (region?.priceFactor || 1));
+      const currentRegId = region?.id || "varanasi";
+      const currentRegName = region?.name || "Varanasi";
+
       if (existing) {
         return prev.map((i) =>
-          i.id === product.id ? { ...i, qty: i.qty + qty } : i
+          i.id === product.id
+            ? { ...i, qty: i.qty + qty, addedRegionId: currentRegId, addedRegionName: currentRegName }
+            : i
         );
       }
-      return [...prev, { ...product, basePrice: base, price: calculatedPrice, qty }];
+      return [
+        ...prev,
+        {
+          ...product,
+          basePrice: base,
+          price: calculatedPrice,
+          qty,
+          addedRegionId: currentRegId,
+          addedRegionName: currentRegName,
+        },
+      ];
     });
   };
 
@@ -80,9 +79,59 @@ export function CartProvider({ children }) {
 
   const clearCart = () => setItems([]);
 
+  // Detect if current selected region differs from cart items' added region
+  const firstItemWithRegion = items.find((i) => i.addedRegionId);
+  const cartRegionId = firstItemWithRegion?.addedRegionId;
+  const cartRegionName = firstItemWithRegion?.addedRegionName || "Varanasi";
+
+  const hasRegionMismatch =
+    items.length > 0 &&
+    Boolean(cartRegionId) &&
+    Boolean(region?.id) &&
+    cartRegionId.toLowerCase() !== region.id.toLowerCase();
+
+  // Function to update cart prices according to the newly selected region
+  const updateCartToCurrentRegion = (allVendorListings = []) => {
+    if (!region) return;
+
+    setItems((prev) =>
+      prev.map((i) => {
+        const base = i.basePrice || i.price;
+        let newPrice = Math.round(base * (region.priceFactor || 1));
+        let newVendorId = i.vendorId;
+        let newVendorName = i.vendorName;
+
+        // Try to match vendor listing in new region if available
+        if (Array.isArray(allVendorListings) && allVendorListings.length > 0) {
+          const matchingListing = allVendorListings.find((l) => {
+            const matchProduct = l.masterProductId === i.masterProductId || l.name === i.name;
+            const listingReg = l.vendor?.region?.name || l.regionName || "";
+            return matchProduct && listingReg.toLowerCase().trim() === region.name.toLowerCase().trim();
+          });
+
+          if (matchingListing) {
+            newPrice = Number(matchingListing.price) || newPrice;
+            newVendorId = matchingListing.vendorId || newVendorId;
+            newVendorName = matchingListing.vendor?.shopName || matchingListing.vendorName || newVendorName;
+          }
+        }
+
+        return {
+          ...i,
+          basePrice: base,
+          price: newPrice,
+          vendorId: newVendorId,
+          vendorName: newVendorName,
+          addedRegionId: region.id,
+          addedRegionName: region.name,
+        };
+      })
+    );
+  };
+
   const count = items.reduce((sum, i) => sum + i.qty, 0);
   const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);
-  const mrpTotal = items.reduce((sum, i) => sum + i.mrp * i.qty, 0);
+  const mrpTotal = items.reduce((sum, i) => sum + (i.mrp || i.price) * i.qty, 0);
 
   return (
     <CartContext.Provider
@@ -95,6 +144,10 @@ export function CartProvider({ children }) {
         count,
         subtotal,
         mrpTotal,
+        hasRegionMismatch,
+        cartRegionName,
+        currentRegionName: region?.name || "Varanasi",
+        updateCartToCurrentRegion,
       }}
     >
       {children}

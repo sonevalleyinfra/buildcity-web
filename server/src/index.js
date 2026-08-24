@@ -730,18 +730,32 @@ app.post("/api/v1/categories", async (req, res) => {
 
 app.patch("/api/v1/categories/:id", async (req, res) => {
   try {
-    const { id } = req.params;
-    const { name, gstRate, productCount } = req.body;
+    const rawId = req.params.id;
+    const { name, gstRate, productCount, isActive } = req.body;
+
+    let cat = await prisma.category.findUnique({ where: { id: rawId } }).catch(() => null);
+    if (!cat) {
+      cat = await prisma.category.findFirst({
+        where: { OR: [{ id: rawId }, { name: { equals: rawId.trim(), mode: "insensitive" } }] },
+      }).catch(() => null);
+    }
+
+    if (!cat) {
+      return res.status(404).json({ error: "Category not found" });
+    }
+
     const updated = await prisma.category.update({
-      where: { id },
+      where: { id: cat.id },
       data: {
         ...(name ? { name: name.trim() } : {}),
         ...(gstRate !== undefined ? { gstRate: Number(gstRate) } : {}),
         ...(productCount !== undefined ? { productCount: Number(productCount) } : {}),
+        ...(isActive !== undefined ? { isActive: Boolean(isActive) } : {}),
       },
     });
     res.json(updated);
   } catch (err) {
+    console.error("Patch category error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -822,10 +836,22 @@ app.post("/api/v1/regions", async (req, res) => {
 
 app.patch("/api/v1/regions/:id", async (req, res) => {
   try {
-    const { id } = req.params;
+    const rawId = req.params.id;
     const { name, state, baseDeliveryCharge, isActive } = req.body;
+
+    let reg = await prisma.region.findUnique({ where: { id: rawId } }).catch(() => null);
+    if (!reg) {
+      reg = await prisma.region.findFirst({
+        where: { OR: [{ id: rawId }, { name: { equals: rawId.trim(), mode: "insensitive" } }] },
+      }).catch(() => null);
+    }
+
+    if (!reg) {
+      return res.status(404).json({ error: "Region not found" });
+    }
+
     const updated = await prisma.region.update({
-      where: { id },
+      where: { id: reg.id },
       data: {
         ...(name ? { name: name.trim() } : {}),
         ...(state ? { state } : {}),
@@ -835,6 +861,7 @@ app.patch("/api/v1/regions/:id", async (req, res) => {
     });
     res.json(updated);
   } catch (err) {
+    console.error("Patch region error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });

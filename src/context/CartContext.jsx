@@ -90,43 +90,78 @@ export function CartProvider({ children }) {
     Boolean(region?.id) &&
     cartRegionId.toLowerCase() !== region.id.toLowerCase();
 
-  // Function to update cart prices according to the newly selected region
-  const updateCartToCurrentRegion = (allVendorListings = []) => {
-    if (!region) return;
+  // Function to update cart prices directly from live database listings in current region
+  const updateCartToCurrentRegion = async (passedListings = []) => {
+    if (!region) return { updatedCount: 0, removedItems: [] };
 
-    setItems((prev) =>
-      prev.map((i) => {
-        const base = i.basePrice || i.price;
-        let newPrice = Math.round(base * (region.priceFactor || 1));
-        let newVendorId = i.vendorId;
-        let newVendorName = i.vendorName;
+    let listings = passedListings;
+    try {
+      const syncRes = await fetch(`${API_BASE_URL}/api/v1/cloud-sync`).then((r) => r.json()).catch(() => null);
+      if (syncRes && Array.isArray(syncRes.listings) && syncRes.listings.length > 0) {
+        listings = syncRes.listings;
+      }
+    } catch (err) {
+      console.warn("Fetch live cloud sync listings note:", err.message);
+    }
 
-        // Try to match vendor listing in new region if available
-        if (Array.isArray(allVendorListings) && allVendorListings.length > 0) {
-          const matchingListing = allVendorListings.find((l) => {
-            const matchProduct = l.masterProductId === i.masterProductId || l.name === i.name;
-            const listingReg = l.vendor?.region?.name || l.regionName || "";
-            return matchProduct && listingReg.toLowerCase().trim() === region.name.toLowerCase().trim();
-          });
+    const removedItems = [];
+    const updatedItems = [];
 
-          if (matchingListing) {
-            newPrice = Number(matchingListing.price) || newPrice;
-            newVendorId = matchingListing.vendorId || newVendorId;
-            newVendorName = matchingListing.vendor?.shopName || matchingListing.vendorName || newVendorName;
-          }
-        }
+    items.forEach((i) => {
+      // Find matching approved vendor listing in new region
+      const matchingListing = Array.isArray(listings)
+        ? listings.find((l) => {
+            const isApproved = (l.approvalStatus || "APPROVED") === "APPROVED";
+            const matchProduct =
+              (l.masterProductId && i.masterProductId && l.masterProductId === i.masterProductId) ||
+              (l.id && i.id && l.id === i.id) ||
+              (l.name && i.name && l.name.toLowerCase().trim() === i.name.toLowerCase().trim());
 
-        return {
+            const listingRegionName = l.vendor?.region?.name || l.regionName || "";
+            const listingRegionId = l.vendor?.region?.id || l.regionId || "";
+
+            const matchRegion =
+              (listingRegionName && listingRegionName.toLowerCase().trim() === region.name.toLowerCase().trim()) ||
+              (listingRegionId && listingRegionId.toLowerCase().trim() === region.id.toLowerCase().trim());
+
+            return isApproved && matchProduct && matchRegion;
+          })
+        : null;
+
+      if (matchingListing) {
+        // Real price from live database in the new region
+        const realPrice = Number(matchingListing.price) || i.price;
+        const realVendorId = matchingListing.vendorId || i.vendorId;
+        const realVendorName = matchingListing.vendor?.shopName || matchingListing.vendorName || i.vendorName;
+
+        updatedItems.push({
           ...i,
-          basePrice: base,
-          price: newPrice,
-          vendorId: newVendorId,
-          vendorName: newVendorName,
+          price: realPrice,
+          vendorId: realVendorId,
+          vendorName: realVendorName,
           addedRegionId: region.id,
           addedRegionName: region.name,
-        };
-      })
-    );
+        });
+      } else {
+        // Check if master catalog fallback or price factor applies
+        if (i.basePrice || i.isMasterProduct) {
+          const base = i.basePrice || i.price;
+          const calculatedPrice = Math.round(base * (region.priceFactor || 1));
+          updatedItems.push({
+            ...i,
+            price: calculatedPrice,
+            addedRegionId: region.id,
+            addedRegionName: region.name,
+          });
+        } else {
+          // Product is NOT sold by any supplier in this new region -> remove from cart
+          removedItems.push(i.name);
+        }
+      }
+    });
+
+    setItems(updatedItems);
+    return { updatedCount: updatedItems.length, removedItems };
   };
 
   const count = items.reduce((sum, i) => sum + i.qty, 0);

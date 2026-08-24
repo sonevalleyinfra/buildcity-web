@@ -9,7 +9,7 @@ import { useAddresses } from "../../context/AddressContext";
 import { API_BASE_URL } from "../../config/api";
 
 export default function Checkout() {
-  const { items, subtotal, mrpTotal = subtotal, clearCart } = useCart();
+  const { items, subtotal, mrpTotal = subtotal, clearCart, hasRegionMismatch } = useCart();
   const { placeOrder } = useOrders();
   const navigate = useNavigate();
   const { user } = useAuth();

@@ -365,13 +365,12 @@ export default function Categories() {
               </span>
             </div>
 
-            <div className="max-h-[640px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent rounded-2xl border border-slate-200/80 p-2 bg-slate-50/50">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {liveVendorProducts.map((p) => (
-                  <div
-                    key={p.id}
-                    className="bg-white border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between hover:border-brand-300 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200 group"
-                  >
+            <div className="flex gap-4 overflow-x-auto pb-3 pt-1 -mx-1 px-1 no-scrollbar scroll-smooth">
+              {liveVendorProducts.map((p) => (
+                <div
+                  key={p.id}
+                  className="bg-white border border-slate-200/90 rounded-2xl p-4 w-60 sm:w-64 shrink-0 flex flex-col justify-between hover:border-brand-300 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200 group"
+                >
                     <div>
                       <div className="relative h-36 rounded-xl overflow-hidden bg-slate-50 mb-3 border border-slate-200">
                         <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
@@ -419,7 +418,6 @@ export default function Categories() {
                     </div>
                   </div>
                 ))}
-              </div>
             </div>
           </section>
         )}
@@ -433,12 +431,12 @@ export default function Categories() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="flex gap-4 overflow-x-auto pb-3 pt-1 -mx-1 px-1 no-scrollbar scroll-smooth">
             {bestSelling.map((p) => {
               return (
                 <div
                   key={p.id}
-                  className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group"
+                  className="bg-white rounded-2xl border border-slate-200/90 p-4 w-60 sm:w-64 shrink-0 shadow-2xs hover:shadow-md hover:border-amber-400 hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200 flex flex-col justify-between group relative"
                 >
                   <div>
                     <div className="relative rounded-xl overflow-hidden bg-slate-50 mb-3 border border-slate-100">

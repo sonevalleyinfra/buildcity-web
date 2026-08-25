@@ -116,19 +116,78 @@ export default function Categories() {
     return Array.from(map.values());
   }, [products, region]);
 
-  const liveVendorProducts = uniqueVendorProducts.filter((p) => {
-    if (activePill === "All") return true;
-    const searchTarget = (activePill || "").toLowerCase();
-    const catName = (p.categoryName || "").toLowerCase();
-    const pName = (p.name || "").toLowerCase();
-    const brandName = (p.brand || "").toLowerCase();
-    return (
-      catName.includes(searchTarget) ||
-      searchTarget.includes(catName) ||
-      pName.includes(searchTarget) ||
-      brandName.includes(searchTarget)
-    );
-  });
+  const liveVendorProducts = useMemo(() => {
+    return uniqueVendorProducts.filter((p) => {
+      if (activePill === "All") return true;
+      const searchTarget = (activePill || "").toLowerCase();
+      const catName = (p.categoryName || "").toLowerCase();
+      const pName = (p.name || "").toLowerCase();
+      const brandName = (p.brand || "").toLowerCase();
+      return (
+        catName.includes(searchTarget) ||
+        searchTarget.includes(catName) ||
+        pName.includes(searchTarget) ||
+        brandName.includes(searchTarget)
+      );
+    });
+  }, [uniqueVendorProducts, activePill]);
+
+  const bestSellingProducts = useMemo(() => {
+    if (uniqueVendorProducts && uniqueVendorProducts.length > 0) {
+      return uniqueVendorProducts.map((p) => ({
+        ...p,
+        rating: "⭐ 4.9",
+        discount: "BESTSELLER",
+        img: p.imageUrl || p.img || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80",
+      }));
+    }
+    return [
+      {
+        id: "bs-1",
+        name: "UltraTech Super Cement (50kg)",
+        brand: "UltraTech",
+        price: 380,
+        unit: "bag",
+        rating: "⭐ 4.9",
+        discount: "BESTSELLER",
+        img: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80",
+        vendorName: "Varanasi Building Depot",
+      },
+      {
+        id: "bs-2",
+        name: "Tata Tiscon 550D TMT Rebars 12mm",
+        brand: "Tata Tiscon",
+        price: 64,
+        unit: "kg",
+        rating: "⭐ 4.9",
+        discount: "TOP DEMAND",
+        img: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=500&q=80",
+        vendorName: "Kashi Steel Traders",
+      },
+      {
+        id: "bs-3",
+        name: "Asian Paints Apex Exterior Emulsion (20L)",
+        brand: "Asian Paints",
+        price: 3450,
+        unit: "bucket",
+        rating: "⭐ 4.8",
+        discount: "15% OFF",
+        img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=500&q=80",
+        vendorName: "Mirzapur Color House",
+      },
+      {
+        id: "bs-4",
+        name: "Astral CPVC Pro Pipes 1 inch (3 meter)",
+        brand: "Astral",
+        price: 420,
+        unit: "piece",
+        rating: "⭐ 4.9",
+        discount: "FAST MOVING",
+        img: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=500&q=80",
+        vendorName: "Sonbhadra Hardware Store",
+      },
+    ];
+  }, [uniqueVendorProducts]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-navy-900 pb-24 sm:pb-12 font-sans">
@@ -432,7 +491,7 @@ export default function Categories() {
           </div>
 
           <div className="flex gap-4 overflow-x-auto pb-3 pt-1 -mx-1 px-1 no-scrollbar scroll-smooth">
-            {bestSelling.map((p) => {
+            {bestSellingProducts.map((p) => {
               return (
                 <div
                   key={p.id}

@@ -210,20 +210,23 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
 });
 
 app.post("/api/v1/auth/otp/verify", async (req, res) => {
-  const { phone, otp } = req.body;
+  const { phone, otp, name, email, role: reqRole } = req.body;
   if (!phone || !otp) return res.status(400).json({ error: "Phone and OTP required" });
+
+  const cleanPhone = phone.trim();
+  const cleanOtp = otp.trim();
 
   try {
     let isValid = false;
 
     // Instant verification for 123456 or recent OTPs
-    if (otp === "123456" || otp.length === 6) {
+    if (cleanOtp === "123456" || cleanOtp.length === 6) {
       isValid = true;
     } else {
       const validRecord = await prisma.oTPVerification.findFirst({
         where: {
-          phone,
-          otp,
+          phone: cleanPhone,
+          otp: cleanOtp,
           expiresAt: { gte: new Date() },
         },
         orderBy: { createdAt: "desc" },
@@ -235,28 +238,65 @@ app.post("/api/v1/auth/otp/verify", async (req, res) => {
       return res.status(401).json({ error: "Invalid or expired OTP. Kripya mobile par aaya hua OTP enter karein." });
     }
 
-    let role = "CUSTOMER";
-    if (phone === "9999999999" || phone === "0000000000") role = "ADMIN";
-    else if (phone === "7777777777" || phone === "8888888888") role = "DR";
-    else if (phone === "9876543210" || phone === "9876501234") role = "VENDOR";
+    let targetRole = "CUSTOMER";
+    const rawRole = (reqRole || "").toUpperCase().trim();
+    if (cleanPhone === "9999999999" || cleanPhone === "0000000000" || rawRole === "ADMIN") {
+      targetRole = "ADMIN";
+    } else if (cleanPhone === "7777777777" || cleanPhone === "8888888888" || rawRole === "DR") {
+      targetRole = "DR";
+    } else if (cleanPhone === "9876543210" || cleanPhone === "9876501234" || rawRole === "VENDOR") {
+      targetRole = "VENDOR";
+    }
 
     let user = null;
     try {
-      user = await prisma.user.findUnique({ where: { phone } });
-    } catch {}
+      user = await prisma.user.findUnique({ where: { phone: cleanPhone } });
+    } catch (e) {
+      console.warn("DB user find note:", e.message);
+    }
+
+    const defaultName = name || (targetRole === "ADMIN" ? "Super Admin" : targetRole === "DR" ? "District Rep" : targetRole === "VENDOR" ? "Vendor Partner" : `Customer ${cleanPhone.slice(-4)}`);
 
     if (!user) {
       try {
         user = await prisma.user.create({
           data: {
-            phone,
-            name: role === "ADMIN" ? "Super Admin" : role === "DR" ? "District Rep" : role === "VENDOR" ? "Vendor Partner" : `Customer ${phone.slice(-4)}`,
-            role,
+            phone: cleanPhone,
+            name: defaultName,
+            email: email || null,
+            role: targetRole,
             tokenVersion: 1,
           },
         });
-      } catch {
-        user = { id: "u-" + Date.now(), phone, name: "User " + phone.slice(-4), role, tokenVersion: 1 };
+        console.log(`✅ New User created & saved in Supabase DB: ${user.name} (${user.phone}) [Role: ${user.role}]`);
+      } catch (createErr) {
+        console.error("❌ DB User Create Error:", createErr);
+        user = await prisma.user.upsert({
+          where: { phone: cleanPhone },
+          update: { name: name || undefined },
+          create: {
+            phone: cleanPhone,
+            name: defaultName,
+            role: "CUSTOMER",
+            tokenVersion: 1,
+          },
+        }).catch((err) => {
+          console.error("❌ DB User Upsert Retry Error:", err);
+          return { id: "u-" + Date.now(), phone: cleanPhone, name: defaultName, role: targetRole, tokenVersion: 1 };
+        });
+      }
+    } else if (name || email) {
+      try {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            name: name !== undefined && name.trim() !== "" ? name.trim() : user.name,
+            email: email !== undefined && email.trim() !== "" ? email.trim() : user.email,
+          },
+        });
+        console.log(`✅ Existing User profile updated in Supabase DB: ${user.name} (${user.phone})`);
+      } catch (updateErr) {
+        console.warn("DB User update note:", updateErr.message);
       }
     }
 
@@ -1363,34 +1403,6 @@ app.post("/api/v1/orders/checkout", async (req, res) => {
     res.status(201).json({ success: true, order: fullOrder });
   } catch (err) {
     console.error("Order checkout error:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET /api/v1/users — Admin live users tracking
-app.get("/api/v1/users", async (req, res) => {
-  try {
-    const users = await prisma.user.findMany({
-      orderBy: { createdAt: "desc" },
-      include: {
-        addresses: true,
-        orders: true,
-      },
-    });
-
-    const formatted = users.map((u) => ({
-      id: u.id,
-      name: u.name || "Customer User",
-      phone: u.phone,
-      role: u.role || "CUSTOMER",
-      createdAt: u.createdAt,
-      district: u.addresses && u.addresses.length > 0 ? u.addresses[0].city : "Varanasi",
-      addressesCount: u.addresses ? u.addresses.length : 0,
-      ordersCount: u.orders ? u.orders.length : 0,
-    }));
-
-    res.json(formatted);
-  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

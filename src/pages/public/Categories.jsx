@@ -134,7 +134,7 @@ export default function Categories() {
 
   const bestSellingProducts = useMemo(() => {
     if (uniqueVendorProducts && uniqueVendorProducts.length > 0) {
-      return uniqueVendorProducts.map((p) => ({
+      return uniqueVendorProducts.slice(0, 4).map((p) => ({
         ...p,
         rating: "⭐ 4.9",
         discount: "BESTSELLER",

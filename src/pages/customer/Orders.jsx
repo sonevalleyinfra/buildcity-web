@@ -7,6 +7,7 @@ import { useAdmin } from "../../context/AdminContext";
 import Navbar from "../../components/Navbar";
 import RegionPicker from "../../components/RegionPicker";
 import NotificationPanel from "../../components/NotificationPanel";
+import { formatShortId } from "../../utils/formatId";
 
 const TABS = ["All", "Pending", "Processing", "Out for Delivery", "Delivered", "Cancelled"];
 
@@ -52,14 +53,14 @@ export default function Orders() {
   const customerOrders = useMemo(() => {
     if (!customerPhone && !customerId) return [];
     return orders.filter((o) => {
-      const oPhone = (o.userPhone || o.phone || o.customer?.phone || "").trim();
+      const oPhone = (o.userPhone || o.phone || o.customerPhone || o.customer?.phone || o.address?.phone || "").trim();
       const oUserId = o.userId || o.customerId || o.customer?.id;
 
-      if (customerPhone && oPhone) {
-        return oPhone === customerPhone;
+      if (customerId && oUserId && String(oUserId).toLowerCase() === String(customerId).toLowerCase()) {
+        return true;
       }
-      if (customerId && oUserId) {
-        return oUserId === customerId;
+      if (customerPhone && oPhone && oPhone === customerPhone) {
+        return true;
       }
       return false;
     });
@@ -223,7 +224,7 @@ export default function Orders() {
                         {order.items?.[0]?.name || order.items?.[0]?.productName || "Order Item"}
                         {order.items && order.items.length > 1 && ` + ${order.items.length - 1} more items`}
                       </h3>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Order ID: <strong className="font-mono text-brand-700 font-extrabold">{order.orderNumber || (order.id ? `#ORD-${order.id.slice(0, 8).toUpperCase()}` : "#ORD-NEW")}</strong></p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Order ID: <strong className="font-mono text-brand-700 font-extrabold">{formatShortId(order.id || order.orderNumber, "ORD")}</strong></p>
                     </div>
                   </div>
 

@@ -15,6 +15,15 @@ const emptyForm = {
 export default function Addresses() {
   const { addresses, addAddress, updateAddress, removeAddress, setDefault } =
     useAddresses();
+
+  const uniqueAddresses = Array.from(
+    new Map(
+      (addresses || []).map((a) => {
+        const key = `${(a.line || a.street || "").toLowerCase().trim()}_${(a.city || "").toLowerCase().trim()}_${(a.pincode || "").trim()}`;
+        return [key, a];
+      })
+    ).values()
+  );
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -152,7 +161,7 @@ export default function Addresses() {
           </form>
         )}
 
-        {addresses.length === 0 && !showForm ? (
+        {uniqueAddresses.length === 0 && !showForm ? (
           <div className="bg-white rounded-xl border border-dashed border-slate-300 p-12 text-center">
             <span className="text-4xl mb-3 inline-block">📍</span>
             <h3 className="font-bold text-navy-900 mb-1">No addresses saved</h3>
@@ -168,7 +177,7 @@ export default function Addresses() {
           </div>
         ) : (
           <div className="space-y-3">
-            {addresses.map((a) => (
+            {uniqueAddresses.map((a) => (
               <div
                 key={a.id}
                 className="bg-white rounded-xl border border-slate-200 p-4"

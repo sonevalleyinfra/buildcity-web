@@ -52,7 +52,9 @@ export default function RegionPicker({ trigger }) {
                       <div className="text-xs font-bold text-navy-900">
                         {r.name}
                       </div>
-                      <div className="text-[11px] font-medium text-slate-500 mt-0.5">{r.state}</div>
+                      <div className="text-[11px] font-medium text-slate-500 mt-0.5">
+                        {r.state} {r.baseDeliveryCharge ? `• Delivery Fee: ₹${r.baseDeliveryCharge}` : ""}
+                      </div>
                     </div>
                     {region.id === r.id && (
                       <span className="text-brand-600 text-xs font-extrabold bg-brand-100/80 px-2 py-0.5 rounded-full">✓ Active</span>

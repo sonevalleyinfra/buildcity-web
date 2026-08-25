@@ -4,6 +4,7 @@ import Navbar from "../../components/Navbar";
 import { useAuth } from "../../context/AuthContext";
 import { useOrders } from "../../context/OrderContext";
 import { useAddresses } from "../../context/AddressContext";
+import { formatShortId } from "../../utils/formatId";
 
 const accountLinks = [
   { label: "My District Orders", icon: "📋", to: "/orders", sub: "Track order status & history" },
@@ -13,7 +14,7 @@ const accountLinks = [
 
 const supportLinks = [
   { label: "24/7 District Support", icon: "🎧", sub: "Call or WhatsApp support team" },
-  { label: "About Build City", icon: "ℹ️", sub: "Platform terms & GST info" },
+  { label: "About Build City", icon: "ℹ️", sub: "Platform terms & company details" },
 ];
 
 export default function Profile() {
@@ -21,6 +22,18 @@ export default function Profile() {
   const { orders } = useOrders();
   const { addresses } = useAddresses();
   const navigate = useNavigate();
+
+  const customerPhone = (user?.phone || "").trim();
+  const customerId = user?.id;
+
+  const myOrders = orders.filter((o) => {
+    const oPhone = (o.userPhone || o.phone || o.customerPhone || o.customer?.phone || o.address?.phone || "").trim();
+    const oUserId = o.userId || o.customerId || o.customer?.id;
+
+    if (customerId && oUserId && String(oUserId).toLowerCase() === String(customerId).toLowerCase()) return true;
+    if (customerPhone && oPhone && oPhone === customerPhone) return true;
+    return false;
+  });
 
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ name: user?.name || "", email: user?.email || "" });
@@ -66,6 +79,7 @@ export default function Profile() {
                   {user?.name || "Customer Account"}
                 </h1>
                 <p className="text-slate-300 text-xs mt-1">📱 {user?.phone || "Phone verified"}</p>
+                <p className="text-slate-300 text-[11px] mt-0.5">🆔 Account ID: <strong className="font-mono text-amber-300 font-extrabold">{formatShortId(user?.id, "USR")}</strong></p>
                 {user?.email && <p className="text-slate-400 text-[11px]">✉️ {user.email}</p>}
               </div>
             </div>
@@ -128,7 +142,7 @@ export default function Profile() {
               <p className="text-[11px] font-medium text-slate-500 mt-0.5">Coupons Available</p>
             </div>
             <div className="bg-white rounded-2xl border border-slate-200 p-4 text-center shadow-xs">
-              <p className="text-lg font-black text-navy-900">{orders.length}</p>
+              <p className="text-lg font-black text-navy-900">{myOrders.length}</p>
               <p className="text-[11px] font-medium text-slate-500 mt-0.5">Total Orders</p>
             </div>
           </div>

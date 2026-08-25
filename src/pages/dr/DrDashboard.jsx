@@ -3,6 +3,7 @@ import Logo from "../../components/Logo";
 import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useOrders } from "../../context/OrderContext";
+import { formatShortId } from "../../utils/formatId";
 
 const PRESET_IMAGES = [
   { label: "Cement Bag", url: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80" },
@@ -15,18 +16,18 @@ const PRESET_IMAGES = [
 // District Representative (DR) Dashboard component — Ground Agent Portal
 export default function DrDashboard() {
   const { user, logout } = useAuth();
-  const { masterProducts = [], vendors = [], products = [], productsLoading, categories, regions, addVendor, updateVendor, removeVendor, addMasterProduct, updateMasterProduct, setVendorStatus, updateListingApprovalStatus } = useAdmin();
+  const { drs = [], masterProducts = [], vendors = [], products = [], productsLoading, categories, regions, addVendor, updateVendor, removeVendor, addMasterProduct, updateMasterProduct, setVendorStatus, updateListingApprovalStatus } = useAdmin();
   const { orders = [] } = useOrders();
 
   const [activeTab, setActiveTab] = useState("products");
   const [searchTerm, setSearchTerm] = useState("");
   const [listingFilter, setListingFilter] = useState("ALL");
 
-  // Modals state hai ye  (Naya Vendor ya Product banane ke liye)
+  // Modals state
   const [showVendorModal, setShowVendorModal] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
 
-  // Modals state  hai ye (Vendor ya Product edit karne ke liye)
+  // Editing state
   const [editingVendor, setEditingVendor] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
 
@@ -52,32 +53,54 @@ export default function DrDashboard() {
     imageUrl: PRESET_IMAGES[0].url,
   });
 
+  // Find current logged-in DR info dynamically from live DB drs list or user.drInfo
+  const currentDr = drs.find((d) => (d.phone || "").trim() === (user?.phone || "").trim() || d.userId === user?.id) || user?.drInfo || {};
   
-  const drInfo = user?.drInfo || {};
-  const districtName = drInfo.regionName || "Varanasi";
-  const drRegionId = drInfo.regionId || "r1";
+  // Find region object matching DR's assigned regionId or regionName
+  const drRegion = (regions || []).find((r) => r.id === currentDr.regionId || r.id === currentDr.region?.id || r.name?.toLowerCase().trim() === (currentDr.regionName || currentDr.region?.name || "").toLowerCase().trim());
 
-  // DR Assigned Region Orders Filter
-  const districtOrders = orders.filter((o) => {
-    const oDist = (o.districtName || o.address?.city || "Varanasi").toLowerCase();
-    return oDist.includes(districtName.toLowerCase()) || districtName.toLowerCase().includes(oDist);
-  });
+  const districtName = drRegion ? drRegion.name : (currentDr.regionName || currentDr.region?.name || user?.drInfo?.regionName || "Varanasi");
+  const drRegionId = drRegion ? drRegion.id : (currentDr.regionId || currentDr.region?.id || "r1");
 
+  // DR Assigned Region Vendors Filter
   const districtVendors = vendors.filter((v) => {
-    if (!user || user.role === "admin") return true;
-    return (
-      v.regionId === drRegionId ||
-      v.regionName?.toLowerCase() === districtName.toLowerCase() ||
-      v.addedByDr?.toLowerCase().includes("dr") ||
-      v.addedByDr?.toLowerCase().includes((user?.name || "").toLowerCase()) ||
-      true
-    );
+    if (!user) return true;
+    if (user.role === "admin") return true;
+
+    const matchesRegionId = v.regionId && drRegionId && v.regionId === drRegionId;
+    const matchesRegionName = v.regionName && districtName && v.regionName.toLowerCase().trim() === districtName.toLowerCase().trim();
+    const matchesDistrictName = v.districtName && districtName && v.districtName.toLowerCase().trim() === districtName.toLowerCase().trim();
+    const matchesAddedBy = v.addedByDr && user?.name && v.addedByDr.toLowerCase().includes(user.name.toLowerCase());
+
+    return matchesRegionId || matchesRegionName || matchesDistrictName || matchesAddedBy;
   });
 
+  // DR Assigned Region Products Filter
   const districtProducts = products.filter((p) => {
+    if (!user) return true;
+    if (user.role === "admin") return true;
     const belongsToDistrictVendor = districtVendors.some((v) => v.id === p.vendorId);
-    const addedByDr = p.addedBy?.toLowerCase().includes("dr") || p.addedBy?.toLowerCase().includes(user?.name?.toLowerCase() || "");
-    return belongsToDistrictVendor || addedByDr || true;
+    const addedByDr = p.addedBy?.toLowerCase().includes("dr") || (user?.name && p.addedBy?.toLowerCase().includes(user.name.toLowerCase()));
+    return belongsToDistrictVendor || addedByDr;
+  });
+
+  // DR Assigned Region Orders Filter (Strictly filter orders belonging to DR's jurisdiction)
+  const districtOrders = orders.filter((o) => {
+    if (!user) return true;
+    if (user.role === "admin") return true;
+
+    // 1. Order explicit district or city matching DR's assigned district name
+    const orderCity = (o.districtName || o.address?.city || o.address?.district || "").toLowerCase().trim();
+    const matchesCity = orderCity && (orderCity.includes(districtName.toLowerCase().trim()) || districtName.toLowerCase().trim().includes(orderCity));
+
+    // 2. Order regionId matching assigned regionId
+    const matchesRegionId = (o.regionId || o.address?.regionId) && drRegionId && (o.regionId === drRegionId || o.address?.regionId === drRegionId);
+
+    // 3. Vendor fulfilling the order item belongs to this DR's district
+    const orderVendorIds = (o.items || []).map((i) => i.vendorId).filter(Boolean);
+    const matchesVendor = orderVendorIds.some((vId) => districtVendors.some((v) => v.id === vId));
+
+    return matchesCity || matchesRegionId || matchesVendor;
   });
 
   // Filtered by search
@@ -440,7 +463,7 @@ export default function DrDashboard() {
                             <div>
                               <div className="flex items-center gap-1.5">
                                 <span className="bg-navy-900 text-white font-mono text-[9px] font-bold px-1.5 py-0.5 rounded">
-                                  ID: #{p.id}
+                                  {formatShortId(p.id, "PRD")}
                                 </span>
                                 <p className="font-bold text-navy-900">{p.name}</p>
                               </div>
@@ -754,22 +777,69 @@ export default function DrDashboard() {
                           </td>
                           <td className="py-3.5 px-4 text-right">
                             <div className="flex items-center justify-end gap-2">
-                              {st !== "APPROVED" && (
-                                <button
-                                  onClick={() => updateListingApprovalStatus(p.id, "APPROVED")}
-                                  className="bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold text-[11px] px-3 py-1.5 rounded-lg transition-all duration-200 cursor-pointer shadow-2xs"
-                                >
-                                  ✓ Approve
-                                </button>
-                              )}
-                              {st !== "REJECTED" && (
-                                <button
-                                  onClick={() => updateListingApprovalStatus(p.id, "REJECTED")}
-                                  className="bg-rose-50 text-rose-700 border border-rose-200/80 hover:bg-rose-100 active:scale-[0.98] font-bold text-[11px] px-3 py-1.5 rounded-lg transition-all duration-200 cursor-pointer"
-                                >
-                                  ✕ Reject
-                                </button>
-                              )}
+                              <button
+                                disabled={busyListingId === p.id || st === "APPROVED"}
+                                onClick={async (e) => {
+                                  e.preventDefault();
+                                  if (busyListingId) return;
+                                  setBusyListingId(p.id);
+                                  try {
+                                    await updateListingApprovalStatus(p.id, "APPROVED");
+                                  } finally {
+                                    setTimeout(() => setBusyListingId(null), 300);
+                                  }
+                                }}
+                                className={`min-w-[95px] text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 select-none ${
+                                  st === "APPROVED"
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default opacity-90 pointer-events-none"
+                                    : busyListingId === p.id
+                                    ? "bg-emerald-600/90 text-white cursor-wait pointer-events-none"
+                                    : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs active:scale-[0.98] cursor-pointer"
+                                }`}
+                              >
+                                {busyListingId === p.id ? (
+                                  <>
+                                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    <span>...</span>
+                                  </>
+                                ) : st === "APPROVED" ? (
+                                  "✓ Approved"
+                                ) : (
+                                  "✓ Approve"
+                                )}
+                              </button>
+
+                              <button
+                                disabled={busyListingId === p.id || st === "REJECTED"}
+                                onClick={async (e) => {
+                                  e.preventDefault();
+                                  if (busyListingId) return;
+                                  setBusyListingId(p.id);
+                                  try {
+                                    await updateListingApprovalStatus(p.id, "REJECTED");
+                                  } finally {
+                                    setTimeout(() => setBusyListingId(null), 300);
+                                  }
+                                }}
+                                className={`min-w-[90px] text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 select-none ${
+                                  st === "REJECTED"
+                                    ? "bg-rose-50 text-rose-600 border border-rose-200 cursor-default opacity-90 pointer-events-none"
+                                    : busyListingId === p.id
+                                    ? "bg-rose-100 text-rose-700 cursor-wait pointer-events-none"
+                                    : "bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 active:scale-[0.98] cursor-pointer"
+                                }`}
+                              >
+                                {busyListingId === p.id ? (
+                                  <>
+                                    <span className="w-3 h-3 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
+                                    <span>...</span>
+                                  </>
+                                ) : st === "REJECTED" ? (
+                                  "✕ Rejected"
+                                ) : (
+                                  "✕ Reject"
+                                )}
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -820,6 +890,7 @@ export default function DrDashboard() {
                       ? ord.items.map((i) => `${i.productName || i.name} (x${i.quantity})`).join(", ")
                       : ord.items || "Order Items";
                     const custName = ord.customer?.name || ord.customer || "Customer";
+                    const orderDistrict = ord.districtName || ord.address?.city || ord.address?.district || districtName;
 
                     return (
                       <tr key={ord.id} className="hover:bg-slate-50/80 transition-colors duration-150">
@@ -830,7 +901,7 @@ export default function DrDashboard() {
                         </td>
                         <td className="py-3.5 px-4">
                           <span className="bg-amber-50 text-amber-700 font-bold px-2 py-0.5 rounded text-[10px] border border-amber-200/80">
-                            📍 {ord.districtName || districtName}
+                            📍 {orderDistrict}
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-slate-600 max-w-xs">{itemsSummary}</td>

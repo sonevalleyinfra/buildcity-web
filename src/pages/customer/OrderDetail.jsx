@@ -2,6 +2,7 @@ import { useParams, Link, Navigate } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import BottomNav from "../../components/BottomNav";
 import { useOrders } from "../../context/OrderContext";
+import { formatShortId } from "../../utils/formatId";
 
 const STATUS_MAP = {
   PENDING: { label: "Pending", color: "bg-amber-50 text-amber-700 border-amber-200" },
@@ -52,7 +53,7 @@ export default function OrderDetail() {
         <div className="bg-white rounded-xl border border-slate-200 p-4 mb-5 shadow-2xs">
           <div className="flex items-center justify-between mb-1">
             <h1 className="text-lg font-bold text-navy-900 flex items-center gap-2">
-              Order #{order.id?.slice(0, 8) || "ORD"}
+              Order {formatShortId(order.id, "ORD")}
               <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${statusInfo.color}`}>
                 {statusInfo.label}
               </span>

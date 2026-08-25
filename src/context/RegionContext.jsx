@@ -4,50 +4,84 @@ import { API_BASE_URL } from "../config/api";
 const RegionContext = createContext(null);
 const STORAGE_KEY = "buildcity_region";
 
-export const DEFAULT_REGIONS = [
-  { id: "varanasi", name: "Varanasi", state: "Uttar Pradesh", priceFactor: 1 },
-  { id: "mirzapur", name: "Mirzapur", state: "Uttar Pradesh", priceFactor: 1.08 },
-  { id: "prayagraj", name: "Prayagraj", state: "Uttar Pradesh", priceFactor: 1.05 },
-  { id: "jaunpur", name: "Jaunpur", state: "Uttar Pradesh", priceFactor: 1.1 },
-];
-
 export function RegionProvider({ children }) {
-  const [regions, setRegions] = useState(DEFAULT_REGIONS);
-  const [region, setRegionState] = useState(DEFAULT_REGIONS[0]);
+  const [regions, setRegions] = useState([]);
+  const [region, setRegionState] = useState(() => {
+    return { id: "default", name: "Varanasi", state: "Uttar Pradesh", baseDeliveryCharge: 49, priceFactor: 1 };
+  });
 
-  // DB se live regions fetch karo
-  useEffect(() => {
-    const loadDbRegions = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/v1/regions`);
-        if (res.ok) {
-          const dbRegs = await res.json();
-          if (Array.isArray(dbRegs) && dbRegs.length > 0) {
-            const formatted = dbRegs.map((r, index) => ({
-              id: r.id || r.name.toLowerCase(),
+  // Fetch live active regions directly from Supabase Database
+  const loadDbRegions = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/regions`);
+      if (res.ok) {
+        const dbRegs = await res.json();
+        if (Array.isArray(dbRegs)) {
+          // Filter only ACTIVE regions from DB
+          const activeRegs = dbRegs
+            .filter((r) => r.isActive !== false)
+            .map((r) => ({
+              id: r.id,
               name: r.name,
               state: r.state || "Uttar Pradesh",
-              priceFactor: index === 0 ? 1 : 1 + (index * 0.03),
+              baseDeliveryCharge: Number(r.baseDeliveryCharge) || 49,
+              priceFactor: 1,
             }));
-            setRegions(formatted);
-            const saved = localStorage.getItem(STORAGE_KEY);
-            const found = formatted.find((r) => r.id === saved || r.name.toLowerCase() === (saved || "").toLowerCase());
-            setRegionState(found || formatted[0]);
+
+          if (activeRegs.length > 0) {
+            setRegions(activeRegs);
+
+            // Update current selected region if saved in localStorage
+            const savedIdOrName = localStorage.getItem(STORAGE_KEY);
+            const found = activeRegs.find(
+              (r) =>
+                r.id === savedIdOrName ||
+                r.name.toLowerCase().trim() === (savedIdOrName || "").toLowerCase().trim()
+            );
+
+            if (found) {
+              setRegionState(found);
+            } else if (activeRegs[0]) {
+              setRegionState(activeRegs[0]);
+              localStorage.setItem(STORAGE_KEY, activeRegs[0].id);
+            }
             return;
           }
         }
-      } catch (err) {
-        console.warn("Region fetch note:", err.message);
       }
-      const saved = localStorage.getItem(STORAGE_KEY);
-      const found = DEFAULT_REGIONS.find((r) => r.id === saved);
-      if (found) setRegionState(found);
-    };
+    } catch (err) {
+      console.warn("Live DB Region fetch note:", err.message);
+    }
+  };
+
+  useEffect(() => {
     loadDbRegions();
+
+    // 1. Listen for custom regions updated event, storage event, and tab focus
+    const handleUpdate = () => loadDbRegions();
+    window.addEventListener("buildcity_regions_updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    window.addEventListener("focus", handleUpdate);
+
+    // 2. Continuous background poll every 10 seconds to keep Home and Navbar 100% updated from DB
+    const interval = setInterval(() => {
+      loadDbRegions();
+    }, 10000);
+
+    return () => {
+      window.removeEventListener("buildcity_regions_updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+      window.removeEventListener("focus", handleUpdate);
+      clearInterval(interval);
+    };
   }, []);
 
   const setRegion = (regionId) => {
-    const found = regions.find((r) => r.id === regionId || r.name.toLowerCase() === (regionId || "").toLowerCase());
+    const found = regions.find(
+      (r) =>
+        r.id === regionId ||
+        r.name.toLowerCase().trim() === (regionId || "").toLowerCase().trim()
+    );
     if (found) {
       setRegionState(found);
       localStorage.setItem(STORAGE_KEY, found.id);

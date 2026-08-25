@@ -84,6 +84,8 @@ export function OrderProvider({ children }) {
       if (resData.success && resData.order) {
         const createdOrder = {
           id: resData.order.id,
+          userId: customerId || resData.order.userId || resData.order.customerId,
+          userPhone: resData.order.userPhone || address?.phone,
           date: resData.order.createdAt || new Date().toISOString(),
           status: resData.order.status || "Pending",
           districtName: districtName || resData.order.districtName || "Varanasi",

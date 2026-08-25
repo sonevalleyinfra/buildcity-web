@@ -81,7 +81,7 @@ export default function ProductDetail() {
         ],
         reviewsList: [
           { name: "Rahul S.", rating: 5, comment: "Genuine material, fast delivery in Varanasi site." },
-          { name: "Vikram M.", rating: 5, comment: "Original brand packaging with GST invoice." },
+          { name: "Vikram M.", rating: 5, comment: "Original brand packaging with official invoice." },
         ],
       };
     }

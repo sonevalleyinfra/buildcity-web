@@ -841,7 +841,7 @@ app.get("/api/v1/categories", async (req, res) => {
 
 app.post("/api/v1/categories", async (req, res) => {
   try {
-    const { name, gstRate, productCount } = req.body;
+    const { name, productCount } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ error: "Category name required" });
     }
@@ -852,7 +852,6 @@ app.post("/api/v1/categories", async (req, res) => {
     const newCategory = await prisma.category.create({
       data: {
         name: name.trim(),
-        gstRate: Number(gstRate) || 18.0,
         productCount: Number(productCount) || 0,
       },
     });
@@ -865,7 +864,7 @@ app.post("/api/v1/categories", async (req, res) => {
 app.patch("/api/v1/categories/:id", async (req, res) => {
   try {
     const rawId = req.params.id;
-    const { name, gstRate, productCount, isActive } = req.body;
+    const { name, productCount, isActive } = req.body;
 
     let cat = await prisma.category.findUnique({ where: { id: rawId } }).catch(() => null);
     if (!cat) {
@@ -882,7 +881,6 @@ app.patch("/api/v1/categories/:id", async (req, res) => {
       where: { id: cat.id },
       data: {
         ...(name ? { name: name.trim() } : {}),
-        ...(gstRate !== undefined ? { gstRate: Number(gstRate) } : {}),
         ...(productCount !== undefined ? { productCount: Number(productCount) } : {}),
         ...(isActive !== undefined ? { isActive: Boolean(isActive) } : {}),
       },

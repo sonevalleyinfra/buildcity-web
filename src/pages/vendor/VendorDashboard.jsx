@@ -3,6 +3,7 @@ import DashboardShell from "../../components/DashboardShell";
 import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useOrders } from "../../context/OrderContext";
+import { formatShortId } from "../../utils/formatId";
 
 // Vendor Dashboard component — Vendor partner ka main portal (Master Catalog selection, Custom Price & Stock setting, Orders management)
 export default function VendorDashboard() {
@@ -323,12 +324,12 @@ export default function VendorDashboard() {
                     const itemsSummary = Array.isArray(ord.items)
                       ? ord.items.map((i) => `${i.productName || i.name} (x${i.quantity})`).join(", ")
                       : ord.items || "Order Items";
-                    const custName = ord.customer?.name || ord.customer || "Customer";
+                    const custName = typeof ord.customer === "object" ? (ord.customer?.name || "Customer") : (typeof ord.customer === "string" && !ord.customer.includes("cmt") && !ord.customer.includes("usr") ? ord.customer : "Customer");
 
                     return (
                       <div key={ord.id} className="py-3 flex items-center justify-between gap-3 text-xs">
                         <div>
-                          <span className="font-bold text-navy-900">{ord.id.slice(0, 8).toUpperCase()}</span>
+                          <span className="font-bold text-navy-900">{formatShortId(ord.id, "ORD")}</span>
                           <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-bold border bg-blue-50 text-blue-700 border-blue-200">
                             {ord.status || "Pending"}
                           </span>
@@ -560,7 +561,7 @@ export default function VendorDashboard() {
                       cityAddr = ord.districtName || ord.regionName || "Mirzapur";
                     }
 
-                    const formattedOrderId = ord.orderNumber || (ord.id ? `#ORD-${ord.id.slice(0, 8).toUpperCase()}` : "#ORD-NEW");
+                    const formattedOrderId = formatShortId(ord.id || ord.orderNumber, "ORD");
 
                     return (
                       <tr key={ord.id} className="hover:bg-slate-50/80 transition-colors duration-150">

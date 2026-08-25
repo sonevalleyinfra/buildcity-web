@@ -7,11 +7,11 @@ const seedDrs = [];
 const seedVendors = [];
 
 const seedCategories = [
-  { id: "c1", name: "Cement", gstRate: 28, productCount: 120, isActive: true },
-  { id: "c2", name: "Paints", gstRate: 18, productCount: 150, isActive: true },
-  { id: "c3", name: "Steel", gstRate: 18, productCount: 100, isActive: true },
-  { id: "c4", name: "Plumbing", gstRate: 18, productCount: 80, isActive: true },
-  { id: "c5", name: "Electrical", gstRate: 18, productCount: 120, isActive: true },
+  { id: "c1", name: "Cement", productCount: 120, isActive: true },
+  { id: "c2", name: "Paints", productCount: 150, isActive: true },
+  { id: "c3", name: "Steel", productCount: 100, isActive: true },
+  { id: "c4", name: "Plumbing", productCount: 80, isActive: true },
+  { id: "c5", name: "Electrical", productCount: 120, isActive: true },
 ];
 
 const seedRegions = [];
@@ -174,7 +174,6 @@ export function AdminProvider({ children }) {
         const formattedCats = categoriesRes.map((c) => ({
           id: c.id,
           name: c.name,
-          gstRate: Number(c.gstRate) || 18,
           productCount: c.productCount || 0,
           isActive: c.isActive !== false,
         }));
@@ -413,7 +412,6 @@ export function AdminProvider({ children }) {
     const newCat = {
       id: "c-" + Date.now(),
       name: categoryData.name,
-      gstRate: Number(categoryData.gstRate) || 18,
       productCount: 0,
       isActive: true,
     };

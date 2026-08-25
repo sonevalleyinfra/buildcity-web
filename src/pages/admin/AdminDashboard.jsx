@@ -92,7 +92,7 @@ export default function AdminDashboard() {
   // Forms
   const [drForm, setDrForm] = useState({ name: "", phone: "", regionId: "" });
   const [vendorForm, setVendorForm] = useState({ shopName: "", ownerName: "", phone: "", regionId: "", commissionRate: 10 });
-  const [catForm, setCatForm] = useState({ name: "", gstRate: 18 });
+  const [catForm, setCatForm] = useState({ name: "" });
   const [regionForm, setRegionForm] = useState({ name: "", state: "Uttar Pradesh", baseDeliveryCharge: 49 });
   const [couponForm, setCouponForm] = useState({
     code: "",
@@ -272,12 +272,16 @@ export default function AdminDashboard() {
     alert("Product details updated!");
   };
 
-  const handleAddCategory = (e) => {
+  const handleAddCategory = async (e) => {
     e.preventDefault();
     if (!catForm.name.trim()) return;
-    addCategory({ name: catForm.name, gstRate: Number(catForm.gstRate) });
-    setCatForm({ name: "", gstRate: 18 });
-    setShowCatForm(false);
+    try {
+      await addCategory({ name: catForm.name });
+      setCatForm({ name: "" });
+      setShowCatForm(false);
+    } catch (err) {
+      alert("Error adding category: " + (err.message || err));
+    }
   };
 
   const [isSubmittingCat, setIsSubmittingCat] = useState(false);
@@ -1252,13 +1256,6 @@ export default function AdminDashboard() {
                   onChange={(e) => setCatForm({ ...catForm, name: e.target.value })}
                   className="bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 flex-1"
                 />
-                <input
-                  type="number"
-                  placeholder="GST Rate % (e.g. 18)"
-                  value={catForm.gstRate}
-                  onChange={(e) => setCatForm({ ...catForm, gstRate: e.target.value })}
-                  className="bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 w-32"
-                />
                 <button type="submit" className="bg-brand-500 text-white text-xs font-bold px-4 py-2 rounded-xl">Save</button>
               </form>
             )}
@@ -1288,9 +1285,6 @@ export default function AdminDashboard() {
                         </div>
                         <p className="text-xs text-slate-500 mt-1">{realCount} products listed</p>
                       </div>
-                      <span className="bg-brand-50 text-brand-700 text-xs font-bold px-2.5 py-1 rounded-full border border-brand-200 shrink-0">
-                        {c.gstRate || 18}% GST
-                      </span>
                     </div>
 
                     <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100">
@@ -1849,15 +1843,6 @@ export default function AdminDashboard() {
                   required
                   value={editingCategory.name}
                   onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">GST Rate (%)</label>
-                <input
-                  type="number"
-                  value={editingCategory.gstRate}
-                  onChange={(e) => setEditingCategory({ ...editingCategory, gstRate: e.target.value })}
                   className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
                 />
               </div>

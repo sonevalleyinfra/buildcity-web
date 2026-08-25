@@ -1,7 +1,7 @@
 export default function Logo({ variant = "dark", size = "md" }) {
   const textColor = variant === "light" ? "text-white" : "text-navy-900";
   const subColor = variant === "light" ? "text-white/70" : "text-slate-500";
-  const iconColor = variant === "light" ? "#FFFFFF" : "#1E5FD9";
+  const iconColor = variant === "light" ? "#FFFFFF" : "#EA580C";
 
   const sizes = {
     sm: { icon: 22, title: "text-lg", sub: "text-[10px]" },

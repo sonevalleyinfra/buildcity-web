@@ -18,15 +18,15 @@ const categoryTiles = [
 ];
 
 const brands = [
-  { name: "UltraTech", category: "Cement", short: "UltraTech", icon: "🏗️", color: "#F59E0B" },
-  { name: "Asian Paints", category: "Paints", short: "Asian Paints", icon: "🎨", color: "#1E5FD9" },
-  { name: "Tata Tiscon", category: "Steel 550D", short: "Tata Tiscon", icon: "⚙️", color: "#0F172A" },
-  { name: "Ambuja", category: "Waterproof", short: "Ambuja", icon: "🛡️", color: "#16A34A" },
-  { name: "Astral Pipes", category: "Plumbing", short: "Astral", icon: "🚰", color: "#0EA5E9" },
-  { name: "Finolex", category: "Electrical", short: "Finolex", icon: "⚡", color: "#DC2626" },
-  { name: "Berger", category: "Coatings", short: "Berger", icon: "🖌️", color: "#9333EA" },
-  { name: "Havells", category: "Switches", short: "Havells", icon: "💡", color: "#2563EB" },
-  { name: "Kajaria", category: "Ceramics", short: "Kajaria", icon: "🧱", color: "#D97706" },
+  { name: "UltraTech", category: "Cement", short: "UltraTech", logo: "https://www.google.com/s2/favicons?domain=ultratechcement.com&sz=128", logoAlt: "https://logo.clearbit.com/ultratechcement.com", initials: "UT", color: "#D97706", bg: "#FEF3C7" },
+  { name: "Asian Paints", category: "Paints", short: "Asian Paints", logo: "https://www.google.com/s2/favicons?domain=asianpaints.com&sz=128", logoAlt: "https://logo.clearbit.com/asianpaints.com", initials: "AP", color: "#DC2626", bg: "#FEE2E2" },
+  { name: "Tata Tiscon", category: "Steel 550D", short: "Tata Tiscon", logo: "https://www.google.com/s2/favicons?domain=tatatiscon.co.in&sz=128", logoAlt: "https://logo.clearbit.com/tatatiscon.co.in", initials: "TT", color: "#0284C7", bg: "#E0F2FE" },
+  { name: "Ambuja", category: "Waterproof", short: "Ambuja", logo: "https://www.google.com/s2/favicons?domain=ambujacement.com&sz=128", logoAlt: "https://logo.clearbit.com/ambujacement.com", initials: "AC", color: "#16A34A", bg: "#DCFCE7" },
+  { name: "Astral Pipes", category: "Plumbing", short: "Astral", logo: "https://www.google.com/s2/favicons?domain=astralpipes.com&sz=128", logoAlt: "https://logo.clearbit.com/astralpipes.com", initials: "AP", color: "#0EA5E9", bg: "#E0F2FE" },
+  { name: "Finolex", category: "Electrical", short: "Finolex", logo: "https://www.google.com/s2/favicons?domain=finolex.com&sz=128", logoAlt: "https://logo.clearbit.com/finolex.com", initials: "FC", color: "#E11D48", bg: "#FFE4E6" },
+  { name: "Berger", category: "Coatings", short: "Berger", logo: "https://www.google.com/s2/favicons?domain=bergerpaints.com&sz=128", logoAlt: "https://logo.clearbit.com/bergerpaints.com", initials: "BP", color: "#9333EA", bg: "#F3E8FF" },
+  { name: "Havells", category: "Switches", short: "Havells", logo: "https://www.google.com/s2/favicons?domain=havells.com&sz=128", logoAlt: "https://logo.clearbit.com/havells.com", initials: "HI", color: "#2563EB", bg: "#DBEAFE" },
+  { name: "Kajaria", category: "Ceramics", short: "Kajaria", logo: "https://www.google.com/s2/favicons?domain=kajariaceramics.com&sz=128", logoAlt: "https://logo.clearbit.com/kajariaceramics.com", initials: "KC", color: "#B45309", bg: "#FEF3C7" },
 ];
 
 const services = [
@@ -43,7 +43,7 @@ const banners = [
   {
     tag: "WHOLESALE PRICES",
     title: ["Direct From", "Verified Suppliers"],
-    img: "https://images.unsplash.com/photo-1541888946425-d0fbb186a5b2?auto=format&fit=crop&w=1200&q=80",
+    img: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=1200&q=80",
   },
   {
     tag: "100% CERTIFIED MATERIALS",
@@ -184,8 +184,8 @@ export default function Home() {
         {/* Ambient subtle background section glow */}
         <div className="absolute top-10 left-1/2 -translate-x-1/2 w-full max-w-4xl h-72 bg-brand-500/5 blur-3xl pointer-events-none rounded-full" />
 
-        {/* Compact & Sleek Hero Banner */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-navy-950 via-navy-900 to-slate-900 h-36 sm:h-44 md:h-48 shadow-sm border border-navy-800/60">
+        {/* Hero banner */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-navy-950 via-navy-900 to-slate-900 h-38 sm:h-48 md:h-52 shadow-md border border-navy-800/60">
           {banners.map((b, i) => (
             <div
               key={i}
@@ -193,11 +193,11 @@ export default function Home() {
               style={{ opacity: slide === i ? 1 : 0, pointerEvents: slide === i ? "auto" : "none" }}
             >
               {/* Left 50% Content */}
-              <div className="w-1/2 sm:w-7/12 flex flex-col justify-center px-3.5 sm:px-7 py-2.5 sm:py-4 relative z-10">
-                <span className="inline-flex items-center gap-1 bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[8px] sm:text-[10px] font-extrabold px-2 sm:px-2.5 py-0.5 rounded-full w-fit mb-1 sm:mb-1.5 backdrop-blur-md uppercase tracking-wider">
+              <div className="w-1/2 sm:w-7/12 flex flex-col justify-center px-3.5 sm:px-6 py-3 relative z-10">
+                <span className="inline-flex items-center gap-1 bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[8px] sm:text-[10px] font-extrabold px-2 sm:px-2.5 py-0.5 rounded-full w-fit mb-1 backdrop-blur-md uppercase tracking-wider">
                   ✨ {b.tag}
                 </span>
-                <h1 className="text-white text-xs sm:text-lg md:text-xl font-black leading-tight tracking-tight mb-1.5 sm:mb-2.5">
+                <h1 className="text-white text-xs sm:text-lg md:text-xl font-black leading-tight tracking-tight mb-2">
                   {b.title.map((line, idx) => (
                     <span key={idx}>
                       {line}
@@ -213,26 +213,29 @@ export default function Home() {
                 </Link>
               </div>
 
-              {/* Right 50% Image — VISIBLE & SLENDER ON MOBILE & DESKTOP */}
+              {/* Right 50% Image — VISIBLE ON MOBILE & DESKTOP */}
               <div className="w-1/2 sm:w-5/12 h-full relative overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-r from-navy-950 via-navy-950/20 to-transparent z-10 pointer-events-none" />
                 <img
                   src={b.img}
                   alt="Banner"
                   className="w-full h-full object-cover object-center transform hover:scale-105 transition-transform duration-500"
+                  onError={(e) => {
+                    e.target.src = "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=1200&q=80";
+                  }}
                 />
               </div>
             </div>
           ))}
 
           {/* Slider Dot Indicators */}
-          <div className="absolute bottom-2.5 right-3.5 sm:right-6 flex gap-1 z-30">
+          <div className="absolute bottom-3.5 right-4 sm:right-8 flex gap-1.5 z-30">
             {banners.map((_, i) => (
               <button
                 key={i}
                 onClick={() => setSlide(i)}
-                className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                  slide === i ? "w-5 bg-amber-400" : "w-1.5 bg-white/30 hover:bg-white/50"
+                className={`h-2 rounded-full transition-all cursor-pointer ${
+                  slide === i ? "w-6 bg-amber-400" : "w-2 bg-white/30 hover:bg-white/50"
                 }`}
               />
             ))}
@@ -329,18 +332,35 @@ export default function Home() {
               <Link
                 key={b.name}
                 to={`/categories?cat=${encodeURIComponent(b.category)}`}
-                className="bg-white border border-slate-200/90 rounded-xl p-2.5 flex flex-col items-center text-center shadow-2xs hover:border-brand-400 hover:shadow-xs active:scale-[0.98] transition-all duration-200 group"
+                className="bg-white border border-slate-200/90 rounded-2xl p-2.5 flex flex-col items-center text-center shadow-2xs hover:border-brand-400 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 group"
               >
                 <div
-                  className="w-9 h-9 rounded-xl flex items-center justify-center text-base mb-1.5 shadow-2xs group-hover:scale-105 transition-transform duration-200"
-                  style={{ backgroundColor: b.color + "15", color: b.color }}
+                  className="w-12 h-12 rounded-xl flex items-center justify-center p-1.5 mb-1.5 shadow-2xs border border-slate-100 bg-white group-hover:scale-105 transition-transform duration-200 overflow-hidden relative"
                 >
-                  {b.icon}
+                  <img
+                    src={b.logo}
+                    alt={b.name}
+                    className="w-7 h-7 object-contain"
+                    onError={(e) => {
+                      if (e.target.src !== b.logoAlt) {
+                        e.target.src = b.logoAlt;
+                      } else {
+                        e.target.style.display = 'none';
+                        if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                      }
+                    }}
+                  />
+                  <div
+                    className="w-full h-full rounded-lg font-black text-xs hidden items-center justify-center tracking-tight shadow-2xs"
+                    style={{ backgroundColor: b.bg, color: b.color }}
+                  >
+                    {b.initials}
+                  </div>
                 </div>
-                <span className="text-xs font-bold text-navy-900 leading-tight tracking-tight group-hover:text-brand-600 transition-colors">
+                <span className="text-xs font-black text-navy-900 leading-tight tracking-tight group-hover:text-brand-600 transition-colors">
                   {b.name}
                 </span>
-                <span className="text-[9px] font-semibold text-slate-400 mt-0.5">
+                <span className="text-[9px] font-bold text-slate-400 mt-0.5">
                   {b.category}
                 </span>
               </Link>
@@ -417,10 +437,13 @@ export default function Home() {
                         {p.categoryName || "Material"}
                       </span>
                       <img
-                        src={p.imageUrl || p.img || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80"}
+                        src={p.imageUrl || p.img || p.masterProduct?.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80"}
                         alt={p.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         loading="lazy"
+                        onError={(e) => {
+                          e.target.src = "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80";
+                        }}
                       />
                     </div>
 

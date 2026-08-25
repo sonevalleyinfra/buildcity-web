@@ -31,13 +31,13 @@ async function main() {
   const catCement = await prisma.category.upsert({
     where: { name: "Cement" },
     update: {},
-    create: { name: "Cement", gstRate: 28.0, productCount: 120 },
+    create: { name: "Cement", productCount: 120 },
   });
 
   const catPaints = await prisma.category.upsert({
     where: { name: "Paints" },
     update: {},
-    create: { name: "Paints", gstRate: 18.0, productCount: 150 },
+    create: { name: "Paints", productCount: 150 },
   });
 
   // 3. Seed Core Users

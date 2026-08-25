@@ -44,9 +44,19 @@ export function AddressProvider({ children }) {
             pincode: a.pincode,
             isDefault: a.isDefault || false,
           }));
-          setAddresses(formatted);
+
+          const uniqueList = Array.from(
+            new Map(
+              formatted.map((a) => {
+                const key = `${(a.street || a.line || "").toLowerCase().trim()}_${(a.city || "").toLowerCase().trim()}_${(a.pincode || "").trim()}`;
+                return [key, a];
+              })
+            ).values()
+          );
+
+          setAddresses(uniqueList);
           if (addressStorageKey) {
-            localStorage.setItem(addressStorageKey, JSON.stringify(formatted));
+            localStorage.setItem(addressStorageKey, JSON.stringify(uniqueList));
           }
           return;
         }
@@ -70,7 +80,15 @@ export function AddressProvider({ children }) {
         const clean = (Array.isArray(parsed) ? parsed : []).filter(
           (a) => a.line && !a.line.includes("House No. 12, Lanka Road") && a.id !== "addr1"
         );
-        setAddresses(clean);
+        const uniqueClean = Array.from(
+          new Map(
+            clean.map((a) => {
+              const key = `${(a.street || a.line || "").toLowerCase().trim()}_${(a.city || "").toLowerCase().trim()}_${(a.pincode || "").trim()}`;
+              return [key, a];
+            })
+          ).values()
+        );
+        setAddresses(uniqueClean);
       } catch {
         setAddresses([]);
       }

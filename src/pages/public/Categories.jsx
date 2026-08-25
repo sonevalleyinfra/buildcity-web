@@ -51,18 +51,42 @@ export default function Categories() {
   const initialCat = searchParams.get("cat") || "All";
 
   const { count, addItem, items } = useCart();
-  const { products = [], productsLoading } = useAdmin();
+  const { products = [], productsLoading, categories = [] } = useAdmin();
   const { region } = useRegion();
   const [activePill, setActivePill] = useState(initialCat);
   const [slide, setSlide] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const dynamicFilterPills = useMemo(() => {
+    const pills = [{ name: "All", img: null, icon: "⚡" }];
+    (categories || []).forEach((c) => {
+      if (c.isActive !== false) {
+        pills.push({
+          name: c.name,
+          img: c.img || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=150&q=80",
+        });
+      }
+    });
+    return pills;
+  }, [categories]);
+
+  const dynamicCategoryCards = useMemo(() => {
+    return (categories || [])
+      .filter((c) => c.isActive !== false)
+      .map((c) => ({
+        name: c.name,
+        count: `${c.productCount || 0} Products`,
+        img: c.img || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=300&q=80",
+        tag: `Verified`,
+      }));
+  }, [categories]);
 
   const handleSearch = (e) => {
     e.preventDefault();
     navigate(searchQuery ? `/search?q=${encodeURIComponent(searchQuery)}` : "/search");
   };
 
-  const filteredCategories = categoryCards.filter((c) => {
+  const filteredCategories = dynamicCategoryCards.filter((c) => {
     if (activePill === "All") return true;
     return c.name.toLowerCase().includes(activePill.toLowerCase());
   });
@@ -183,7 +207,7 @@ export default function Categories() {
 
           {/* Filter Pills */}
           <div className="flex items-center gap-2.5 overflow-x-auto pb-1.5 no-scrollbar">
-            {filterPills.map((p) => (
+            {dynamicFilterPills.map((p) => (
               <button
                 key={p.name}
                 onClick={() => setActivePill(p.name)}

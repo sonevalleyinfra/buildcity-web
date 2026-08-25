@@ -94,6 +94,7 @@ const loadInitialCoupons = () => {
 export function AdminProvider({ children }) {
   const [drs, setDrs] = useState(loadInitialDrs);
   const [vendors, setVendors] = useState(loadInitialVendors);
+  const [users, setUsers] = useState([]);
   const [orders, setOrders] = useState([]);
   const [categories, setCategories] = useState(loadInitialCategories);
   const [regions, setRegions] = useState(loadInitialRegions);
@@ -105,6 +106,11 @@ export function AdminProvider({ children }) {
   // Single Source of Truth: Supabase Cloud DB se live data sync karne ke liye (Zero flickering guard ke sath)
   const fetchCloudData = async () => {
     try {
+      fetch(`${API_BASE_URL}/api/v1/users`)
+        .then((r) => r.json())
+        .then((u) => Array.isArray(u) && setUsers((prev) => (JSON.stringify(prev) === JSON.stringify(u) ? prev : u)))
+        .catch(() => {});
+
       const syncRes = await fetch(`${API_BASE_URL}/api/v1/cloud-sync`).then((r) => r.json()).catch(() => null);
       if (!syncRes) return;
 
@@ -922,6 +928,7 @@ export function AdminProvider({ children }) {
       value={{
         drs,
         vendors,
+        users,
         orders,
         categories,
         regions,

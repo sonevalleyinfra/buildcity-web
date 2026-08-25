@@ -1367,6 +1367,34 @@ app.post("/api/v1/orders/checkout", async (req, res) => {
   }
 });
 
+// GET /api/v1/users — Admin live users tracking
+app.get("/api/v1/users", async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        addresses: true,
+        orders: true,
+      },
+    });
+
+    const formatted = users.map((u) => ({
+      id: u.id,
+      name: u.name || "Customer User",
+      phone: u.phone,
+      role: u.role || "CUSTOMER",
+      createdAt: u.createdAt,
+      district: u.addresses && u.addresses.length > 0 ? u.addresses[0].city : "Varanasi",
+      addressesCount: u.addresses ? u.addresses.length : 0,
+      ordersCount: u.orders ? u.orders.length : 0,
+    }));
+
+    res.json(formatted);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Start Express Server
 app.listen(PORT, () => {
   console.log(`🚀 BuildCity Express Gateway running live on http://localhost:${PORT}`);

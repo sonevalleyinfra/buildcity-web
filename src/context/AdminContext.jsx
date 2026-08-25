@@ -91,10 +91,30 @@ const loadInitialCoupons = () => {
   return seedCoupons;
 };
 
+const USERS_STORAGE_KEY = "buildcity_admin_users";
+
+const seedUsers = [
+  { id: "usr-admin-1", name: "Super Admin", phone: "9876543210", role: "ADMIN", district: "Varanasi", ordersCount: 0, addressesCount: 1, createdAt: "2026-01-01" },
+  { id: "usr-customer-1", name: "Ramesh Customer", phone: "7607650875", role: "CUSTOMER", district: "Varanasi", ordersCount: 3, addressesCount: 2, createdAt: "2026-02-10" },
+  { id: "usr-dr-1", name: "Kashi Ground Agent", phone: "9123456789", role: "DR", district: "Varanasi", ordersCount: 0, addressesCount: 1, createdAt: "2026-02-12" },
+  { id: "usr-vendor-1", name: "Varanasi Building Depot", phone: "9988776655", role: "VENDOR", district: "Varanasi", ordersCount: 12, addressesCount: 1, createdAt: "2026-02-15" },
+];
+
+const loadInitialUsers = () => {
+  try {
+    const saved = localStorage.getItem(USERS_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return seedUsers;
+};
+
 export function AdminProvider({ children }) {
   const [drs, setDrs] = useState(loadInitialDrs);
   const [vendors, setVendors] = useState(loadInitialVendors);
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState(loadInitialUsers);
   const [orders, setOrders] = useState([]);
   const [categories, setCategories] = useState(loadInitialCategories);
   const [regions, setRegions] = useState(loadInitialRegions);
@@ -108,7 +128,12 @@ export function AdminProvider({ children }) {
     try {
       fetch(`${API_BASE_URL}/api/v1/users`)
         .then((r) => r.json())
-        .then((u) => Array.isArray(u) && setUsers((prev) => (JSON.stringify(prev) === JSON.stringify(u) ? prev : u)))
+        .then((u) => {
+          if (Array.isArray(u) && u.length > 0) {
+            localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(u));
+            setUsers((prev) => (JSON.stringify(prev) === JSON.stringify(u) ? prev : u));
+          }
+        })
         .catch(() => {});
 
       const syncRes = await fetch(`${API_BASE_URL}/api/v1/cloud-sync`).then((r) => r.json()).catch(() => null);

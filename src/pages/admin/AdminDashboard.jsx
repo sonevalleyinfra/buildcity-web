@@ -69,6 +69,7 @@ export default function AdminDashboard() {
     updateMasterProduct,
     updateListingApprovalStatus,
     updateOrderStatus,
+    fetchCloudData,
   } = useAdmin();
 
   // Tab State: Overview, District Reps, Vendors, Products, Listings, Orders, Categories, Regions
@@ -427,6 +428,11 @@ export default function AdminDashboard() {
                 }`}
               >
                 <span>{t.label}</span>
+                {t.id === "Users" && (
+                  <span className="bg-brand-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-2xs">
+                    {users.length}
+                  </span>
+                )}
                 {t.id === "Listings" && pendingCount > 0 && (
                   <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full animate-pulse">
                     {pendingCount}
@@ -502,20 +508,53 @@ export default function AdminDashboard() {
             <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-base sm:text-lg font-black text-navy-900 flex items-center gap-2">
-                  <span>👥 Registered Users & Account Tracking</span>
-                  <span className="bg-brand-50 text-brand-700 border border-brand-200 font-extrabold text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                    Live DB Sync
+                  <span>👥 Registered Database Users & Accounts</span>
+                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-extrabold text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                    🟢 Live Supabase DB Sync
                   </span>
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Track all registered customers, vendors, DR agents, and admin accounts directly without checking database tables.
+                  View and manage all real registered customer accounts, vendor logins, DR ground agents, and admin accounts in database.
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 text-xs font-bold">
-                <span className="bg-slate-100 text-slate-800 px-3.5 py-2 rounded-xl border border-slate-200 shadow-2xs">
-                  Total Accounts: <span className="font-black text-brand-600 text-sm tabular-nums">{users.length}</span>
-                </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    fetchCloudData();
+                    alert("Syncing latest users list from Supabase Database...");
+                  }}
+                  className="bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-xs px-3.5 py-2 rounded-xl border border-brand-200 shadow-2xs active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  🔄 Refresh DB Users
+                </button>
+              </div>
+            </div>
+
+            {/* User Roles Breakdown Stat Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs">
+                <p className="text-[11px] font-bold text-slate-500">Total Registered DB Users</p>
+                <p className="text-xl font-black text-navy-900 mt-0.5 tabular-nums">{users.length}</p>
+              </div>
+              <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3.5 shadow-2xs">
+                <p className="text-[11px] font-bold text-emerald-800">🛒 Customers</p>
+                <p className="text-xl font-black text-emerald-900 mt-0.5 tabular-nums">
+                  {users.filter((u) => !u.role || u.role === "CUSTOMER").length}
+                </p>
+              </div>
+              <div className="bg-blue-50/60 border border-blue-200/80 rounded-xl p-3.5 shadow-2xs">
+                <p className="text-[11px] font-bold text-blue-800">🏪 Vendors</p>
+                <p className="text-xl font-black text-blue-900 mt-0.5 tabular-nums">
+                  {users.filter((u) => u.role === "VENDOR").length}
+                </p>
+              </div>
+              <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3.5 shadow-2xs">
+                <p className="text-[11px] font-bold text-amber-800">📍 DR Reps & Admins</p>
+                <p className="text-xl font-black text-amber-900 mt-0.5 tabular-nums">
+                  {users.filter((u) => u.role === "DR" || u.role === "ADMIN").length}
+                </p>
               </div>
             </div>
 

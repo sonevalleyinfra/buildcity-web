@@ -957,6 +957,7 @@ export function AdminProvider({ children }) {
         orders,
         categories,
         regions,
+        users,
         coupons,
         masterProducts,
         products,

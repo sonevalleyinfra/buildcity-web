@@ -54,7 +54,15 @@ export default function Categories() {
   const { products = [], productsLoading, categories = [] } = useAdmin();
   const { region } = useRegion();
   const [activePill, setActivePill] = useState(initialCat);
+  const [slide, setSlide] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setSlide((s) => (s + 1) % banners.length);
+    }, 4000);
+    return () => clearInterval(id);
+  }, []);
 
   const catProductsScrollRef = useRef(null);
   const bestScrollRef = useRef(null);

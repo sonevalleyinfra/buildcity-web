@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useCart } from "../../context/CartContext";
@@ -83,6 +83,15 @@ export default function Home() {
   const [slide, setSlide] = useState(0);
   const [justAddedId, setJustAddedId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const dealsScrollRef = useRef(null);
+
+  const scrollDeals = (direction) => {
+    if (dealsScrollRef.current) {
+      const scrollAmount = direction === "left" ? -320 : 320;
+      dealsScrollRef.current.scrollBy({ left: scrollAmount, behavior: "smooth" });
+    }
+  };
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -382,9 +391,29 @@ export default function Home() {
                 All certified construction products from database for {region?.name || "your region"}.
               </p>
             </div>
-            <Link to="/categories" className="text-xs font-bold text-brand-600 hover:text-brand-700 active:scale-[0.98] transition-all duration-200 shrink-0">
-              View All ({liveDisplayProducts.length}) →
-            </Link>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => scrollDeals("left")}
+                  className="w-7 h-7 rounded-lg bg-white hover:bg-brand-500 hover:text-white text-navy-900 font-black text-xs flex items-center justify-center shadow-2xs active:scale-95 transition-all cursor-pointer"
+                  title="Scroll Left"
+                >
+                  ◀
+                </button>
+                <button
+                  type="button"
+                  onClick={() => scrollDeals("right")}
+                  className="w-7 h-7 rounded-lg bg-white hover:bg-brand-500 hover:text-white text-navy-900 font-black text-xs flex items-center justify-center shadow-2xs active:scale-95 transition-all cursor-pointer"
+                  title="Scroll Right"
+                >
+                  ▶
+                </button>
+              </div>
+              <Link to="/categories" className="text-xs font-bold text-brand-600 hover:text-brand-700 active:scale-[0.98] transition-all duration-200 shrink-0">
+                View All ({liveDisplayProducts.length}) →
+              </Link>
+            </div>
           </div>
 
           {productsLoading ? (
@@ -425,7 +454,7 @@ export default function Home() {
               📦 No live vendor deals available in this region yet.
             </div>
           ) : (
-            <div className="flex gap-3.5 overflow-x-auto pb-3 pt-1 -mx-1 px-1 no-scrollbar scroll-smooth">
+            <div ref={dealsScrollRef} className="flex gap-3.5 overflow-x-auto pb-3 pt-1 -mx-1 px-1 no-scrollbar scroll-smooth">
               {liveDisplayProducts.map((p, i) => (
                 <div
                   key={p.id || i}

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useCart } from "../../context/CartContext";
 import { useAdmin } from "../../context/AdminContext";
@@ -54,8 +54,17 @@ export default function Categories() {
   const { products = [], productsLoading, categories = [] } = useAdmin();
   const { region } = useRegion();
   const [activePill, setActivePill] = useState(initialCat);
-  const [slide, setSlide] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const catProductsScrollRef = useRef(null);
+  const bestScrollRef = useRef(null);
+
+  const scrollContainer = (ref, direction) => {
+    if (ref.current) {
+      const amount = direction === "left" ? -320 : 320;
+      ref.current.scrollBy({ left: amount, behavior: "smooth" });
+    }
+  };
 
   const dynamicFilterPills = useMemo(() => {
     const pills = [{ name: "All", img: null, icon: "⚡" }];
@@ -419,12 +428,32 @@ export default function Categories() {
                   100% Tested & Verified Construction Stock · Direct Site Delivery Across {region?.name || "Varanasi"} & UP Districts
                 </p>
               </div>
-              <span className="text-xs font-extrabold bg-slate-100 text-slate-700 px-3 py-1 rounded-xl border border-slate-200/80 w-fit shrink-0 shadow-2xs">
-                {liveVendorProducts.length} Items Available in {region?.name || "Region"}
-              </span>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => scrollContainer(catProductsScrollRef, "left")}
+                    className="w-7 h-7 rounded-lg bg-white hover:bg-brand-500 hover:text-white text-navy-900 font-black text-xs flex items-center justify-center shadow-2xs active:scale-95 transition-all cursor-pointer"
+                    title="Scroll Left"
+                  >
+                    ◀
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollContainer(catProductsScrollRef, "right")}
+                    className="w-7 h-7 rounded-lg bg-white hover:bg-brand-500 hover:text-white text-navy-900 font-black text-xs flex items-center justify-center shadow-2xs active:scale-95 transition-all cursor-pointer"
+                    title="Scroll Right"
+                  >
+                    ▶
+                  </button>
+                </div>
+                <span className="text-xs font-extrabold bg-slate-100 text-slate-700 px-3 py-1 rounded-xl border border-slate-200/80 w-fit shrink-0 shadow-2xs">
+                  {liveVendorProducts.length} Items
+                </span>
+              </div>
             </div>
 
-            <div className="flex gap-4 overflow-x-auto pb-3 pt-1 -mx-1 px-1 no-scrollbar scroll-smooth">
+            <div ref={catProductsScrollRef} className="flex gap-4 overflow-x-auto pb-3 pt-1 -mx-1 px-1 no-scrollbar scroll-smooth">
               {liveVendorProducts.map((p) => (
                 <div
                   key={p.id}
@@ -488,9 +517,27 @@ export default function Categories() {
               <h2 className="text-lg font-black text-navy-900">Best Selling District Products</h2>
               <p className="text-xs text-slate-500">Highest ordered construction items across Varanasi & nearby districts</p>
             </div>
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => scrollContainer(bestScrollRef, "left")}
+                className="w-7 h-7 rounded-lg bg-white hover:bg-brand-500 hover:text-white text-navy-900 font-black text-xs flex items-center justify-center shadow-2xs active:scale-95 transition-all cursor-pointer"
+                title="Scroll Left"
+              >
+                ◀
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollContainer(bestScrollRef, "right")}
+                className="w-7 h-7 rounded-lg bg-white hover:bg-brand-500 hover:text-white text-navy-900 font-black text-xs flex items-center justify-center shadow-2xs active:scale-95 transition-all cursor-pointer"
+                title="Scroll Right"
+              >
+                ▶
+              </button>
+            </div>
           </div>
 
-          <div className="flex gap-4 overflow-x-auto pb-3 pt-1 -mx-1 px-1 no-scrollbar scroll-smooth">
+          <div ref={bestScrollRef} className="flex gap-4 overflow-x-auto pb-3 pt-1 -mx-1 px-1 no-scrollbar scroll-smooth">
             {bestSellingProducts.map((p) => {
               return (
                 <div

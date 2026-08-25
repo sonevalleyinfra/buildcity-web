@@ -368,18 +368,18 @@ export default function Home() {
           </div>
         </section>
 
-        {/* 🏆 PREMIUM CERTIFIED MATERIALS CATALOG (HORIZONTAL SCROLL) */}
+        {/* DEALS OF THE WEEK & LIVE ADMIN/DR/VENDOR PRODUCTS */}
         <section className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs relative z-10">
           <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
             <div>
               <h2 className="text-base sm:text-lg font-black text-navy-900 flex items-center gap-2 tracking-tight">
-                <span>🏆 Premium Certified Materials Catalog</span>
-                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wide">
-                  ✨ 100% Certified
+                <span>⚡ Deals Of The Week</span>
+                <span className="bg-warning/20 border border-amber-400/40 text-amber-800 font-extrabold text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wide">
+                  Top 5 Deals
                 </span>
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Lab tested & DR certified construction products for {region?.name || "your region"}.
+                All certified construction products from database for {region?.name || "your region"}.
               </p>
             </div>
             <Link to="/categories" className="text-xs font-bold text-brand-600 hover:text-brand-700 active:scale-[0.98] transition-all duration-200 shrink-0">
@@ -388,11 +388,11 @@ export default function Home() {
           </div>
 
           {productsLoading ? (
-            <div className="flex gap-3.5 overflow-x-auto pb-2 -mx-1 px-1 no-scrollbar animate-pulse">
+            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 animate-pulse">
               {[1, 2, 3, 4, 5].map((n) => (
                 <div
                   key={n}
-                  className="bg-white rounded-xl border border-slate-200 p-3 w-48 sm:w-56 shrink-0 flex flex-col justify-between shadow-2xs"
+                  className="bg-white rounded-xl border border-slate-200 p-3 w-44 shrink-0 flex flex-col justify-between shadow-2xs"
                 >
                   <div>
                     <div className="relative h-28 rounded-lg overflow-hidden bg-slate-200 mb-2 border border-slate-100 flex items-center justify-center">
@@ -400,12 +400,19 @@ export default function Home() {
                         Material
                       </span>
                     </div>
-                    <div className="h-2.5 bg-slate-200 rounded w-20 mb-1.5" />
+
+                    <div className="h-2 bg-slate-200 rounded w-20 mb-1.5" />
+                    <div className="h-2.5 bg-green-100 rounded w-28 mb-1.5" />
+                    <div className="h-2 bg-slate-200 rounded w-24 mb-1" />
                     <div className="h-3 bg-slate-200 rounded w-full mb-1" />
                     <div className="h-3 bg-slate-200 rounded w-3/4 mb-2" />
                   </div>
+
                   <div>
-                    <div className="h-4 bg-slate-200 rounded w-12 mb-2" />
+                    <div className="flex items-baseline justify-between mb-2">
+                      <div className="h-4 bg-slate-200 rounded w-12" />
+                      <div className="h-2 bg-slate-200 rounded w-8" />
+                    </div>
                     <div className="w-full h-7 bg-amber-300/80 rounded-lg flex items-center justify-center font-extrabold text-xs text-navy-900 shadow-2xs">
                       + ADD
                     </div>
@@ -415,7 +422,7 @@ export default function Home() {
             </div>
           ) : liveDisplayProducts.length === 0 ? (
             <div className="py-8 text-center text-slate-500 text-xs font-extrabold bg-slate-50 rounded-xl border border-slate-200">
-              📦 No live certified materials available in this region yet.
+              📦 No live vendor deals available in this region yet.
             </div>
           ) : (
             <div className="flex gap-3.5 overflow-x-auto pb-3 pt-1 -mx-1 px-1 no-scrollbar scroll-smooth">
@@ -473,103 +480,6 @@ export default function Home() {
                       }`}
                     >
                       {justAddedId === p.id ? "Added ✓" : "+ ADD"}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* 🔥 BEST SELLING DISTRICT PRODUCTS (HORIZONTAL SCROLL) */}
-        <section className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs relative z-10">
-          <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-            <div>
-              <h2 className="text-base sm:text-lg font-black text-navy-900 flex items-center gap-2 tracking-tight">
-                <span>🔥 Best Selling District Products</span>
-                <span className="bg-amber-100 border border-amber-300/80 text-amber-900 font-extrabold text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wide">
-                  Top Demand
-                </span>
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Fast-moving certified supplies with highest buyer demand in {region?.name || "your district"}.
-              </p>
-            </div>
-            <Link to="/categories" className="text-xs font-bold text-brand-600 hover:text-brand-700 active:scale-[0.98] transition-all duration-200 shrink-0">
-              Explore All →
-            </Link>
-          </div>
-
-          {productsLoading ? (
-            <div className="flex gap-3.5 overflow-x-auto pb-2 -mx-1 px-1 no-scrollbar animate-pulse">
-              {[1, 2, 3, 4].map((n) => (
-                <div key={n} className="bg-white rounded-xl border border-slate-200 p-3 w-48 sm:w-56 shrink-0 h-64" />
-              ))}
-            </div>
-          ) : liveDisplayProducts.length === 0 ? (
-            <div className="py-8 text-center text-slate-500 text-xs font-extrabold bg-slate-50 rounded-xl border border-slate-200">
-              📦 No district best selling products listed yet.
-            </div>
-          ) : (
-            <div className="flex gap-3.5 overflow-x-auto pb-3 pt-1 -mx-1 px-1 no-scrollbar scroll-smooth">
-              {liveDisplayProducts.slice().reverse().map((p, i) => (
-                <div
-                  key={p.id ? `best-${p.id}` : i}
-                  className="bg-white rounded-xl border border-slate-200/90 p-3 w-48 sm:w-56 shrink-0 flex flex-col justify-between hover:shadow-md hover:border-amber-400 hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200 group relative"
-                >
-                  <span className="absolute top-2 right-2 z-20 bg-gradient-to-r from-amber-500 to-amber-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full shadow-2xs uppercase tracking-wider">
-                    🔥 BESTSELLER
-                  </span>
-
-                  <div>
-                    <div className="relative h-28 rounded-lg overflow-hidden bg-slate-100 mb-2 border border-slate-100">
-                      <span className="absolute top-1.5 left-1.5 bg-navy-900 text-white text-[9px] font-black px-2 py-0.5 rounded shadow-2xs">
-                        {p.categoryName || "Material"}
-                      </span>
-                      <img
-                        src={p.imageUrl || p.img || p.masterProduct?.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80"}
-                        alt={p.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        loading="lazy"
-                        onError={(e) => {
-                          e.target.src = "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80";
-                        }}
-                      />
-                    </div>
-
-                    <div className="flex items-center gap-1 text-[9px] font-medium text-slate-500 mb-1">
-                      ⭐ 4.9/5 Rating &nbsp;·&nbsp; District Verified
-                    </div>
-                    <span className="inline-block w-fit bg-amber-50 text-amber-800 text-[8px] font-bold px-1.5 py-0.5 rounded mb-1.5 border border-amber-200/60">
-                      High Demand in {region?.name || "District"}
-                    </span>
-
-                    <p className="text-[9px] font-black text-brand-600 truncate mb-0.5">
-                      🏬 {p.vendorName || p.addedBy || "Verified District Supplier"}
-                    </p>
-
-                    <p className="text-[11px] font-bold text-navy-900 leading-tight mb-1.5 line-clamp-2 min-h-[32px] tracking-tight">
-                      {p.name}
-                    </p>
-                  </div>
-
-                  <div>
-                    <div className="flex items-baseline justify-between mb-2">
-                      <span className="text-base font-black text-navy-900 tracking-tight tabular-nums">
-                        ₹{p.price || p.suggestedPrice}
-                      </span>
-                      <span className="text-[9px] font-medium text-slate-400">per {p.unit || "unit"}</span>
-                    </div>
-
-                    <button
-                      onClick={() => handleAddToCart(p)}
-                      className={`w-full text-xs font-black rounded-lg py-1.5 transition-all duration-200 active:scale-[0.98] shadow-2xs cursor-pointer ${
-                        justAddedId === p.id
-                          ? "bg-emerald-600 text-white shadow-xs"
-                          : "bg-navy-900 text-white hover:bg-navy-950 hover:shadow-sm"
-                      }`}
-                    >
-                      {justAddedId === p.id ? "Added ✓" : "+ ADD TO CART"}
                     </button>
                   </div>
                 </div>

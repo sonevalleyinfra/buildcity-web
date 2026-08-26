@@ -49,6 +49,7 @@ export default function AdminDashboard() {
     stats,
     addDr,
     updateDr,
+    removeDr,
     toggleDrActive,
     addVendor,
     updateVendor,
@@ -243,6 +244,25 @@ export default function AdminDashboard() {
   };
 
   const [isSubmittingDr, setIsSubmittingDr] = useState(false);
+  const [deletingDrId, setDeletingDrId] = useState(null);
+
+  const handleDeleteDr = async (d) => {
+    showConfirm({
+      title: "Delete District Representative?",
+      message: `Are you sure you want to permanently delete DR "${d.name}" (${d.phone}) from Database?`,
+      type: "error",
+      confirmText: "Delete DR",
+      onConfirm: async () => {
+        setDeletingDrId(d.id);
+        try {
+          await removeDr(d.id);
+          showAlert({ title: "DR Deleted", message: `District Representative "${d.name}" removed successfully.`, type: "success" });
+        } finally {
+          setDeletingDrId(null);
+        }
+      },
+    });
+  };
 
   const handleAddDr = async (e) => {
     e.preventDefault();
@@ -838,6 +858,20 @@ export default function AdminDashboard() {
                               }`}
                             >
                               {d.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                            </button>
+                            <button
+                              disabled={deletingDrId === d.id}
+                              onClick={() => handleDeleteDr(d)}
+                              className="text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                            >
+                              {deletingDrId === d.id ? (
+                                <>
+                                  <span className="w-3 h-3 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
+                                  <span>Deleting...</span>
+                                </>
+                              ) : (
+                                "🗑️ Delete"
+                              )}
                             </button>
                           </div>
                         </td>

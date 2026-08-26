@@ -410,6 +410,54 @@ app.post("/api/v1/drs", async (req, res) => {
   }
 });
 
+app.patch("/api/v1/drs/:id", async (req, res) => {
+  try {
+    const rawId = req.params.id;
+    const { name, phone, regionId, status } = req.body;
+
+    const dataToUpdate = {};
+    if (name) dataToUpdate.name = name;
+    if (phone) dataToUpdate.phone = phone;
+    if (regionId) dataToUpdate.regionId = regionId;
+    if (status) dataToUpdate.status = status;
+
+    let dr = await prisma.dR.findUnique({ where: { id: rawId } }).catch(() => null);
+    if (!dr) {
+      dr = await prisma.dR.findFirst({ where: { OR: [{ id: rawId }, { phone: rawId }] } }).catch(() => null);
+    }
+
+    if (dr) {
+      const updatedDr = await prisma.dR.update({
+        where: { id: dr.id },
+        data: dataToUpdate,
+        include: { region: true, user: true },
+      });
+      return res.json(updatedDr);
+    }
+    return res.status(404).json({ error: "DR not found" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/v1/drs/:id", async (req, res) => {
+  try {
+    const rawId = req.params.id;
+    let dr = await prisma.dR.findUnique({ where: { id: rawId } }).catch(() => null);
+    if (!dr) {
+      dr = await prisma.dR.findFirst({ where: { OR: [{ id: rawId }, { phone: rawId }] } }).catch(() => null);
+    }
+
+    if (dr) {
+      await prisma.dR.delete({ where: { id: dr.id } });
+      return res.json({ success: true, message: "DR deleted successfully" });
+    }
+    return res.status(404).json({ error: "DR not found" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 3. VENDOR ENDPOINTS
 app.get("/api/v1/vendors", async (req, res) => {
   try {

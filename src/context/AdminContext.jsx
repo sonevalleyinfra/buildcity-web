@@ -357,12 +357,74 @@ export function AdminProvider({ children }) {
     return newDr;
   };
 
-  const toggleDrActive = (id) => {
+  const updateDr = async (id, drData) => {
+    const regionObj = regions.find((r) => r.id === drData.regionId) || {};
+    const newRegName = regionObj.name || drData.regionName || "General";
+
     setDrs((prev) =>
       prev.map((d) =>
-        d.id === id ? { ...d, status: d.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" } : d
+        d.id === id
+          ? {
+              ...d,
+              name: drData.name || d.name,
+              phone: drData.phone || d.phone,
+              regionId: drData.regionId || d.regionId,
+              regionName: newRegName,
+            }
+          : d
       )
     );
+
+    try {
+      await fetch(`${API_BASE_URL}/api/v1/drs/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: drData.name,
+          phone: drData.phone,
+          regionId: drData.regionId,
+        }),
+      });
+      await fetchCloudData();
+    } catch (err) {
+      console.warn("Update DR error:", err.message);
+    }
+  };
+
+  const toggleDrActive = async (id) => {
+    let nextStatus = "ACTIVE";
+    setDrs((prev) =>
+      prev.map((d) => {
+        if (d.id === id) {
+          nextStatus = d.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
+          return { ...d, status: nextStatus };
+        }
+        return d;
+      })
+    );
+
+    try {
+      await fetch(`${API_BASE_URL}/api/v1/drs/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      await fetchCloudData();
+    } catch {}
+  };
+
+  const removeDr = async (id) => {
+    setDrs((prev) => prev.filter((d) => d.id !== id));
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/drs/${id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        await fetchCloudData();
+      }
+    } catch (err) {
+      console.warn("Delete DR error:", err.message);
+    }
   };
 
   const addVendor = async (vendorData) => {
@@ -964,6 +1026,8 @@ export function AdminProvider({ children }) {
         productsLoading,
         stats,
         addDr,
+        updateDr,
+        removeDr,
         toggleDrActive,
         addVendor,
         setVendorStatus,

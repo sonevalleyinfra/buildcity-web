@@ -193,44 +193,6 @@ export default function Cart() {
           )}
         </div>
 
-        {/* 📍 REGION MISMATCH & PRICE RECALCULATION BANNER */}
-        {hasRegionMismatch && (
-          <div className="bg-amber-50 border-2 border-amber-300/80 rounded-2xl p-4.5 mb-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in duration-200">
-            <div className="flex items-start gap-3">
-              <div className="bg-amber-100 text-amber-900 p-2.5 rounded-xl shrink-0 text-lg font-bold">
-                📍
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h4 className="text-xs font-black text-amber-950 uppercase tracking-wider">
-                    District Region Changed to {currentRegionName}
-                  </h4>
-                  <span className="bg-amber-200/80 text-amber-900 text-[10px] font-extrabold px-2 py-0.5 rounded-md">
-                    Action Required
-                  </span>
-                </div>
-                <p className="text-xs font-bold text-amber-800 mt-1">
-                  Cart items were added in <span className="underline font-black">{cartRegionName}</span>. Update prices to fetch live DB rates for {currentRegionName}.
-                </p>
-              </div>
-            </div>
-            <button
-              disabled={isUpdatingPrices}
-              onClick={handleUpdateRegionPrices}
-              className="w-full sm:w-auto bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-[0.98] text-white text-xs font-black px-4.5 py-2.5 rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0 disabled:opacity-60"
-            >
-              {isUpdatingPrices ? (
-                <>
-                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Fetching DB Prices...</span>
-                </>
-              ) : (
-                `🔄 Update Cart Prices to ${currentRegionName}`
-              )}
-            </button>
-          </div>
-        )}
-
         <div className="grid md:grid-cols-3 gap-6">
           {/* Cart Items List */}
           <div className="md:col-span-2 space-y-3.5">
@@ -395,22 +357,10 @@ export default function Cart() {
 
               <button
                 onClick={handleProceedToCheckout}
-                className={`w-full text-xs font-black rounded-xl py-3.5 shadow-md active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                  hasRegionMismatch
-                    ? "bg-amber-500 hover:bg-amber-600 text-white border border-amber-600 shadow-none"
-                    : "bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white"
-                }`}
+                className="w-full text-xs font-black rounded-xl py-3.5 shadow-md active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white"
               >
-                {hasRegionMismatch
-                  ? `🔒 Update Prices to Checkout (${currentRegionName})`
-                  : "Proceed to Checkout →"}
+                Proceed to Checkout →
               </button>
-
-              {hasRegionMismatch && (
-                <p className="text-[10px] font-bold text-amber-800 text-center mt-1.5 bg-amber-50 py-1.5 px-2 rounded-lg border border-amber-200">
-                  ⚠️ Region update required for {currentRegionName} before placing order
-                </p>
-              )}
             </div>
           </div>
         </div>

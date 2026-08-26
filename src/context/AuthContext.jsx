@@ -65,7 +65,7 @@ export function AuthProvider({ children }) {
     const apiRes = await fetch(`${API_BASE_URL}/api/v1/auth/otp/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: cleanPhone, otp: cleanOtp, name, role }),
+      body: JSON.stringify({ phone: cleanPhone, otp: cleanOtp }),
     });
     const apiData = await apiRes.json();
     if (!apiRes.ok || !apiData.success) {

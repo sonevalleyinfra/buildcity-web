@@ -51,10 +51,10 @@ export default function RegionPicker({ trigger }) {
                           const res = await updateCartToCurrentRegion();
                           if (res && res.removedItems && res.removedItems.length > 0) {
                             showAlert({
-                              title: "📍 Region Update Notice",
-                              message: `The following product(s) are not sold by any supplier in ${r.name} and have been removed from your cart:\n\n• ${res.removedItems.join("\n• ")}`,
+                              title: "📍 Region Changed",
+                              message: `Region change karne par purane region ke products cart se remove kar diye gaye hain.\n\nAb aap ${r.name} region se naye products cart me add kar sakte hain!`,
                               type: "warning",
-                              buttonText: "Understood",
+                              buttonText: "Got It",
                             });
                           }
                         } catch {}

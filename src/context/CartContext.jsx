@@ -195,9 +195,9 @@ export function CartProvider({ children }) {
 
         showAlert({
           title: "📍 Region Changed",
-          message: `Delivery region changed to ${region.name}. The following item(s) from your previous region have been removed from your cart:\n\n• ${removedNames.join("\n• ")}`,
+          message: `Region change karne par purane region ke products cart se remove kar diye gaye hain.\n\nAb aap ${region.name} region se naye products cart me add kar sakte hain!`,
           type: "warning",
-          buttonText: "Understood",
+          buttonText: "Got It",
         });
       }
     }

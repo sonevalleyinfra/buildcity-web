@@ -152,6 +152,19 @@ export function CartProvider({ children }) {
     return { updatedCount: updatedItems.length, removedItems };
   };
 
+  // Automatic Cart Region Sync: Automatically update prices or auto-remove unavailable items when region changes
+  useEffect(() => {
+    if (items.length > 0 && region?.id) {
+      updateCartToCurrentRegion().then((res) => {
+        if (res && res.removedItems && res.removedItems.length > 0) {
+          alert(
+            `⚠️ Region Availability Notice:\n\nThe following product(s) are not sold in ${region.name} and have been automatically removed from your cart:\n\n• ${res.removedItems.join("\n• ")}`
+          );
+        }
+      });
+    }
+  }, [region?.id, region?.name]);
+
   const count = items.reduce((sum, i) => sum + i.qty, 0);
   const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);
   const mrpTotal = items.reduce((sum, i) => sum + (i.mrp || i.price) * i.qty, 0);

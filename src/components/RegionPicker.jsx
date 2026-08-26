@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useRegion } from "../context/RegionContext";
+import { useCart } from "../context/CartContext";
 
 export default function RegionPicker({ trigger }) {
   const { region, setRegion, regions } = useRegion();
+  const { items, updateCartToCurrentRegion } = useCart();
   const [open, setOpen] = useState(false);
 
   return (
@@ -38,9 +40,20 @@ export default function RegionPicker({ trigger }) {
                   <button
                     type="button"
                     key={r.id}
-                    onClick={() => {
-                      setRegion(r.id);
+                    onClick={async () => {
+                      const newRegionId = r.id;
+                      setRegion(newRegionId);
                       setOpen(false);
+                      if (items && items.length > 0) {
+                        try {
+                          const res = await updateCartToCurrentRegion();
+                          if (res && res.removedItems && res.removedItems.length > 0) {
+                            alert(
+                              `⚠️ Region Update Notice:\n\nThe following product(s) are not sold by any supplier in ${r.name} and have been removed from your cart:\n\n• ${res.removedItems.join("\n• ")}`
+                            );
+                          }
+                        } catch {}
+                      }
                     }}
                     className={`w-full text-left flex items-center justify-between rounded-xl border p-3.5 active:scale-[0.98] transition-all duration-200 cursor-pointer ${
                       region.id === r.id

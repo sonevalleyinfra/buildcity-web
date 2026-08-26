@@ -183,18 +183,23 @@ export default function Checkout() {
       vendorName: i.vendorName,
     }));
 
-    const order = await placeOrder({
-      customerId: user?.id,
-      items: orderItems,
-      address: targetAddr,
-      total,
-      districtName: targetAddr?.city || region?.name || "Mirzapur",
-      regionId: region?.id || "mirzapur",
-    });
+    try {
+      const order = await placeOrder({
+        customerId: user?.id,
+        items: orderItems,
+        address: targetAddr,
+        total,
+        districtName: targetAddr?.city || region?.name || "Mirzapur",
+        regionId: region?.id || "mirzapur",
+      });
 
-    clearCart();
-    setPlacing(false);
-    navigate(`/orders/${order.id}`, { replace: true });
+      clearCart();
+      setPlacing(false);
+      navigate(`/orders/${order.id}`, { replace: true });
+    } catch (err) {
+      setPlacing(false);
+      alert(`⚠️ Order Error:\n\n${err.message || "Failed to place order."}`);
+    }
   };
 
   return (

@@ -143,20 +143,8 @@ export function CartProvider({ children }) {
           addedRegionName: region.name,
         });
       } else {
-        // Check if master catalog fallback or price factor applies
-        if (i.basePrice || i.isMasterProduct) {
-          const base = i.basePrice || i.price;
-          const calculatedPrice = Math.round(base * (region.priceFactor || 1));
-          updatedItems.push({
-            ...i,
-            price: calculatedPrice,
-            addedRegionId: region.id,
-            addedRegionName: region.name,
-          });
-        } else {
-          // Product is NOT sold by any supplier in this new region -> remove from cart
-          removedItems.push(i.name);
-        }
+        // Product is NOT sold by any supplier in this new region -> remove from cart
+        removedItems.push(i.name);
       }
     });
 

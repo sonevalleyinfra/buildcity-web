@@ -173,19 +173,33 @@ export function CartProvider({ children }) {
     return { updatedCount: updatedItems.length, removedItems };
   };
 
-  // Automatic Cart Region Sync: Automatically update prices or auto-remove unavailable items when region changes
+  // Automatic Cart Region Change Handler: Remove products from cart when region changes & show centered modal notice
   useEffect(() => {
     if (items.length > 0 && region?.id) {
-      updateCartToCurrentRegion().then((res) => {
-        if (res && res.removedItems && res.removedItems.length > 0) {
-          showAlert({
-            title: "📍 Region Availability Notice",
-            message: `The following product(s) are not sold in ${region.name} and have been automatically removed from your cart:\n\n• ${res.removedItems.join("\n• ")}`,
-            type: "warning",
-            buttonText: "Got It",
-          });
-        }
-      });
+      const itemsFromOtherRegion = items.filter(
+        (i) =>
+          i.addedRegionId &&
+          i.addedRegionId.toLowerCase() !== region.id.toLowerCase()
+      );
+
+      if (itemsFromOtherRegion.length > 0) {
+        const removedNames = itemsFromOtherRegion.map((i) => i.name);
+        // Keep only items that belong to the new region
+        setItems((prev) =>
+          prev.filter(
+            (i) =>
+              !i.addedRegionId ||
+              i.addedRegionId.toLowerCase() === region.id.toLowerCase()
+          )
+        );
+
+        showAlert({
+          title: "📍 Region Changed",
+          message: `Delivery region changed to ${region.name}. The following item(s) from your previous region have been removed from your cart:\n\n• ${removedNames.join("\n• ")}`,
+          type: "warning",
+          buttonText: "Understood",
+        });
+      }
     }
   }, [region?.id, region?.name]);
 

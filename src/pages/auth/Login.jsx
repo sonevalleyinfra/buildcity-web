@@ -24,7 +24,7 @@ export default function Login() {
     e.preventDefault();
     setError("");
     if (!/^\d{10}$/.test(phone.trim())) {
-      setError("Kripya sahi 10-digit mobile number enter karein");
+      setError("Please enter a valid 10-digit mobile number");
       return;
     }
     setLoading(true);
@@ -41,7 +41,7 @@ export default function Login() {
     e.preventDefault();
     setError("");
     if (!/^\d{4,6}$/.test(otp.trim())) {
-      setError("Aapke mobile par aaya hua OTP yahan enter karein");
+      setError("Please enter the OTP sent to your mobile number");
       return;
     }
     setLoading(true);
@@ -60,7 +60,7 @@ export default function Login() {
           
       navigate(home, { replace: true });
     } catch (err) {
-      setError(err?.message || "Kuch dikkat aayi, kripya dobara try karein");
+      setError(err?.message || "Verification failed. Please try again.");
     } finally {
       setLoading(false);
     }

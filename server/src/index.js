@@ -232,7 +232,7 @@ app.post("/api/v1/auth/otp/verify", async (req, res) => {
     }
 
     if (!isValid) {
-      return res.status(401).json({ error: "Invalid or expired OTP. Kripya mobile par aaya hua OTP enter karein." });
+      return res.status(401).json({ error: "Invalid or expired OTP. Please enter the OTP code sent to your mobile." });
     }
 
     let role = "CUSTOMER";

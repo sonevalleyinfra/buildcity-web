@@ -131,7 +131,7 @@ export function CartProvider({ children }) {
         : null;
 
       if (matchingListing) {
-        // Option A: Vendor listing exists in the new region -> update price to that region's vendor price
+        // Case 1: Product IS sold by a vendor in the new region -> update price to that region's vendor price
         const realPrice = Number(matchingListing.price) || i.price;
         const realVendorId = matchingListing.vendorId || i.vendorId;
         const realVendorName = matchingListing.vendor?.shopName || matchingListing.vendorName || i.vendorName;
@@ -144,19 +144,28 @@ export function CartProvider({ children }) {
           addedRegionId: region.id,
           addedRegionName: region.name,
         });
-      } else if (i.basePrice || i.isMasterProduct) {
-        // Option B: General / Master Catalog product -> recalculate price using the new region's price factor
-        const base = Number(i.basePrice || i.suggestedPrice || i.price);
-        const calculatedPrice = Math.round(base * Number(region.priceFactor || 1.0));
-        updatedItems.push({
-          ...i,
-          price: calculatedPrice,
-          addedRegionId: region.id,
-          addedRegionName: region.name,
-        });
       } else {
-        // Option C: Vendor-exclusive product NOT available in new region -> remove from cart
-        removedItems.push(i.name);
+        // Check if this product is listed by vendors in OTHER regions but NOT in the new region
+        const isVendorListedElsewhere = Array.isArray(listings) && listings.some((l) => {
+          return (l.masterProductId && i.masterProductId && l.masterProductId === i.masterProductId) ||
+                 (l.id && i.id && l.id === i.id) ||
+                 (l.name && i.name && l.name.toLowerCase().trim() === i.name.toLowerCase().trim());
+        });
+
+        if (isVendorListedElsewhere || !i.isMasterProduct) {
+          // Product is NOT sold by any supplier in the new region -> REMOVE FROM CART
+          removedItems.push(i.name);
+        } else {
+          // General master product available everywhere -> recalculate price using the new region's price factor
+          const base = Number(i.basePrice || i.suggestedPrice || i.price);
+          const calculatedPrice = Math.round(base * Number(region.priceFactor || 1.0));
+          updatedItems.push({
+            ...i,
+            price: calculatedPrice,
+            addedRegionId: region.id,
+            addedRegionName: region.name,
+          });
+        }
       }
     });
 

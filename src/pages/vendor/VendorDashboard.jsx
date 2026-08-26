@@ -118,7 +118,7 @@ export default function VendorDashboard() {
 
     setSelectedMasterProd(null);
     setShowCatalogModal(false);
-    alert(`"${selectedMasterProd.name}" is submitted for Review!\n\nStatus: ⏳ Under Admin & DR Review\nAdmin aur DR dwara Approve hone ke baad yeh product customer store par live dikhega.`);
+    alert(`"${selectedMasterProd.name}" has been submitted for review!\n\nStatus: ⏳ Under Admin & DR Review\nOnce approved by Admin or DR, this product will go live on the customer store.`);
   };
 
   const handleUpdateListing = (e) => {

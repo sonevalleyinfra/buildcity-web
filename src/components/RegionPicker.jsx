@@ -2,10 +2,12 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useRegion } from "../context/RegionContext";
 import { useCart } from "../context/CartContext";
+import { useAlert } from "../context/AlertContext";
 
 export default function RegionPicker({ trigger }) {
   const { region, setRegion, regions } = useRegion();
   const { items, updateCartToCurrentRegion } = useCart();
+  const { showAlert } = useAlert();
   const [open, setOpen] = useState(false);
 
   return (
@@ -48,9 +50,12 @@ export default function RegionPicker({ trigger }) {
                         try {
                           const res = await updateCartToCurrentRegion();
                           if (res && res.removedItems && res.removedItems.length > 0) {
-                            alert(
-                              `⚠️ Region Update Notice:\n\nThe following product(s) are not sold by any supplier in ${r.name} and have been removed from your cart:\n\n• ${res.removedItems.join("\n• ")}`
-                            );
+                            showAlert({
+                              title: "📍 Region Update Notice",
+                              message: `The following product(s) are not sold by any supplier in ${r.name} and have been removed from your cart:\n\n• ${res.removedItems.join("\n• ")}`,
+                              type: "warning",
+                              buttonText: "Understood",
+                            });
                           }
                         } catch {}
                       }

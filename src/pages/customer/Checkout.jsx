@@ -6,11 +6,13 @@ import { useOrders } from "../../context/OrderContext";
 import { useAuth } from "../../context/AuthContext";
 import { useRegion } from "../../context/RegionContext";
 import { useAddresses } from "../../context/AddressContext";
+import { useAlert } from "../../context/AlertContext";
 import { API_BASE_URL } from "../../config/api";
 
 export default function Checkout() {
   const { items, subtotal, mrpTotal = subtotal, clearCart, hasRegionMismatch } = useCart();
   const { placeOrder } = useOrders();
+  const { showAlert } = useAlert();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { region } = useRegion();
@@ -134,7 +136,12 @@ export default function Checkout() {
     // If no saved address selected, check inline form fields
     if (!targetAddr || !targetAddr.street) {
       if (!newStreet || !newStreet.trim()) {
-        alert("Kripya Order place karne ke liye apna Site Delivery Address zaroor bharain.");
+        showAlert({
+          title: "📍 Delivery Address Required",
+          message: "Please enter your Site Delivery Address to complete your order.",
+          type: "warning",
+          buttonText: "Fill Address",
+        });
         return;
       }
 
@@ -198,7 +205,12 @@ export default function Checkout() {
       navigate(`/orders/${order.id}`, { replace: true });
     } catch (err) {
       setPlacing(false);
-      alert(`⚠️ Order Error:\n\n${err.message || "Failed to place order."}`);
+      showAlert({
+        title: "⚠️ Order Creation Notice",
+        message: err.message || "Failed to place order.",
+        type: "warning",
+        buttonText: "Understood",
+      });
     }
   };
 

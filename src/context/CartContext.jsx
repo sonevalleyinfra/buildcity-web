@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useRegion } from "./RegionContext";
 import { useAuth } from "./AuthContext";
+import { useAlert } from "./AlertContext";
 
 // Cart context - user isolated cart storage & regional pricing
 const CartContext = createContext(null);
@@ -8,6 +9,7 @@ const CartContext = createContext(null);
 export function CartProvider({ children }) {
   const { user } = useAuth();
   const { region } = useRegion();
+  const { showAlert } = useAlert();
   const [items, setItems] = useState([]);
 
   // Compute unique storage key for logged-in user or guest
@@ -157,9 +159,12 @@ export function CartProvider({ children }) {
     if (items.length > 0 && region?.id) {
       updateCartToCurrentRegion().then((res) => {
         if (res && res.removedItems && res.removedItems.length > 0) {
-          alert(
-            `⚠️ Region Availability Notice:\n\nThe following product(s) are not sold in ${region.name} and have been automatically removed from your cart:\n\n• ${res.removedItems.join("\n• ")}`
-          );
+          showAlert({
+            title: "📍 Region Availability Notice",
+            message: `The following product(s) are not sold in ${region.name} and have been automatically removed from your cart:\n\n• ${res.removedItems.join("\n• ")}`,
+            type: "warning",
+            buttonText: "Got It",
+          });
         }
       });
     }

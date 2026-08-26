@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import { useCart } from "../../context/CartContext";
 import { useAdmin } from "../../context/AdminContext";
+import { useAlert } from "../../context/AlertContext";
 import { API_BASE_URL } from "../../config/api";
 
 const AVAILABLE_COUPONS = [
@@ -24,6 +25,7 @@ export default function Cart() {
     updateCartToCurrentRegion,
   } = useCart();
   const { coupons: adminCoupons = [], products = [] } = useAdmin();
+  const { showAlert } = useAlert();
   const navigate = useNavigate();
 
   // Live DB Coupons state
@@ -41,14 +43,27 @@ export default function Cart() {
     try {
       const { updatedCount, removedItems } = await updateCartToCurrentRegion(products);
       if (removedItems && removedItems.length > 0) {
-        alert(
-          `⚠️ Region Availability Notice:\n\nThe following product(s) are not sold by any supplier in ${currentRegionName} and have been removed from your cart:\n\n• ${removedItems.join("\n• ")}`
-        );
+        showAlert({
+          title: "📍 Region Availability Notice",
+          message: `The following product(s) are not sold by any supplier in ${currentRegionName} and have been removed from your cart:\n\n• ${removedItems.join("\n• ")}`,
+          type: "warning",
+          buttonText: "Understood",
+        });
       } else {
-        alert(`✅ Cart prices and vendor listings successfully updated for ${currentRegionName}!`);
+        showAlert({
+          title: "✅ Region Sync Complete",
+          message: `Cart prices and vendor listings successfully updated for ${currentRegionName}!`,
+          type: "success",
+          buttonText: "Awesome",
+        });
       }
     } catch (err) {
-      alert("Error updating region prices: " + (err.message || err));
+      showAlert({
+        title: "❌ Update Failed",
+        message: "Error updating region prices: " + (err.message || err),
+        type: "error",
+        buttonText: "Close",
+      });
     } finally {
       setIsUpdatingPrices(false);
     }
@@ -56,7 +71,12 @@ export default function Cart() {
 
   const handleProceedToCheckout = () => {
     if (hasRegionMismatch) {
-      alert(`⚠️ Action Required: Please click '🔄 Update Cart Prices to ${currentRegionName}' before proceeding to checkout!`);
+      showAlert({
+        title: "⚠️ Action Required",
+        message: `Please click '🔄 Update Cart Prices to ${currentRegionName}' before proceeding to checkout!`,
+        type: "warning",
+        buttonText: "Got It",
+      });
       return;
     }
     navigate("/checkout");

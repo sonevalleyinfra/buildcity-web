@@ -41,16 +41,19 @@ function CatchAll() {
   return <Navigate to={target} replace />;
 }
 
+import { AlertProvider } from "./context/AlertContext";
+
 export default function App() {
   return (
-    <AuthProvider>
-      <RegionProvider>
-        <CartProvider>
-          <OrderProvider>
-            <AddressProvider>
-              <NotificationProvider>
-                <AdminProvider>
-                <BrowserRouter>
+    <AlertProvider>
+      <AuthProvider>
+        <RegionProvider>
+          <CartProvider>
+            <OrderProvider>
+              <AddressProvider>
+                <NotificationProvider>
+                  <AdminProvider>
+                  <BrowserRouter>
                 <Routes>
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
@@ -178,6 +181,7 @@ export default function App() {
             </OrderProvider>
           </CartProvider>
         </RegionProvider>
-    </AuthProvider>
+      </AuthProvider>
+    </AlertProvider>
   );
 }

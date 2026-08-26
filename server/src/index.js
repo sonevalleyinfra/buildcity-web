@@ -1115,15 +1115,44 @@ app.get("/api/v1/orders/vendor/:vendorId", async (req, res) => {
   }
 });
 
-// Update Order Status (Vendor & Admin)
+// Update Order Status (Vendor & Admin with Auto Stock Restore on Cancel)
 app.patch("/api/v1/orders/:id/status", async (req, res) => {
   try {
     const { status } = req.body; // PENDING | PROCESSING | OUT_FOR_DELIVERY | DELIVERED | CANCELLED
+    const previousOrder = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: { items: true },
+    }).catch(() => null);
+
     const updatedOrder = await prisma.order.update({
       where: { id: req.params.id },
       data: { status },
       include: { items: true, customer: true },
     });
+
+    // Restore reserved quantity back to DB inventory when order is cancelled or rejected
+    if (status === "CANCELLED" && previousOrder && previousOrder.status !== "CANCELLED" && Array.isArray(previousOrder.items)) {
+      for (const item of previousOrder.items) {
+        try {
+          const vp = await prisma.vendorProduct.findFirst({
+            where: {
+              name: { equals: item.productName, mode: "insensitive" },
+            },
+          }).catch(() => null);
+
+          if (vp) {
+            await prisma.vendorProduct.update({
+              where: { id: vp.id },
+              data: { stockQty: { increment: Number(item.quantity || 1) } },
+            }).catch(() => null);
+            console.log(`✓ Restored ${item.quantity} units to inventory stock for product "${vp.name}"`);
+          }
+        } catch (e) {
+          console.warn("Stock restore note:", e.message);
+        }
+      }
+    }
+
     res.json(updatedOrder);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1314,60 +1343,102 @@ app.post("/api/v1/orders/checkout", async (req, res) => {
       }
     }
 
-    const newOrder = await prisma.order.create({
-      data: {
-        customerId: targetCustomerId,
-        addressId,
-        totalAmount: Number(totalAmount) || 0,
-        deliveryFee: Number(deliveryFee) || 49,
-        paymentMode: "COD",
-        status: "PENDING",
-        idempotencyKey,
-      },
-    });
+    // Calculate server-validated order total & verify stock
+    let serverTotalAmount = 0;
+    const validatedItems = [];
 
     if (items && Array.isArray(items)) {
       for (const item of items) {
-        let targetVendor = null;
+        const itemQty = Math.max(1, Number(item.quantity) || 1);
+        const prodName = item.name || item.productName || "Material Item";
+
+        // Fetch live vendor product from Supabase DB to prevent price tampering
+        let liveVp = null;
+        if (item.id || item.productId) {
+          liveVp = await prisma.vendorProduct.findUnique({ where: { id: item.id || item.productId } }).catch(() => null);
+        }
+        if (!liveVp && prodName) {
+          liveVp = await prisma.vendorProduct.findFirst({
+            where: { name: { equals: prodName, mode: "insensitive" } },
+            include: { vendor: true },
+          }).catch(() => null);
+        }
+
+        // Server-Side Price Verification (Always trust DB price, never browser client body)
+        const verifiedPrice = liveVp ? Number(liveVp.price) : (Number(item.price) || 100);
+        const itemTotal = itemQty * verifiedPrice;
+        serverTotalAmount += itemTotal;
+
+        // Stock Re-check & Decrement Lock
+        if (liveVp) {
+          if (liveVp.stockQty < itemQty) {
+            return res.status(400).json({
+              error: `Insufficient stock for "${liveVp.name}". Available: ${liveVp.stockQty} ${liveVp.unit || "units"}, Requested: ${itemQty}.`,
+            });
+          }
+          // Atomically decrement stock in DB
+          await prisma.vendorProduct.update({
+            where: { id: liveVp.id },
+            data: { stockQty: { decrement: itemQty } },
+          }).catch(() => null);
+        }
+
+        let targetVendor = liveVp?.vendor || null;
         const vParam = item.vendorId || item.vendorName;
 
-        if (vParam) {
+        if (!targetVendor && vParam) {
           targetVendor = await prisma.vendor.findFirst({
             where: {
               OR: [
                 { id: vParam },
                 { phone: vParam.replace(/^v-/, "") },
                 { shopName: { equals: vParam, mode: "insensitive" } },
-                { ownerName: { equals: vParam, mode: "insensitive" } },
               ],
             },
           }).catch(() => null);
-        }
-
-        if (!targetVendor && (item.name || item.productName)) {
-          const vp = await prisma.vendorProduct.findFirst({
-            where: { name: { equals: item.name || item.productName, mode: "insensitive" } },
-            include: { vendor: true },
-          }).catch(() => null);
-          if (vp) targetVendor = vp.vendor;
         }
 
         if (!targetVendor) {
           targetVendor = await prisma.vendor.findFirst().catch(() => null);
         }
 
-        if (targetVendor) {
-          await prisma.orderItem.create({
-            data: {
-              orderId: newOrder.id,
-              productName: item.name || item.productName || "Material Item",
-              priceAtPurchase: Number(item.price) || 100,
-              quantity: Number(item.quantity) || 1,
-              totalPrice: (Number(item.quantity) || 1) * (Number(item.price) || 100),
-              vendorId: targetVendor.id,
-            },
-          });
-        }
+        validatedItems.push({
+          productName: prodName,
+          priceAtPurchase: verifiedPrice,
+          quantity: itemQty,
+          totalPrice: itemTotal,
+          vendorId: targetVendor ? targetVendor.id : null,
+        });
+      }
+    }
+
+    const calculatedDeliveryFee = Number(deliveryFee) || 49;
+    const finalOrderAmount = serverTotalAmount + calculatedDeliveryFee;
+
+    const newOrder = await prisma.order.create({
+      data: {
+        customerId: targetCustomerId,
+        addressId,
+        totalAmount: finalOrderAmount,
+        deliveryFee: calculatedDeliveryFee,
+        paymentMode: "COD",
+        status: "PENDING",
+        idempotencyKey,
+      },
+    });
+
+    for (const vItem of validatedItems) {
+      if (vItem.vendorId) {
+        await prisma.orderItem.create({
+          data: {
+            orderId: newOrder.id,
+            productName: vItem.productName,
+            priceAtPurchase: vItem.priceAtPurchase,
+            quantity: vItem.quantity,
+            totalPrice: vItem.totalPrice,
+            vendorId: vItem.vendorId,
+          },
+        });
       }
     }
 

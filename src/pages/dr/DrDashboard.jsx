@@ -3,6 +3,7 @@ import Logo from "../../components/Logo";
 import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useOrders } from "../../context/OrderContext";
+import { useAlert } from "../../context/AlertContext";
 import { formatShortId } from "../../utils/formatId";
 
 const PRESET_IMAGES = [
@@ -16,6 +17,7 @@ const PRESET_IMAGES = [
 // District Representative (DR) Dashboard component — Ground Agent Portal
 export default function DrDashboard() {
   const { user, logout } = useAuth();
+  const { showAlert, showConfirm } = useAlert();
   const { drs = [], masterProducts = [], vendors = [], products = [], productsLoading, categories, regions, addVendor, updateVendor, removeVendor, addMasterProduct, updateMasterProduct, setVendorStatus, updateListingApprovalStatus } = useAdmin();
   const { orders = [] } = useOrders();
 
@@ -129,19 +131,27 @@ export default function DrDashboard() {
   const [busyListingId, setBusyListingId] = useState(null);
 
   const handleDeleteVendor = async (v) => {
-    if (!confirm(`Are you sure you want to permanently delete vendor "${v.shopName}" from Database?`)) return;
-    setDeletingVendorId(v.id);
-    try {
-      await removeVendor(v.id);
-    } finally {
-      setDeletingVendorId(null);
-    }
+    showConfirm({
+      title: "Delete Vendor Partner?",
+      message: `Are you sure you want to permanently delete vendor "${v.shopName}" from Database?`,
+      type: "error",
+      confirmText: "Delete Vendor",
+      onConfirm: async () => {
+        setDeletingVendorId(v.id);
+        try {
+          await removeVendor(v.id);
+          showAlert({ title: "Vendor Deleted", message: `Vendor "${v.shopName}" removed successfully.`, type: "success" });
+        } finally {
+          setDeletingVendorId(null);
+        }
+      },
+    });
   };
 
   const handleCreateVendor = async (e) => {
     e.preventDefault();
     if (!vendorForm.shopName.trim() || !vendorForm.ownerName.trim() || !vendorForm.phone.trim()) {
-      alert("Please fill all required vendor details!");
+      showAlert({ title: "Validation Error", message: "Please fill all required vendor details!", type: "warning" });
       return;
     }
     if (isSubmittingVendor) return;
@@ -167,9 +177,9 @@ export default function DrDashboard() {
 
       setVendorForm({ shopName: "", ownerName: "", phone: "", status: "APPROVED", commissionRate: 10 });
       setShowVendorModal(false);
-      alert(`✅ Vendor "${vendorForm.shopName.trim()}" successfully added to Supabase Cloud Database!`);
+      showAlert({ title: "Vendor Added", message: `Vendor "${vendorForm.shopName.trim()}" successfully added to Supabase Cloud Database!`, type: "success" });
     } catch (err) {
-      alert("Failed to add vendor: " + err.message);
+      showAlert({ title: "Error", message: "Failed to add vendor: " + err.message, type: "error" });
     } finally {
       setIsSubmittingVendor(false);
     }
@@ -178,7 +188,7 @@ export default function DrDashboard() {
   const handleCreateProduct = (e) => {
     e.preventDefault();
     if (!productForm.name.trim() || !productForm.categoryId) {
-      alert("Please select Category and enter Product Name!");
+      showAlert({ title: "Validation Error", message: "Please select Category and enter Product Name!", type: "warning" });
       return;
     }
 
@@ -210,7 +220,7 @@ export default function DrDashboard() {
       imageUrl: PRESET_IMAGES[0].url,
     });
     setShowProductModal(false);
-    alert("Product added successfully!");
+    showAlert({ title: "Product Added", message: "Product added successfully to Master Catalog!", type: "success" });
   };
 
   return (

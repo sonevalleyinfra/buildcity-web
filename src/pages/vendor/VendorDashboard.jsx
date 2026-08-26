@@ -3,11 +3,13 @@ import DashboardShell from "../../components/DashboardShell";
 import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useOrders } from "../../context/OrderContext";
+import { useAlert } from "../../context/AlertContext";
 import { formatShortId } from "../../utils/formatId";
 
 // Vendor Dashboard component — Vendor partner ka main portal (Master Catalog selection, Custom Price & Stock setting, Orders management)
 export default function VendorDashboard() {
   const { user } = useAuth();
+  const { showAlert, showConfirm } = useAlert();
   const {
     masterProducts = [],
     vendors = [],
@@ -118,7 +120,12 @@ export default function VendorDashboard() {
 
     setSelectedMasterProd(null);
     setShowCatalogModal(false);
-    alert(`"${selectedMasterProd.name}" has been submitted for review!\n\nStatus: ⏳ Under Admin & DR Review\nOnce approved by Admin or DR, this product will go live on the customer store.`);
+    showAlert({
+      title: "Submitted for Review",
+      message: `"${selectedMasterProd.name}" has been submitted for review!\n\nStatus: ⏳ Under Admin & DR Review\nOnce approved by Admin or DR, this product will go live on the customer store.`,
+      type: "info",
+      buttonText: "Understood",
+    });
   };
 
   const handleUpdateListing = (e) => {
@@ -131,13 +138,20 @@ export default function VendorDashboard() {
     });
 
     setEditingProduct(null);
-    alert("Product price and stock updated!");
+    showAlert({ title: "Listing Updated", message: "Product price and stock updated successfully!", type: "success" });
   };
 
   const handleRemoveListing = (id, name) => {
-    if (confirm(`Remove "${name}" from your store listings?`)) {
-      removeVendorProductListing(id);
-    }
+    showConfirm({
+      title: "Remove Store Listing?",
+      message: `Remove "${name}" from your store listings?`,
+      type: "warning",
+      confirmText: "Remove Listing",
+      onConfirm: () => {
+        removeVendorProductListing(id);
+        showAlert({ title: "Listing Removed", message: `"${name}" removed from your store.`, type: "info" });
+      },
+    });
   };
 
   // Real DB stats calculation

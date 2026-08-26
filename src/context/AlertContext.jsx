@@ -10,31 +10,67 @@ export function AlertProvider({ children }) {
     message: "",
     type: "info", // warning, success, error, info
     buttonText: "Understood",
+    isConfirm: false,
+    cancelText: "Cancel",
+    confirmText: "Confirm",
     onConfirm: null,
+    onCancel: null,
   });
 
-  const showAlert = ({ title, message, type = "warning", buttonText = "Understood", onConfirm = null }) => {
+  const showAlert = ({ title, message, type = "warning", buttonText = "Understood" }) => {
     setConfig({
       isOpen: true,
       title: title || (type === "warning" ? "Notice" : type === "success" ? "Success" : "Notification"),
       message: message || "",
       type,
       buttonText,
+      isConfirm: false,
+      onConfirm: null,
+    });
+  };
+
+  const showConfirm = ({ title, message, type = "warning", confirmText = "Yes, Proceed", cancelText = "Cancel", onConfirm, onCancel }) => {
+    setConfig({
+      isOpen: true,
+      title: title || "Confirmation Required",
+      message: message || "Are you sure you want to proceed?",
+      type,
+      confirmText,
+      cancelText,
+      isConfirm: true,
       onConfirm,
+      onCancel,
     });
   };
 
   const hideAlert = () => {
-    if (config.onConfirm) {
-      try {
-        config.onConfirm();
-      } catch {}
-    }
     setConfig((prev) => ({ ...prev, isOpen: false }));
   };
 
+  const handleConfirmAction = () => {
+    if (config.onConfirm) {
+      try {
+        config.onConfirm();
+      } catch (err) {
+        console.error("Alert confirm action error:", err);
+      }
+    }
+    hideAlert();
+  };
+
+  const handleCancelAction = () => {
+    if (config.onCancel) {
+      try {
+        config.onCancel();
+      } catch (err) {
+        console.error("Alert cancel action error:", err);
+      }
+    }
+    hideAlert();
+  };
+
   return (
-    <AlertContext.Provider value={{ showAlert, hideAlert }}>
+    <AlertContext.Provider value={{ showAlert, showConfirm, hideAlert }}>
       {children}
       {config.isOpen &&
         createPortal(
@@ -105,16 +141,35 @@ export function AlertProvider({ children }) {
                 </p>
               </div>
 
-              {/* Action Button */}
+              {/* Action Buttons */}
               <div className="mt-5">
-                <button
-                  type="button"
-                  onClick={hideAlert}
-                  className="w-full bg-navy-900 hover:bg-navy-950 active:scale-[0.98] text-white font-extrabold text-xs py-3.5 px-6 rounded-2xl shadow-md transition-all duration-200 cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <span>{config.buttonText}</span>
-                  <span>→</span>
-                </button>
+                {config.isConfirm ? (
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleCancelAction}
+                      className="w-1/2 bg-slate-100 hover:bg-slate-200 active:scale-[0.98] text-slate-700 font-extrabold text-xs py-3 px-4 rounded-2xl border border-slate-200 transition-all duration-200 cursor-pointer text-center"
+                    >
+                      {config.cancelText}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmAction}
+                      className="w-1/2 bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-extrabold text-xs py-3 px-4 rounded-2xl shadow-md transition-all duration-200 cursor-pointer text-center"
+                    >
+                      {config.confirmText}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={hideAlert}
+                    className="w-full bg-navy-900 hover:bg-navy-950 active:scale-[0.98] text-white font-extrabold text-xs py-3.5 px-6 rounded-2xl shadow-md transition-all duration-200 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <span>{config.buttonText}</span>
+                    <span>→</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>,

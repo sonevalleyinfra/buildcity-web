@@ -2,6 +2,7 @@ import { useState } from "react";
 import Logo from "../../components/Logo";
 import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
+import { useAlert } from "../../context/AlertContext";
 import { formatShortId } from "../../utils/formatId";
 
 const TABS = [
@@ -33,6 +34,7 @@ const STATUS_STYLE = {
 // Admin yahan se DRs assign karta hai, Vendors approve/suspend karta hai, Master Product Catalog manage karta hai, aur Categories/Regions configure karta hai.
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
+  const { showAlert, showConfirm } = useAlert();
   const {
     drs = [],
     vendors,
@@ -112,7 +114,7 @@ export default function AdminDashboard() {
   const handleAddCoupon = async (e) => {
     e.preventDefault();
     if (!couponForm.code.trim()) {
-      alert("Please enter Coupon Code!");
+      showAlert({ title: "Coupon Code Required", message: "Please enter a valid coupon code.", type: "warning" });
       return;
     }
     setIsSubmittingCoupon(true);
@@ -127,9 +129,9 @@ export default function AdminDashboard() {
       });
       setCouponForm({ code: "", title: "", discountAmount: 100, minOrder: 1000, expiryDate: "2026-12-31", desc: "" });
       setShowCouponForm(false);
-      alert(`Coupon "${couponForm.code.trim().toUpperCase()}" created & activated successfully!`);
+      showAlert({ title: "Coupon Created", message: `Coupon "${couponForm.code.trim().toUpperCase()}" created & activated successfully!`, type: "success" });
     } catch (err) {
-      alert("Error adding coupon: " + (err.message || err));
+      showAlert({ title: "Error", message: "Error adding coupon: " + (err.message || err), type: "error" });
     } finally {
       setIsSubmittingCoupon(false);
     }
@@ -142,22 +144,30 @@ export default function AdminDashboard() {
     try {
       await updateCoupon(editingCoupon.id, editingCoupon);
       setEditingCoupon(null);
-      alert("Coupon updated in Database successfully!");
+      showAlert({ title: "Coupon Updated", message: "Coupon updated in Database successfully!", type: "success" });
     } catch (err) {
-      alert("Error updating coupon: " + (err.message || err));
+      showAlert({ title: "Error", message: "Error updating coupon: " + (err.message || err), type: "error" });
     } finally {
       setIsSubmittingCoupon(false);
     }
   };
 
   const handleDeleteCoupon = async (c) => {
-    if (!confirm(`Are you sure you want to delete coupon "${c.code}"?`)) return;
-    setDeletingCouponId(c.id);
-    try {
-      await removeCoupon(c);
-    } finally {
-      setDeletingCouponId(null);
-    }
+    showConfirm({
+      title: "Delete Coupon?",
+      message: `Are you sure you want to delete coupon "${c.code}"?`,
+      type: "warning",
+      confirmText: "Delete",
+      onConfirm: async () => {
+        setDeletingCouponId(c.id);
+        try {
+          await removeCoupon(c);
+          showAlert({ title: "Coupon Deleted", message: `Coupon "${c.code}" has been removed.`, type: "success" });
+        } finally {
+          setDeletingCouponId(null);
+        }
+      },
+    });
   };
   const [productForm, setProductForm] = useState({
     name: "",
@@ -179,20 +189,28 @@ export default function AdminDashboard() {
 
   // Vendor Delete Handler — Live spinner animation aur double-click protection ke sath vendor remove karein
   const handleDeleteVendor = async (v) => {
-    if (!confirm(`Are you sure you want to permanently delete vendor "${v.shopName}" from Database?`)) return;
-    setDeletingVendorId(v.id);
-    try {
-      await removeVendor(v.id);
-    } finally {
-      setDeletingVendorId(null);
-    }
+    showConfirm({
+      title: "Delete Vendor Partner?",
+      message: `Are you sure you want to permanently delete vendor "${v.shopName}" from Database?`,
+      type: "error",
+      confirmText: "Delete Vendor",
+      onConfirm: async () => {
+        setDeletingVendorId(v.id);
+        try {
+          await removeVendor(v.id);
+          showAlert({ title: "Vendor Deleted", message: `Vendor "${v.shopName}" removed successfully.`, type: "success" });
+        } finally {
+          setDeletingVendorId(null);
+        }
+      },
+    });
   };
 
   // Admin Add Vendor Handler — Direct APPROVED status aur submission spinner ke sath Naya Vendor save karein
   const handleAddVendorSubmit = async (e) => {
     e.preventDefault();
     if (!vendorForm.shopName.trim() || !vendorForm.ownerName.trim() || !vendorForm.phone.trim()) {
-      alert("Please fill all Vendor details!");
+      showAlert({ title: "Validation Error", message: "Please fill all Vendor details!", type: "warning" });
       return;
     }
     if (isSubmittingVendor) return;
@@ -216,9 +234,9 @@ export default function AdminDashboard() {
       });
       setVendorForm({ shopName: "", ownerName: "", phone: "", regionId: "", commissionRate: 10 });
       setShowVendorForm(false);
-      alert(`✅ Vendor "${vendorForm.shopName.trim()}" successfully added to Supabase Cloud Database!`);
+      showAlert({ title: "Vendor Added", message: `Vendor "${vendorForm.shopName.trim()}" successfully added to Supabase Cloud Database!`, type: "success" });
     } catch (err) {
-      alert("Failed to add vendor: " + err.message);
+      showAlert({ title: "Error", message: "Failed to add vendor: " + err.message, type: "error" });
     } finally {
       setIsSubmittingVendor(false);
     }
@@ -229,7 +247,7 @@ export default function AdminDashboard() {
   const handleAddDr = async (e) => {
     e.preventDefault();
     if (!drForm.name.trim() || !drForm.phone.trim() || !drForm.regionId) {
-      alert("Please fill all DR details!");
+      showAlert({ title: "Validation Error", message: "Please fill all District Rep details!", type: "warning" });
       return;
     }
     if (isSubmittingDr) return;
@@ -243,9 +261,9 @@ export default function AdminDashboard() {
       });
       setDrForm({ name: "", phone: "", regionId: "" });
       setShowDrForm(false);
-      alert("✅ District Representative added to Database successfully!");
+      showAlert({ title: "DR Added", message: "District Representative added to Database successfully!", type: "success" });
     } catch (err) {
-      alert("Failed to add DR: " + err.message);
+      showAlert({ title: "Error", message: "Failed to add DR: " + err.message, type: "error" });
     } finally {
       setIsSubmittingDr(false);
     }
@@ -256,7 +274,7 @@ export default function AdminDashboard() {
     if (!editingDr) return;
     updateDr(editingDr.id, editingDr);
     setEditingDr(null);
-    alert("DR details updated!");
+    showAlert({ title: "DR Updated", message: "DR details updated successfully!", type: "success" });
   };
 
   const handleUpdateVendorSubmit = (e) => {
@@ -264,7 +282,7 @@ export default function AdminDashboard() {
     if (!editingVendor) return;
     updateVendor(editingVendor.id, editingVendor);
     setEditingVendor(null);
-    alert("Vendor details updated!");
+    showAlert({ title: "Vendor Updated", message: "Vendor details updated successfully!", type: "success" });
   };
 
   const handleUpdateProductSubmit = (e) => {
@@ -272,7 +290,7 @@ export default function AdminDashboard() {
     if (!editingProduct) return;
     updateMasterProduct(editingProduct.id || editingProduct.masterProductId, editingProduct);
     setEditingProduct(null);
-    alert("Product details updated!");
+    showAlert({ title: "Product Updated", message: "Product details updated successfully!", type: "success" });
   };
 
   const handleAddCategory = async (e) => {
@@ -282,8 +300,9 @@ export default function AdminDashboard() {
       await addCategory({ name: catForm.name });
       setCatForm({ name: "" });
       setShowCatForm(false);
+      showAlert({ title: "Category Added", message: `Category "${catForm.name}" created successfully!`, type: "success" });
     } catch (err) {
-      alert("Error adding category: " + (err.message || err));
+      showAlert({ title: "Error", message: "Error adding category: " + (err.message || err), type: "error" });
     }
   };
 
@@ -296,9 +315,9 @@ export default function AdminDashboard() {
     try {
       await updateCategory(editingCategory.id, editingCategory);
       setEditingCategory(null);
-      alert(`Category "${editingCategory.name}" updated in Database successfully!`);
+      showAlert({ title: "Category Updated", message: `Category "${editingCategory.name}" updated in Database successfully!`, type: "success" });
     } catch (err) {
-      alert("Error updating category: " + (err.message || err));
+      showAlert({ title: "Error", message: "Error updating category: " + (err.message || err), type: "error" });
     } finally {
       setIsSubmittingCat(false);
     }
@@ -318,9 +337,9 @@ export default function AdminDashboard() {
       });
       setRegionForm({ name: "", state: "Uttar Pradesh", baseDeliveryCharge: 49 });
       setShowRegionForm(false);
-      alert(`District Region "${regionForm.name.trim()}" saved to Database successfully!`);
+      showAlert({ title: "Region Added", message: `District Region "${regionForm.name.trim()}" saved to Database successfully!`, type: "success" });
     } catch (err) {
-      alert("Error adding district region: " + (err.message || err));
+      showAlert({ title: "Error", message: "Error adding district region: " + (err.message || err), type: "error" });
     } finally {
       setIsSubmittingRegion(false);
     }
@@ -333,9 +352,9 @@ export default function AdminDashboard() {
     try {
       await updateRegion(editingRegion.id, editingRegion);
       setEditingRegion(null);
-      alert("District Region updated in Database successfully!");
+      showAlert({ title: "Region Updated", message: "District Region updated in Database successfully!", type: "success" });
     } catch (err) {
-      alert("Error updating district region: " + (err.message || err));
+      showAlert({ title: "Error", message: "Error updating district region: " + (err.message || err), type: "error" });
     } finally {
       setIsSubmittingRegion(false);
     }
@@ -344,7 +363,7 @@ export default function AdminDashboard() {
   const handleAddProduct = (e) => {
     e.preventDefault();
     if (!productForm.name.trim() || !productForm.categoryId) {
-      alert("Please select Category and enter Product Name!");
+      showAlert({ title: "Validation Error", message: "Please select Category and enter Product Name!", type: "warning" });
       return;
     }
     addMasterProduct({
@@ -361,7 +380,7 @@ export default function AdminDashboard() {
     });
     setProductForm({ name: "", categoryId: "", vendorId: "", brand: "", type: "", grade: "", unit: "50kg Bag", price: "", stockQty: "" });
     setShowProductForm(false);
-    alert("Master Product created successfully!");
+    showAlert({ title: "Product Created", message: "Master Product created successfully!", type: "success" });
   };
 
   const filteredListings = products.filter((p) => {
@@ -430,7 +449,7 @@ export default function AdminDashboard() {
                 <span>{t.label}</span>
                 {t.id === "Users" && (
                   <span className="bg-brand-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-2xs">
-                    {users.length}
+                    {users.filter((u) => !u.role || u.role === "CUSTOMER").length}
                   </span>
                 )}
                 {t.id === "Listings" && pendingCount > 0 && (

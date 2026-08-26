@@ -6,7 +6,7 @@ import { formatShortId } from "../../utils/formatId";
 
 const TABS = [
   { id: "Overview", label: "📊 Overview" },
-  { id: "Users", label: "👥 Users & Customers" },
+  { id: "Users", label: "👥 Registered Customers" },
   { id: "District Reps (DR)", label: "📍 District Reps (DR)" },
   { id: "Vendors", label: "🏬 Vendors" },
   { id: "Products", label: "📦 Products" },
@@ -507,14 +507,14 @@ export default function AdminDashboard() {
             {/* Header & Quick Stats */}
             <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h2 className="text-base sm:text-lg font-black text-navy-900 flex items-center gap-2">
-                  <span>👥 Registered Database Users & Accounts</span>
+                <h2 className="text-base sm:text-lg font-black text-navy-900 flex items-center gap-2 tracking-tight">
+                  <span>👥 Registered Customer Database & Addresses</span>
                   <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-extrabold text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                    🟢 Live Supabase DB Sync
+                    🟢 Live Supabase DB
                   </span>
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  View and manage all real registered customer accounts, vendor logins, DR ground agents, and admin accounts in database.
+                  View all registered customer accounts, mobile numbers, delivery site addresses, and purchase activity.
                 </p>
               </div>
 
@@ -523,159 +523,162 @@ export default function AdminDashboard() {
                   type="button"
                   onClick={() => {
                     fetchCloudData();
-                    alert("Syncing latest users list from Supabase Database...");
+                    alert("Syncing latest customer profiles and addresses from Supabase Database...");
                   }}
                   className="bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-xs px-3.5 py-2 rounded-xl border border-brand-200 shadow-2xs active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
                 >
-                  🔄 Refresh DB Users
+                  🔄 Refresh Customers DB
                 </button>
               </div>
             </div>
 
-            {/* User Roles Breakdown Stat Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs">
-                <p className="text-[11px] font-bold text-slate-500">Total Registered DB Users</p>
-                <p className="text-xl font-black text-navy-900 mt-0.5 tabular-nums">{users.length}</p>
-              </div>
-              <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3.5 shadow-2xs">
-                <p className="text-[11px] font-bold text-emerald-800">🛒 Customers</p>
-                <p className="text-xl font-black text-emerald-900 mt-0.5 tabular-nums">
-                  {users.filter((u) => !u.role || u.role === "CUSTOMER").length}
-                </p>
-              </div>
-              <div className="bg-blue-50/60 border border-blue-200/80 rounded-xl p-3.5 shadow-2xs">
-                <p className="text-[11px] font-bold text-blue-800">🏪 Vendors</p>
-                <p className="text-xl font-black text-blue-900 mt-0.5 tabular-nums">
-                  {users.filter((u) => u.role === "VENDOR").length}
-                </p>
-              </div>
-              <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3.5 shadow-2xs">
-                <p className="text-[11px] font-bold text-amber-800">📍 DR Reps & Admins</p>
-                <p className="text-xl font-black text-amber-900 mt-0.5 tabular-nums">
-                  {users.filter((u) => u.role === "DR" || u.role === "ADMIN").length}
-                </p>
-              </div>
-            </div>
+            {/* Customer Stats Breakdown */}
+            {(() => {
+              const customerUsers = users.filter((u) => !u.role || u.role === "CUSTOMER");
+              const withAddresses = customerUsers.filter((u) => (u.addresses && u.addresses.length > 0) || u.address).length;
+              const withOrders = customerUsers.filter((u) => (u.orders && u.orders.length > 0) || (u.ordersCount > 0)).length;
 
-            {/* Filter Pills & Search Input */}
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs">
+                    <p className="text-[11px] font-bold text-slate-500">Total Registered Customers</p>
+                    <p className="text-xl font-black text-navy-900 mt-0.5 tabular-nums">{customerUsers.length}</p>
+                  </div>
+                  <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3.5 shadow-2xs">
+                    <p className="text-[11px] font-bold text-emerald-800">📍 Saved Site Delivery Addresses</p>
+                    <p className="text-xl font-black text-emerald-900 mt-0.5 tabular-nums">{withAddresses}</p>
+                  </div>
+                  <div className="bg-brand-50/60 border border-brand-200/80 rounded-xl p-3.5 shadow-2xs">
+                    <p className="text-[11px] font-bold text-brand-800">🛒 Active Purchasing Customers</p>
+                    <p className="text-xl font-black text-brand-900 mt-0.5 tabular-nums">{withOrders}</p>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Search Input */}
             <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="relative flex-1">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
                 <input
                   type="text"
-                  placeholder="Search user by name, mobile phone number, role, or district city..."
+                  placeholder="Search customer by name, mobile phone, address, city, or pincode..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full bg-slate-50 text-xs font-medium border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 outline-none focus:border-brand-500 focus:bg-white transition-all"
                 />
               </div>
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-                {["ALL", "CUSTOMER", "VENDOR", "DR", "ADMIN"].map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setListingFilter(r)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                      listingFilter === r
-                        ? "bg-navy-900 text-white shadow-xs"
-                        : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80"
-                    }`}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
             </div>
 
-            {/* Users Table */}
+            {/* Customers Table */}
             <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-black text-slate-500 uppercase tracking-wider">
                     <tr>
-                      <th className="p-3.5 pl-4">User Details</th>
-                      <th className="p-3.5">Phone / Mobile</th>
-                      <th className="p-3.5">Account Role</th>
-                      <th className="p-3.5">District / City</th>
-                      <th className="p-3.5">Activity Stats</th>
+                      <th className="p-3.5 pl-4">Customer Details</th>
+                      <th className="p-3.5">Mobile Phone</th>
+                      <th className="p-3.5">📍 Full Delivery Address</th>
+                      <th className="p-3.5">Orders & Activity</th>
                       <th className="p-3.5">Registered Date</th>
-                      <th className="p-3.5 pr-4 text-right">Quick Action</th>
+                      <th className="p-3.5 pr-4 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {users
+                      .filter((u) => !u.role || u.role === "CUSTOMER")
                       .filter((u) => {
-                        const targetRole = listingFilter === "ALL" || (u.role || "CUSTOMER").toUpperCase() === listingFilter.toUpperCase();
                         const query = searchTerm.toLowerCase().trim();
-                        if (!query) return targetRole;
+                        if (!query) return true;
                         const uName = (u.name || "").toLowerCase();
                         const uPhone = (u.phone || "").toLowerCase();
-                        const uDist = (u.district || "").toLowerCase();
-                        const uRole = (u.role || "").toLowerCase();
-                        return targetRole && (uName.includes(query) || uPhone.includes(query) || uDist.includes(query) || uRole.includes(query));
+                        const uDist = (u.district || u.city || "").toLowerCase();
+                        const uAddr = (
+                          Array.isArray(u.addresses)
+                            ? u.addresses.map((a) => `${a.streetAddress || ""} ${a.area || ""} ${a.city || ""} ${a.pincode || ""}`).join(" ")
+                            : u.address || ""
+                        ).toLowerCase();
+                        return uName.includes(query) || uPhone.includes(query) || uDist.includes(query) || uAddr.includes(query);
                       })
-                      .map((u, idx) => (
-                        <tr key={u.id || idx} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="p-3.5 pl-4">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 font-black text-xs flex items-center justify-center border border-brand-200 shrink-0">
-                                {(u.name || u.phone || "U").charAt(0).toUpperCase()}
+                      .map((u, idx) => {
+                        const resolvedAddress = (() => {
+                          if (Array.isArray(u.addresses) && u.addresses.length > 0) {
+                            const addr = u.addresses[0];
+                            const parts = [
+                              addr.houseNo || addr.streetAddress || addr.address,
+                              addr.area || addr.landmark,
+                              addr.city || addr.district || u.district,
+                              addr.state || "Uttar Pradesh",
+                              addr.pincode,
+                            ].filter(Boolean);
+                            if (parts.length > 0) return parts.join(", ");
+                          }
+                          if (Array.isArray(u.orders) && u.orders.length > 0) {
+                            const lastOrder = u.orders[0];
+                            if (lastOrder.address) {
+                              if (typeof lastOrder.address === "string") return lastOrder.address;
+                              if (typeof lastOrder.address === "object") {
+                                const a = lastOrder.address;
+                                return [a.street || a.address, a.city || a.district, a.pincode].filter(Boolean).join(", ");
+                              }
+                            }
+                          }
+                          if (u.address) return u.address;
+                          if (u.district) return `${u.district}, Uttar Pradesh`;
+                          return "Address Not Added Yet";
+                        })();
+
+                        const orderCount = Array.isArray(u.orders) ? u.orders.length : (u.ordersCount || 0);
+
+                        return (
+                          <tr key={u.id || idx} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="p-3.5 pl-4">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 font-black text-xs flex items-center justify-center border border-brand-200 shrink-0">
+                                  {(u.name || u.phone || "C").charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <p className="font-extrabold text-navy-900 text-xs tracking-tight">{u.name || "Customer Account"}</p>
+                                  <p className="text-[10px] font-medium text-slate-400 font-mono">ID: {formatShortId(u.id)}</p>
+                                </div>
                               </div>
-                              <div>
-                                <p className="font-extrabold text-navy-900 text-xs tracking-tight">{u.name || "Customer Account"}</p>
-                                <p className="text-[10px] font-medium text-slate-400 font-mono">ID: {formatShortId(u.id)}</p>
+                            </td>
+                            <td className="p-3.5 font-bold text-slate-800 font-mono">
+                              📱 {u.phone}
+                            </td>
+                            <td className="p-3.5 max-w-xs">
+                              <div className="flex items-start gap-1.5 text-xs text-navy-900 font-medium leading-snug">
+                                <span className="text-sm shrink-0">📍</span>
+                                <span className={resolvedAddress === "Address Not Added Yet" ? "text-slate-400 italic" : "font-bold text-slate-800"}>
+                                  {resolvedAddress}
+                                </span>
                               </div>
-                            </div>
-                          </td>
-                          <td className="p-3.5 font-bold text-slate-800 font-mono">
-                            📱 {u.phone}
-                          </td>
-                          <td className="p-3.5">
-                            <span
-                              className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                                u.role === "ADMIN"
-                                  ? "bg-purple-100 text-purple-800 border border-purple-300"
-                                  : u.role === "VENDOR"
-                                  ? "bg-blue-100 text-blue-800 border border-blue-300"
-                                  : u.role === "DR"
-                                  ? "bg-amber-100 text-amber-800 border border-amber-300"
-                                  : "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                              }`}
-                            >
-                              {u.role || "CUSTOMER"}
-                            </span>
-                          </td>
-                          <td className="p-3.5 font-extrabold text-slate-700">
-                            📍 {u.district || "Varanasi"}
-                          </td>
-                          <td className="p-3.5">
-                            <div className="flex items-center gap-2 text-[10px] font-bold">
-                              <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
-                                🛒 {u.ordersCount || 0} Orders
-                              </span>
-                              <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
-                                🏠 {u.addressesCount || 0} Addr
-                              </span>
-                            </div>
-                          </td>
-                          <td className="p-3.5 text-slate-500 font-medium text-[11px]">
-                            {u.createdAt ? new Date(u.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Recently"}
-                          </td>
-                          <td className="p-3.5 pr-4 text-right">
-                            <a
-                              href={`tel:${u.phone}`}
-                              className="inline-flex items-center gap-1 bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-[11px] px-3 py-1.5 rounded-lg border border-brand-200 transition-colors"
-                            >
-                              📞 Call User
-                            </a>
-                          </td>
-                        </tr>
-                      ))}
-                    {users.length === 0 && (
+                            </td>
+                            <td className="p-3.5">
+                              <div className="flex items-center gap-2 text-[10px] font-bold">
+                                <span className="bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded border border-emerald-200">
+                                  🛒 {orderCount} Orders
+                                </span>
+                              </div>
+                            </td>
+                            <td className="p-3.5 text-slate-500 font-medium text-[11px]">
+                              {u.createdAt ? new Date(u.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Recently"}
+                            </td>
+                            <td className="p-3.5 pr-4 text-right">
+                              <a
+                                href={`tel:${u.phone}`}
+                                className="inline-flex items-center gap-1 bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-[11px] px-3 py-1.5 rounded-lg border border-brand-200 transition-colors"
+                              >
+                                📞 Call Customer
+                              </a>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    {users.filter((u) => !u.role || u.role === "CUSTOMER").length === 0 && (
                       <tr>
-                        <td colSpan={7} className="p-8 text-center text-slate-500 text-xs font-bold">
-                          📦 No registered user accounts found in database.
+                        <td colSpan={6} className="p-8 text-center text-slate-500 text-xs font-bold">
+                          📦 No registered customer accounts found in database.
                         </td>
                       </tr>
                     )}

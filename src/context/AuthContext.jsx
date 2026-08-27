@@ -50,8 +50,14 @@ export function AuthProvider({ children }) {
         body: JSON.stringify({ phone: cleanPhone }),
       });
       const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to dispatch OTP");
+      }
       return data;
     } catch (err) {
+      if (err.message.toLowerCase().includes("vendor")) {
+        throw err;
+      }
       console.warn("Backend API requestOtp note:", err.message);
       return { success: true, message: "OTP Dispatched" };
     }
@@ -61,6 +67,18 @@ export function AuthProvider({ children }) {
     const cleanPhone = phone.trim();
     const cleanOtp = otp.trim();
 
+    // Check vendor account locally to block OTP login for vendors immediately
+    let localVendor = null;
+    try {
+      const savedVendors = localStorage.getItem("buildcity_admin_vendors");
+      const vendors = savedVendors ? JSON.parse(savedVendors) : [];
+      localVendor = vendors.find((v) => (v.phone || "").trim() === cleanPhone);
+    } catch {}
+
+    if (localVendor) {
+      throw new Error("Vendor accounts cannot log in using OTP. Please switch to 'Vendor Login (Password)'!");
+    }
+
     // Verify strictly with Express REST API & Supabase PostgreSQL Database
     const apiRes = await fetch(`${API_BASE_URL}/api/v1/auth/otp/verify`, {
       method: "POST",
@@ -69,7 +87,7 @@ export function AuthProvider({ children }) {
     });
     const apiData = await apiRes.json();
     if (!apiRes.ok || !apiData.success) {
-      throw new Error(apiData.error || "Galat OTP! Kripya mobile par aaya hua sahi OTP enter karein.");
+      throw new Error(apiData.error || "Incorrect OTP. Please enter the valid code sent to your mobile number.");
     }
 
     const fetchedDbUser = apiData.user;
@@ -93,29 +111,17 @@ export function AuthProvider({ children }) {
     } catch {}
 
     if (!vendorMatch) {
-      try {
-        const savedVendors = localStorage.getItem("buildcity_admin_vendors");
-        const vendors = savedVendors ? JSON.parse(savedVendors) : [];
-        vendorMatch = vendors.find((v) => (v.phone || "").trim() === cleanPhone);
-      } catch {
-        vendorMatch = null;
-      }
+      vendorMatch = localVendor;
+    }
+
+    if (vendorMatch || fetchedDbUser?.role === "VENDOR") {
+      throw new Error("Vendor Partners are strictly not allowed to log in via Mobile OTP. Please click 'Vendor Login (Password)' at the top!");
     }
 
     if (cleanPhone === "9999999999" || cleanPhone === "0000000000" || fetchedDbUser?.role === "ADMIN") {
       assignedRole = "admin";
     } else if (drMatch || fetchedDbUser?.role === "DR") {
       assignedRole = "dr";
-    } else if (vendorMatch || fetchedDbUser?.role === "VENDOR") {
-      if (vendorMatch?.status === "PENDING") {
-        throw new Error("Aapka vendor account abhi DR ya Admin dwara approval ke liye pending hai.");
-      }
-      if (vendorMatch?.status === "SUSPENDED") {
-        throw new Error("Aapka vendor account suspend kar diya gaya hai. Support se sampark karein.");
-      }
-      assignedRole = "vendor";
-    } else if (cleanPhone === "8888888888") {
-      assignedRole = "vendor";
     }
 
     const defaultName =

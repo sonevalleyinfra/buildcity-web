@@ -254,6 +254,24 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
   }
 
   try {
+    const cleanPhone = phone.trim().replace(/\D/g, "");
+
+    // Check if phone belongs to a Vendor account — Block OTP for vendors
+    const vendorExists = await prisma.vendor.findFirst({
+      where: { OR: [{ phone: cleanPhone }, { phone }] },
+    }).catch(() => null);
+
+    const vendorUser = await prisma.user.findFirst({
+      where: { phone: cleanPhone, role: "VENDOR" },
+    }).catch(() => null);
+
+    if (vendorExists || vendorUser) {
+      return res.status(403).json({
+        error: "Vendor accounts cannot log in using Mobile OTP. Please switch to 'Vendor Login (Password)' at top right!",
+        isVendorBlocked: true,
+      });
+    }
+
     // Generate 6-digit OTP code instantly
     const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins expiry
@@ -285,6 +303,24 @@ app.post("/api/v1/auth/otp/verify", async (req, res) => {
   if (!phone || !otp) return res.status(400).json({ error: "Phone and OTP required" });
 
   try {
+    const cleanPhone = phone.trim().replace(/\D/g, "");
+
+    // Check if phone belongs to a Vendor account — Block OTP verification for vendors
+    const vendorExists = await prisma.vendor.findFirst({
+      where: { OR: [{ phone: cleanPhone }, { phone }] },
+    }).catch(() => null);
+
+    const vendorUser = await prisma.user.findFirst({
+      where: { phone: cleanPhone, role: "VENDOR" },
+    }).catch(() => null);
+
+    if (vendorExists || vendorUser) {
+      return res.status(403).json({
+        error: "Vendor Partners are not allowed to log in via OTP. Please use 'Vendor Login (Password)' mode!",
+        isVendorBlocked: true,
+      });
+    }
+
     let isValid = false;
 
     // Instant verification for 123456 or recent OTPs
@@ -309,7 +345,6 @@ app.post("/api/v1/auth/otp/verify", async (req, res) => {
     let role = "CUSTOMER";
     if (phone === "9999999999" || phone === "0000000000") role = "ADMIN";
     else if (phone === "7777777777" || phone === "8888888888") role = "DR";
-    else if (phone === "9876543210" || phone === "9876501234") role = "VENDOR";
 
     let user = null;
     try {

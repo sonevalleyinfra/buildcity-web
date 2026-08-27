@@ -950,6 +950,54 @@ app.post("/api/v1/master-products", async (req, res) => {
   }
 });
 
+// Master Product Update Endpoint — Admin dwara Product Title, Brand, Grade, Unit, Price, Image update karne ke liye
+app.patch("/api/v1/master-products/:id", async (req, res) => {
+  try {
+    const rawId = req.params.id;
+    const { name, categoryId, brand, type, grade, unit, suggestedPrice, price, imageUrl } = req.body;
+
+    let mp = await prisma.productMaster.findUnique({ where: { id: rawId } }).catch(() => null);
+
+    if (mp) {
+      const updateData = {};
+      if (name) updateData.name = name;
+      if (categoryId) updateData.categoryId = categoryId;
+      if (brand) updateData.brand = brand;
+      if (type) updateData.type = type;
+      if (grade) updateData.grade = grade;
+      if (unit) updateData.unit = unit;
+
+      const targetPrice = suggestedPrice !== undefined ? Number(suggestedPrice) : (price !== undefined ? Number(price) : undefined);
+      if (targetPrice !== undefined && !isNaN(targetPrice)) {
+        updateData.suggestedPrice = targetPrice;
+      }
+      if (imageUrl) updateData.imageUrl = imageUrl;
+
+      const updatedMp = await prisma.productMaster.update({
+        where: { id: mp.id },
+        data: updateData,
+        include: { category: true },
+      });
+
+      // Synchronize price to existing vendor listings for this master product in DB
+      if (targetPrice !== undefined && !isNaN(targetPrice)) {
+        await prisma.vendorProduct.updateMany({
+          where: { masterProductId: mp.id },
+          data: { price: targetPrice },
+        }).catch(() => null);
+      }
+
+      console.log(`✅ Master Product ${mp.id} updated in DB successfully! Price: ₹${updatedMp.suggestedPrice}`);
+      return res.json(updatedMp);
+    }
+
+    return res.status(404).json({ error: "Master Product not found" });
+  } catch (err) {
+    console.error("PATCH Master Product error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 5. VENDOR PRODUCT LISTINGS & APPROVALS ENDPOINTS
 app.get("/api/v1/vendor/listings", async (req, res) => {
   try {

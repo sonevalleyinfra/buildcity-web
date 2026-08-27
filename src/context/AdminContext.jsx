@@ -931,6 +931,37 @@ export function AdminProvider({ children }) {
     return newMp;
   };
 
+  const updateMasterProduct = async (id, updates) => {
+    const targetPrice = Number(updates.suggestedPrice !== undefined ? updates.suggestedPrice : updates.price);
+
+    setMasterProducts((prev) =>
+      prev.map((mp) => (mp.id === id ? { ...mp, ...updates, suggestedPrice: !isNaN(targetPrice) && targetPrice > 0 ? targetPrice : mp.suggestedPrice } : mp))
+    );
+
+    if (!isNaN(targetPrice) && targetPrice > 0) {
+      setProducts((prev) =>
+        prev.map((p) => (p.masterProductId === id || p.id === id ? { ...p, price: targetPrice, suggestedPrice: targetPrice } : p))
+      );
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/master-products/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...updates,
+          suggestedPrice: !isNaN(targetPrice) ? targetPrice : undefined,
+        }),
+      });
+
+      if (res.ok) {
+        await fetchCloudData();
+      }
+    } catch (err) {
+      console.warn("Update master product error:", err.message);
+    }
+  };
+
   const assignMasterProductToVendor = async ({ masterProductId, vendorId, vendorName, regionId, regionName, districtName, price, stockQty, addedBy }) => {
     const matchedVendor = vendors.find((v) => v.id === vendorId || (vendorName && (v.shopName || "").toLowerCase() === vendorName.toLowerCase()));
     const regName = regionName || districtName || matchedVendor?.regionName || matchedVendor?.districtName || matchedVendor?.region?.name || "Mirzapur";
@@ -1106,6 +1137,7 @@ export function AdminProvider({ children }) {
         toggleCouponActive,
         removeCoupon,
         addMasterProduct,
+        updateMasterProduct,
         assignMasterProductToVendor,
         updateVendorProductListing,
         removeVendorProductListing,

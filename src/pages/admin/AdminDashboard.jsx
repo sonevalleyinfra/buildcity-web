@@ -70,6 +70,7 @@ export default function AdminDashboard() {
     toggleCouponActive,
     addMasterProduct,
     updateMasterProduct,
+    updateVendorProductListing,
     updateListingApprovalStatus,
     updateOrderStatus,
     fetchCloudData,
@@ -332,9 +333,27 @@ export default function AdminDashboard() {
     if (!editingProduct) return;
     setIsSubmittingEditProduct(true);
     try {
-      await updateMasterProduct(editingProduct.id || editingProduct.masterProductId, editingProduct);
+      const targetPrice = Number(editingProduct.suggestedPrice || editingProduct.price || 100);
+      const prodId = editingProduct.id || editingProduct.masterProductId;
+
+      await updateMasterProduct(prodId, {
+        ...editingProduct,
+        suggestedPrice: targetPrice,
+        price: targetPrice,
+      });
+
+      if (editingProduct.vendorId || editingProduct.masterProductId) {
+        await updateVendorProductListing(editingProduct.id, {
+          name: editingProduct.name,
+          brand: editingProduct.brand,
+          grade: editingProduct.grade,
+          unit: editingProduct.unit,
+          price: targetPrice,
+        }).catch(() => null);
+      }
+
       setEditingProduct(null);
-      showAlert({ title: "Product Updated", message: "Product details updated successfully!", type: "success" });
+      showAlert({ title: "Product Updated", message: "Product details and price updated successfully in Database!", type: "success" });
     } catch (err) {
       showAlert({ title: "Error", message: "Failed to update product: " + (err.message || err), type: "error" });
     } finally {

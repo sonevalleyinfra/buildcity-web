@@ -98,8 +98,32 @@ export default function Login() {
     }
   };
 
+  const footerVendorAction = mode === "standard" ? (
+    <button
+      type="button"
+      onClick={() => {
+        setMode("vendor");
+        setError("");
+      }}
+      className="text-xs font-extrabold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-4 py-2.5 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs active:scale-[0.98]"
+    >
+      <span>🏬 Login as a Vendor Partner →</span>
+    </button>
+  ) : (
+    <button
+      type="button"
+      onClick={() => {
+        setMode("standard");
+        setError("");
+      }}
+      className="text-xs font-bold text-slate-500 hover:text-navy-900 transition-all cursor-pointer inline-flex items-center gap-1"
+    >
+      <span>← Back to Customer / DR Login (OTP)</span>
+    </button>
+  );
+
   return (
-    <AuthLayout>
+    <AuthLayout footerRight={footerVendorAction}>
       <h1 className="text-2xl font-bold text-navy-900 mb-1">
         {mode === "vendor" ? "Vendor Partner Login 🏬" : "Welcome back 👋"}
       </h1>
@@ -248,33 +272,6 @@ export default function Login() {
           </div>
         </form>
       )}
-
-      {/* Login as Vendor Footer Link — Positioned at Very Bottom Right */}
-      <div className="mt-10 pt-4 border-t border-slate-100 flex justify-end items-center">
-        {mode === "standard" ? (
-          <button
-            type="button"
-            onClick={() => {
-              setMode("vendor");
-              setError("");
-            }}
-            className="text-xs font-extrabold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-4 py-2.5 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs active:scale-[0.98]"
-          >
-            <span>🏬 Login as a Vendor Partner →</span>
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setMode("standard");
-              setError("");
-            }}
-            className="text-xs font-bold text-slate-500 hover:text-navy-900 transition-all cursor-pointer inline-flex items-center gap-1"
-          >
-            <span>← Back to Customer / DR Login (OTP)</span>
-          </button>
-        )}
-      </div>
 
       <div id="recaptcha-container"></div>
     </AuthLayout>

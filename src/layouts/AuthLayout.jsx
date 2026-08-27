@@ -7,7 +7,7 @@ const features = [
   { title: "Trusted Service", sub: "24/7 customer support" },
 ];
 
-export default function AuthLayout({ children }) {
+export default function AuthLayout({ children, footerRight }) {
   return (
     <div className="min-h-screen flex bg-surface">
       {/* Left brand panel - hidden on mobile */}
@@ -62,8 +62,10 @@ export default function AuthLayout({ children }) {
           {children}
         </div>
 
-        {/* Bottom container slot for full page bottom-right alignment */}
-        <div id="auth-layout-footer" className="w-full flex justify-end items-center min-h-[24px]"></div>
+        {/* Bottom container slot for exact bottom-right alignment */}
+        <div className="w-full flex justify-end items-center min-h-[24px]">
+          {footerRight}
+        </div>
       </div>
     </div>
   );

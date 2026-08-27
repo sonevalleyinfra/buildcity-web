@@ -128,6 +128,7 @@ export default function DrDashboard() {
   });
 
   const [isSubmittingVendor, setIsSubmittingVendor] = useState(false);
+  const [isSubmittingEditVendor, setIsSubmittingEditVendor] = useState(false);
   const [deletingVendorId, setDeletingVendorId] = useState(null);
   const [busyListingId, setBusyListingId] = useState(null);
 
@@ -174,7 +175,7 @@ export default function DrDashboard() {
         status: vendorForm.status || "APPROVED",
         commissionRate: Number(vendorForm.commissionRate) || 10,
         addedByDr: `${user?.name || "DR"} (${targetRegionName})`,
-        drId: drInfo.id,
+        drId: currentDr.id,
       });
 
       setVendorForm({ shopName: "", ownerName: "", phone: "", password: "", status: "APPROVED", commissionRate: 10 });
@@ -190,12 +191,15 @@ export default function DrDashboard() {
   const handleUpdateVendorSubmit = async (e) => {
     e.preventDefault();
     if (!editingVendor) return;
+    setIsSubmittingEditVendor(true);
     try {
       await updateVendor(editingVendor.id, editingVendor);
       setEditingVendor(null);
       showAlert({ title: "Vendor Updated", message: `Vendor "${editingVendor.shopName}" details & password updated in Database!`, type: "success" });
     } catch (err) {
       showAlert({ title: "Error", message: "Failed to update vendor: " + (err.message || err), type: "error" });
+    } finally {
+      setIsSubmittingEditVendor(false);
     }
   };
 
@@ -1297,7 +1301,20 @@ export default function DrDashboard() {
               </div>
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button type="button" onClick={() => setEditingVendor(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
-                <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs">Save Changes</button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingEditVendor}
+                  className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isSubmittingEditVendor ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Saving Changes...</span>
+                    </>
+                  ) : (
+                    "Save Changes"
+                  )}
+                </button>
               </div>
             </form>
           </div>

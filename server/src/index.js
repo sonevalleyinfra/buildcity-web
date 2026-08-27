@@ -49,6 +49,9 @@ app.get("/api/v1/cloud-sync", async (req, res) => {
   }
 });
 
+// In-memory persistent Store for Vendor Passwords
+const vendorPasswordsMap = new Map();
+
 // Vendor Password Login Endpoint — Phone & Password Login for Approved Vendor Partners
 app.post("/api/v1/auth/vendor/login", async (req, res) => {
   try {
@@ -92,8 +95,8 @@ app.post("/api/v1/auth/vendor/login", async (req, res) => {
       return res.status(403).json({ error: "Your Vendor account is PENDING approval from Admin or DR." });
     }
 
-    // Verify Password (Check stored password or fallback to vendor123)
-    const expectedPassword = vendor?.password || user?.password || "vendor123";
+    // Verify Password (Check in-memory map, stored password or fallback to vendor123)
+    const expectedPassword = vendorPasswordsMap.get(vendor?.id) || vendorPasswordsMap.get(cleanPhone) || vendor?.password || user?.password || "vendor123";
     if (password.trim() !== expectedPassword.trim()) {
       return res.status(401).json({ error: "Incorrect Password. Please verify with your DR or Super Admin." });
     }
@@ -656,7 +659,8 @@ app.get("/api/v1/vendors", async (req, res) => {
         },
         include: { region: true, user: true },
       });
-    });
+    if (newVendor?.id) vendorPasswordsMap.set(newVendor.id, vendorPassword);
+    if (phone) vendorPasswordsMap.set(phone.trim().replace(/\D/g, ""), vendorPassword);
 
     console.log(`✅ Vendor created successfully in Supabase DB: ${newVendor.shopName} (${validRegion.name})`);
     res.status(201).json({ ...newVendor, password: vendorPassword });
@@ -680,6 +684,13 @@ app.patch("/api/v1/vendors/:id", async (req, res) => {
     }
 
     if (vendor) {
+      const cleanPhone = (phone || vendor.phone || "").trim().replace(/\D/g, "");
+      if (password && password.trim()) {
+        vendorPasswordsMap.set(vendor.id, password.trim());
+        if (cleanPhone) vendorPasswordsMap.set(cleanPhone, password.trim());
+        if (rawId) vendorPasswordsMap.set(rawId, password.trim());
+      }
+
       const updateData = {};
       if (shopName) updateData.shopName = shopName;
       if (ownerName) updateData.ownerName = ownerName;
@@ -692,9 +703,9 @@ app.patch("/api/v1/vendors/:id", async (req, res) => {
         where: { id: vendor.id },
         data: updateData,
         include: { region: true, user: true },
-      }).catch(() => vendor);
+      }).catch(() => ({ ...vendor, ...updateData }));
 
-      return res.json(updatedVendor);
+      return res.json({ ...updatedVendor, password: password || vendorPasswordsMap.get(vendor.id) || vendor.password });
     }
     return res.status(404).json({ error: "Vendor not found" });
   } catch (err) {

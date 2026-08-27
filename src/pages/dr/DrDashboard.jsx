@@ -345,20 +345,30 @@ export default function DrDashboard() {
 
         {/* Navigation Tabs & Search */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-6">
-          <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200 shadow-2xs">
+          <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200 shadow-2xs overflow-x-auto no-scrollbar">
             <button
               onClick={() => setActiveTab("products")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer ${
+              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer shrink-0 ${
                 activeTab === "products"
                   ? "bg-brand-600 text-white shadow-xs"
                   : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
               }`}
             >
-              📦 Products ({districtProducts.length})
+              📦 District Products ({districtProducts.length})
+            </button>
+            <button
+              onClick={() => setActiveTab("masterCatalog")}
+              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer shrink-0 ${
+                activeTab === "masterCatalog"
+                  ? "bg-brand-600 text-white shadow-xs"
+                  : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
+              }`}
+            >
+              🏬 Master Catalog ({masterProducts.length})
             </button>
             <button
               onClick={() => setActiveTab("vendors")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer ${
+              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer shrink-0 ${
                 activeTab === "vendors"
                   ? "bg-brand-600 text-white shadow-xs"
                   : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
@@ -368,7 +378,7 @@ export default function DrDashboard() {
             </button>
             <button
               onClick={() => setActiveTab("listings")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center gap-1.5 ${
+              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer shrink-0 flex items-center gap-1.5 ${
                 activeTab === "listings"
                   ? "bg-brand-600 text-white shadow-xs"
                   : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
@@ -383,7 +393,7 @@ export default function DrDashboard() {
             </button>
             <button
               onClick={() => setActiveTab("orders")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer ${
+              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer shrink-0 ${
                 activeTab === "orders"
                   ? "bg-brand-600 text-white shadow-xs"
                   : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
@@ -611,6 +621,94 @@ export default function DrDashboard() {
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Tab: Master Products Catalog (All Platform Master Products) */}
+        {activeTab === "masterCatalog" && (
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+              <div>
+                <h2 className="text-sm font-bold text-navy-900">
+                  Platform Master Product Catalog ({masterProducts.length})
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">Sare Master Products jo Platform Catalog me listed hain.</p>
+              </div>
+              <button
+                onClick={() => setShowProductModal(true)}
+                className="text-xs bg-brand-500 hover:bg-brand-600 text-white font-semibold px-3.5 py-2 rounded-xl transition-colors cursor-pointer shadow-2xs"
+              >
+                + Add Master Product
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    <th className="py-3 px-4">Product Details</th>
+                    <th className="py-3 px-4">Category / Brand</th>
+                    <th className="py-3 px-4">Type & Grade</th>
+                    <th className="py-3 px-4">Suggested Price</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {masterProducts
+                    .filter((p) => {
+                      if (!searchTerm.trim()) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      return (
+                        (p.name || "").toLowerCase().includes(q) ||
+                        (p.brand || "").toLowerCase().includes(q) ||
+                        (p.categoryName || "").toLowerCase().includes(q)
+                      );
+                    })
+                    .map((p) => (
+                      <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-3">
+                            <img src={p.imageUrl} alt={p.name} className="w-10 h-10 object-cover rounded-lg border border-slate-200 shrink-0" />
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="bg-navy-900 text-white font-mono text-[9px] font-bold px-1.5 py-0.5 rounded">
+                                  {formatShortId(p.id, "PRD")}
+                                </span>
+                                <p className="font-bold text-navy-900">{p.name}</p>
+                              </div>
+                              <p className="text-[10px] text-slate-400">Packaging: {p.unit}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-semibold">
+                            {p.categoryName || "General"}
+                          </span>
+                          <p className="text-slate-700 font-medium mt-0.5">🏷️ {p.brand}</p>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <p className="font-semibold text-slate-800">{p.type}</p>
+                          <span className="bg-amber-50 text-amber-700 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-amber-200 inline-block mt-0.5">
+                            Grade: {p.grade}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className="font-extrabold text-navy-900 text-sm">₹{p.suggestedPrice || p.price}</span>
+                          <span className="text-[11px] text-slate-500"> /{p.unit}</span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <button
+                            onClick={() => setEditingProduct({ ...p })}
+                            className="text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer active:scale-[0.98] transition-all"
+                          >
+                            ✏️ Edit Catalog
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 

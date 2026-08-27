@@ -1167,26 +1167,15 @@ export default function AdminDashboard() {
             </div>
 
             {showProductForm && (
-              <form onSubmit={handleAddProduct} className="p-5 border-b border-slate-200 bg-brand-50/30 space-y-3">
+              <form onSubmit={handleAddProduct} className="p-5 border-b border-slate-200 bg-brand-50/30 space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-navy-900 mb-1">Product Title *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. UltraTech Super PPC Cement"
-                      value={productForm.name}
-                      onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-navy-900 mb-1">Category *</label>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Product Category *</label>
                     <select
                       required
                       value={productForm.categoryId}
                       onChange={(e) => setProductForm({ ...productForm, categoryId: e.target.value })}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none"
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-medium"
                     >
                       <option value="">-- Select Category --</option>
                       {categories.map((c) => (
@@ -1194,25 +1183,83 @@ export default function AdminDashboard() {
                       ))}
                     </select>
                   </div>
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Product Title / Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. UltraTech Super PPC Cement"
+                      value={productForm.name}
+                      onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-bold"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-navy-900 mb-1">Brand</label>
-                    <input type="text" placeholder="e.g. UltraTech" value={productForm.brand} onChange={(e) => setProductForm({ ...productForm, brand: e.target.value })} className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none" />
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Brand Name</label>
+                    <input type="text" placeholder="e.g. UltraTech" value={productForm.brand} onChange={(e) => setProductForm({ ...productForm, brand: e.target.value })} className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-medium" />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-navy-900 mb-1">Type</label>
-                    <input type="text" placeholder="e.g. PPC Cement" value={productForm.type} onChange={(e) => setProductForm({ ...productForm, type: e.target.value })} className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none" />
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Product Type</label>
+                    <input type="text" placeholder="e.g. PPC Cement" value={productForm.type} onChange={(e) => setProductForm({ ...productForm, type: e.target.value })} className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-medium" />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-navy-900 mb-1">Grade</label>
-                    <input type="text" placeholder="e.g. OPC 53 Grade" value={productForm.grade} onChange={(e) => setProductForm({ ...productForm, grade: e.target.value })} className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none" />
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Grade / Spec</label>
+                    <input type="text" placeholder="e.g. OPC 53 Grade" value={productForm.grade} onChange={(e) => setProductForm({ ...productForm, grade: e.target.value })} className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-medium" />
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-2 pt-2">
-                  <button type="button" onClick={() => setShowProductForm(false)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl">Cancel</button>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Unit Packaging</label>
+                    <input type="text" placeholder="e.g. 50kg Bag / Piece" value={productForm.unit || "50kg Bag"} onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })} className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-medium" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Suggested Price (₹) *</label>
+                    <input
+                      type="number"
+                      required
+                      placeholder="e.g. 390"
+                      value={productForm.suggestedPrice || productForm.price || ""}
+                      onChange={(e) => setProductForm({ ...productForm, suggestedPrice: e.target.value, price: e.target.value })}
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Stock Quantity</label>
+                    <input type="number" placeholder="e.g. 100" value={productForm.stockQty || ""} onChange={(e) => setProductForm({ ...productForm, stockQty: e.target.value })} className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-navy-900 mb-1">Product Image URL or Select Preset</label>
+                  <div className="flex gap-2 overflow-x-auto pb-2 mb-2 no-scrollbar">
+                    {PRESET_IMAGES.map((preset, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setProductForm({ ...productForm, imageUrl: preset.url })}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-semibold shrink-0 cursor-pointer ${
+                          productForm.imageUrl === preset.url ? "bg-brand-50 border-brand-500 text-brand-700 font-bold" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="url"
+                    placeholder="https://images.unsplash.com/..."
+                    value={productForm.imageUrl || ""}
+                    onChange={(e) => setProductForm({ ...productForm, imageUrl: e.target.value })}
+                    className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-mono text-[11px]"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button type="button" onClick={() => setShowProductForm(false)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
                   <button
                     type="submit"
                     disabled={isSubmittingProduct}

@@ -622,13 +622,13 @@ app.get("/api/v1/vendors", async (req, res) => {
     let user = await prisma.user.findUnique({ where: { phone } }).catch(() => null);
     if (!user) {
       user = await prisma.user.create({
-        data: { phone, name: ownerName || shopName, role: "VENDOR", tokenVersion: 1 },
+        data: { phone, name: ownerName || shopName, password: vendorPassword, role: "VENDOR", tokenVersion: 1 },
       });
-    } else if (user.role !== "VENDOR") {
+    } else {
       await prisma.user.update({
         where: { id: user.id },
-        data: { role: "VENDOR" },
-      });
+        data: { role: "VENDOR", password: vendorPassword },
+      }).catch(() => null);
     }
 
     const newVendor = await prisma.vendor.create({
@@ -637,6 +637,7 @@ app.get("/api/v1/vendors", async (req, res) => {
         shopName,
         ownerName,
         phone,
+        password: vendorPassword,
         regionId: validRegion.id,
         commissionRate: Number(commissionRate) || 10,
         addedByDr: addedByDr || "Admin",
@@ -681,6 +682,7 @@ app.patch("/api/v1/vendors/:id", async (req, res) => {
       if (shopName) prismaUpdateData.shopName = shopName;
       if (ownerName) prismaUpdateData.ownerName = ownerName;
       if (phone) prismaUpdateData.phone = phone;
+      if (password && password.trim()) prismaUpdateData.password = password.trim();
       if (commissionRate !== undefined) prismaUpdateData.commissionRate = Number(commissionRate);
       if (status) prismaUpdateData.status = status;
 
@@ -688,17 +690,18 @@ app.patch("/api/v1/vendors/:id", async (req, res) => {
         where: { id: vendor.id },
         data: prismaUpdateData,
         include: { region: true, user: true },
-      }).catch((err) => {
-        console.error("Prisma Vendor Update error:", err.message);
-        return { ...vendor, ...prismaUpdateData };
       });
 
-      console.log(`✅ Vendor updated successfully in Supabase DB: ${updatedVendor.shopName} (ID: ${vendor.id})`);
+      if (vendor.userId && password && password.trim()) {
+        await prisma.user.update({
+          where: { id: vendor.userId },
+          data: { password: password.trim() },
+        }).catch(() => null);
+      }
 
-      return res.json({
-        ...updatedVendor,
-        password: password || vendorPasswordsMap.get(vendor.id) || "vendor123",
-      });
+      console.log(`✅ Vendor & Password updated successfully in Supabase DB: ${updatedVendor.shopName} (ID: ${vendor.id})`);
+
+      return res.json(updatedVendor);
     }
     return res.status(404).json({ error: "Vendor not found" });
   } catch (err) {

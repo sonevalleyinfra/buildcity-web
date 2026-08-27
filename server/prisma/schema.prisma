@@ -44,6 +44,7 @@ model User {
   phone        String   @unique
   name         String?
   email        String?
+  password     String?  @default("vendor123")
   role         Role     @default(CUSTOMER)
   tokenVersion Int      @default(1)
   status       String   @default("ACTIVE")
@@ -112,6 +113,7 @@ model Vendor {
   shopName       String
   ownerName      String
   phone          String
+  password       String?      @default("vendor123")
   regionId       String
   region         Region       @relation(fields: [regionId], references: [id])
   status         VendorStatus @default(PENDING)

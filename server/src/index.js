@@ -112,13 +112,14 @@ app.post("/api/v1/auth/vendor/login", async (req, res) => {
     }).catch(() => null);
 
     if (drInDb || userInDb?.role === "DR" || cleanPhone === "7777777777") {
-      const expectedDrPassword =
+      const dbPassword =
         drInDb?.password ||
         drInDb?.user?.password ||
-        userInDb?.password ||
-        "dr123";
+        userInDb?.password;
 
-      if (cleanPassword === expectedDrPassword.trim() || cleanPassword === "dr123" || cleanPassword === "dr2026") {
+      const expectedDrPassword = dbPassword ? dbPassword.trim() : "dr123";
+
+      if (cleanPassword === expectedDrPassword) {
         return res.json({
           success: true,
           user: {

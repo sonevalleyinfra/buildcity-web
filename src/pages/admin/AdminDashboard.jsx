@@ -5,6 +5,14 @@ import { useAdmin } from "../../context/AdminContext";
 import { useAlert } from "../../context/AlertContext";
 import { formatShortId } from "../../utils/formatId";
 
+const PRESET_IMAGES = [
+  { label: "Cement Bag", url: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80" },
+  { label: "Paint Bucket", url: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=400&q=80" },
+  { label: "Steel Rebars", url: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=400&q=80" },
+  { label: "Pipes & Plumbing", url: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=80" },
+  { label: "Electrical / Wire", url: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=400&q=80" },
+];
+
 const TABS = [
   { id: "Overview", label: "📊 Overview" },
   { id: "Users", label: "👥 Registered Customers" },

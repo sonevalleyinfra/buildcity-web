@@ -267,7 +267,7 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
 
     if (vendorExists || vendorUser) {
       return res.status(403).json({
-        error: "Vendor accounts cannot log in using Mobile OTP. Please switch to 'Vendor Login (Password)' at top right!",
+        error: "Vendor accounts cannot log in using Mobile OTP. Please click 'Login as a Vendor Partner' at the bottom right!",
         isVendorBlocked: true,
       });
     }
@@ -316,7 +316,7 @@ app.post("/api/v1/auth/otp/verify", async (req, res) => {
 
     if (vendorExists || vendorUser) {
       return res.status(403).json({
-        error: "Vendor Partners are not allowed to log in via OTP. Please use 'Vendor Login (Password)' mode!",
+        error: "Vendor accounts cannot log in using Mobile OTP. Please click 'Login as a Vendor Partner' at the bottom right!",
         isVendorBlocked: true,
       });
     }

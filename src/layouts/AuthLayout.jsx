@@ -52,13 +52,18 @@ export default function AuthLayout({ children }) {
       </div>
 
       {/* Right form panel */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-10 sm:px-10">
-        <div className="w-full max-w-[420px]">
-          <div className="lg:hidden mb-8 flex justify-center">
-            <Logo size="md" />
-          </div>
+      <div className="flex-1 flex flex-col justify-between p-6 sm:p-10 lg:p-12 relative min-h-screen">
+        <div className="lg:hidden flex justify-center">
+          <Logo size="md" />
+        </div>
+        <div className="hidden lg:block"></div>
+
+        <div className="w-full max-w-[420px] mx-auto my-auto py-4">
           {children}
         </div>
+
+        {/* Bottom container slot for full page bottom-right alignment */}
+        <div id="auth-layout-footer" className="w-full flex justify-end items-center min-h-[24px]"></div>
       </div>
     </div>
   );

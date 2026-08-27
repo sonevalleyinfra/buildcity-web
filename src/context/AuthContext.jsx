@@ -76,7 +76,7 @@ export function AuthProvider({ children }) {
     } catch {}
 
     if (localVendor) {
-      throw new Error("Vendor accounts cannot log in using OTP. Please switch to 'Vendor Login (Password)'!");
+      throw new Error("Vendor accounts cannot log in using Mobile OTP. Please click 'Login as a Vendor Partner' at the bottom right!");
     }
 
     // Verify strictly with Express REST API & Supabase PostgreSQL Database

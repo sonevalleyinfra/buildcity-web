@@ -187,6 +187,18 @@ export default function DrDashboard() {
     }
   };
 
+  const handleUpdateVendorSubmit = async (e) => {
+    e.preventDefault();
+    if (!editingVendor) return;
+    try {
+      await updateVendor(editingVendor.id, editingVendor);
+      setEditingVendor(null);
+      showAlert({ title: "Vendor Updated", message: `Vendor "${editingVendor.shopName}" details & password updated in Database!`, type: "success" });
+    } catch (err) {
+      showAlert({ title: "Error", message: "Failed to update vendor: " + (err.message || err), type: "error" });
+    }
+  };
+
   const handleCreateProduct = (e) => {
     e.preventDefault();
     if (!productForm.name.trim() || !productForm.categoryId) {
@@ -1241,7 +1253,7 @@ export default function DrDashboard() {
               <h3 className="font-bold text-navy-900 text-base">Edit District Vendor Details</h3>
               <button onClick={() => setEditingVendor(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none">✕</button>
             </div>
-            <form onSubmit={(e) => { e.preventDefault(); updateVendor(editingVendor.id, editingVendor); setEditingVendor(null); alert("Vendor updated!"); }} className="space-y-4">
+            <form onSubmit={handleUpdateVendorSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-navy-900 mb-1">Shop / Business Name *</label>
                 <input
@@ -1271,6 +1283,16 @@ export default function DrDashboard() {
                   value={editingVendor.phone}
                   onChange={(e) => setEditingVendor({ ...editingVendor, phone: e.target.value.replace(/\D/g, "") })}
                   className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Vendor Login Password</label>
+                <input
+                  type="text"
+                  placeholder="Set / Change Login Password"
+                  value={editingVendor.password || ""}
+                  onChange={(e) => setEditingVendor({ ...editingVendor, password: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold font-mono"
                 />
               </div>
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">

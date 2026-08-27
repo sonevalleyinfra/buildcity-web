@@ -470,6 +470,45 @@ export function AdminProvider({ children }) {
     return newVendor;
   };
 
+  const updateVendor = async (id, vendorData) => {
+    setVendors((prev) =>
+      prev.map((v) =>
+        v.id === id
+          ? {
+              ...v,
+              shopName: vendorData.shopName || v.shopName,
+              ownerName: vendorData.ownerName || v.ownerName,
+              phone: vendorData.phone || v.phone,
+              password: vendorData.password || v.password,
+              commissionRate: vendorData.commissionRate !== undefined ? vendorData.commissionRate : v.commissionRate,
+              status: vendorData.status || v.status,
+            }
+          : v
+      )
+    );
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/vendors/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shopName: vendorData.shopName,
+          ownerName: vendorData.ownerName,
+          phone: vendorData.phone,
+          password: vendorData.password,
+          commissionRate: vendorData.commissionRate,
+          status: vendorData.status,
+        }),
+      });
+
+      if (res.ok) {
+        await fetchCloudData();
+      }
+    } catch (err) {
+      console.warn("Update vendor error:", err.message);
+    }
+  };
+
   const setVendorStatus = async (id, status) => {
     setVendors((prev) =>
       prev.map((v) => (v.id === id ? { ...v, status } : v))
@@ -1030,6 +1069,7 @@ export function AdminProvider({ children }) {
         removeDr,
         toggleDrActive,
         addVendor,
+        updateVendor,
         setVendorStatus,
         removeVendor,
         clearAllVendorsAndProducts,

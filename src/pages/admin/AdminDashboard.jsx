@@ -298,12 +298,16 @@ export default function AdminDashboard() {
     showAlert({ title: "DR Updated", message: "DR details updated successfully!", type: "success" });
   };
 
-  const handleUpdateVendorSubmit = (e) => {
+  const handleUpdateVendorSubmit = async (e) => {
     e.preventDefault();
     if (!editingVendor) return;
-    updateVendor(editingVendor.id, editingVendor);
-    setEditingVendor(null);
-    showAlert({ title: "Vendor Updated", message: "Vendor details updated successfully!", type: "success" });
+    try {
+      await updateVendor(editingVendor.id, editingVendor);
+      setEditingVendor(null);
+      showAlert({ title: "Vendor Updated", message: "Vendor details & password updated in Database successfully!", type: "success" });
+    } catch (err) {
+      showAlert({ title: "Error", message: "Failed to update vendor: " + (err.message || err), type: "error" });
+    }
   };
 
   const handleUpdateProductSubmit = (e) => {

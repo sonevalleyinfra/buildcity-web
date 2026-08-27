@@ -471,8 +471,8 @@ export function AdminProvider({ children }) {
   };
 
   const updateVendor = async (id, vendorData) => {
-    setVendors((prev) =>
-      prev.map((v) =>
+    setVendors((prev) => {
+      const updatedList = prev.map((v) =>
         v.id === id
           ? {
               ...v,
@@ -484,8 +484,12 @@ export function AdminProvider({ children }) {
               status: vendorData.status || v.status,
             }
           : v
-      )
-    );
+      );
+      try {
+        localStorage.setItem("buildcity_admin_vendors", JSON.stringify(updatedList));
+      } catch {}
+      return updatedList;
+    });
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/v1/vendors/${id}`, {
@@ -502,6 +506,14 @@ export function AdminProvider({ children }) {
       });
 
       if (res.ok) {
+        const updatedApiV = await res.json();
+        setVendors((prev) => {
+          const freshList = prev.map((v) => (v.id === id ? { ...v, ...updatedApiV, password: vendorData.password || v.password } : v));
+          try {
+            localStorage.setItem("buildcity_admin_vendors", JSON.stringify(freshList));
+          } catch {}
+          return freshList;
+        });
         await fetchCloudData();
       }
     } catch (err) {

@@ -521,12 +521,19 @@ app.get("/api/v1/users", async (req, res) => {
             totalAmount: true,
             status: true,
             address: true,
-            createdAt: true,
           },
         },
       },
     });
-    res.json(users);
+
+    const sanitizedUsers = users.map((u) => {
+      const copy = { ...u };
+      if (!copy.role || copy.role === "CUSTOMER") {
+        delete copy.password;
+      }
+      return copy;
+    });
+    res.json(sanitizedUsers);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

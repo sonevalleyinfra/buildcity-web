@@ -329,19 +329,24 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
   try {
     const cleanPhone = phone.trim().replace(/\D/g, "");
 
-    // Check if phone belongs to a Vendor account — Block OTP for vendors
+    // Check if phone belongs to Admin, DR, or Vendor — Block Mobile OTP login for staff/partners
+    const isSpecialAdminOrDr = cleanPhone === "9999999999" || cleanPhone === "7777777777";
+    const drExists = await prisma.dR.findFirst({
+      where: { OR: [{ phone: cleanPhone }, { phone }] },
+    }).catch(() => null);
+
     const vendorExists = await prisma.vendor.findFirst({
       where: { OR: [{ phone: cleanPhone }, { phone }] },
     }).catch(() => null);
 
-    const vendorUser = await prisma.user.findFirst({
-      where: { phone: cleanPhone, role: "VENDOR" },
+    const staffUser = await prisma.user.findFirst({
+      where: { phone: cleanPhone, role: { in: ["ADMIN", "DR", "VENDOR"] } },
     }).catch(() => null);
 
-    if (vendorExists || vendorUser) {
+    if (isSpecialAdminOrDr || drExists || vendorExists || staffUser) {
       return res.status(403).json({
-        error: "Vendor accounts cannot log in using Mobile OTP. Please click 'Login as a Vendor Partner' at the bottom right!",
-        isVendorBlocked: true,
+        error: "Admin, DR, and Vendor accounts cannot log in using Mobile OTP. Please click 'Partner Login (Password)' at the bottom right!",
+        isStaffBlocked: true,
       });
     }
 
@@ -378,19 +383,24 @@ app.post("/api/v1/auth/otp/verify", async (req, res) => {
   try {
     const cleanPhone = phone.trim().replace(/\D/g, "");
 
-    // Check if phone belongs to a Vendor account — Block OTP verification for vendors
-    const vendorExists = await prisma.vendor.findFirst({
+    // Check if phone belongs to Admin, DR, or Vendor — Block Mobile OTP verification for staff/partners
+    const isSpecialAdminOrDr = cleanPhone === "9999999999" || cleanPhone === "7777777777";
+    const drExistsVerify = await prisma.dR.findFirst({
       where: { OR: [{ phone: cleanPhone }, { phone }] },
     }).catch(() => null);
 
-    const vendorUser = await prisma.user.findFirst({
-      where: { phone: cleanPhone, role: "VENDOR" },
+    const vendorExistsVerify = await prisma.vendor.findFirst({
+      where: { OR: [{ phone: cleanPhone }, { phone }] },
     }).catch(() => null);
 
-    if (vendorExists || vendorUser) {
+    const staffUserVerify = await prisma.user.findFirst({
+      where: { phone: cleanPhone, role: { in: ["ADMIN", "DR", "VENDOR"] } },
+    }).catch(() => null);
+
+    if (isSpecialAdminOrDr || drExistsVerify || vendorExistsVerify || staffUserVerify) {
       return res.status(403).json({
-        error: "Vendor accounts cannot log in using Mobile OTP. Please click 'Login as a Vendor Partner' at the bottom right!",
-        isVendorBlocked: true,
+        error: "Admin, DR, and Vendor accounts cannot log in using Mobile OTP. Please click 'Partner Login (Password)' at the bottom right!",
+        isStaffBlocked: true,
       });
     }
 

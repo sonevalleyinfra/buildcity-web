@@ -114,14 +114,17 @@ export function AuthProvider({ children }) {
       vendorMatch = localVendor;
     }
 
-    if (vendorMatch || fetchedDbUser?.role === "VENDOR") {
-      throw new Error("Vendor Partners are strictly not allowed to log in via Mobile OTP. Please click 'Vendor Login (Password)' at the top!");
-    }
+    const isStaffOrPartner =
+      cleanPhone === "9999999999" ||
+      cleanPhone === "7777777777" ||
+      drMatch ||
+      vendorMatch ||
+      fetchedDbUser?.role === "ADMIN" ||
+      fetchedDbUser?.role === "DR" ||
+      fetchedDbUser?.role === "VENDOR";
 
-    if (cleanPhone.toUpperCase() === "ADMIN2026" || fetchedDbUser?.role === "ADMIN") {
-      assignedRole = "admin";
-    } else if (drMatch || fetchedDbUser?.role === "DR") {
-      assignedRole = "dr";
+    if (isStaffOrPartner) {
+      throw new Error("Admin, DR, and Vendor accounts cannot log in using Mobile OTP. Please click 'Partner Login (Password)' at the bottom right!");
     }
 
     const defaultName =

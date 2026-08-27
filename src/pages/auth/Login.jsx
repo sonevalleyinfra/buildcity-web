@@ -7,11 +7,13 @@ import { useAuth } from "../../context/AuthContext";
 // Login Page component — User / Vendor / DR / Admin ka universal login screen
 export default function Login() {
   const navigate = useNavigate();
-  const { requestOtp, verifyOtp } = useAuth();
+  const { requestOtp, verifyOtp, vendorLogin } = useAuth();
 
-  // Screen State steps — Pehle "phone" input mode, phr "otp" verification mode
+  // Mode: "standard" (OTP for Customer/DR) vs "vendor" (Phone & Password for Vendor Partners)
+  const [mode, setMode] = useState("standard");
   const [step, setStep] = useState("phone"); // "phone" | "otp"
   const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
   const [role, setRole] = useState("customer");
   const [loading, setLoading] = useState(false);
@@ -19,7 +21,7 @@ export default function Login() {
 
   const [demoOtp, setDemoOtp] = useState("");
 
-  // Step 1: 10-digit Mobile number submit karke OTP request bhejna
+  // Customer / DR OTP Request
   const handleSendOtp = async (e) => {
     e.preventDefault();
     setError("");
@@ -33,10 +35,10 @@ export default function Login() {
       setDemoOtp(resData.otp);
     }
     setLoading(false);
-    setStep("otp"); // OTP step par switch karo
+    setStep("otp");
   };
 
-  // Step 2: Received OTP verify karna aur dynamic role ke basis par redirect karna
+  // Customer / DR OTP Verification
   const handleVerify = async (e) => {
     e.preventDefault();
     setError("");
@@ -48,7 +50,6 @@ export default function Login() {
     try {
       const user = await verifyOtp({ phone: phone.trim(), otp: otp.trim(), role });
       
-      // Arrow mapping — User ki dynamic role (Admin/DR/Vendor/Customer) ke mutabiq homepage target
       const home =
         user.role === "admin"
           ? "/admin/dashboard"
@@ -66,20 +67,123 @@ export default function Login() {
     }
   };
 
+  // Vendor Partner Password Authentication
+  const handleVendorPasswordLogin = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!/^\d{10}$/.test(phone.trim())) {
+      setError("Please enter a valid 10-digit registered mobile number");
+      return;
+    }
+    if (!password.trim()) {
+      setError("Please enter your Vendor Login Password");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await vendorLogin({ phone: phone.trim(), password: password.trim() });
+      navigate("/vendor/dashboard", { replace: true });
+    } catch (err) {
+      setError(err?.message || "Login failed. Invalid Phone or Password.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <AuthLayout>
+      {/* Top Mode Switcher Pills */}
+      <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-6 border border-slate-200/80">
+        <button
+          type="button"
+          onClick={() => {
+            setMode("standard");
+            setError("");
+          }}
+          className={`flex-1 text-xs font-black py-2.5 rounded-xl transition-all cursor-pointer text-center ${
+            mode === "standard"
+              ? "bg-white text-navy-900 shadow-xs border border-slate-200/80"
+              : "text-slate-500 hover:text-navy-900"
+          }`}
+        >
+          📱 Customer / DR Login (OTP)
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMode("vendor");
+            setError("");
+          }}
+          className={`flex-1 text-xs font-black py-2.5 rounded-xl transition-all cursor-pointer text-center ${
+            mode === "vendor"
+              ? "bg-emerald-600 text-white shadow-xs"
+              : "text-slate-500 hover:text-navy-900"
+          }`}
+        >
+          🏬 Vendor Login (Password)
+        </button>
+      </div>
+
       <h1 className="text-2xl font-bold text-navy-900 mb-1">
-        Welcome back 👋
+        {mode === "vendor" ? "Vendor Partner Login 🏬" : "Welcome back 👋"}
       </h1>
-      <p className="text-sm text-slate-500 mb-7">
-        {step === "phone"
+      <p className="text-sm text-slate-500 mb-6">
+        {mode === "vendor"
+          ? "Login with your registered mobile number and password assigned by DR or Admin"
+          : step === "phone"
           ? "Login with your phone number — no password needed"
           : `Enter the OTP sent to +91 ${phone}`}
       </p>
 
-      {error && <p className="mb-4 text-sm text-red-500">{error}</p>}
+      {error && <p className="mb-4 text-sm font-semibold text-rose-500 bg-rose-50 p-3 rounded-xl border border-rose-200">{error}</p>}
 
-      {step === "phone" ? (
+      {mode === "vendor" ? (
+        /* VENDOR PASSWORD LOGIN FORM */
+        <form onSubmit={handleVendorPasswordLogin} noValidate className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-navy-900 mb-1.5">
+              Vendor Mobile Number
+            </label>
+            <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 focus-within:border-emerald-500">
+              <span className="text-sm text-slate-500 shrink-0">+91</span>
+              <span className="text-slate-200">|</span>
+              <input
+                type="tel"
+                inputMode="numeric"
+                maxLength={10}
+                value={phone}
+                onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
+                placeholder="Registered 10-digit mobile number"
+                className="w-full bg-transparent text-sm text-navy-900 placeholder:text-slate-400 outline-none font-bold"
+                autoFocus
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-navy-900 mb-1.5">
+              Vendor Login Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter password set by Admin / DR"
+              className="w-full text-sm font-medium rounded-xl border border-slate-200 bg-white px-3.5 py-3 outline-none focus:border-emerald-500"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-extrabold text-sm py-3.5 rounded-xl shadow-md active:scale-[0.98] transition-all cursor-pointer disabled:opacity-60 mt-2"
+          >
+            {loading ? "Authenticating Vendor..." : "Login to Vendor Dashboard →"}
+          </button>
+        </form>
+      ) : step === "phone" ? (
+        /* CUSTOMER / DR OTP REQUEST FORM */
         <form onSubmit={handleSendOtp} noValidate>
           <label className="block text-sm font-medium text-navy-900 mb-1.5">
             Phone Number
@@ -111,6 +215,7 @@ export default function Login() {
           </p>
         </form>
       ) : (
+        /* CUSTOMER / DR OTP VERIFY FORM */
         <form onSubmit={handleVerify} noValidate>
           <label className="block text-sm font-medium text-navy-900 mb-1.5">
             One-Time Password
@@ -169,7 +274,22 @@ export default function Login() {
         </form>
       )}
 
-      {/* Firebase Invisible Recaptcha Container */}
+      {/* Direct Vendor Login Quick Action Link */}
+      {mode === "standard" && (
+        <div className="mt-6 pt-4 border-t border-slate-100 text-center">
+          <button
+            type="button"
+            onClick={() => {
+              setMode("vendor");
+              setError("");
+            }}
+            className="text-xs font-extrabold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-4 py-2 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5"
+          >
+            <span>🏬 Are you a Vendor Partner? Login with Password →</span>
+          </button>
+        </div>
+      )}
+
       <div id="recaptcha-container"></div>
     </AuthLayout>
   );

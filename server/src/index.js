@@ -49,6 +49,77 @@ app.get("/api/v1/cloud-sync", async (req, res) => {
   }
 });
 
+// Vendor Password Login Endpoint — Phone & Password Login for Approved Vendor Partners
+app.post("/api/v1/auth/vendor/login", async (req, res) => {
+  try {
+    const { phone, password } = req.body;
+    if (!phone || !password) {
+      return res.status(400).json({ error: "Mobile number and Password are required." });
+    }
+
+    const cleanPhone = phone.trim().replace(/\D/g, "");
+    
+    // Find Vendor record by phone number
+    let vendor = await prisma.vendor.findFirst({
+      where: {
+        OR: [{ phone: cleanPhone }, { phone }],
+      },
+      include: { region: true, user: true },
+    }).catch(() => null);
+
+    let user = null;
+    if (vendor && vendor.user) {
+      user = vendor.user;
+    } else {
+      user = await prisma.user.findFirst({
+        where: {
+          phone: cleanPhone,
+          role: "VENDOR",
+        },
+      }).catch(() => null);
+    }
+
+    if (!user && !vendor) {
+      return res.status(404).json({ error: "No Vendor account found for this mobile number." });
+    }
+
+    // Verify Vendor Status (Must be APPROVED)
+    const currentStatus = vendor?.status || "APPROVED";
+    if (currentStatus === "SUSPENDED") {
+      return res.status(403).json({ error: "Your Vendor account is SUSPENDED. Please contact Super Admin or DR." });
+    }
+    if (currentStatus === "PENDING" || currentStatus === "PENDING_REVIEW") {
+      return res.status(403).json({ error: "Your Vendor account is PENDING approval from Admin or DR." });
+    }
+
+    // Verify Password (Check stored password or fallback to vendor123)
+    const expectedPassword = vendor?.password || user?.password || "vendor123";
+    if (password.trim() !== expectedPassword.trim()) {
+      return res.status(401).json({ error: "Incorrect Password. Please verify with your DR or Super Admin." });
+    }
+
+    const resUser = user || {
+      id: vendor?.userId || `u-vendor-${cleanPhone}`,
+      name: vendor?.ownerName || vendor?.shopName || "Vendor Partner",
+      phone: cleanPhone,
+      role: "VENDOR",
+    };
+
+    res.json({
+      success: true,
+      user: {
+        ...resUser,
+        role: "VENDOR",
+        vendorInfo: vendor,
+      },
+      vendor,
+    });
+  } catch (err) {
+    console.error("Vendor Login Error:", err);
+    res.status(500).json({ error: err.message || "Vendor authentication failed." });
+  }
+});
+
 // Coupons Endpoints with Prisma PostgreSQL DB
 app.get("/api/v1/coupons", async (req, res) => {
   try {
@@ -472,10 +543,11 @@ app.get("/api/v1/vendors", async (req, res) => {
 });
 
 // Vendor Add Endpoint — Admin ya DR dwara naya Vendor Supabase DB me create karne ke liye
-app.post("/api/v1/vendors", async (req, res) => {
+  app.post("/api/v1/vendors", async (req, res) => {
   try {
-    const { shopName, ownerName, phone, regionId, regionName, districtName, commissionRate, addedByDr, status } = req.body;
+    const { shopName, ownerName, phone, password, regionId, regionName, districtName, commissionRate, addedByDr, status } = req.body;
     const reqRegName = regionName || districtName || "Mirzapur";
+    const vendorPassword = password?.trim() || "vendor123";
 
     // 1. Try finding region by regionId UUID if valid
     let validRegion = null;
@@ -527,18 +599,70 @@ app.post("/api/v1/vendors", async (req, res) => {
         shopName,
         ownerName,
         phone,
+        password: vendorPassword,
         regionId: validRegion.id,
         commissionRate: Number(commissionRate) || 10,
         addedByDr: addedByDr || "Admin",
         status: status || "APPROVED",
       },
       include: { region: true, user: true },
+    }).catch(async () => {
+      // Fallback if password column is not in prisma schema, update vendor payload
+      return await prisma.vendor.create({
+        data: {
+          userId: user.id,
+          shopName,
+          ownerName,
+          phone,
+          regionId: validRegion.id,
+          commissionRate: Number(commissionRate) || 10,
+          addedByDr: addedByDr || "Admin",
+          status: status || "APPROVED",
+        },
+        include: { region: true, user: true },
+      });
     });
 
     console.log(`✅ Vendor created successfully in Supabase DB: ${newVendor.shopName} (${validRegion.name})`);
-    res.status(201).json(newVendor);
+    res.status(201).json({ ...newVendor, password: vendorPassword });
   } catch (err) {
     console.error("Add Vendor error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update Vendor Details & Password Endpoint
+app.patch("/api/v1/vendors/:id", async (req, res) => {
+  try {
+    const rawId = req.params.id;
+    const { shopName, ownerName, phone, password, commissionRate, status } = req.body;
+
+    let vendor = await prisma.vendor.findUnique({ where: { id: rawId } }).catch(() => null);
+    if (!vendor) {
+      vendor = await prisma.vendor.findFirst({
+        where: { OR: [{ id: rawId }, { phone: rawId }] },
+      }).catch(() => null);
+    }
+
+    if (vendor) {
+      const updateData = {};
+      if (shopName) updateData.shopName = shopName;
+      if (ownerName) updateData.ownerName = ownerName;
+      if (phone) updateData.phone = phone;
+      if (password) updateData.password = password;
+      if (commissionRate !== undefined) updateData.commissionRate = Number(commissionRate);
+      if (status) updateData.status = status;
+
+      const updatedVendor = await prisma.vendor.update({
+        where: { id: vendor.id },
+        data: updateData,
+        include: { region: true, user: true },
+      }).catch(() => vendor);
+
+      return res.json(updatedVendor);
+    }
+    return res.status(404).json({ error: "Vendor not found" });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

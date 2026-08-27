@@ -190,6 +190,31 @@ export function AuthProvider({ children }) {
     return userObj;
   };
 
+  const vendorLogin = async ({ phone, password }) => {
+    const cleanPhone = phone.trim().replace(/\D/g, "");
+    const cleanPassword = password.trim();
+
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/vendor/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: cleanPhone, password: cleanPassword }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || "Vendor authentication failed. Incorrect Mobile or Password.");
+    }
+
+    const userObj = {
+      ...data.user,
+      role: "vendor",
+      vendorInfo: data.vendor || data.user?.vendorInfo,
+    };
+
+    persist(userObj);
+    return userObj;
+  };
+
   const logout = () => {
     setUser(null);
     localStorage.removeItem(STORAGE_KEY);
@@ -202,6 +227,7 @@ export function AuthProvider({ children }) {
         loading,
         requestOtp,
         verifyOtp,
+        vendorLogin,
         login,
         logout,
         updateProfile,

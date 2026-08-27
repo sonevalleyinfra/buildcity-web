@@ -97,7 +97,7 @@ export default function AdminDashboard() {
 
   // Forms
   const [drForm, setDrForm] = useState({ name: "", phone: "", regionId: "" });
-  const [vendorForm, setVendorForm] = useState({ shopName: "", ownerName: "", phone: "", regionId: "", commissionRate: 10 });
+  const [vendorForm, setVendorForm] = useState({ shopName: "", ownerName: "", phone: "", password: "", regionId: "", commissionRate: 10 });
   const [catForm, setCatForm] = useState({ name: "" });
   const [regionForm, setRegionForm] = useState({ name: "", state: "Uttar Pradesh", baseDeliveryCharge: 49 });
   const [couponForm, setCouponForm] = useState({
@@ -226,6 +226,7 @@ export default function AdminDashboard() {
         shopName: vendorForm.shopName.trim(),
         ownerName: vendorForm.ownerName.trim(),
         phone: vendorForm.phone.trim(),
+        password: vendorForm.password.trim() || "vendor123",
         regionId: finalRegId,
         regionName: finalRegName,
         districtName: finalRegName,
@@ -233,7 +234,7 @@ export default function AdminDashboard() {
         status: "APPROVED",
         addedByDr: "Super Admin",
       });
-      setVendorForm({ shopName: "", ownerName: "", phone: "", regionId: "", commissionRate: 10 });
+      setVendorForm({ shopName: "", ownerName: "", phone: "", password: "", regionId: "", commissionRate: 10 });
       setShowVendorForm(false);
       showAlert({ title: "Vendor Added", message: `Vendor "${vendorForm.shopName.trim()}" successfully added to Supabase Cloud Database!`, type: "success" });
     } catch (err) {
@@ -956,6 +957,16 @@ export default function AdminDashboard() {
                         </option>
                       ))}
                     </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Set Login Password *</label>
+                    <input
+                      type="text"
+                      placeholder="Password (default: vendor123)"
+                      value={vendorForm.password}
+                      onChange={(e) => setVendorForm({ ...vendorForm, password: e.target.value })}
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-mono"
+                    />
                   </div>
                 </div>
                 <div className="flex justify-end gap-2">
@@ -1997,6 +2008,16 @@ export default function AdminDashboard() {
                   value={editingVendor.commissionRate}
                   onChange={(e) => setEditingVendor({ ...editingVendor, commissionRate: e.target.value })}
                   className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">Vendor Login Password</label>
+                <input
+                  type="text"
+                  placeholder="Set / Change Login Password"
+                  value={editingVendor.password || ""}
+                  onChange={(e) => setEditingVendor({ ...editingVendor, password: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold font-mono"
                 />
               </div>
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">

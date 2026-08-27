@@ -38,6 +38,7 @@ export default function DrDashboard() {
     shopName: "",
     ownerName: "",
     phone: "",
+    password: "",
     status: "APPROVED",
     commissionRate: 10,
   });
@@ -166,6 +167,7 @@ export default function DrDashboard() {
         shopName: vendorForm.shopName.trim(),
         ownerName: vendorForm.ownerName.trim(),
         phone: vendorForm.phone.trim(),
+        password: vendorForm.password.trim() || "vendor123",
         regionId: targetRegionId,
         regionName: targetRegionName,
         districtName: targetRegionName,
@@ -175,7 +177,7 @@ export default function DrDashboard() {
         drId: drInfo.id,
       });
 
-      setVendorForm({ shopName: "", ownerName: "", phone: "", status: "APPROVED", commissionRate: 10 });
+      setVendorForm({ shopName: "", ownerName: "", phone: "", password: "", status: "APPROVED", commissionRate: 10 });
       setShowVendorModal(false);
       showAlert({ title: "Vendor Added", message: `Vendor "${vendorForm.shopName.trim()}" successfully added to Supabase Cloud Database!`, type: "success" });
     } catch (err) {
@@ -1001,6 +1003,21 @@ export default function DrDashboard() {
                   disabled
                   value={districtName}
                   className="w-full bg-slate-100 text-slate-500 text-xs border border-slate-200 rounded-xl px-3 py-2.5 cursor-not-allowed font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">
+                  Set Vendor Login Password *
+                </label>
+                <input
+                  type="text"
+                  placeholder="Password (default: vendor123)"
+                  value={vendorForm.password}
+                  onChange={(e) =>
+                    setVendorForm({ ...vendorForm, password: e.target.value })
+                  }
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-mono"
                 />
               </div>
 

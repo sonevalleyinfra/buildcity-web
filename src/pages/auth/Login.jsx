@@ -29,13 +29,19 @@ export default function Login() {
       setError("Please enter a valid 10-digit mobile number");
       return;
     }
+
     setLoading(true);
-    const resData = await requestOtp(phone.trim());
-    if (resData?.otp) {
-      setDemoOtp(resData.otp);
+    try {
+      const resData = await requestOtp(phone.trim());
+      if (resData?.otp) {
+        setDemoOtp(resData.otp);
+      }
+      setStep("otp");
+    } catch (err) {
+      setError(err?.message || "Failed to send OTP. Please check mobile number.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-    setStep("otp");
   };
 
   // Customer / DR OTP Verification
@@ -46,6 +52,7 @@ export default function Login() {
       setError("Please enter the OTP sent to your mobile number");
       return;
     }
+
     setLoading(true);
     try {
       const user = await verifyOtp({ phone: phone.trim(), otp: otp.trim(), role });
@@ -93,38 +100,6 @@ export default function Login() {
 
   return (
     <AuthLayout>
-      {/* Top Mode Switcher Pills */}
-      <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-6 border border-slate-200/80">
-        <button
-          type="button"
-          onClick={() => {
-            setMode("standard");
-            setError("");
-          }}
-          className={`flex-1 text-xs font-black py-2.5 rounded-xl transition-all cursor-pointer text-center ${
-            mode === "standard"
-              ? "bg-white text-navy-900 shadow-xs border border-slate-200/80"
-              : "text-slate-500 hover:text-navy-900"
-          }`}
-        >
-          📱 Customer / DR Login (OTP)
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setMode("vendor");
-            setError("");
-          }}
-          className={`flex-1 text-xs font-black py-2.5 rounded-xl transition-all cursor-pointer text-center ${
-            mode === "vendor"
-              ? "bg-emerald-600 text-white shadow-xs"
-              : "text-slate-500 hover:text-navy-900"
-          }`}
-        >
-          🏬 Vendor Login (Password)
-        </button>
-      </div>
-
       <h1 className="text-2xl font-bold text-navy-900 mb-1">
         {mode === "vendor" ? "Vendor Partner Login 🏬" : "Welcome back 👋"}
       </h1>
@@ -136,14 +111,14 @@ export default function Login() {
           : `Enter the OTP sent to +91 ${phone}`}
       </p>
 
-      {error && <p className="mb-4 text-sm font-semibold text-rose-500 bg-rose-50 p-3 rounded-xl border border-rose-200">{error}</p>}
+      {error && <p className="mb-4 text-xs font-extrabold text-rose-600 bg-rose-50 p-3 rounded-xl border border-rose-200 leading-snug">{error}</p>}
 
       {mode === "vendor" ? (
         /* VENDOR PASSWORD LOGIN FORM */
         <form onSubmit={handleVendorPasswordLogin} noValidate className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-navy-900 mb-1.5">
-              Vendor Mobile Number
+              Vendor Registered Mobile Number
             </label>
             <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 focus-within:border-emerald-500">
               <span className="text-sm text-slate-500 shrink-0">+91</span>
@@ -274,21 +249,32 @@ export default function Login() {
         </form>
       )}
 
-      {/* Direct Vendor Login Quick Action Link */}
-      {mode === "standard" && (
-        <div className="mt-6 pt-4 border-t border-slate-100 text-center">
+      {/* Login as Vendor Footer Link */}
+      <div className="mt-8 pt-4 border-t border-slate-100 text-center">
+        {mode === "standard" ? (
           <button
             type="button"
             onClick={() => {
               setMode("vendor");
               setError("");
             }}
-            className="text-xs font-extrabold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-4 py-2 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5"
+            className="text-xs font-extrabold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-4 py-2.5 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs"
           >
-            <span>🏬 Are you a Vendor Partner? Login with Password →</span>
+            <span>🏬 Login as a Vendor Partner →</span>
           </button>
-        </div>
-      )}
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setMode("standard");
+              setError("");
+            }}
+            className="text-xs font-bold text-slate-500 hover:text-navy-900 transition-all cursor-pointer inline-flex items-center gap-1"
+          >
+            <span>← Back to Customer / DR Login (OTP)</span>
+          </button>
+        )}
+      </div>
 
       <div id="recaptcha-container"></div>
     </AuthLayout>

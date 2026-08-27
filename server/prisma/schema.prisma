@@ -44,7 +44,7 @@ model User {
   phone        String   @unique
   name         String?
   email        String?
-  password     String?  @default("vendor123")
+  password     String?
   role         Role     @default(CUSTOMER)
   tokenVersion Int      @default(1)
   status       String   @default("ACTIVE")

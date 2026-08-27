@@ -205,13 +205,6 @@ export default function Login() {
           <Button type="submit" disabled={loading}>
             {loading ? "Sending OTP..." : "Continue with OTP"}
           </Button>
-
-          <p className="mt-6 text-center text-sm text-slate-500">
-            New to BuildCity?{" "}
-            <Link to="/register" className="font-semibold text-brand-500 hover:underline">
-              Create account
-            </Link>
-          </p>
         </form>
       ) : (
         /* CUSTOMER / DR OTP VERIFY FORM */

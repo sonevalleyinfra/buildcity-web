@@ -291,12 +291,21 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleUpdateDrSubmit = (e) => {
+  const [isSubmittingEditDr, setIsSubmittingEditDr] = useState(false);
+
+  const handleUpdateDrSubmit = async (e) => {
     e.preventDefault();
     if (!editingDr) return;
-    updateDr(editingDr.id, editingDr);
-    setEditingDr(null);
-    showAlert({ title: "DR Updated", message: "DR details updated successfully!", type: "success" });
+    setIsSubmittingEditDr(true);
+    try {
+      await updateDr(editingDr.id, editingDr);
+      setEditingDr(null);
+      showAlert({ title: "DR Updated", message: "DR details updated in Database successfully!", type: "success" });
+    } catch (err) {
+      showAlert({ title: "Error", message: "Failed to update DR: " + (err.message || err), type: "error" });
+    } finally {
+      setIsSubmittingEditDr(false);
+    }
   };
 
   const handleUpdateVendorSubmit = async (e) => {
@@ -314,17 +323,30 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleUpdateProductSubmit = (e) => {
+  const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
+  const [isSubmittingEditProduct, setIsSubmittingEditProduct] = useState(false);
+
+  const handleUpdateProductSubmit = async (e) => {
     e.preventDefault();
     if (!editingProduct) return;
-    updateMasterProduct(editingProduct.id || editingProduct.masterProductId, editingProduct);
-    setEditingProduct(null);
-    showAlert({ title: "Product Updated", message: "Product details updated successfully!", type: "success" });
+    setIsSubmittingEditProduct(true);
+    try {
+      await updateMasterProduct(editingProduct.id || editingProduct.masterProductId, editingProduct);
+      setEditingProduct(null);
+      showAlert({ title: "Product Updated", message: "Product details updated successfully!", type: "success" });
+    } catch (err) {
+      showAlert({ title: "Error", message: "Failed to update product: " + (err.message || err), type: "error" });
+    } finally {
+      setIsSubmittingEditProduct(false);
+    }
   };
+
+  const [isSubmittingCat, setIsSubmittingCat] = useState(false);
 
   const handleAddCategory = async (e) => {
     e.preventDefault();
     if (!catForm.name.trim()) return;
+    setIsSubmittingCat(true);
     try {
       await addCategory({ name: catForm.name });
       setCatForm({ name: "" });
@@ -332,10 +354,10 @@ export default function AdminDashboard() {
       showAlert({ title: "Category Added", message: `Category "${catForm.name}" created successfully!`, type: "success" });
     } catch (err) {
       showAlert({ title: "Error", message: "Error adding category: " + (err.message || err), type: "error" });
+    } finally {
+      setIsSubmittingCat(false);
     }
   };
-
-  const [isSubmittingCat, setIsSubmittingCat] = useState(false);
 
   const handleUpdateCategorySubmit = async (e) => {
     e.preventDefault();
@@ -389,27 +411,34 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleAddProduct = (e) => {
+  const handleAddProduct = async (e) => {
     e.preventDefault();
     if (!productForm.name.trim() || !productForm.categoryId) {
       showAlert({ title: "Validation Error", message: "Please select Category and enter Product Name!", type: "warning" });
       return;
     }
-    addMasterProduct({
-      name: productForm.name.trim(),
-      categoryId: productForm.categoryId,
-      vendorId: productForm.vendorId || null,
-      brand: productForm.brand.trim() || "Generic",
-      type: productForm.type.trim() || "Standard",
-      grade: productForm.grade.trim() || "Standard Grade",
-      unit: productForm.unit.trim() || "Unit",
-      price: Number(productForm.price) || 100,
-      stockQty: Number(productForm.stockQty) || 100,
-      addedBy: "Super Admin",
-    });
-    setProductForm({ name: "", categoryId: "", vendorId: "", brand: "", type: "", grade: "", unit: "50kg Bag", price: "", stockQty: "" });
-    setShowProductForm(false);
-    showAlert({ title: "Product Created", message: "Master Product created successfully!", type: "success" });
+    setIsSubmittingProduct(true);
+    try {
+      await addMasterProduct({
+        name: productForm.name.trim(),
+        categoryId: productForm.categoryId,
+        vendorId: productForm.vendorId || null,
+        brand: productForm.brand.trim() || "Generic",
+        type: productForm.type.trim() || "Standard",
+        grade: productForm.grade.trim() || "Standard Grade",
+        unit: productForm.unit.trim() || "Unit",
+        price: Number(productForm.price) || 100,
+        stockQty: Number(productForm.stockQty) || 100,
+        addedBy: "Super Admin",
+      });
+      setProductForm({ name: "", categoryId: "", vendorId: "", brand: "", type: "", grade: "", unit: "50kg Bag", price: "", stockQty: "" });
+      setShowProductForm(false);
+      showAlert({ title: "Product Created", message: "Master Product created successfully!", type: "success" });
+    } catch (err) {
+      showAlert({ title: "Error", message: "Error creating product: " + (err.message || err), type: "error" });
+    } finally {
+      setIsSubmittingProduct(false);
+    }
   };
 
   const filteredListings = products.filter((p) => {
@@ -1962,7 +1991,20 @@ export default function AdminDashboard() {
               </div>
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button type="button" onClick={() => setEditingDr(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
-                <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs">Save DR Changes</button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingEditDr}
+                  className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isSubmittingEditDr ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Saving Changes...</span>
+                    </>
+                  ) : (
+                    "Save DR Changes"
+                  )}
+                </button>
               </div>
             </form>
           </div>
@@ -2111,7 +2153,20 @@ export default function AdminDashboard() {
               </div>
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button type="button" onClick={() => setEditingProduct(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
-                <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs">Save Product Changes</button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingEditProduct}
+                  className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isSubmittingEditProduct ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Saving Changes...</span>
+                    </>
+                  ) : (
+                    "Save Product Changes"
+                  )}
+                </button>
               </div>
             </form>
           </div>

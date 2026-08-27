@@ -129,6 +129,7 @@ export default function DrDashboard() {
 
   const [isSubmittingVendor, setIsSubmittingVendor] = useState(false);
   const [isSubmittingEditVendor, setIsSubmittingEditVendor] = useState(false);
+  const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
   const [deletingVendorId, setDeletingVendorId] = useState(null);
   const [busyListingId, setBusyListingId] = useState(null);
 
@@ -203,42 +204,62 @@ export default function DrDashboard() {
     }
   };
 
-  const handleCreateProduct = (e) => {
+  const handleCreateProduct = async (e) => {
     e.preventDefault();
     if (!productForm.name.trim() || !productForm.categoryId) {
       showAlert({ title: "Validation Error", message: "Please select Category and enter Product Name!", type: "warning" });
       return;
     }
+    if (isSubmittingProduct) return;
 
-    addMasterProduct({
-      name: productForm.name.trim(),
-      categoryId: productForm.categoryId,
-      brand: productForm.brand.trim() || "Generic",
-      type: productForm.type.trim() || "Standard",
-      grade: productForm.grade.trim() || "Standard Grade",
-      unit: productForm.unit.trim() || "Piece",
-      price: Number(productForm.price) || 100,
-      stockQty: Number(productForm.stockQty) || 100,
-      vendorId: productForm.vendorId || null,
-      imageUrl: productForm.imageUrl || PRESET_IMAGES[0].url,
-      addedBy: `DR: ${user?.name || "DR"} (${districtName})`,
-      drId: drInfo.id,
-    });
+    setIsSubmittingProduct(true);
+    try {
+      const createdMp = await addMasterProduct({
+        name: productForm.name.trim(),
+        categoryId: productForm.categoryId,
+        brand: productForm.brand.trim() || "Generic",
+        type: productForm.type.trim() || "Standard",
+        grade: productForm.grade.trim() || "Standard Grade",
+        unit: productForm.unit.trim() || "Piece",
+        suggestedPrice: Number(productForm.price) || 100,
+        price: Number(productForm.price) || 100,
+        imageUrl: productForm.imageUrl || PRESET_IMAGES[0].url,
+        addedBy: `DR: ${user?.name || "DR"} (${districtName})`,
+      });
 
-    setProductForm({
-      name: "",
-      categoryId: "",
-      brand: "",
-      type: "",
-      grade: "",
-      unit: "50kg Bag",
-      price: "",
-      stockQty: "",
-      vendorId: "",
-      imageUrl: PRESET_IMAGES[0].url,
-    });
-    setShowProductModal(false);
-    showAlert({ title: "Product Added", message: "Product added successfully to Master Catalog!", type: "success" });
+      const targetVendorId = productForm.vendorId || (districtVendors.length > 0 ? districtVendors[0].id : null);
+      if (createdMp && targetVendorId) {
+        await assignMasterProductToVendor({
+          masterProductId: createdMp.id,
+          vendorId: targetVendorId,
+          regionId: drRegionId,
+          regionName: districtName,
+          districtName: districtName,
+          price: Number(productForm.price) || 100,
+          stockQty: Number(productForm.stockQty) || 100,
+          addedBy: `DR: ${user?.name || "DR"}`,
+        }).catch(() => null);
+      }
+
+      setProductForm({
+        name: "",
+        categoryId: "",
+        brand: "",
+        type: "",
+        grade: "",
+        unit: "50kg Bag",
+        price: "",
+        stockQty: "",
+        vendorId: "",
+        imageUrl: PRESET_IMAGES[0].url,
+      });
+      setShowProductModal(false);
+      showAlert({ title: "Product Added", message: `Product "${productForm.name.trim()}" added to Master Catalog & District Listings!`, type: "success" });
+    } catch (err) {
+      showAlert({ title: "Error", message: "Failed to add product: " + (err.message || err), type: "error" });
+    } finally {
+      setIsSubmittingProduct(false);
+    }
   };
 
   return (
@@ -1239,9 +1260,17 @@ export default function DrDashboard() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-semibold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs"
+                  disabled={isSubmittingProduct}
+                  className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  Save Product
+                  {isSubmittingProduct ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Saving Product...</span>
+                    </>
+                  ) : (
+                    "Save Product"
+                  )}
                 </button>
               </div>
             </form>

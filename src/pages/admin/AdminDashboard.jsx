@@ -328,6 +328,38 @@ export default function AdminDashboard() {
   const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
   const [isSubmittingEditProduct, setIsSubmittingEditProduct] = useState(false);
 
+  const handleAddProduct = async (e) => {
+    e.preventDefault();
+    if (!productForm.name.trim() || !productForm.categoryId) {
+      showAlert({ title: "Validation Error", message: "Please select Category and enter Product Title!", type: "warning" });
+      return;
+    }
+    if (isSubmittingProduct) return;
+
+    setIsSubmittingProduct(true);
+    try {
+      await addMasterProduct({
+        name: productForm.name.trim(),
+        categoryId: productForm.categoryId,
+        brand: productForm.brand.trim() || "Generic",
+        type: productForm.type.trim() || "Standard",
+        grade: productForm.grade.trim() || "Standard Grade",
+        unit: productForm.unit.trim() || "Piece",
+        suggestedPrice: Number(productForm.price || productForm.suggestedPrice) || 100,
+        imageUrl: productForm.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+        addedBy: "Admin",
+      });
+
+      setProductForm({ name: "", categoryId: "", brand: "", type: "", grade: "", unit: "50kg Bag", price: "", stockQty: "" });
+      setShowProductForm(false);
+      showAlert({ title: "Master Product Created", message: `Master product "${productForm.name.trim()}" saved to Database successfully!`, type: "success" });
+    } catch (err) {
+      showAlert({ title: "Error", message: "Failed to create master product: " + (err.message || err), type: "error" });
+    } finally {
+      setIsSubmittingProduct(false);
+    }
+  };
+
   const handleUpdateProductSubmit = async (e) => {
     e.preventDefault();
     if (!editingProduct) return;
@@ -428,36 +460,6 @@ export default function AdminDashboard() {
       showAlert({ title: "Error", message: "Error updating district region: " + (err.message || err), type: "error" });
     } finally {
       setIsSubmittingRegion(false);
-    }
-  };
-
-  const handleAddProduct = async (e) => {
-    e.preventDefault();
-    if (!productForm.name.trim() || !productForm.categoryId) {
-      showAlert({ title: "Validation Error", message: "Please select Category and enter Product Name!", type: "warning" });
-      return;
-    }
-    setIsSubmittingProduct(true);
-    try {
-      await addMasterProduct({
-        name: productForm.name.trim(),
-        categoryId: productForm.categoryId,
-        vendorId: productForm.vendorId || null,
-        brand: productForm.brand.trim() || "Generic",
-        type: productForm.type.trim() || "Standard",
-        grade: productForm.grade.trim() || "Standard Grade",
-        unit: productForm.unit.trim() || "Unit",
-        price: Number(productForm.price) || 100,
-        stockQty: Number(productForm.stockQty) || 100,
-        addedBy: "Super Admin",
-      });
-      setProductForm({ name: "", categoryId: "", vendorId: "", brand: "", type: "", grade: "", unit: "50kg Bag", price: "", stockQty: "" });
-      setShowProductForm(false);
-      showAlert({ title: "Product Created", message: "Master Product created successfully!", type: "success" });
-    } catch (err) {
-      showAlert({ title: "Error", message: "Error creating product: " + (err.message || err), type: "error" });
-    } finally {
-      setIsSubmittingProduct(false);
     }
   };
 
@@ -1211,7 +1213,20 @@ export default function AdminDashboard() {
 
                 <div className="flex justify-end gap-2 pt-2">
                   <button type="button" onClick={() => setShowProductForm(false)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl">Cancel</button>
-                  <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl shadow-xs hover:bg-brand-600">Save Master Product</button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingProduct}
+                    className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl shadow-xs hover:bg-brand-600 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
+                  >
+                    {isSubmittingProduct ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Saving Master Product...</span>
+                      </>
+                    ) : (
+                      "Save Master Product"
+                    )}
+                  </button>
                 </div>
               </form>
             )}

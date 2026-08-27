@@ -334,7 +334,12 @@ export function AdminProvider({ children }) {
       const res = await fetch(`${API_BASE_URL}/api/v1/drs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: drData.name, phone: drData.phone.trim(), regionId: drData.regionId }),
+        body: JSON.stringify({
+          name: drData.name,
+          phone: drData.phone.trim(),
+          password: drData.password ? drData.password.trim() : "dr123",
+          regionId: drData.regionId,
+        }),
       });
       if (res.ok) {
         await fetchCloudData();
@@ -346,6 +351,7 @@ export function AdminProvider({ children }) {
       id: "dr-" + Date.now(),
       name: drData.name,
       phone: drData.phone.trim(),
+      password: drData.password ? drData.password.trim() : "dr123",
       regionId: drData.regionId,
       regionName: regionObj.name || drData.regionName || "General",
       status: "ACTIVE",
@@ -368,6 +374,7 @@ export function AdminProvider({ children }) {
               ...d,
               name: drData.name || d.name,
               phone: drData.phone || d.phone,
+              password: drData.password || d.password,
               regionId: drData.regionId || d.regionId,
               regionName: newRegName,
             }
@@ -382,6 +389,7 @@ export function AdminProvider({ children }) {
         body: JSON.stringify({
           name: drData.name,
           phone: drData.phone,
+          password: drData.password ? drData.password.trim() : undefined,
           regionId: drData.regionId,
         }),
       });

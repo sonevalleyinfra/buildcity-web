@@ -565,7 +565,8 @@ app.get("/api/v1/drs", async (req, res) => {
 
 app.post("/api/v1/drs", async (req, res) => {
   try {
-    const { name, phone, regionId } = req.body;
+    const { name, phone, password, regionId } = req.body;
+    const drPassword = (password && password.trim()) || "dr123";
 
     let targetRegionId = regionId;
     let validRegion = targetRegionId ? await prisma.region.findUnique({ where: { id: targetRegionId } }).catch(() => null) : null;
@@ -581,11 +582,16 @@ app.post("/api/v1/drs", async (req, res) => {
       }
     }
 
-    let user = await prisma.user.findUnique({ where: { phone } });
+    let user = await prisma.user.findUnique({ where: { phone } }).catch(() => null);
     if (!user) {
       user = await prisma.user.create({
-        data: { phone, name, role: "DR", tokenVersion: 1 },
+        data: { phone, name, password: drPassword, role: "DR", tokenVersion: 1 },
       });
+    } else {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { role: "DR", password: drPassword, name },
+      }).catch(() => null);
     }
 
     const newDr = await prisma.dR.create({
@@ -593,11 +599,13 @@ app.post("/api/v1/drs", async (req, res) => {
         userId: user.id,
         name,
         phone,
+        password: drPassword,
         regionId: targetRegionId,
         status: "ACTIVE",
       },
       include: { region: true, user: true },
     });
+    console.log(`✅ DR created in DB: ${newDr.name} (${newDr.phone})`);
     res.status(201).json(newDr);
   } catch (err) {
     console.error("Add DR error:", err);
@@ -608,11 +616,12 @@ app.post("/api/v1/drs", async (req, res) => {
 app.patch("/api/v1/drs/:id", async (req, res) => {
   try {
     const rawId = req.params.id;
-    const { name, phone, regionId, status } = req.body;
+    const { name, phone, password, regionId, status } = req.body;
 
     const dataToUpdate = {};
     if (name) dataToUpdate.name = name;
     if (phone) dataToUpdate.phone = phone;
+    if (password && password.trim()) dataToUpdate.password = password.trim();
     if (regionId) dataToUpdate.regionId = regionId;
     if (status) dataToUpdate.status = status;
 
@@ -627,6 +636,14 @@ app.patch("/api/v1/drs/:id", async (req, res) => {
         data: dataToUpdate,
         include: { region: true, user: true },
       });
+
+      if (dr.userId && password && password.trim()) {
+        await prisma.user.update({
+          where: { id: dr.userId },
+          data: { password: password.trim() },
+        }).catch(() => null);
+      }
+      console.log(`✅ DR updated in DB: ${updatedDr.name} (${updatedDr.phone})`);
       return res.json(updatedDr);
     }
     return res.status(404).json({ error: "DR not found" });

@@ -266,7 +266,7 @@ export default function AdminDashboard() {
     });
   };
 
-  const handleAddDr = async (e) => {
+  const handleCreateDr = async (e) => {
     e.preventDefault();
     if (!drForm.name.trim() || !drForm.phone.trim() || !drForm.regionId) {
       showAlert({ title: "Validation Error", message: "Please fill all District Rep details!", type: "warning" });
@@ -279,11 +279,12 @@ export default function AdminDashboard() {
       await addDr({
         name: drForm.name.trim(),
         phone: drForm.phone.trim(),
+        password: drForm.password ? drForm.password.trim() : "dr123",
         regionId: drForm.regionId,
       });
-      setDrForm({ name: "", phone: "", regionId: "" });
+      setDrForm({ name: "", phone: "", password: "", regionId: "" });
       setShowDrForm(false);
-      showAlert({ title: "DR Added", message: "District Representative added to Database successfully!", type: "success" });
+      showAlert({ title: "DR Added", message: "District Representative & Password added to Database successfully!", type: "success" });
     } catch (err) {
       showAlert({ title: "Error", message: "Failed to add DR: " + err.message, type: "error" });
     } finally {
@@ -806,7 +807,17 @@ export default function AdminDashboard() {
                       placeholder="10-digit mobile number"
                       value={drForm.phone}
                       onChange={(e) => setDrForm({ ...drForm, phone: e.target.value.replace(/\D/g, "") })}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Set DR Login Password</label>
+                    <input
+                      type="text"
+                      placeholder="Login Password (default: dr123)"
+                      value={drForm.password || ""}
+                      onChange={(e) => setDrForm({ ...drForm, password: e.target.value })}
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-mono font-bold"
                     />
                   </div>
                   <div>
@@ -815,7 +826,7 @@ export default function AdminDashboard() {
                       required
                       value={drForm.regionId}
                       onChange={(e) => setDrForm({ ...drForm, regionId: e.target.value })}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-bold"
                     >
                       <option value="">-- Select District --</option>
                       {regions.map((r) => (
@@ -1975,6 +1986,16 @@ export default function AdminDashboard() {
                   value={editingDr.phone}
                   onChange={(e) => setEditingDr({ ...editingDr, phone: e.target.value.replace(/\D/g, "") })}
                   className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-navy-900 mb-1">DR Login Password</label>
+                <input
+                  type="text"
+                  placeholder="Set / Change Login Password (default: dr123)"
+                  value={editingDr.password || ""}
+                  onChange={(e) => setEditingDr({ ...editingDr, password: e.target.value })}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold font-mono"
                 />
               </div>
               <div>

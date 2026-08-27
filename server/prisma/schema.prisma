@@ -97,6 +97,7 @@ model DR {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name        String
   phone       String
+  password    String?  @default("dr123")
   regionId    String
   region      Region   @relation(fields: [regionId], references: [id])
   status      String   @default("ACTIVE")

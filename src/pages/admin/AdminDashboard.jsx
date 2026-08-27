@@ -784,7 +784,7 @@ export default function AdminDashboard() {
             </div>
 
             {showDrForm && (
-              <form onSubmit={handleAddDr} className="p-5 border-b border-slate-200 bg-brand-50/30 space-y-4">
+              <form onSubmit={handleCreateDr} className="p-5 border-b border-slate-200 bg-brand-50/30 space-y-4">
                 <h4 className="font-bold text-navy-900 text-xs uppercase tracking-wider">Assign District Representative Credentials</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>

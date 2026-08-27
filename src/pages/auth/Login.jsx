@@ -249,8 +249,8 @@ export default function Login() {
         </form>
       )}
 
-      {/* Login as Vendor Footer Link */}
-      <div className="mt-8 pt-4 border-t border-slate-100 text-center">
+      {/* Login as Vendor Footer Link — Positioned at Bottom Right */}
+      <div className="mt-8 pt-4 border-t border-slate-100 flex justify-end items-center">
         {mode === "standard" ? (
           <button
             type="button"
@@ -258,7 +258,7 @@ export default function Login() {
               setMode("vendor");
               setError("");
             }}
-            className="text-xs font-extrabold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-4 py-2.5 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs"
+            className="text-xs font-extrabold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3.5 py-2.5 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs active:scale-[0.98]"
           >
             <span>🏬 Login as a Vendor Partner →</span>
           </button>

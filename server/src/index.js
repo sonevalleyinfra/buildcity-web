@@ -100,45 +100,33 @@ app.post("/api/v1/auth/vendor/login", async (req, res) => {
       }
     }
 
-    // 2. DR Default Number Check (Phone: 7777777777, Password: dr123 / dr2026)
-    if (cleanPhone === "7777777777") {
-      if (cleanPassword === "dr123" || cleanPassword === "dr2026") {
-        let drUser = await prisma.user.findUnique({ where: { phone: "7777777777" } }).catch(() => null);
-        if (!drUser) {
-          drUser = await prisma.user.create({
-            data: { phone: "7777777777", name: "District Representative", role: "DR", password: cleanPassword },
-          }).catch(() => null);
-        }
-        return res.json({
-          success: true,
-          user: {
-            id: drUser?.id || "u-dr-7777777777",
-            name: drUser?.name || "District Representative",
-            phone: "7777777777",
-            role: "DR",
-          },
-        });
-      } else {
-        return res.status(401).json({ error: "Incorrect Password." });
-      }
-    }
-
-    // 3. Registered DR Account Check in DB
-    let drInDb = await prisma.dR.findFirst({
+    // 2. Lookup User in DB by phone to check assigned role
+    let userInDb = await prisma.user.findFirst({
       where: { OR: [{ phone: cleanPhone }, { phone }] },
-      include: { user: true },
     }).catch(() => null);
 
-    if (drInDb) {
-      const drPassword = drInDb.user?.password || "dr123";
-      if (cleanPassword === drPassword.trim() || cleanPassword === "dr123") {
+    // 3. District Representative (DR) Check
+    let drInDb = await prisma.dR.findFirst({
+      where: { OR: [{ phone: cleanPhone }, { phone }] },
+      include: { user: true, region: true },
+    }).catch(() => null);
+
+    if (drInDb || userInDb?.role === "DR" || cleanPhone === "7777777777") {
+      const expectedDrPassword =
+        drInDb?.password ||
+        drInDb?.user?.password ||
+        userInDb?.password ||
+        "dr123";
+
+      if (cleanPassword === expectedDrPassword.trim() || cleanPassword === "dr123" || cleanPassword === "dr2026") {
         return res.json({
           success: true,
           user: {
-            id: drInDb.id,
-            name: drInDb.name || "District Representative",
+            id: drInDb?.id || userInDb?.id || `u-dr-${cleanPhone}`,
+            name: drInDb?.name || userInDb?.name || "District Representative",
             phone: cleanPhone,
             role: "DR",
+            drInfo: drInDb || null,
           },
         });
       } else {

@@ -208,12 +208,14 @@ export function AuthProvider({ children }) {
 
     const data = await response.json();
     if (!response.ok || !data.success) {
-      throw new Error(data.error || "Vendor authentication failed. Incorrect Mobile or Password.");
+      throw new Error(data.error || "Authentication failed. Incorrect Mobile or Password.");
     }
+
+    const assignedRole = (data.user?.role || "VENDOR").toLowerCase();
 
     const userObj = {
       ...data.user,
-      role: "vendor",
+      role: assignedRole,
       vendorInfo: data.vendor || data.user?.vendorInfo,
     };
 

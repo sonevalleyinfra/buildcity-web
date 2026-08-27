@@ -21,21 +21,18 @@ export default function Login() {
 
   const [demoOtp, setDemoOtp] = useState("");
 
-  // Customer / DR / Admin OTP Request
+  // Customer OTP Request
   const handleSendOtp = async (e) => {
     e.preventDefault();
     setError("");
-    const inputClean = phone.trim();
-    const isAdminId = inputClean.toUpperCase() === "ADMIN2026";
-
-    if (!isAdminId && !/^\d{10}$/.test(inputClean)) {
-      setError("Please enter a valid 10-digit mobile number or Unique Admin ID");
+    if (!/^\d{10}$/.test(phone.trim())) {
+      setError("Please enter a valid 10-digit mobile number");
       return;
     }
 
     setLoading(true);
     try {
-      const resData = await requestOtp(inputClean);
+      const resData = await requestOtp(phone.trim());
       if (resData?.otp) {
         setDemoOtp(resData.otp);
       }
@@ -47,7 +44,7 @@ export default function Login() {
     }
   };
 
-  // Customer / DR OTP Verification
+  // Customer OTP Verification
   const handleVerify = async (e) => {
     e.preventDefault();
     setError("");
@@ -77,7 +74,7 @@ export default function Login() {
     }
   };
 
-  // Vendor Partner Password Authentication
+  // Partner / Admin / DR / Vendor Password Authentication
   const handleVendorPasswordLogin = async (e) => {
     e.preventDefault();
     setError("");
@@ -86,16 +83,23 @@ export default function Login() {
       return;
     }
     if (!password.trim()) {
-      setError("Please enter your Vendor Login Password");
+      setError("Please enter your Login Password");
       return;
     }
 
     setLoading(true);
     try {
-      await vendorLogin({ phone: phone.trim(), password: password.trim() });
-      navigate("/vendor/dashboard", { replace: true });
+      const userObj = await vendorLogin({ phone: phone.trim(), password: password.trim() });
+      const home =
+        userObj.role === "admin"
+          ? "/admin/dashboard"
+          : userObj.role === "dr"
+          ? "/dr/dashboard"
+          : "/vendor/dashboard";
+
+      navigate(home, { replace: true });
     } catch (err) {
-      setError(err?.message || "Login failed. Invalid Phone or Password.");
+      setError(err?.message || "Login failed. Invalid Mobile or Password.");
     } finally {
       setLoading(false);
     }
@@ -110,7 +114,7 @@ export default function Login() {
       }}
       className="text-xs font-extrabold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-4 py-2.5 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs active:scale-[0.98]"
     >
-      <span>🏬 Login as a Vendor Partner →</span>
+      <span>🏬 Partner Login (Password) →</span>
     </button>
   ) : (
     <button
@@ -121,18 +125,18 @@ export default function Login() {
       }}
       className="text-xs font-bold text-slate-500 hover:text-navy-900 transition-all cursor-pointer inline-flex items-center gap-1"
     >
-      <span>← Back to Customer / DR Login (OTP)</span>
+      <span>← Back to Customer Login (OTP)</span>
     </button>
   );
 
   return (
     <AuthLayout footerRight={footerVendorAction}>
       <h1 className="text-2xl font-bold text-navy-900 mb-1">
-        {mode === "vendor" ? "Vendor Partner Login 🏬" : "Welcome back 👋"}
+        {mode === "vendor" ? "Partner Portal Login 🏬" : "Welcome back 👋"}
       </h1>
       <p className="text-sm text-slate-500 mb-6">
         {mode === "vendor"
-          ? "Login with your registered mobile number and password assigned by DR or Admin"
+          ? "Login with your registered mobile number and password"
           : step === "phone"
           ? "Login with your phone number — no password needed"
           : `Enter the OTP sent to +91 ${phone}`}
@@ -141,11 +145,11 @@ export default function Login() {
       {error && <p className="mb-4 text-xs font-extrabold text-rose-600 bg-rose-50 p-3 rounded-xl border border-rose-200 leading-snug">{error}</p>}
 
       {mode === "vendor" ? (
-        /* VENDOR PASSWORD LOGIN FORM */
+        /* PARTNER / ADMIN / DR / VENDOR PASSWORD LOGIN FORM */
         <form onSubmit={handleVendorPasswordLogin} noValidate className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-navy-900 mb-1.5">
-              Vendor Registered Mobile Number
+              Registered Mobile Number
             </label>
             <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 focus-within:border-emerald-500">
               <span className="text-sm text-slate-500 shrink-0">+91</span>
@@ -165,13 +169,13 @@ export default function Login() {
 
           <div>
             <label className="block text-xs font-bold text-navy-900 mb-1.5">
-              Vendor Login Password
+              Login Password
             </label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password set by Admin / DR"
+              placeholder="Enter password"
               className="w-full text-sm font-medium rounded-xl border border-slate-200 bg-white px-3.5 py-3 outline-none focus:border-emerald-500"
             />
           </div>
@@ -181,24 +185,26 @@ export default function Login() {
             disabled={loading}
             className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-extrabold text-sm py-3.5 rounded-xl shadow-md active:scale-[0.98] transition-all cursor-pointer disabled:opacity-60 mt-2"
           >
-            {loading ? "Authenticating Vendor..." : "Login to Vendor Dashboard →"}
+            {loading ? "Authenticating..." : "Login to Dashboard →"}
           </button>
         </form>
       ) : step === "phone" ? (
-        /* CUSTOMER / DR / ADMIN LOGIN FORM */
+        /* CUSTOMER OTP REQUEST FORM */
         <form onSubmit={handleSendOtp} noValidate>
           <label className="block text-sm font-medium text-navy-900 mb-1.5">
-            Mobile Number / Unique Admin ID
+            Phone Number
           </label>
           <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 mb-6 focus-within:border-brand-500">
-            <span className="text-sm text-slate-500 shrink-0">📱</span>
+            <span className="text-sm text-slate-500 shrink-0">+91</span>
             <span className="text-slate-200">|</span>
             <input
-              type="text"
+              type="tel"
+              inputMode="numeric"
+              maxLength={10}
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="Enter 10-digit mobile number or Admin ID"
-              className="w-full bg-transparent text-sm text-navy-900 placeholder:text-slate-400 outline-none font-bold uppercase"
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
+              placeholder="Enter 10-digit mobile number"
+              className="w-full bg-transparent text-sm text-navy-900 placeholder:text-slate-400 outline-none font-bold"
               autoFocus
             />
           </div>

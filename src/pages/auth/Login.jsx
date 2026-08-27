@@ -21,18 +21,21 @@ export default function Login() {
 
   const [demoOtp, setDemoOtp] = useState("");
 
-  // Customer / DR OTP Request
+  // Customer / DR / Admin OTP Request
   const handleSendOtp = async (e) => {
     e.preventDefault();
     setError("");
-    if (!/^\d{10}$/.test(phone.trim())) {
-      setError("Please enter a valid 10-digit mobile number");
+    const inputClean = phone.trim();
+    const isAdminId = inputClean.toUpperCase() === "ADMIN2026";
+
+    if (!isAdminId && !/^\d{10}$/.test(inputClean)) {
+      setError("Please enter a valid 10-digit mobile number or Unique Admin ID");
       return;
     }
 
     setLoading(true);
     try {
-      const resData = await requestOtp(phone.trim());
+      const resData = await requestOtp(inputClean);
       if (resData?.otp) {
         setDemoOtp(resData.otp);
       }
@@ -182,22 +185,20 @@ export default function Login() {
           </button>
         </form>
       ) : step === "phone" ? (
-        /* CUSTOMER / DR OTP REQUEST FORM */
+        /* CUSTOMER / DR / ADMIN LOGIN FORM */
         <form onSubmit={handleSendOtp} noValidate>
           <label className="block text-sm font-medium text-navy-900 mb-1.5">
-            Phone Number
+            Mobile Number / Unique Admin ID
           </label>
           <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 mb-6 focus-within:border-brand-500">
-            <span className="text-sm text-slate-500 shrink-0">+91</span>
+            <span className="text-sm text-slate-500 shrink-0">📱</span>
             <span className="text-slate-200">|</span>
             <input
-              type="tel"
-              inputMode="numeric"
-              maxLength={10}
+              type="text"
               value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
-              placeholder="Enter 10-digit mobile number"
-              className="w-full bg-transparent text-sm text-navy-900 placeholder:text-slate-400 outline-none"
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="Enter 10-digit mobile number or Admin ID"
+              className="w-full bg-transparent text-sm text-navy-900 placeholder:text-slate-400 outline-none font-bold uppercase"
               autoFocus
             />
           </div>

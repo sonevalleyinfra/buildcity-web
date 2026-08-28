@@ -175,21 +175,9 @@ export default function VendorDashboard() {
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                 STORE STATUS: APPROVED
               </span>
-              <button
-                type="button"
-                onClick={() => {
-                  showAlert({
-                    title: `📍 Store Location & District: ${districtName}`,
-                    message: `Shop Name: ${shopName}\nDistrict: ${districtName}\nOwner: ${ownerName} (${vendorPhone})\nCommission Rate: ${matchedVendorObj.commissionRate || 10}%\n\nDB Table: public.vendors & public.regions`,
-                    type: "info",
-                  });
-                }}
-                className="bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white text-[11px] font-bold px-3 py-0.5 rounded-full border border-white/20 active:scale-95 transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
-                title="Click to view Store Region Info"
-              >
-                <span>📍 {districtName}</span>
-                <span className="text-[9px] opacity-80">ℹ️</span>
-              </button>
+              <span className="bg-white/10 text-slate-300 text-[11px] font-bold px-3 py-0.5 rounded-full border border-white/10">
+                📍 {districtName}
+              </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">{shopName}</h1>
             <p className="text-xs text-slate-300 font-medium mt-1">
@@ -207,28 +195,59 @@ export default function VendorDashboard() {
           </div>
         </div>
 
-        {/* Quick Metrics Bar - Real DB Data */}
+        {/* Quick Metrics Bar - Interactive Clickable Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-slate-700/60 relative z-10">
-          <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3.5 border border-white/10">
-            <p className="text-[11px] font-medium text-slate-300">Total Store Revenue</p>
+          <button
+            type="button"
+            onClick={() => setActiveTab("overview")}
+            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-3.5 border border-white/10 hover:border-emerald-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group"
+          >
+            <p className="text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">Total Store Revenue</p>
             <p className="text-lg font-black text-white mt-0.5 tracking-tight">₹{totalRevenue.toLocaleString()}</p>
-            <span className="text-[10px] text-emerald-400 font-extrabold">Real-time DB Sales</span>
-          </div>
-          <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3.5 border border-white/10">
-            <p className="text-[11px] font-medium text-slate-300">Active Orders</p>
+            <span className="text-[10px] text-emerald-400 font-extrabold flex items-center gap-1 mt-0.5">
+              <span>Real-time DB Sales</span>
+              <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("orders")}
+            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-3.5 border border-white/10 hover:border-amber-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group"
+          >
+            <p className="text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">Active Orders</p>
             <p className="text-lg font-black text-white mt-0.5 tracking-tight">{activeOrdersCount} Orders</p>
-            <span className="text-[10px] text-amber-300 font-extrabold">Live Orders in DB</span>
-          </div>
-          <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3.5 border border-white/10">
-            <p className="text-[11px] font-medium text-slate-300">My Store Products</p>
+            <span className="text-[10px] text-amber-300 font-extrabold flex items-center gap-1 mt-0.5">
+              <span>Live Orders in DB</span>
+              <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("products")}
+            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-3.5 border border-white/10 hover:border-brand-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group"
+          >
+            <p className="text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">My Store Products</p>
             <p className="text-lg font-black text-white mt-0.5 tracking-tight">{vendorProducts.length} Items</p>
-            <span className="text-[10px] text-brand-300 font-extrabold">Picked from Master Catalog</span>
-          </div>
-          <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3.5 border border-white/10">
-            <p className="text-[11px] font-medium text-slate-300">Master Catalog Available</p>
+            <span className="text-[10px] text-brand-300 font-extrabold flex items-center gap-1 mt-0.5">
+              <span>Picked from Master Catalog</span>
+              <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowCatalogModal(true)}
+            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-3.5 border border-white/10 hover:border-amber-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group"
+          >
+            <p className="text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">Master Catalog Available</p>
             <p className="text-lg font-black text-amber-300 mt-0.5 tracking-tight">{masterProducts.length} Pre-built Products</p>
-            <span className="text-[10px] text-slate-300 font-medium">Created by Admin & DR</span>
-          </div>
+            <span className="text-[10px] text-slate-300 font-medium flex items-center gap-1 mt-0.5">
+              <span>Click to Open Catalog</span>
+              <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+            </span>
+          </button>
         </div>
       </div>
 

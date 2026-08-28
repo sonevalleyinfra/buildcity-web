@@ -99,7 +99,6 @@ export default function ProductDetail() {
     } catch (err) {}
     return [];
   });
-  const [reviewsLoading, setReviewsLoading] = useState(false);
 
   const [newRating, setNewRating] = useState(5);
   const [hoverRating, setHoverRating] = useState(0);
@@ -107,6 +106,21 @@ export default function ProductDetail() {
   const [reviewComment, setReviewComment] = useState("");
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
   const [showForm, setShowForm] = useState(false);
+
+  // Sync state when product ID changes
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`buildcity_reviews_${id}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setReviewsList(parsed);
+          return;
+        }
+      }
+    } catch (e) {}
+    setReviewsList([]);
+  }, [id]);
 
   useEffect(() => {
     if (user?.name && !reviewerName) {
@@ -118,17 +132,33 @@ export default function ProductDetail() {
   useEffect(() => {
     let isMounted = true;
     fetch(`${API_BASE_URL}/api/v1/reviews?productId=${encodeURIComponent(id)}`)
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error("API status " + res.status);
+        return res.json();
+      })
       .then((data) => {
         if (isMounted && Array.isArray(data)) {
-          setReviewsList(data);
-          try {
-            localStorage.setItem(`buildcity_reviews_${id}`, JSON.stringify(data));
-          } catch (e) {}
+          setReviewsList((prevList) => {
+            // Merge DB data with local offline submissions so user reviews are NEVER erased
+            const mergedMap = new Map();
+            data.forEach((item) => {
+              if (item && item.comment) mergedMap.set(item.id || item.comment, item);
+            });
+            prevList.forEach((item) => {
+              if (item && item.comment && !mergedMap.has(item.id || item.comment)) {
+                mergedMap.set(item.id || item.comment, item);
+              }
+            });
+            const merged = Array.from(mergedMap.values());
+            try {
+              localStorage.setItem(`buildcity_reviews_${id}`, JSON.stringify(merged));
+            } catch (e) {}
+            return merged;
+          });
         }
       })
       .catch((err) => {
-        console.warn("Failed to fetch live DB reviews, using cached/local state:", err);
+        console.warn("Failed to fetch live DB reviews, keeping local state:", err);
       });
     return () => {
       isMounted = false;
@@ -183,9 +213,9 @@ export default function ProductDetail() {
       date: "Just now",
     };
 
-    // 1. Save to state immediately
+    // 1. Save to state and localStorage IMMEDIATELY (Instant & Persistent)
     setReviewsList((prev) => {
-      const updated = [newRev, ...prev];
+      const updated = [newRev, ...prev.filter((r) => r.id !== newRev.id && r.comment !== newRev.comment)];
       try {
         localStorage.setItem(`buildcity_reviews_${id}`, JSON.stringify(updated));
       } catch (err) {}
@@ -219,7 +249,7 @@ export default function ProductDetail() {
         });
       }
     } catch (err) {
-      console.error("Failed to post review to DB:", err);
+      console.error("Failed to post review to DB (kept in device storage):", err);
     }
 
     setTimeout(() => setReviewSubmitted(false), 3000);

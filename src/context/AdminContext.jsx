@@ -92,13 +92,7 @@ const loadInitialCoupons = () => {
 };
 
 const USERS_STORAGE_KEY = "buildcity_admin_users";
-
-const seedUsers = [
-  { id: "usr-admin-1", name: "Super Admin", phone: "9876543210", role: "ADMIN", district: "Varanasi", ordersCount: 0, addressesCount: 1, createdAt: "2026-01-01" },
-  { id: "usr-customer-1", name: "Ramesh Customer", phone: "7607650875", role: "CUSTOMER", district: "Varanasi", ordersCount: 3, addressesCount: 2, createdAt: "2026-02-10" },
-  { id: "usr-dr-1", name: "Kashi Ground Agent", phone: "9123456789", role: "DR", district: "Varanasi", ordersCount: 0, addressesCount: 1, createdAt: "2026-02-12" },
-  { id: "usr-vendor-1", name: "Varanasi Building Depot", phone: "9988776655", role: "VENDOR", district: "Varanasi", ordersCount: 12, addressesCount: 1, createdAt: "2026-02-15" },
-];
+const PRODUCTS_STORAGE_KEY = "buildcity_admin_products";
 
 const loadInitialUsers = () => {
   try {
@@ -111,6 +105,17 @@ const loadInitialUsers = () => {
   return seedUsers;
 };
 
+const loadInitialProducts = () => {
+  try {
+    const saved = localStorage.getItem(PRODUCTS_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return [];
+};
+
 export function AdminProvider({ children }) {
   const [drs, setDrs] = useState(loadInitialDrs);
   const [vendors, setVendors] = useState(loadInitialVendors);
@@ -120,7 +125,7 @@ export function AdminProvider({ children }) {
   const [regions, setRegions] = useState(loadInitialRegions);
   const [coupons, setCoupons] = useState(loadInitialCoupons);
   const [masterProducts, setMasterProducts] = useState([]);
-  const [products, setProducts] = useState([]);
+  const [products, setProducts] = useState(loadInitialProducts);
   const [productsLoading, setProductsLoading] = useState(true);
 
   // Single Source of Truth: Supabase Cloud DB se live data sync karne ke liye (Zero flickering guard ke sath)
@@ -280,6 +285,7 @@ export function AdminProvider({ children }) {
             addedBy: l.addedBy || "Vendor",
           };
         });
+        localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(formattedListings));
         setProducts((prev) => {
           const prevMap = new Map(prev.map((p) => [p.id, p]));
           let hasChanged = prev.length !== formattedListings.length;

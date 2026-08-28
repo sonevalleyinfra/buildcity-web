@@ -460,9 +460,9 @@ export default function Home() {
                   key={p.id || i}
                   className="bg-white rounded-xl border border-slate-200/90 p-3 w-48 sm:w-56 shrink-0 flex flex-col justify-between hover:shadow-md hover:border-brand-300 hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200 group"
                 >
-                  <div>
-                    <div className="relative h-28 rounded-lg overflow-hidden bg-slate-100 mb-2 border border-slate-100">
-                      <span className="absolute top-1.5 left-1.5 bg-amber-400 text-navy-950 text-[9px] font-black px-2 py-0.5 rounded shadow-2xs">
+                  <Link to={`/product/${p.id}`} className="block flex-1">
+                    <div className="relative h-28 rounded-lg overflow-hidden bg-slate-100 mb-2 border border-slate-100 group-hover:border-brand-300">
+                      <span className="absolute top-1.5 left-1.5 z-10 bg-amber-400 text-navy-950 text-[9px] font-black px-2 py-0.5 rounded shadow-2xs">
                         {p.categoryName || "Material"}
                       </span>
                       <img
@@ -487,10 +487,10 @@ export default function Home() {
                       🏬 {p.vendorName || p.addedBy || "District Catalog"}
                     </p>
 
-                    <p className="text-[11px] font-bold text-navy-900 leading-tight mb-1.5 line-clamp-2 min-h-[32px] tracking-tight">
+                    <p className="text-[11px] font-bold text-navy-900 leading-tight mb-1.5 line-clamp-2 min-h-[32px] tracking-tight group-hover:text-brand-600 transition-colors">
                       {p.name}
                     </p>
-                  </div>
+                  </Link>
 
                   <div>
                     <div className="flex items-baseline justify-between mb-2">

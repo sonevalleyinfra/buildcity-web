@@ -467,10 +467,10 @@ export default function Categories() {
                   key={p.id}
                   className="bg-white border border-slate-200/90 rounded-2xl p-4 w-60 sm:w-64 shrink-0 flex flex-col justify-between hover:border-brand-300 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200 group"
                 >
-                    <div>
-                      <div className="relative h-36 rounded-xl overflow-hidden bg-slate-50 mb-3 border border-slate-200">
+                    <Link to={`/product/${p.id}`} className="block flex-1 cursor-pointer">
+                      <div className="relative h-36 rounded-xl overflow-hidden bg-slate-50 mb-3 border border-slate-200 group-hover:border-brand-300">
                         <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                        <span className="absolute top-2 left-2 bg-navy-900 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow-2xs">
+                        <span className="absolute top-2 left-2 z-10 bg-navy-900 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow-2xs">
                           {p.categoryName}
                         </span>
                       </div>
@@ -478,13 +478,13 @@ export default function Categories() {
                       <p className="text-[10px] font-black text-brand-600 uppercase tracking-wide">
                         🏬 Offered by: {p.vendorName}
                       </p>
-                      <h3 className="font-extrabold text-navy-900 text-xs leading-snug line-clamp-2 mt-0.5 tracking-tight">
+                      <h3 className="font-extrabold text-navy-900 text-xs leading-snug line-clamp-2 mt-0.5 tracking-tight group-hover:text-brand-600 transition-colors">
                         {p.name}
                       </h3>
                       <p className="text-[11px] font-medium text-slate-500 mt-1">
                         Brand: <span className="font-bold text-slate-700">{p.brand}</span> · Grade: <span className="font-bold text-slate-700">{p.grade}</span>
                       </p>
-                    </div>
+                    </Link>
 
                     <div className="mt-4 pt-3 border-t border-slate-200/90 flex items-center justify-between">
                       <div>

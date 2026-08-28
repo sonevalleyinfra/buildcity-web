@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import Navbar from "../../components/Navbar";
+import ProductImageSlider, { getProductImages } from "../../components/ProductImageSlider";
 import { useCart } from "../../context/CartContext";
 import { useRegion } from "../../context/RegionContext";
-
 import { useAdmin } from "../../context/AdminContext";
 
 // Fallback single-product lookup
@@ -18,12 +18,14 @@ function generateProduct(id, priceFactor = 1, regionName = "Varanasi") {
     name: `${brand} ${slug[0].toUpperCase() + slug.slice(1)} — Premium Quality`,
     brand,
     category: slug,
-    images: [0, 1, 2, 3].map(
-      (i) => `https://picsum.photos/seed/${slug}${id}${i}/600/600`
-    ),
+    images: [
+      `https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=600&q=80`,
+      `https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=600&q=80`,
+      `https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80`,
+    ],
     mrp,
     price: mrp - discount,
-    rating: 4.3,
+    rating: 4.8,
     reviews: 128,
     inStock: true,
     unit: "1 Piece",
@@ -31,7 +33,7 @@ function generateProduct(id, priceFactor = 1, regionName = "Varanasi") {
     specs: [
       { label: "Brand", value: brand },
       { label: "Category", value: slug[0].toUpperCase() + slug.slice(1) },
-      { label: "Unit", value: "1 Piece" },
+      { label: "Unit Packaging", value: "1 Piece" },
       { label: "Warranty", value: "1 Year Manufacturer Warranty" },
       { label: "Delivery", value: "2-4 business days" },
     ],
@@ -54,6 +56,7 @@ export default function ProductDetail() {
     const realProd = products.find((p) => p.id === id);
     if (realProd) {
       const mrp = Math.round(Number(realProd.price) * 1.15);
+      const extractedImages = getProductImages(realProd);
       return {
         id: realProd.id,
         name: realProd.name,
@@ -61,26 +64,24 @@ export default function ProductDetail() {
         category: realProd.categoryName || "Material",
         vendorId: realProd.vendorId,
         vendorName: realProd.vendorName,
-        images: [
-          realProd.imageUrl,
-          realProd.imageUrl,
-        ],
+        images: extractedImages,
         mrp,
         price: Number(realProd.price) || 100,
         rating: 4.9,
         reviews: 42,
         inStock: (realProd.stockQty || 0) > 0,
         unit: realProd.unit || "Unit",
-        description: `High-quality certified ${realProd.name} by ${realProd.brand}. Supplied directly by ${realProd.vendorName || "Authorized Vendor"}.`,
+        description: realProd.description || `High-quality certified ${realProd.name} by ${realProd.brand}. Supplied directly by ${realProd.vendorName || "Authorized Vendor"}.`,
         specs: [
-          { label: "Vendor Shop", value: realProd.vendorName || "Shree Cement Traders" },
+          { label: "Vendor Shop", value: realProd.vendorName || "Authorized BuildCity Vendor" },
           { label: "Brand", value: realProd.brand || "Generic" },
           { label: "Grade", value: realProd.grade || "Standard" },
-          { label: "Packaging", value: realProd.unit || "Unit" },
+          { label: "Type", value: realProd.type || "Standard Type" },
+          { label: "Packaging Unit", value: realProd.unit || "Unit" },
           { label: "Available Stock", value: `${realProd.stockQty || 100} units` },
         ],
         reviewsList: [
-          { name: "Rahul S.", rating: 5, comment: "Genuine material, fast delivery in Varanasi site." },
+          { name: "Rahul S.", rating: 5, comment: "Genuine material, fast delivery in site." },
           { name: "Vikram M.", rating: 5, comment: "Original brand packaging with official invoice." },
         ],
       };
@@ -133,28 +134,9 @@ export default function ProductDetail() {
         </div>
 
         <div className="grid md:grid-cols-2 gap-8">
-          {/* Gallery Hai  */}
+          {/* Interactive Image Slider */}
           <div>
-            <div className="aspect-square rounded-2xl overflow-hidden bg-white border border-slate-200 mb-3">
-              <img
-                src={product.images[activeImg]}
-                alt={product.name}
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <div className="grid grid-cols-4 gap-2.5">
-              {product.images.map((img, i) => (
-                <button
-                  key={i}
-                  onClick={() => setActiveImg(i)}
-                  className={`aspect-square rounded-lg overflow-hidden border-2 ${
-                    activeImg === i ? "border-brand-500" : "border-transparent"
-                  }`}
-                >
-                  <img src={img} alt="" className="w-full h-full object-cover" />
-                </button>
-              ))}
-            </div>
+            <ProductImageSlider images={product.images} name={product.name} />
           </div>
 
           {/* Info hai  */}

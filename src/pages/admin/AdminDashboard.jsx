@@ -907,16 +907,9 @@ export default function AdminDashboard() {
                         <td className="py-3.5 px-4 font-bold text-navy-900">{d.name}</td>
                         <td className="py-3.5 px-4 font-semibold text-slate-700">📱 {d.phone}</td>
                         <td className="py-3.5 px-4">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTab("Regions");
-                              showAlert({ title: "Region Selected", message: `Navigated to Regions Management for district "${d.regionName}".`, type: "info" });
-                            }}
-                            className="bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 hover:border-brand-300 font-bold px-2.5 py-1 rounded-lg text-[11px] active:scale-95 transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
-                          >
-                            📍 {d.regionName} ↗️
-                          </button>
+                          <span className="bg-slate-100 text-slate-800 font-bold px-2.5 py-0.5 rounded text-[11px]">
+                            📍 {d.regionName}
+                          </span>
                         </td>
                         <td className="py-3.5 px-4">
                           <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${STATUS_STYLE[d.status]}`}>
@@ -1103,16 +1096,9 @@ export default function AdminDashboard() {
                             <p className="text-[11px] text-slate-500">📱 {v.phone}</p>
                           </td>
                           <td className="py-3.5 px-4">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setTab("Regions");
-                                showAlert({ title: "Region Selected", message: `Navigated to Regions Management for district "${v.regionName}".`, type: "info" });
-                              }}
-                              className="bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 hover:border-brand-300 font-bold px-2 py-0.5 rounded text-[11px] active:scale-95 transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
-                            >
-                              📍 {v.regionName} ↗️
-                            </button>
+                            <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-semibold">
+                              📍 {v.regionName}
+                            </span>
                           </td>
                           <td className="py-3.5 px-4 font-extrabold text-navy-900">
                             <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded text-[11px]">
@@ -1256,28 +1242,60 @@ export default function AdminDashboard() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-navy-900 mb-1">Product Image URL or Select Preset</label>
+                  <label className="block text-xs font-bold text-navy-900 mb-1">Product Images (Add 1 to 3 Images for Interactive Slider)</label>
                   <div className="flex gap-2 overflow-x-auto pb-2 mb-2 no-scrollbar">
                     {PRESET_IMAGES.map((preset, idx) => (
                       <button
                         key={idx}
                         type="button"
-                        onClick={() => setProductForm({ ...productForm, imageUrl: preset.url })}
-                        className={`px-3 py-1.5 rounded-lg border text-xs font-semibold shrink-0 cursor-pointer ${
-                          productForm.imageUrl === preset.url ? "bg-brand-50 border-brand-500 text-brand-700 font-bold" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                        }`}
+                        onClick={() => {
+                          const currentList = (productForm.imageUrl || "").split(",").map(s => s.trim()).filter(Boolean);
+                          if (!currentList.includes(preset.url)) {
+                            const newList = [...currentList, preset.url].slice(0, 3);
+                            setProductForm({ ...productForm, imageUrl: newList.join(", ") });
+                          }
+                        }}
+                        className="px-3 py-1 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-brand-50 hover:border-brand-300 text-[11px] font-semibold shrink-0 cursor-pointer"
                       >
-                        {preset.label}
+                        + {preset.label}
                       </button>
                     ))}
                   </div>
-                  <input
-                    type="url"
-                    placeholder="https://images.unsplash.com/..."
-                    value={productForm.imageUrl || ""}
-                    onChange={(e) => setProductForm({ ...productForm, imageUrl: e.target.value })}
-                    className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-mono text-[11px]"
-                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <input
+                      type="url"
+                      placeholder="Main Image 1 URL *"
+                      value={(productForm.imageUrl || "").split(",")[0]?.trim() || ""}
+                      onChange={(e) => {
+                        const parts = (productForm.imageUrl || "").split(",").map(s => s.trim());
+                        parts[0] = e.target.value;
+                        setProductForm({ ...productForm, imageUrl: parts.filter(Boolean).join(", ") });
+                      }}
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-mono text-[11px]"
+                    />
+                    <input
+                      type="url"
+                      placeholder="Image 2 URL (Optional)"
+                      value={(productForm.imageUrl || "").split(",")[1]?.trim() || ""}
+                      onChange={(e) => {
+                        const parts = (productForm.imageUrl || "").split(",").map(s => s.trim());
+                        parts[1] = e.target.value;
+                        setProductForm({ ...productForm, imageUrl: parts.filter(Boolean).join(", ") });
+                      }}
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-mono text-[11px]"
+                    />
+                    <input
+                      type="url"
+                      placeholder="Image 3 URL (Optional)"
+                      value={(productForm.imageUrl || "").split(",")[2]?.trim() || ""}
+                      onChange={(e) => {
+                        const parts = (productForm.imageUrl || "").split(",").map(s => s.trim());
+                        parts[2] = e.target.value;
+                        setProductForm({ ...productForm, imageUrl: parts.filter(Boolean).join(", ") });
+                      }}
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-mono text-[11px]"
+                    />
+                  </div>
                 </div>
 
                 <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
@@ -1798,18 +1816,6 @@ export default function AdminDashboard() {
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5">{r.state || "Uttar Pradesh"}</p>
                       <p className="text-xs font-bold text-brand-600 mt-1">Delivery Charge: ₹{r.baseDeliveryCharge || 49}</p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(r.id);
-                          showAlert({ title: "Region ID Copied", message: `Copied Region ID "${r.id}" to clipboard!\n\nDB Table: public.regions`, type: "success" });
-                        }}
-                        className="mt-2 text-[10px] font-mono font-bold bg-slate-100 hover:bg-brand-50 text-slate-700 hover:text-brand-700 border border-slate-200 hover:border-brand-300 px-2 py-1 rounded-lg active:scale-95 transition-all cursor-pointer flex items-center justify-between w-full shadow-2xs"
-                        title="Click to copy DB Region ID"
-                      >
-                        <span>🔑 ID: {r.id ? (r.id.length > 16 ? r.id.substring(0, 16) + '...' : r.id) : 'af4bf0c4...'}</span>
-                        <span className="text-[9px] bg-white border border-slate-200 px-1 py-0.2 rounded font-sans">Copy 📋</span>
-                      </button>
                     </div>
 
                     <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100">

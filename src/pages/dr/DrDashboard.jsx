@@ -272,21 +272,9 @@ export default function DrDashboard() {
             <span className="bg-brand-50 text-brand-600 border border-brand-200 text-xs font-bold px-2.5 py-1 rounded-full">
               DR Portal
             </span>
-            <button
-              type="button"
-              onClick={() => {
-                showAlert({
-                  title: `📍 District Region Info: ${districtName}`,
-                  message: `District Name: ${districtName}\nState: Uttar Pradesh\nDR Agent: ${user?.name || "DR"} (${user?.phone})\n\nDB Record: public.regions`,
-                  type: "info",
-                });
-              }}
-              className="hidden md:inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg border border-amber-200/90 active:scale-95 transition-all cursor-pointer shadow-2xs"
-              title="Click to view District details"
-            >
-              <span>📍 District: <strong>{districtName}</strong></span>
-              <span className="text-[10px] bg-amber-200/60 px-1 rounded font-mono">ℹ️ info</span>
-            </button>
+            <span className="hidden md:inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg border border-amber-200">
+              📍 District: <strong>{districtName}</strong>
+            </span>
           </div>
 
           <div className="flex items-center gap-4">
@@ -1333,31 +1321,61 @@ export default function DrDashboard() {
 
               <div>
                 <label className="block text-xs font-bold text-navy-900 mb-1">
-                  Product Image URL or Select Preset
+                  Product Images (Add 1 to 3 Images for Interactive Slider)
                 </label>
-                <div className="flex gap-2 mb-2 overflow-x-auto pb-1">
+                <div className="flex gap-2 mb-2 overflow-x-auto pb-1 no-scrollbar">
                   {PRESET_IMAGES.map((img, i) => (
                     <button
                       type="button"
                       key={i}
-                      onClick={() => setProductForm({ ...productForm, imageUrl: img.url })}
-                      className={`text-[11px] px-2.5 py-1 rounded-lg border shrink-0 transition-colors ${
-                        productForm.imageUrl === img.url
-                          ? "bg-brand-50 border-brand-500 text-brand-600 font-bold"
-                          : "border-slate-200 text-slate-600 bg-white"
-                      }`}
+                      onClick={() => {
+                        const currentList = (productForm.imageUrl || "").split(",").map(s => s.trim()).filter(Boolean);
+                        if (!currentList.includes(img.url)) {
+                          const newList = [...currentList, img.url].slice(0, 3);
+                          setProductForm({ ...productForm, imageUrl: newList.join(", ") });
+                        }
+                      }}
+                      className="text-[11px] px-2.5 py-1 rounded-lg border border-slate-200 text-slate-700 bg-white hover:bg-brand-50 hover:border-brand-300 font-semibold shrink-0 cursor-pointer"
                     >
-                      📷 {img.label}
+                      + 📷 {img.label}
                     </button>
                   ))}
                 </div>
-                <input
-                  type="url"
-                  placeholder="https://images.unsplash.com/..."
-                  value={productForm.imageUrl}
-                  onChange={(e) => setProductForm({ ...productForm, imageUrl: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500"
-                />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input
+                    type="url"
+                    placeholder="Main Image 1 URL *"
+                    value={(productForm.imageUrl || "").split(",")[0]?.trim() || ""}
+                    onChange={(e) => {
+                      const parts = (productForm.imageUrl || "").split(",").map(s => s.trim());
+                      parts[0] = e.target.value;
+                      setProductForm({ ...productForm, imageUrl: parts.filter(Boolean).join(", ") });
+                    }}
+                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-mono text-[11px]"
+                  />
+                  <input
+                    type="url"
+                    placeholder="Image 2 URL (Optional)"
+                    value={(productForm.imageUrl || "").split(",")[1]?.trim() || ""}
+                    onChange={(e) => {
+                      const parts = (productForm.imageUrl || "").split(",").map(s => s.trim());
+                      parts[1] = e.target.value;
+                      setProductForm({ ...productForm, imageUrl: parts.filter(Boolean).join(", ") });
+                    }}
+                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-mono text-[11px]"
+                  />
+                  <input
+                    type="url"
+                    placeholder="Image 3 URL (Optional)"
+                    value={(productForm.imageUrl || "").split(",")[2]?.trim() || ""}
+                    onChange={(e) => {
+                      const parts = (productForm.imageUrl || "").split(",").map(s => s.trim());
+                      parts[2] = e.target.value;
+                      setProductForm({ ...productForm, imageUrl: parts.filter(Boolean).join(", ") });
+                    }}
+                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-mono text-[11px]"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">

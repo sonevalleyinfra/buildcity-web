@@ -22,8 +22,8 @@ export default function VendorDashboard() {
   } = useAdmin();
   const { orders = [], fetchVendorOrders, updateOrderStatus } = useOrders();
 
-  // Tabs navigation state: "overview" -> Store Summary, "products" -> My Shop Items, "orders" -> Customer Orders
-  const [activeTab, setActiveTab] = useState("overview");
+  // Tabs navigation state: "products" -> My Shop Items, "orders" -> Customer Orders, "overview" -> Store Info & Sales
+  const [activeTab, setActiveTab] = useState("products");
   const [vendorOrders, setVendorOrders] = useState([]);
 
   // Master Catalog — Admin/DR dwara banaye gaye Master Products select karne ke liye
@@ -221,30 +221,30 @@ export default function VendorDashboard() {
       </div>
 
       {/* Tabs Bar */}
-      <div className="flex items-center gap-2 mb-6 bg-white p-1.5 rounded-xl border border-slate-200/90 shadow-2xs w-fit">
-        <button
-          onClick={() => setActiveTab("overview")}
-          className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer ${
-            activeTab === "overview" ? "bg-navy-900 text-white shadow-xs" : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
-          }`}
-        >
-          📊 Store Overview
-        </button>
+      <div className="flex items-center gap-2 mb-6 bg-white p-1.5 rounded-xl border border-slate-200/90 shadow-2xs overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveTab("products")}
-          className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer ${
-            activeTab === "products" ? "bg-navy-900 text-white shadow-xs" : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
+          className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer shrink-0 ${
+            activeTab === "products" ? "bg-emerald-600 text-white shadow-xs font-extrabold" : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80 font-bold"
           }`}
         >
           📦 My Store Products ({vendorProducts.length})
         </button>
         <button
           onClick={() => setActiveTab("orders")}
-          className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer ${
-            activeTab === "orders" ? "bg-navy-900 text-white shadow-xs" : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
+          className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer shrink-0 ${
+            activeTab === "orders" ? "bg-emerald-600 text-white shadow-xs font-extrabold" : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80 font-bold"
           }`}
         >
           🛍️ Customer Orders ({vendorOrders.length})
+        </button>
+        <button
+          onClick={() => setActiveTab("overview")}
+          className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer shrink-0 ${
+            activeTab === "overview" ? "bg-emerald-600 text-white shadow-xs font-extrabold" : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80 font-bold"
+          }`}
+        >
+          📊 Sales & Store Info
         </button>
       </div>
 

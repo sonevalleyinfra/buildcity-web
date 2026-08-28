@@ -6,6 +6,7 @@ import { useCart } from "../../context/CartContext";
 import { useRegion } from "../../context/RegionContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useAuth } from "../../context/AuthContext";
+import { API_BASE_URL } from "../../config/api";
 
 // Fallback single-product lookup
 function generateProduct(id, priceFactor = 1, regionName = "Varanasi") {
@@ -94,9 +95,18 @@ export default function ProductDetail() {
   const [qty, setQty] = useState(1);
   const [justAdded, setJustAdded] = useState(false);
 
-  // Reviews state connected to Supabase Database with fallback
-  const [reviewsList, setReviewsList] = useState([]);
-  const [reviewsLoading, setReviewsLoading] = useState(true);
+  // Reviews state with instant localStorage cache + Supabase Database sync
+  const [reviewsList, setReviewsList] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`buildcity_reviews_${id}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (err) {}
+    return product.reviewsList || [];
+  });
+  const [reviewsLoading, setReviewsLoading] = useState(false);
 
   const [newRating, setNewRating] = useState(5);
   const [hoverRating, setHoverRating] = useState(0);
@@ -111,27 +121,30 @@ export default function ProductDetail() {
     }
   }, [user]);
 
-  // Fetch Reviews from Database (Supabase PostgreSQL API)
+  // Fetch Reviews from Database (Supabase PostgreSQL API via API_BASE_URL)
   useEffect(() => {
     let isMounted = true;
-    setReviewsLoading(true);
-    fetch(`/api/v1/reviews?productId=${encodeURIComponent(id)}`)
+    fetch(`${API_BASE_URL}/api/v1/reviews?productId=${encodeURIComponent(id)}`)
       .then((res) => res.json())
       .then((data) => {
-        if (isMounted) {
-          if (Array.isArray(data) && data.length > 0) {
-            setReviewsList(data);
-          } else {
-            setReviewsList(product.reviewsList || []);
-          }
-          setReviewsLoading(false);
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          setReviewsList((prev) => {
+            // Merge DB data with local offline submissions seamlessly
+            const combined = [...data];
+            prev.forEach((localItem) => {
+              if (!combined.some((dbItem) => dbItem.id === localItem.id || dbItem.comment === localItem.comment)) {
+                combined.unshift(localItem);
+              }
+            });
+            try {
+              localStorage.setItem(`buildcity_reviews_${id}`, JSON.stringify(combined));
+            } catch (e) {}
+            return combined;
+          });
         }
       })
       .catch((err) => {
-        if (isMounted) {
-          setReviewsList(product.reviewsList || []);
-          setReviewsLoading(false);
-        }
+        console.warn("Failed to fetch live DB reviews, using cached/local state:", err);
       });
     return () => {
       isMounted = false;
@@ -176,22 +189,32 @@ export default function ProductDetail() {
 
     const nameToUse = reviewerName.trim() || user?.name || "Verified Customer";
 
-    // Optimistic UI update
-    const tempRev = {
+    const newRev = {
       id: `rev-${Date.now()}`,
       productId: id,
       name: nameToUse,
       rating: Number(newRating),
       comment: reviewComment.trim(),
       createdAt: new Date().toISOString(),
+      date: "Just now",
     };
-    setReviewsList((prev) => [tempRev, ...prev]);
+
+    // 1. Save to state immediately
+    setReviewsList((prev) => {
+      const updated = [newRev, ...prev];
+      try {
+        localStorage.setItem(`buildcity_reviews_${id}`, JSON.stringify(updated));
+      } catch (err) {}
+      return updated;
+    });
+
     setReviewComment("");
     setReviewSubmitted(true);
     setShowForm(false);
 
+    // 2. Persist to Supabase DB via REST API
     try {
-      const res = await fetch("/api/v1/reviews", {
+      const res = await fetch(`${API_BASE_URL}/api/v1/reviews`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -203,10 +226,16 @@ export default function ProductDetail() {
       });
       if (res.ok) {
         const savedRev = await res.json();
-        setReviewsList((prev) => prev.map((r) => (r.id === tempRev.id ? savedRev : r)));
+        setReviewsList((prev) => {
+          const synced = prev.map((r) => (r.id === newRev.id ? savedRev : r));
+          try {
+            localStorage.setItem(`buildcity_reviews_${id}`, JSON.stringify(synced));
+          } catch (e) {}
+          return synced;
+        });
       }
     } catch (err) {
-      console.error("Failed to save review to DB:", err);
+      console.error("Failed to post review to DB:", err);
     }
 
     setTimeout(() => setReviewSubmitted(false), 3000);

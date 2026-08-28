@@ -43,6 +43,28 @@ function generateProduct(id, priceFactor = 1, regionName = "Varanasi") {
   };
 }
 
+const DEMO_NAMES = new Set([
+  "rahul singh",
+  "vikram malhotra",
+  "amit sharma",
+  "rahul s.",
+  "vikram m.",
+  "amit s.",
+  "priya v.",
+  "rakesh k.",
+  "priya verma",
+  "rakesh kumar"
+]);
+
+function filterOutDemoReviews(list) {
+  if (!Array.isArray(list)) return [];
+  return list.filter((r) => {
+    if (!r || !r.name) return false;
+    const nameLower = r.name.toLowerCase().trim();
+    return !DEMO_NAMES.has(nameLower);
+  });
+}
+
 export default function ProductDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -94,7 +116,9 @@ export default function ProductDetail() {
       const saved = localStorage.getItem(`buildcity_reviews_${id}`);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        const clean = filterOutDemoReviews(parsed);
+        localStorage.setItem(`buildcity_reviews_${id}`, JSON.stringify(clean));
+        return clean;
       }
     } catch (err) {}
     return [];
@@ -113,10 +137,10 @@ export default function ProductDetail() {
       const saved = localStorage.getItem(`buildcity_reviews_${id}`);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          setReviewsList(parsed);
-          return;
-        }
+        const clean = filterOutDemoReviews(parsed);
+        localStorage.setItem(`buildcity_reviews_${id}`, JSON.stringify(clean));
+        setReviewsList(clean);
+        return;
       }
     } catch (e) {}
     setReviewsList([]);
@@ -138,13 +162,14 @@ export default function ProductDetail() {
       })
       .then((data) => {
         if (isMounted && Array.isArray(data)) {
+          const cleanData = filterOutDemoReviews(data);
           setReviewsList((prevList) => {
-            // Merge DB data with local offline submissions so user reviews are NEVER erased
+            const cleanPrev = filterOutDemoReviews(prevList);
             const mergedMap = new Map();
-            data.forEach((item) => {
+            cleanData.forEach((item) => {
               if (item && item.comment) mergedMap.set(item.id || item.comment, item);
             });
-            prevList.forEach((item) => {
+            cleanPrev.forEach((item) => {
               if (item && item.comment && !mergedMap.has(item.id || item.comment)) {
                 mergedMap.set(item.id || item.comment, item);
               }

@@ -94,14 +94,9 @@ export default function ProductDetail() {
   const [qty, setQty] = useState(1);
   const [justAdded, setJustAdded] = useState(false);
 
-  // Reviews state with localStorage persistence
-  const [reviewsList, setReviewsList] = useState(() => {
-    try {
-      const saved = localStorage.getItem(`buildcity_reviews_${id}`);
-      if (saved) return JSON.parse(saved);
-    } catch (err) {}
-    return product.reviewsList || [];
-  });
+  // Reviews state connected to Supabase Database with fallback
+  const [reviewsList, setReviewsList] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
 
   const [newRating, setNewRating] = useState(5);
   const [hoverRating, setHoverRating] = useState(0);
@@ -115,6 +110,33 @@ export default function ProductDetail() {
       setReviewerName(user.name);
     }
   }, [user]);
+
+  // Fetch Reviews from Database (Supabase PostgreSQL API)
+  useEffect(() => {
+    let isMounted = true;
+    setReviewsLoading(true);
+    fetch(`/api/v1/reviews?productId=${encodeURIComponent(id)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (isMounted) {
+          if (Array.isArray(data) && data.length > 0) {
+            setReviewsList(data);
+          } else {
+            setReviewsList(product.reviewsList || []);
+          }
+          setReviewsLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (isMounted) {
+          setReviewsList(product.reviewsList || []);
+          setReviewsLoading(false);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [id, product]);
 
   // Recalculate Average Rating and Count Live
   const avgRating = useMemo(() => {
@@ -148,27 +170,45 @@ export default function ProductDetail() {
     navigate("/checkout");
   };
 
-  const handleAddReview = (e) => {
+  const handleAddReview = async (e) => {
     e.preventDefault();
     if (!reviewComment.trim()) return;
 
-    const newRev = {
+    const nameToUse = reviewerName.trim() || user?.name || "Verified Customer";
+
+    // Optimistic UI update
+    const tempRev = {
       id: `rev-${Date.now()}`,
-      name: reviewerName.trim() || user?.name || "Verified Customer",
+      productId: id,
+      name: nameToUse,
       rating: Number(newRating),
       comment: reviewComment.trim(),
-      date: "Just now",
+      createdAt: new Date().toISOString(),
     };
-
-    const updated = [newRev, ...reviewsList];
-    setReviewsList(updated);
-    try {
-      localStorage.setItem(`buildcity_reviews_${id}`, JSON.stringify(updated));
-    } catch (err) {}
-
+    setReviewsList((prev) => [tempRev, ...prev]);
     setReviewComment("");
     setReviewSubmitted(true);
     setShowForm(false);
+
+    try {
+      const res = await fetch("/api/v1/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: id,
+          name: nameToUse,
+          rating: Number(newRating),
+          comment: reviewComment.trim(),
+        }),
+      });
+      if (res.ok) {
+        const savedRev = await res.json();
+        setReviewsList((prev) => prev.map((r) => (r.id === tempRev.id ? savedRev : r)));
+      }
+    } catch (err) {
+      console.error("Failed to save review to DB:", err);
+    }
+
     setTimeout(() => setReviewSubmitted(false), 3000);
   };
 

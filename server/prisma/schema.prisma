@@ -305,3 +305,15 @@ model Coupon {
 
   @@map("coupons")
 }
+
+// 16. Product Review Entity
+model Review {
+  id        String   @id @default(uuid())
+  productId String
+  name      String
+  rating    Int      @default(5)
+  comment   String
+  createdAt DateTime @default(now())
+
+  @@map("reviews")
+}

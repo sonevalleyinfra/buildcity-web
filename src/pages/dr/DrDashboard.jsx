@@ -272,9 +272,21 @@ export default function DrDashboard() {
             <span className="bg-brand-50 text-brand-600 border border-brand-200 text-xs font-bold px-2.5 py-1 rounded-full">
               DR Portal
             </span>
-            <span className="hidden md:inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg border border-amber-200">
-              📍 District: <strong>{districtName}</strong>
-            </span>
+            <button
+              type="button"
+              onClick={() => {
+                showAlert({
+                  title: `📍 District Region Info: ${districtName}`,
+                  message: `District Name: ${districtName}\nState: Uttar Pradesh\nDR Agent: ${user?.name || "DR"} (${user?.phone})\n\nDB Record: public.regions`,
+                  type: "info",
+                });
+              }}
+              className="hidden md:inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg border border-amber-200/90 active:scale-95 transition-all cursor-pointer shadow-2xs"
+              title="Click to view District details"
+            >
+              <span>📍 District: <strong>{districtName}</strong></span>
+              <span className="text-[10px] bg-amber-200/60 px-1 rounded font-mono">ℹ️ info</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-4">

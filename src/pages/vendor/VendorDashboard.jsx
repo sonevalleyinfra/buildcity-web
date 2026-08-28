@@ -175,9 +175,21 @@ export default function VendorDashboard() {
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                 STORE STATUS: APPROVED
               </span>
-              <span className="bg-white/10 text-slate-300 text-[11px] font-bold px-3 py-0.5 rounded-full border border-white/10">
-                📍 {districtName}
-              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  showAlert({
+                    title: `📍 Store Location & District: ${districtName}`,
+                    message: `Shop Name: ${shopName}\nDistrict: ${districtName}\nOwner: ${ownerName} (${vendorPhone})\nCommission Rate: ${matchedVendorObj.commissionRate || 10}%\n\nDB Table: public.vendors & public.regions`,
+                    type: "info",
+                  });
+                }}
+                className="bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white text-[11px] font-bold px-3 py-0.5 rounded-full border border-white/20 active:scale-95 transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                title="Click to view Store Region Info"
+              >
+                <span>📍 {districtName}</span>
+                <span className="text-[9px] opacity-80">ℹ️</span>
+              </button>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">{shopName}</h1>
             <p className="text-xs text-slate-300 font-medium mt-1">

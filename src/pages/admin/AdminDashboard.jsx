@@ -907,9 +907,16 @@ export default function AdminDashboard() {
                         <td className="py-3.5 px-4 font-bold text-navy-900">{d.name}</td>
                         <td className="py-3.5 px-4 font-semibold text-slate-700">📱 {d.phone}</td>
                         <td className="py-3.5 px-4">
-                          <span className="bg-slate-100 text-slate-800 font-bold px-2.5 py-0.5 rounded text-[11px]">
-                            📍 {d.regionName}
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTab("Regions");
+                              showAlert({ title: "Region Selected", message: `Navigated to Regions Management for district "${d.regionName}".`, type: "info" });
+                            }}
+                            className="bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 hover:border-brand-300 font-bold px-2.5 py-1 rounded-lg text-[11px] active:scale-95 transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                          >
+                            📍 {d.regionName} ↗️
+                          </button>
                         </td>
                         <td className="py-3.5 px-4">
                           <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${STATUS_STYLE[d.status]}`}>
@@ -1096,9 +1103,16 @@ export default function AdminDashboard() {
                             <p className="text-[11px] text-slate-500">📱 {v.phone}</p>
                           </td>
                           <td className="py-3.5 px-4">
-                            <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-semibold">
-                              📍 {v.regionName}
-                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTab("Regions");
+                                showAlert({ title: "Region Selected", message: `Navigated to Regions Management for district "${v.regionName}".`, type: "info" });
+                              }}
+                              className="bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 hover:border-brand-300 font-bold px-2 py-0.5 rounded text-[11px] active:scale-95 transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                            >
+                              📍 {v.regionName} ↗️
+                            </button>
                           </td>
                           <td className="py-3.5 px-4 font-extrabold text-navy-900">
                             <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded text-[11px]">
@@ -1784,6 +1798,18 @@ export default function AdminDashboard() {
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5">{r.state || "Uttar Pradesh"}</p>
                       <p className="text-xs font-bold text-brand-600 mt-1">Delivery Charge: ₹{r.baseDeliveryCharge || 49}</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(r.id);
+                          showAlert({ title: "Region ID Copied", message: `Copied Region ID "${r.id}" to clipboard!\n\nDB Table: public.regions`, type: "success" });
+                        }}
+                        className="mt-2 text-[10px] font-mono font-bold bg-slate-100 hover:bg-brand-50 text-slate-700 hover:text-brand-700 border border-slate-200 hover:border-brand-300 px-2 py-1 rounded-lg active:scale-95 transition-all cursor-pointer flex items-center justify-between w-full shadow-2xs"
+                        title="Click to copy DB Region ID"
+                      >
+                        <span>🔑 ID: {r.id ? (r.id.length > 16 ? r.id.substring(0, 16) + '...' : r.id) : 'af4bf0c4...'}</span>
+                        <span className="text-[9px] bg-white border border-slate-200 px-1 py-0.2 rounded font-sans">Copy 📋</span>
+                      </button>
                     </div>
 
                     <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100">

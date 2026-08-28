@@ -10,34 +10,40 @@ import { API_BASE_URL } from "../../config/api";
 
 // Fallback single-product lookup
 function generateProduct(id, priceFactor = 1, regionName = "Varanasi") {
-  const slug = (id.split("-")[0] || "product");
-  const brand = "BuildCity Trusted Brand";
-  const baseMrp = 300 + ((id.length * 191) % 4800);
+  const decoded = decodeURIComponent(id || "");
+  const hasSpaceOrWord = decoded.includes(" ") || (decoded.length > 15 && !/^[a-f0-9-]+$/i.test(decoded));
+  const displayName = hasSpaceOrWord
+    ? decoded
+    : "UltraTech Super PPC Cement";
+
+  const brand = "BuildCity Certified";
+  const baseMrp = 390;
   const mrp = Math.round(baseMrp * priceFactor);
   const discount = Math.round(mrp * 0.15);
+
   return {
     id,
-    name: `${brand} ${slug[0].toUpperCase() + slug.slice(1)} — Premium Quality`,
+    name: displayName,
     brand,
-    category: slug,
+    category: "Building Supplies",
     images: [
-      `https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=600&q=80`,
-      `https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=600&q=80`,
-      `https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80`,
+      "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80",
     ],
     mrp,
     price: mrp - discount,
-    rating: 4.8,
-    reviews: 128,
+    rating: 5.0,
+    reviews: 0,
     inStock: true,
-    unit: "1 Piece",
-    description: `High-quality, durable material sourced from trusted manufacturers. Ideal for residential and commercial construction projects. Available for fast delivery across ${regionName} with region-based pricing.`,
+    unit: "50kg Bag",
+    description: `High-quality certified construction material. Supplied directly by authorized BuildCity vendors across ${regionName}.`,
     specs: [
       { label: "Brand", value: brand },
-      { label: "Category", value: slug[0].toUpperCase() + slug.slice(1) },
-      { label: "Unit Packaging", value: "1 Piece" },
-      { label: "Warranty", value: "1 Year Manufacturer Warranty" },
-      { label: "Delivery", value: "2-4 business days" },
+      { label: "Category", value: "Building Supplies" },
+      { label: "Unit Packaging", value: "50kg Bag" },
+      { label: "Warranty", value: "Manufacturer Warranty" },
+      { label: "Delivery", value: "Fast Site Delivery" },
     ],
     reviewsList: [],
   };
@@ -71,10 +77,58 @@ export default function ProductDetail() {
   const { user } = useAuth();
   const { addItem } = useCart();
   const { region } = useRegion();
-  const { products = [] } = useAdmin();
+  const { products = [], productsLoading } = useAdmin();
+
+  const [directProduct, setDirectProduct] = useState(null);
+  const [directLoading, setDirectLoading] = useState(false);
+
+  // Direct fetch fallback from Cloud API if context products is still loading or missing
+  useEffect(() => {
+    const decodedId = decodeURIComponent(id || "").trim();
+    const existing = products.find(
+      (p) =>
+        p.id === id ||
+        p.id === decodedId ||
+        (p.name && p.name.toLowerCase() === decodedId.toLowerCase()) ||
+        (p.name && encodeURIComponent(p.name) === id)
+    );
+
+    if (!existing) {
+      setDirectLoading(true);
+      fetch(`${API_BASE_URL}/api/v1/cloud-sync`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data && Array.isArray(data.listings)) {
+            const found = data.listings.find(
+              (l) =>
+                l.id === id ||
+                l.id === decodedId ||
+                (l.name && l.name.toLowerCase() === decodedId.toLowerCase()) ||
+                (l.name && encodeURIComponent(l.name) === id)
+            );
+            if (found) {
+              setDirectProduct(found);
+            }
+          }
+          setDirectLoading(false);
+        })
+        .catch(() => setDirectLoading(false));
+    } else {
+      setDirectProduct(null);
+    }
+  }, [id, products]);
 
   const product = useMemo(() => {
-    const realProd = products.find((p) => p.id === id);
+    const decodedId = decodeURIComponent(id || "").trim();
+    const realProd =
+      products.find(
+        (p) =>
+          p.id === id ||
+          p.id === decodedId ||
+          (p.name && p.name.toLowerCase() === decodedId.toLowerCase()) ||
+          (p.name && encodeURIComponent(p.name) === id)
+      ) || directProduct;
+
     if (realProd) {
       const mrp = Math.round(Number(realProd.price) * 1.15);
       const extractedImages = getProductImages(realProd);
@@ -92,7 +146,11 @@ export default function ProductDetail() {
         reviews: 0,
         inStock: (realProd.stockQty || 0) > 0,
         unit: realProd.unit || "Unit",
-        description: realProd.description || `High-quality certified ${realProd.name} by ${realProd.brand}. Supplied directly by ${realProd.vendorName || "Authorized Vendor"}.`,
+        description:
+          realProd.description ||
+          `High-quality certified ${realProd.name} by ${realProd.brand || "Authorized Brand"}. Supplied directly by ${
+            realProd.vendorName || "Authorized Vendor"
+          }.`,
         specs: [
           { label: "Vendor Shop", value: realProd.vendorName || "Authorized BuildCity Vendor" },
           { label: "Brand", value: realProd.brand || "Generic" },
@@ -105,7 +163,7 @@ export default function ProductDetail() {
       };
     }
     return generateProduct(id, region.priceFactor, region.name);
-  }, [id, products, region]);
+  }, [id, products, directProduct, region]);
 
   const [qty, setQty] = useState(1);
   const [justAdded, setJustAdded] = useState(false);

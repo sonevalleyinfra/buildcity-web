@@ -1876,30 +1876,16 @@ app.post("/api/v1/orders/checkout", async (req, res) => {
   }
 });
 
-// 12. PRODUCT REVIEWS ENDPOINTS (Supabase DB Persistence & Auto Demo Seeding)
+// 12. PRODUCT REVIEWS ENDPOINTS (Supabase DB Persistence)
 app.get("/api/v1/reviews", async (req, res) => {
   try {
     const { productId } = req.query;
     const whereClause = productId ? { productId } : {};
 
-    let reviews = await prisma.review.findMany({
+    const reviews = await prisma.review.findMany({
       where: whereClause,
       orderBy: { createdAt: "desc" },
     });
-
-    // If no reviews in DB for this productId, seed initial verified demo reviews directly into DB!
-    if (productId && reviews.length === 0) {
-      const demoReviews = [
-        { productId, name: "Rahul Singh", rating: 5, comment: "Genuine material, fast delivery in site." },
-        { productId, name: "Vikram Malhotra", rating: 5, comment: "Original brand packaging with official invoice." },
-        { productId, name: "Amit Sharma", rating: 4, comment: "Price aur quality dono perfect hai. Good support." },
-      ];
-      await prisma.review.createMany({ data: demoReviews }).catch(() => null);
-      reviews = await prisma.review.findMany({
-        where: { productId },
-        orderBy: { createdAt: "desc" },
-      });
-    }
 
     res.json(reviews);
   } catch (err) {

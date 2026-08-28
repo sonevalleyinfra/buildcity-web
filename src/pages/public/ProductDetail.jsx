@@ -39,11 +39,7 @@ function generateProduct(id, priceFactor = 1, regionName = "Varanasi") {
       { label: "Warranty", value: "1 Year Manufacturer Warranty" },
       { label: "Delivery", value: "2-4 business days" },
     ],
-    reviewsList: [
-      { id: "1", name: "Amit Sharma", rating: 5, comment: "Bahut acchi quality, time pe site pe deliver bhi ho gaya.", date: "2 days ago" },
-      { id: "2", name: "Priya Verma", rating: 4, comment: "Genuine certified product, vendor call support super fast thi.", date: "5 days ago" },
-      { id: "3", name: "Rakesh Kumar", rating: 5, comment: "Original brand packaging with official invoice. Fully satisfied!", date: "1 week ago" },
-    ],
+    reviewsList: [],
   };
 }
 
@@ -70,8 +66,8 @@ export default function ProductDetail() {
         images: extractedImages,
         mrp,
         price: Number(realProd.price) || 100,
-        rating: 4.9,
-        reviews: 42,
+        rating: 5.0,
+        reviews: 0,
         inStock: (realProd.stockQty || 0) > 0,
         unit: realProd.unit || "Unit",
         description: realProd.description || `High-quality certified ${realProd.name} by ${realProd.brand}. Supplied directly by ${realProd.vendorName || "Authorized Vendor"}.`,
@@ -83,10 +79,7 @@ export default function ProductDetail() {
           { label: "Packaging Unit", value: realProd.unit || "Unit" },
           { label: "Available Stock", value: `${realProd.stockQty || 100} units` },
         ],
-        reviewsList: [
-          { id: "1", name: "Rahul Singh", rating: 5, comment: "Genuine material, fast delivery in site.", date: "2 days ago" },
-          { id: "2", name: "Vikram Malhotra", rating: 5, comment: "Original brand packaging with official invoice.", date: "1 week ago" },
-        ],
+        reviewsList: [],
       };
     }
     return generateProduct(id, region.priceFactor, region.name);
@@ -101,10 +94,10 @@ export default function ProductDetail() {
       const saved = localStorage.getItem(`buildcity_reviews_${id}`);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (err) {}
-    return product.reviewsList || [];
+    return [];
   });
   const [reviewsLoading, setReviewsLoading] = useState(false);
 
@@ -127,20 +120,11 @@ export default function ProductDetail() {
     fetch(`${API_BASE_URL}/api/v1/reviews?productId=${encodeURIComponent(id)}`)
       .then((res) => res.json())
       .then((data) => {
-        if (isMounted && Array.isArray(data) && data.length > 0) {
-          setReviewsList((prev) => {
-            // Merge DB data with local offline submissions seamlessly
-            const combined = [...data];
-            prev.forEach((localItem) => {
-              if (!combined.some((dbItem) => dbItem.id === localItem.id || dbItem.comment === localItem.comment)) {
-                combined.unshift(localItem);
-              }
-            });
-            try {
-              localStorage.setItem(`buildcity_reviews_${id}`, JSON.stringify(combined));
-            } catch (e) {}
-            return combined;
-          });
+        if (isMounted && Array.isArray(data)) {
+          setReviewsList(data);
+          try {
+            localStorage.setItem(`buildcity_reviews_${id}`, JSON.stringify(data));
+          } catch (e) {}
         }
       })
       .catch((err) => {
@@ -149,7 +133,7 @@ export default function ProductDetail() {
     return () => {
       isMounted = false;
     };
-  }, [id, product]);
+  }, [id]);
 
   // Recalculate Average Rating and Count Live
   const avgRating = useMemo(() => {
@@ -478,29 +462,46 @@ export default function ProductDetail() {
           )}
 
           {/* Reviews List */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {reviewsList.map((r) => (
-              <div
-                key={r.id || r.name}
-                className="bg-slate-50/70 border border-slate-200/90 rounded-2xl p-4 shadow-2xs flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-extrabold text-navy-900">
-                      {r.name}
-                    </span>
-                    <span className="flex items-center gap-1 text-[11px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/60">
-                      ★ {r.rating}.0
-                    </span>
+          {reviewsList.length === 0 ? (
+            <div className="py-8 px-4 text-center bg-slate-50/80 rounded-2xl border border-dashed border-slate-300 flex flex-col items-center justify-center">
+              <span className="text-3xl mb-2">⭐</span>
+              <h4 className="text-xs font-black text-navy-900 mb-1">No Customer Reviews Yet</h4>
+              <p className="text-[11px] text-slate-500 max-w-sm mb-3">Be the first verified customer to share your experience with this product!</p>
+              {!showForm && (
+                <button
+                  type="button"
+                  onClick={() => setShowForm(true)}
+                  className="bg-navy-900 hover:bg-brand-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all cursor-pointer shadow-2xs"
+                >
+                  ✍️ Write the First Review
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {reviewsList.map((r) => (
+                <div
+                  key={r.id || r.name}
+                  className="bg-slate-50/70 border border-slate-200/90 rounded-2xl p-4 shadow-2xs flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-extrabold text-navy-900">
+                        {r.name}
+                      </span>
+                      <span className="flex items-center gap-1 text-[11px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/60">
+                        ★ {r.rating}.0
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed font-medium">{r.comment}</p>
                   </div>
-                  <p className="text-xs text-slate-600 leading-relaxed font-medium">{r.comment}</p>
+                  <div className="mt-3 pt-2 border-t border-slate-200/60 text-[10px] text-slate-400 font-medium">
+                    Verified Buyer · {r.createdAt ? new Date(r.createdAt).toLocaleDateString() : (r.date || "Recent")}
+                  </div>
                 </div>
-                <div className="mt-3 pt-2 border-t border-slate-200/60 text-[10px] text-slate-400 font-medium">
-                  Verified Buyer · {r.date || "Recent"}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
       </main>
     </div>

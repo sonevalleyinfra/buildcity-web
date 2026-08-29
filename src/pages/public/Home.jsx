@@ -396,7 +396,87 @@ export default function Home() {
           </div>
         </section>
 
-        {/* DEALS OF THE WEEK & LIVE ADMIN/DR/VENDOR PRODUCTS */}
+        {/* 🏗️ 1. All Certified District Products Grid (PLACED ABOVE DEALS OF THE WEEK & COMPACT GRID) */}
+        <section className="bg-white border border-slate-200/90 rounded-2xl p-3.5 sm:p-4 shadow-xs relative z-10 space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+            <div>
+              <h2 className="text-sm sm:text-base font-black text-navy-900 flex items-center gap-1.5 tracking-tight">
+                <span>🏗️ All Certified District Products</span>
+                <span className="bg-emerald-50 border border-emerald-200 text-emerald-700 font-extrabold text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wide">
+                  Live Stock ({liveDisplayProducts.length})
+                </span>
+              </h2>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Explore all verified building and construction materials available for delivery in {region?.name || "your region"}.
+              </p>
+            </div>
+            <Link to="/categories" className="text-[11px] font-bold text-brand-600 hover:text-brand-700 active:scale-[0.98] transition-all duration-200 shrink-0">
+              Browse Categories →
+            </Link>
+          </div>
+
+          {liveDisplayProducts.length === 0 ? (
+            <div className="py-8 text-center text-slate-500 text-xs font-extrabold bg-slate-50 rounded-xl border border-slate-200">
+              📦 No vendor products listed for this region yet.
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-3">
+              {liveDisplayProducts.map((p, i) => (
+                <div
+                  key={`grid-${p.id || i}`}
+                  className="bg-white rounded-xl border border-slate-200 p-2 sm:p-2.5 flex flex-col justify-between hover:shadow-md hover:border-brand-300 transition-all duration-200 group"
+                >
+                  <Link to={`/product/${p.id}`} className="block flex-1">
+                    <div className="relative aspect-[4/3] rounded-lg overflow-hidden bg-slate-100 mb-1.5 border border-slate-100 group-hover:border-brand-300">
+                      <span className="absolute top-1 left-1 z-10 bg-amber-400 text-navy-950 text-[8px] font-black px-1.5 py-0.5 rounded shadow-2xs">
+                        {p.categoryName || "Material"}
+                      </span>
+                      <img
+                        src={p.imageUrl || p.img || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80"}
+                        alt={p.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between text-[9px] font-medium text-slate-500 mb-0.5 gap-1">
+                      <span className="truncate text-slate-400 font-semibold">{p.brand || "Generic"}</span>
+                      <span className="text-brand-600 font-bold bg-brand-50 px-1 py-0.5 rounded border border-brand-100/80 truncate max-w-[80px]">
+                        🏪 {p.vendorName || p.addedBy || "Vendor"}
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] font-bold text-navy-900 leading-snug mb-1 line-clamp-2 min-h-[28px] tracking-tight group-hover:text-brand-600 transition-colors">
+                      {p.name}
+                    </p>
+                  </Link>
+
+                  <div className="mt-1">
+                    <div className="flex items-baseline justify-between mb-1.5">
+                      <span className="text-xs font-black text-navy-900 tracking-tight tabular-nums">
+                        ₹{p.price || p.suggestedPrice}
+                      </span>
+                      <span className="text-[8px] font-medium text-slate-400">per {p.unit || "unit"}</span>
+                    </div>
+
+                    <button
+                      onClick={() => handleAddToCart(p)}
+                      className={`w-full text-[10px] font-extrabold rounded-md py-1 transition-all duration-200 active:scale-[0.98] shadow-2xs cursor-pointer ${
+                        justAddedId === p.id
+                          ? "bg-emerald-600 text-white shadow-xs"
+                          : "bg-amber-400 hover:bg-amber-500 text-navy-950 font-black shadow-xs"
+                      }`}
+                    >
+                      {justAddedId === p.id ? "Added ✓" : "+ ADD"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* ⚡ 2. DEALS OF THE WEEK (TOP 5 DEALS HORIZONTAL SLIDER BELOW DISTRICT PRODUCTS) */}
         <section className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs relative z-10">
           <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
             <div>
@@ -543,86 +623,6 @@ export default function Home() {
                         {justAddedId === p.id ? "Added ✓" : "+ ADD"}
                       </button>
                     )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* 🏗️ NEW SECTION: All Certified District Products Grid */}
-        <section className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs relative z-10 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div>
-              <h2 className="text-base sm:text-lg font-black text-navy-900 flex items-center gap-2 tracking-tight">
-                <span>🏗️ All Certified District Products</span>
-                <span className="bg-emerald-50 border border-emerald-200 text-emerald-700 font-extrabold text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wide">
-                  Live Stock ({liveDisplayProducts.length})
-                </span>
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Explore all verified building and construction materials available for delivery in {region?.name || "your region"}.
-              </p>
-            </div>
-            <Link to="/categories" className="text-xs font-bold text-brand-600 hover:text-brand-700 active:scale-[0.98] transition-all duration-200 shrink-0">
-              Browse Categories →
-            </Link>
-          </div>
-
-          {liveDisplayProducts.length === 0 ? (
-            <div className="py-12 text-center text-slate-500 text-xs font-extrabold bg-slate-50 rounded-xl border border-slate-200">
-              📦 No vendor products listed for this region yet.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {liveDisplayProducts.map((p, i) => (
-                <div
-                  key={`grid-${p.id || i}`}
-                  className="bg-white rounded-xl border border-slate-200 p-3.5 flex flex-col justify-between hover:shadow-md hover:border-brand-300 transition-all duration-200 group"
-                >
-                  <Link to={`/product/${p.id}`} className="block flex-1">
-                    <div className="relative aspect-square rounded-lg overflow-hidden bg-slate-100 mb-2.5 border border-slate-100 group-hover:border-brand-300">
-                      <span className="absolute top-2 left-2 z-10 bg-amber-400 text-navy-950 text-[9px] font-black px-2 py-0.5 rounded shadow-2xs">
-                        {p.categoryName || "Material"}
-                      </span>
-                      <img
-                        src={p.imageUrl || p.img || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80"}
-                        alt={p.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        loading="lazy"
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 mb-1">
-                      <span className="truncate text-slate-400 font-semibold">{p.brand || "Generic"}</span>
-                      <span className="text-brand-600 font-bold bg-brand-50 px-1.5 py-0.5 rounded border border-brand-100 truncate max-w-[110px]">
-                        🏪 {p.vendorName || p.addedBy || "District Vendor"}
-                      </span>
-                    </div>
-
-                    <p className="text-xs font-extrabold text-navy-900 leading-snug mb-1.5 line-clamp-2 min-h-[32px] tracking-tight group-hover:text-brand-600 transition-colors">
-                      {p.name}
-                    </p>
-                  </Link>
-
-                  <div>
-                    <div className="flex items-baseline justify-between mb-2.5">
-                      <span className="text-base font-black text-navy-900 tracking-tight tabular-nums">
-                        ₹{p.price || p.suggestedPrice}
-                      </span>
-                      <span className="text-[10px] font-medium text-slate-400">per {p.unit || "unit"}</span>
-                    </div>
-
-                    <button
-                      onClick={() => handleAddToCart(p)}
-                      className={`w-full text-xs font-extrabold rounded-lg py-2 transition-all duration-200 active:scale-[0.98] shadow-2xs cursor-pointer ${
-                        justAddedId === p.id
-                          ? "bg-emerald-600 text-white shadow-xs"
-                          : "bg-amber-400 hover:bg-amber-500 text-navy-950 font-black shadow-xs"
-                      }`}
-                    >
-                      {justAddedId === p.id ? "Added ✓" : "+ Add to Cart"}
-                    </button>
                   </div>
                 </div>
               ))}

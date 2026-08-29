@@ -77,10 +77,31 @@ export default function ProductDetail() {
   const { user } = useAuth();
   const { addItem } = useCart();
   const { region } = useRegion();
-  const { products = [], productsLoading } = useAdmin();
+  const { products = [], vendors = [], productsLoading } = useAdmin();
 
   const [directProduct, setDirectProduct] = useState(null);
   const [directLoading, setDirectLoading] = useState(false);
+
+  // Check if vendor is suspended
+  const isVendorSuspended = useMemo(() => {
+    if (!product) return false;
+    if (product.isVendorSuspended) return true;
+    if (product.vendorId) {
+      const v = vendors.find(
+        (v) =>
+          v.id === product.vendorId ||
+          (v.shopName && (v.shopName || "").toLowerCase() === (product.vendorName || "").toLowerCase())
+      );
+      if (v && v.status === "SUSPENDED") return true;
+    }
+    if (product.vendorName) {
+      const v = vendors.find(
+        (v) => (v.shopName || "").toLowerCase() === product.vendorName.toLowerCase()
+      );
+      if (v && v.status === "SUSPENDED") return true;
+    }
+    return false;
+  }, [product, vendors]);
 
   // Direct fetch fallback from Cloud API if context products is still loading or missing
   useEffect(() => {
@@ -392,10 +413,22 @@ export default function ProductDetail() {
             </div>
 
             <div className="mb-6">
-              <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                In Stock — Ready for site delivery
-              </span>
+              {isVendorSuspended ? (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2.5 text-rose-800">
+                  <span className="text-lg">⚠️</span>
+                  <div>
+                    <p className="text-xs font-bold">Vendor Account Suspended</p>
+                    <p className="text-[11px] text-rose-600">
+                      The vendor &quot;{product.vendorName || "Partner"}&quot; is currently suspended by Admin. This product is unavailable.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  In Stock — Ready for site delivery
+                </span>
+              )}
             </div>
 
             {/* Qty selector */}
@@ -404,16 +437,18 @@ export default function ProductDetail() {
               <div className="flex items-center border border-slate-200 rounded-xl bg-white shadow-2xs">
                 <button
                   type="button"
+                  disabled={isVendorSuspended}
                   onClick={() => setQty((q) => Math.max(1, q - 1))}
-                  className="px-3.5 py-1.5 text-slate-600 font-bold hover:bg-slate-100 rounded-l-xl transition-colors cursor-pointer"
+                  className="px-3.5 py-1.5 text-slate-600 font-bold hover:bg-slate-100 rounded-l-xl transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   −
                 </button>
                 <span className="px-4 text-xs font-extrabold text-navy-900">{qty}</span>
                 <button
                   type="button"
+                  disabled={isVendorSuspended}
                   onClick={() => setQty((q) => q + 1)}
-                  className="px-3.5 py-1.5 text-slate-600 font-bold hover:bg-slate-100 rounded-r-xl transition-colors cursor-pointer"
+                  className="px-3.5 py-1.5 text-slate-600 font-bold hover:bg-slate-100 rounded-r-xl transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   +
                 </button>
@@ -421,24 +456,36 @@ export default function ProductDetail() {
             </div>
 
             <div className="flex gap-3 mb-8">
-              <button
-                type="button"
-                onClick={handleAddToCart}
-                className={`flex-1 rounded-xl py-3 text-xs font-bold border transition-all active:scale-[0.98] cursor-pointer shadow-xs ${
-                  justAdded
-                    ? "border-emerald-500 text-emerald-700 bg-emerald-50 font-black"
-                    : "border-brand-500 text-brand-600 hover:bg-brand-500 hover:text-white"
-                }`}
-              >
-                {justAdded ? "Added to Cart ✓" : "Add to Cart"}
-              </button>
-              <button
-                type="button"
-                onClick={handleBuyNow}
-                className="flex-1 rounded-xl py-3 text-xs font-extrabold bg-brand-500 text-white hover:bg-brand-600 shadow-md active:scale-[0.98] transition-all cursor-pointer"
-              >
-                Buy Now
-              </button>
+              {isVendorSuspended ? (
+                <button
+                  type="button"
+                  disabled
+                  className="w-full rounded-xl py-3.5 text-xs font-extrabold bg-slate-200 text-slate-500 border border-slate-300 cursor-not-allowed opacity-80"
+                >
+                  🚫 Product Currently Unavailable (Vendor Suspended)
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleAddToCart}
+                    className={`flex-1 rounded-xl py-3 text-xs font-bold border transition-all active:scale-[0.98] cursor-pointer shadow-xs ${
+                      justAdded
+                        ? "border-emerald-500 text-emerald-700 bg-emerald-50 font-black"
+                        : "border-brand-500 text-brand-600 hover:bg-brand-500 hover:text-white"
+                    }`}
+                  >
+                    {justAdded ? "Added to Cart ✓" : "Add to Cart"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBuyNow}
+                    className="flex-1 rounded-xl py-3 text-xs font-extrabold bg-brand-500 text-white hover:bg-brand-600 shadow-md active:scale-[0.98] transition-all cursor-pointer"
+                  >
+                    Buy Now
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Description */}

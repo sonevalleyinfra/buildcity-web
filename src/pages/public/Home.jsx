@@ -62,8 +62,8 @@ export default function Home() {
 
   const liveVendorApproved = products
     .filter((p) => {
-      // Require Admin/DR approval before displaying on storefront
-      if (p.approvalStatus !== "APPROVED" || p.isActive !== true) return false;
+      // Require Admin/DR approval and non-suspended vendor before displaying on storefront
+      if (p.approvalStatus !== "APPROVED" || p.isActive !== true || p.isVendorSuspended === true) return false;
 
       const activeRegName = (region?.name || "Varanasi").toLowerCase().trim();
       const pRegName = (p.regionName || p.districtName || p.vendor?.region?.name || "varanasi").toLowerCase().trim();

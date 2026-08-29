@@ -258,7 +258,10 @@ export function AdminProvider({ children }) {
 
       if (listingsRes && Array.isArray(listingsRes)) {
         const formattedListings = listingsRes.map((l) => {
-          const matchedVendor = vendorsRes?.find((v) => v.id === l.vendorId);
+          const matchedVendor = vendorsRes?.find(
+            (v) => v.id === l.vendorId || (v.shopName && (v.shopName || "").toLowerCase() === (l.vendorName || "").toLowerCase())
+          );
+          const isVendorSuspended = matchedVendor?.status === "SUSPENDED" || l.vendor?.status === "SUSPENDED";
           const resolvedRegionName = l.regionName || l.districtName || l.vendor?.region?.name || matchedVendor?.region?.name || matchedVendor?.regionName || "Mirzapur";
           const resolvedRegionId = l.regionId || l.vendor?.regionId || matchedVendor?.regionId || matchedVendor?.region?.id || "mirzapur";
 
@@ -281,7 +284,8 @@ export function AdminProvider({ children }) {
             stockQty: Number(l.stockQty) || 100,
             imageUrl: l.imageUrl || l.masterProduct?.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80",
             approvalStatus: l.approvalStatus || "PENDING_REVIEW",
-            isActive: l.approvalStatus === "APPROVED" && l.isActive !== false,
+            isActive: l.approvalStatus === "APPROVED" && l.isActive !== false && !isVendorSuspended,
+            isVendorSuspended: Boolean(isVendorSuspended),
             addedBy: l.addedBy || "Vendor",
           };
         });
@@ -536,17 +540,54 @@ export function AdminProvider({ children }) {
   };
 
   const setVendorStatus = async (id, status) => {
-    setVendors((prev) =>
-      prev.map((v) => (v.id === id ? { ...v, status } : v))
-    );
+    // 1. Immediately update vendors state & localStorage
+    setVendors((prev) => {
+      const updated = prev.map((v) => (v.id === id ? { ...v, status } : v));
+      try {
+        localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // 2. Immediately update products state & localStorage
+    setProducts((prev) => {
+      const targetVendor = vendors.find((v) => v.id === id);
+      const targetShop = (targetVendor?.shopName || "").toLowerCase().trim();
+
+      const updated = prev.map((p) => {
+        const pShop = (p.vendorName || "").toLowerCase().trim();
+        if (p.vendorId === id || (pShop && targetShop && pShop === targetShop)) {
+          const isSusp = status === "SUSPENDED";
+          return { ...p, isVendorSuspended: isSusp, isActive: !isSusp && p.approvalStatus === "APPROVED" };
+        }
+        return p;
+      });
+      try {
+        localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // 3. Patch backend DB
     try {
-      await fetch(`${API_BASE_URL}/api/v1/vendors/${id}/status`, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/vendors/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      await fetchCloudData();
-    } catch {}
+      if (res.ok) {
+        const updatedApiV = await res.json();
+        setVendors((prev) => {
+          const fresh = prev.map((v) => (v.id === id ? { ...v, ...updatedApiV, status } : v));
+          try {
+            localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(fresh));
+          } catch {}
+          return fresh;
+        });
+      }
+    } catch (err) {
+      console.warn("Set vendor status error:", err.message);
+    }
   };
 
   const removeVendor = async (id) => {

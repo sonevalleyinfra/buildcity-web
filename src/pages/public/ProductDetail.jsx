@@ -165,21 +165,13 @@ export default function ProductDetail() {
     return generateProduct(id, region.priceFactor, region.name);
   }, [id, products, directProduct, region]);
 
-  // Check if vendor is suspended
+  // Check if vendor is suspended (strict unique ID check)
   const isVendorSuspended = useMemo(() => {
     if (!product) return false;
-    if (product.isVendorSuspended) return true;
-    if (product.vendorId) {
+    if (product.isVendorSuspended === true) return true;
+    if (product.vendorId && Array.isArray(vendors) && vendors.length > 0) {
       const v = vendors.find(
-        (v) =>
-          v.id === product.vendorId ||
-          (v.shopName && (v.shopName || "").toLowerCase() === (product.vendorName || "").toLowerCase())
-      );
-      if (v && v.status === "SUSPENDED") return true;
-    }
-    if (product.vendorName) {
-      const v = vendors.find(
-        (v) => (v.shopName || "").toLowerCase() === product.vendorName.toLowerCase()
+        (v) => String(v.id).toLowerCase() === String(product.vendorId).toLowerCase()
       );
       if (v && v.status === "SUSPENDED") return true;
     }

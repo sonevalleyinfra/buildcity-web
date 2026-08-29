@@ -276,12 +276,13 @@ export function AdminProvider({ children }) {
 
       if (listingsRes && Array.isArray(listingsRes)) {
         const formattedListings = listingsRes.map((l) => {
-          const matchedVendor = vendorsRes?.find(
-            (v) => v.id === l.vendorId || (v.shopName && (v.shopName || "").toLowerCase() === (l.vendorName || "").toLowerCase())
-          );
-          const isVendorSuspended = matchedVendor?.status === "SUSPENDED" || l.vendor?.status === "SUSPENDED";
+          const matchedVendor = l.vendorId
+            ? vendorsRes?.find((v) => String(v.id).toLowerCase() === String(l.vendorId).toLowerCase())
+            : null;
+          const isVendorSuspended = (matchedVendor && matchedVendor.status === "SUSPENDED") || (l.vendor && l.vendor.status === "SUSPENDED");
           const resolvedRegionName = l.regionName || l.districtName || l.vendor?.region?.name || matchedVendor?.region?.name || matchedVendor?.regionName || "Mirzapur";
           const resolvedRegionId = l.regionId || l.vendor?.regionId || matchedVendor?.regionId || matchedVendor?.region?.id || "mirzapur";
+          const isListingApproved = l.approvalStatus === "APPROVED" || !l.approvalStatus || l.approvalStatus === "";
 
           return {
             id: l.id,
@@ -301,8 +302,8 @@ export function AdminProvider({ children }) {
             price: Number(l.price) || 100,
             stockQty: Number(l.stockQty) || 100,
             imageUrl: l.imageUrl || l.masterProduct?.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80",
-            approvalStatus: l.approvalStatus || "PENDING_REVIEW",
-            isActive: l.approvalStatus === "APPROVED" && l.isActive !== false && !isVendorSuspended,
+            approvalStatus: l.approvalStatus || "APPROVED",
+            isActive: isListingApproved && l.isActive !== false && !isVendorSuspended,
             isVendorSuspended: Boolean(isVendorSuspended),
             addedBy: l.addedBy || "Vendor",
           };

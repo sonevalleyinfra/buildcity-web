@@ -334,19 +334,6 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
     // Clean 10-digit mobile number
     const cleanPhone = phone.trim().replace(/\D/g, "").slice(-10);
 
-    // Verify if phone belongs to Admin, DR, or Vendor — Only Customers use Mobile OTP, Partners use Password
-    const isSpecialAdminOrDr = cleanPhone === "9999999999" || cleanPhone === "7777777777";
-    const drExists = await prisma.dR.findFirst({ where: { OR: [{ phone: cleanPhone }, { phone }] } }).catch(() => null);
-    const vendorExists = await prisma.vendor.findFirst({ where: { OR: [{ phone: cleanPhone }, { phone }] } }).catch(() => null);
-    const staffUser = await prisma.user.findFirst({ where: { phone: cleanPhone, role: { in: ["ADMIN", "DR", "VENDOR"] } } }).catch(() => null);
-
-    if (isSpecialAdminOrDr || drExists || vendorExists || staffUser) {
-      return res.status(403).json({
-        error: "This phone number is registered as a Partner/Staff account. Please click 'Partner Login (Password)' at the bottom to log in with your Password.",
-        isStaffBlocked: true,
-      });
-    }
-
     // Generate 6-digit OTP code instantly
     const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins expiry

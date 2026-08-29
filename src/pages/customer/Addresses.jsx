@@ -214,44 +214,62 @@ export default function Addresses() {
             {uniqueAddresses.map((a) => (
               <div
                 key={a.id}
-                className="bg-white rounded-xl border border-slate-200 p-4"
+                className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-xs transition-shadow"
               >
-                <div className="flex items-start justify-between mb-1.5">
+                <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-100">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-navy-900">
-                      {a.label}
+                    <span className="text-xs font-black uppercase tracking-wider text-brand-700 bg-brand-50 border border-brand-200/60 px-2.5 py-0.5 rounded-md">
+                      {a.label || "Home"}
                     </span>
                     {a.isDefault && (
-                      <span className="text-[10px] font-semibold text-success bg-green-50 px-2 py-0.5 rounded-full">
-                        Default
+                      <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                        Default Address ✓
                       </span>
                     )}
                   </div>
                   <div className="flex items-center gap-3 text-xs">
                     <button
+                      type="button"
                       onClick={() => openEdit(a)}
-                      className="text-brand-500 font-medium"
+                      className="text-brand-600 font-bold hover:text-brand-700 active:scale-95 transition-all cursor-pointer flex items-center gap-1"
                     >
-                      Edit
+                      ✏️ Edit
                     </button>
                     <button
+                      type="button"
                       onClick={() => removeAddress(a.id)}
-                      className="text-red-500 font-medium"
+                      className="text-rose-600 font-bold hover:text-rose-700 active:scale-95 transition-all cursor-pointer flex items-center gap-1"
                     >
-                      Delete
+                      🗑️ Delete
                     </button>
                   </div>
                 </div>
-                <p className="text-sm text-slate-600">{a.line}</p>
-                <p className="text-sm text-slate-600">
-                  {a.city}, {a.state} - {a.pincode}
-                </p>
+
+                <div className="space-y-1">
+                  <p className="text-sm font-black text-navy-900 flex items-center gap-1.5">
+                    <span>👤</span> {a.fullName || user?.name || "Customer"}
+                  </p>
+                  {(a.phone || user?.phone) && (
+                    <p className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                      <span>📞</span> {a.phone || user?.phone}
+                    </p>
+                  )}
+                  <p className="text-xs text-slate-700 font-semibold mt-1 flex items-start gap-1.5">
+                    <span className="shrink-0">📍</span>
+                    <span>{a.line || a.street}</span>
+                  </p>
+                  <p className="text-xs font-medium text-slate-500 pl-5">
+                    {a.city}, {a.state || "Uttar Pradesh"} — <span className="font-bold text-navy-900">{a.pincode || "221001"}</span>
+                  </p>
+                </div>
+
                 {!a.isDefault && (
                   <button
+                    type="button"
                     onClick={() => setDefault(a.id)}
-                    className="text-xs font-medium text-brand-500 mt-2"
+                    className="text-xs font-extrabold text-brand-600 hover:underline mt-3 block"
                   >
-                    Set as default
+                    ★ Set as default address
                   </button>
                 )}
               </div>

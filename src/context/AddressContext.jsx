@@ -160,20 +160,80 @@ export function AddressProvider({ children }) {
     return formattedAddr;
   };
 
-  const updateAddress = (id, updates) => {
-    setAddresses((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, ...updates } : a))
-    );
+  const updateAddress = async (id, updates) => {
+    // 1. Immediately update local state & localStorage
+    setAddresses((prev) => {
+      const updated = prev.map((a) => (a.id === id ? { ...a, ...updates, line: updates.line || updates.street || a.line, street: updates.street || updates.line || a.street } : a));
+      if (addressStorageKey) {
+        try {
+          localStorage.setItem(addressStorageKey, JSON.stringify(updated));
+        } catch {}
+      }
+      return updated;
+    });
+
+    // 2. Sync to Supabase Cloud DB via API
+    try {
+      await fetch(`${API_BASE_URL}/api/v1/addresses/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: updates.fullName,
+          phone: updates.phone,
+          street: updates.street || updates.line,
+          city: updates.city,
+          state: updates.state,
+          pincode: updates.pincode,
+          isDefault: updates.isDefault,
+        }),
+      });
+      console.log("✓ Address updated in DB:", id);
+    } catch (err) {
+      console.warn("DB address update note:", err.message);
+    }
   };
 
-  const removeAddress = (id) => {
-    setAddresses((prev) => prev.filter((a) => a.id !== id));
+  const removeAddress = async (id) => {
+    // 1. Immediately remove from local state & localStorage
+    setAddresses((prev) => {
+      const updated = prev.filter((a) => a.id !== id);
+      if (addressStorageKey) {
+        try {
+          localStorage.setItem(addressStorageKey, JSON.stringify(updated));
+        } catch {}
+      }
+      return updated;
+    });
+
+    // 2. Delete from Supabase Cloud DB via API
+    try {
+      await fetch(`${API_BASE_URL}/api/v1/addresses/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      console.log("✓ Address deleted from DB:", id);
+    } catch (err) {
+      console.warn("DB address delete note:", err.message);
+    }
   };
 
-  const setDefault = (id) => {
-    setAddresses((prev) =>
-      prev.map((a) => ({ ...a, isDefault: a.id === id }))
-    );
+  const setDefault = async (id) => {
+    setAddresses((prev) => {
+      const updated = prev.map((a) => ({ ...a, isDefault: a.id === id }));
+      if (addressStorageKey) {
+        try {
+          localStorage.setItem(addressStorageKey, JSON.stringify(updated));
+        } catch {}
+      }
+      return updated;
+    });
+
+    try {
+      await fetch(`${API_BASE_URL}/api/v1/addresses/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isDefault: true }),
+      });
+    } catch {}
   };
 
   return (

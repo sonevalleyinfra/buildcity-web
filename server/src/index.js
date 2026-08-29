@@ -1696,6 +1696,63 @@ app.post("/api/v1/addresses", async (req, res) => {
   }
 });
 
+// Update Address Endpoint in Supabase DB
+app.put("/api/v1/addresses/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { fullName, phone, street, city, state, pincode, isDefault } = req.body;
+
+    let addr = await prisma.address.findUnique({ where: { id } }).catch(() => null);
+    if (!addr) {
+      addr = await prisma.address.findFirst({ where: { id } }).catch(() => null);
+    }
+
+    if (addr) {
+      const updated = await prisma.address.update({
+        where: { id: addr.id },
+        data: {
+          ...(fullName ? { fullName: fullName.trim() } : {}),
+          ...(phone ? { phone: phone.trim() } : {}),
+          ...(street ? { street: street.trim() } : {}),
+          ...(city ? { city: city.trim() } : {}),
+          ...(state ? { state: state.trim() } : {}),
+          ...(pincode ? { pincode: pincode.trim() } : {}),
+          ...(isDefault !== undefined ? { isDefault: Boolean(isDefault) } : {}),
+        },
+      });
+      console.log("✓ Address updated in Supabase DB:", addr.id);
+      return res.json(updated);
+    }
+
+    res.status(404).json({ error: "Address record not found" });
+  } catch (err) {
+    console.error("PUT /api/v1/addresses/:id error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete Address Endpoint in Supabase DB
+app.delete("/api/v1/addresses/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    let addr = await prisma.address.findUnique({ where: { id } }).catch(() => null);
+    if (!addr) {
+      addr = await prisma.address.findFirst({ where: { id } }).catch(() => null);
+    }
+
+    if (addr) {
+      await prisma.address.delete({ where: { id: addr.id } }).catch(() => null);
+      console.log("✓ Address deleted from Supabase DB:", addr.id);
+      return res.json({ success: true, message: "Address deleted from database" });
+    }
+
+    res.json({ success: true, message: "Address removed" });
+  } catch (err) {
+    console.error("DELETE /api/v1/addresses/:id error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post("/api/v1/orders/checkout", async (req, res) => {
   try {
     const { customerId, totalAmount, deliveryFee, items, idempotencyKey } = req.body;

@@ -62,8 +62,8 @@ export default function Home() {
 
   const liveVendorApproved = products
     .filter((p) => {
-      // Require Admin/DR approval and non-suspended vendor before displaying on storefront
-      if (p.approvalStatus !== "APPROVED" || p.isActive !== true || p.isVendorSuspended === true) return false;
+      // Require Admin/DR approval before displaying on storefront
+      if (p.approvalStatus !== "APPROVED") return false;
 
       const activeRegName = (region?.name || "Varanasi").toLowerCase().trim();
       const pRegName = (p.regionName || p.districtName || p.vendor?.region?.name || "varanasi").toLowerCase().trim();
@@ -465,6 +465,11 @@ export default function Home() {
                       <span className="absolute top-1.5 left-1.5 z-10 bg-amber-400 text-navy-950 text-[9px] font-black px-2 py-0.5 rounded shadow-2xs">
                         {p.categoryName || "Material"}
                       </span>
+                      {p.isVendorSuspended && (
+                        <span className="absolute top-1.5 right-1.5 z-10 bg-rose-600 text-white text-[9px] font-black px-2 py-0.5 rounded shadow-2xs">
+                          Unavailable
+                        </span>
+                      )}
                       <img
                         src={p.imageUrl || p.img || p.masterProduct?.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80"}
                         alt={p.name}
@@ -500,16 +505,25 @@ export default function Home() {
                       <span className="text-[9px] font-medium text-slate-400">per {p.unit || "unit"}</span>
                     </div>
 
-                    <button
-                      onClick={() => handleAddToCart(p)}
-                      className={`w-full text-xs font-black rounded-lg py-1.5 transition-all duration-200 active:scale-[0.98] shadow-2xs cursor-pointer ${
-                        justAddedId === p.id
-                          ? "bg-emerald-600 text-white shadow-xs"
-                          : "bg-amber-400 text-navy-950 hover:bg-amber-500 hover:shadow-sm"
-                      }`}
-                    >
-                      {justAddedId === p.id ? "Added ✓" : "+ ADD"}
-                    </button>
+                    {p.isVendorSuspended ? (
+                      <button
+                        disabled
+                        className="w-full text-xs font-black rounded-lg py-1.5 bg-slate-200 text-slate-500 cursor-not-allowed opacity-80 shadow-2xs"
+                      >
+                        Unavailable
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleAddToCart(p)}
+                        className={`w-full text-xs font-black rounded-lg py-1.5 transition-all duration-200 active:scale-[0.98] shadow-2xs cursor-pointer ${
+                          justAddedId === p.id
+                            ? "bg-emerald-600 text-white shadow-xs"
+                            : "bg-amber-400 text-navy-950 hover:bg-amber-500 hover:shadow-sm"
+                        }`}
+                      >
+                        {justAddedId === p.id ? "Added ✓" : "+ ADD"}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

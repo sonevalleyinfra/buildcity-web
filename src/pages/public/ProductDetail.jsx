@@ -414,15 +414,9 @@ export default function ProductDetail() {
 
             <div className="mb-6">
               {isVendorSuspended ? (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2.5 text-rose-800">
-                  <span className="text-lg">⚠️</span>
-                  <div>
-                    <p className="text-xs font-bold">Vendor Account Suspended</p>
-                    <p className="text-[11px] text-rose-600">
-                      The vendor &quot;{product.vendorName || "Partner"}&quot; is currently suspended by Admin. This product is unavailable.
-                    </p>
-                  </div>
-                </div>
+                <span className="text-xs font-extrabold text-rose-700 bg-rose-50 px-3 py-1.5 rounded-lg border border-rose-200 inline-block shadow-2xs">
+                  Unavailable
+                </span>
               ) : (
                 <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -460,9 +454,9 @@ export default function ProductDetail() {
                 <button
                   type="button"
                   disabled
-                  className="w-full rounded-xl py-3.5 text-xs font-extrabold bg-slate-200 text-slate-500 border border-slate-300 cursor-not-allowed opacity-80"
+                  className="w-full rounded-xl py-3 text-xs font-extrabold bg-slate-200 text-slate-600 border border-slate-300 cursor-not-allowed opacity-80"
                 >
-                  🚫 Product Currently Unavailable (Vendor Suspended)
+                  Unavailable
                 </button>
               ) : (
                 <>

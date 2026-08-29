@@ -398,7 +398,7 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
 
       const query = new URLSearchParams(queryParams).toString();
 
-      fetch(`https://sms.aradhyatechnologies.in/sms-panel/api/http/index.php?${query}`)
+      fetch(`http://sms.aradhyatechnologies.in/sms-panel/api/http/index.php?${query}`)
         .then((res) => res.json().catch(() => res.text()))
         .then((respData) => console.log(`[Aradhya SMS Gateway] Dispatched to +91 ${cleanMobile}:`, respData))
         .catch((err) => console.error("[Aradhya SMS Gateway] HTTP Error:", err.message));

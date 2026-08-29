@@ -19,7 +19,7 @@ async function sendRealSMSOTP(phone, otpCode) {
     ? process.env.ARADHYA_SMS_TEMPLATE_TEXT.replace("{OTP}", otpCode)
     : `Dear user, Thankyou for visiting Sonevalley. Your OTP for login is ${otpCode}. Please do not share this OTP with anyone. Regards SNVLY`;
 
-  const queryParams = new URLSearchParams({
+  const postData = new URLSearchParams({
     username,
     apikey,
     apirequest: "Text",
@@ -32,7 +32,7 @@ async function sendRealSMSOTP(phone, otpCode) {
     format: "JSON"
   }).toString();
 
-  console.log(`[Aradhya SMS Gateway] Dispatching OTP ${otpCode} to +91 ${cleanMobile}...`);
+  console.log(`[Aradhya SMS Gateway] POST Dispatching OTP ${otpCode} to +91 ${cleanMobile}...`);
 
   return new Promise((resolve) => {
     let resolved = false;
@@ -46,13 +46,15 @@ async function sendRealSMSOTP(phone, otpCode) {
       }
     }, 3500);
 
-    const path = `/sms-panel/api/http/index.php?${queryParams}`;
-
     const options = {
       hostname: "sms.aradhyatechnologies.in",
       port: 443,
-      path: path,
-      method: "GET",
+      path: "/sms-panel/api/http/index.php",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Length": Buffer.byteLength(postData)
+      },
       rejectUnauthorized: false // Handle SSL cert altname mismatch safely
     };
 
@@ -99,6 +101,7 @@ async function sendRealSMSOTP(phone, otpCode) {
       });
     });
 
+    req.write(postData);
     req.end();
   });
 }

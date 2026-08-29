@@ -181,14 +181,33 @@ export default function Categories() {
   }, [uniqueVendorProducts, activePill]);
 
   const bestSellingProducts = useMemo(() => {
+    // Generate daily seed (changes automatically every 24 hours)
+    const todayStr = new Date().toISOString().split("T")[0];
+    let seed = 0;
+    for (let i = 0; i < todayStr.length; i++) {
+      seed = (seed << 5) - seed + todayStr.charCodeAt(i);
+      seed |= 0;
+    }
+    const pseudoRandom = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+
     if (uniqueVendorProducts && uniqueVendorProducts.length > 0) {
-      return uniqueVendorProducts.slice(0, 4).map((p) => ({
+      const copy = [...uniqueVendorProducts];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(pseudoRandom() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+
+      return copy.slice(0, 4).map((p) => ({
         ...p,
         rating: "⭐ 4.9",
         discount: "BESTSELLER",
         img: p.imageUrl || p.img || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80",
       }));
     }
+
     return [
       {
         id: "bs-1",
@@ -219,20 +238,20 @@ export default function Categories() {
         price: 3450,
         unit: "bucket",
         rating: "⭐ 4.8",
-        discount: "15% OFF",
+        discount: "POPULAR",
         img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=500&q=80",
         vendorName: "Mirzapur Color House",
       },
       {
         id: "bs-4",
-        name: "Astral CPVC Pro Pipes 1 inch (3 meter)",
+        name: "Astral CPVC Pro Pipes 1 Inch (3m)",
         brand: "Astral",
         price: 420,
         unit: "piece",
         rating: "⭐ 4.9",
-        discount: "FAST MOVING",
+        discount: "BESTSELLER",
         img: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=500&q=80",
-        vendorName: "Sonbhadra Hardware Store",
+        vendorName: "Eastern Sanitary",
       },
     ];
   }, [uniqueVendorProducts]);
@@ -553,40 +572,25 @@ export default function Categories() {
         <section>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-lg font-black text-navy-900">Best Selling District Products</h2>
-              <p className="text-xs text-slate-500">Highest ordered construction items across Varanasi & nearby districts</p>
+              <h2 className="text-lg font-black text-navy-900 tracking-tight">Best Selling District Products</h2>
+              <p className="text-xs text-slate-500 font-medium">Highest ordered construction items · Rotates daily with live database stock</p>
             </div>
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-2xs">
-              <button
-                type="button"
-                onClick={() => scrollContainer(bestScrollRef, "left")}
-                className="w-7 h-7 rounded-lg bg-white hover:bg-brand-500 hover:text-white text-navy-900 font-black text-xs flex items-center justify-center shadow-2xs active:scale-95 transition-all cursor-pointer"
-                title="Scroll Left"
-              >
-                ◀
-              </button>
-              <button
-                type="button"
-                onClick={() => scrollContainer(bestScrollRef, "right")}
-                className="w-7 h-7 rounded-lg bg-white hover:bg-brand-500 hover:text-white text-navy-900 font-black text-xs flex items-center justify-center shadow-2xs active:scale-95 transition-all cursor-pointer"
-                title="Scroll Right"
-              >
-                ▶
-              </button>
-            </div>
+            <span className="text-xs font-extrabold bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1 rounded-full shadow-2xs">
+              🔄 Rotates Daily
+            </span>
           </div>
 
-          <div ref={bestScrollRef} className="flex gap-4 overflow-x-auto pb-3 pt-1 -mx-1 px-1 no-scrollbar scroll-smooth">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {bestSellingProducts.map((p) => {
               return (
                 <div
                   key={p.id}
-                  className="bg-white rounded-2xl border border-slate-200/90 p-4 w-60 sm:w-64 shrink-0 shadow-2xs hover:shadow-md hover:border-amber-400 hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200 flex flex-col justify-between group relative"
+                  className="bg-white rounded-2xl border border-slate-200/90 p-4 shrink-0 shadow-2xs hover:shadow-md hover:border-amber-400 hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200 flex flex-col justify-between group relative"
                 >
                   <div>
                     <div className="relative rounded-xl overflow-hidden bg-slate-50 mb-3 border border-slate-100">
                       {p.discount && (
-                        <span className="absolute top-2 left-2 z-10 bg-green-600 text-white text-[10px] font-extrabold px-2 py-0.5 rounded shadow-xs">
+                        <span className="absolute top-2 left-2 z-10 bg-emerald-600 text-white text-[10px] font-extrabold px-2 py-0.5 rounded shadow-xs">
                           {p.discount}
                         </span>
                       )}
@@ -618,7 +622,7 @@ export default function Categories() {
                         addItem(p, 1);
                         alert(`"${p.name}" added to cart!`);
                       }}
-                      className="bg-brand-500 hover:bg-brand-600 active:scale-[0.97] transition-all text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-xs cursor-pointer"
+                      className="bg-brand-500 hover:bg-brand-600 active:scale-[0.97] transition-all text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-xs cursor-pointer"
                     >
                       + Add
                     </button>

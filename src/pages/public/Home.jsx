@@ -78,7 +78,26 @@ export default function Home() {
         : Math.round(Number(p.suggestedPrice || 100) * (region?.priceFactor || 1)),
     }));
 
-  const liveDisplayProducts = liveVendorApproved;
+  const liveDisplayProducts = useMemo(() => {
+    if (!liveVendorApproved || liveVendorApproved.length === 0) return [];
+    const todayStr = new Date().toISOString().split("T")[0];
+    let seed = 0;
+    for (let i = 0; i < todayStr.length; i++) {
+      seed = (seed << 5) - seed + todayStr.charCodeAt(i);
+      seed |= 0;
+    }
+    const pseudoRandom = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+
+    const copy = [...liveVendorApproved];
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(pseudoRandom() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  }, [liveVendorApproved]);
 
   const [slide, setSlide] = useState(0);
   const [justAddedId, setJustAddedId] = useState(null);

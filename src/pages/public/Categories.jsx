@@ -88,15 +88,46 @@ export default function Categories() {
   }, [categories]);
 
   const dynamicCategoryCards = useMemo(() => {
-    return (categories || [])
+    const list = categories.length > 0
+      ? categories
+      : categoryCards.map((c) => ({ name: c.name, img: c.img, tag: c.tag, isActive: true }));
+
+    const getCategoryImage = (name) => {
+      const n = (name || "").toLowerCase();
+      if (n.includes("cement")) return "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=300&q=80";
+      if (n.includes("paint")) return "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=300&q=80";
+      if (n.includes("steel") || n.includes("tmt") || n.includes("iron")) return "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=300&q=80";
+      if (n.includes("plumb") || n.includes("pipe")) return "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=300&q=80";
+      if (n.includes("electr") || n.includes("wire")) return "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=300&q=80";
+      if (n.includes("sanitar") || n.includes("bath")) return "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80";
+      if (n.includes("hardware") || n.includes("tool")) return "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=300&q=80";
+      return "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=300&q=80";
+    };
+
+    return list
       .filter((c) => c.isActive !== false)
-      .map((c) => ({
-        name: c.name,
-        count: `${c.productCount || 0} Products`,
-        img: c.img || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=300&q=80",
-        tag: `Verified`,
-      }));
-  }, [categories]);
+      .map((c) => {
+        const catNameLower = (c.name || "").toLowerCase().trim();
+
+        // Calculate actual live approved products matching this category
+        const liveCount = (products || []).filter((p) => {
+          const isApproved = p.approvalStatus === "APPROVED" || (p.isActive !== false && !p.approvalStatus);
+          if (!isApproved) return false;
+
+          const pCat = (p.categoryName || p.category || p.masterProduct?.category?.name || "").toLowerCase().trim();
+          return pCat === catNameLower || pCat.includes(catNameLower) || catNameLower.includes(pCat);
+        }).length;
+
+        const countLabel = liveCount === 1 ? "1 Product" : `${liveCount} Products`;
+
+        return {
+          name: c.name,
+          count: countLabel,
+          img: c.img || getCategoryImage(c.name),
+          tag: c.tag || "Verified",
+        };
+      });
+  }, [categories, products]);
 
   const handleSearch = (e) => {
     e.preventDefault();

@@ -50,11 +50,11 @@ export default function SearchResults() {
         desc.includes(activeQuery);
 
       if (matchesQuery) {
-        const key = (p.id || p.name).toLowerCase().trim();
-        if (!map.has(key)) {
-          const calculatedPrice = Math.round(Number(p.price) || 100);
-          const calculatedMrp = p.mrp || Math.round(calculatedPrice * 1.15);
+        const key = (p.masterProductId || p.name || p.id).toLowerCase().trim();
+        const itemPrice = Math.round(Number(p.price) || 100);
 
+        if (!map.has(key)) {
+          const calculatedMrp = p.mrp || Math.round(itemPrice * 1.15);
           map.set(key, {
             id: p.id,
             name: p.name,
@@ -62,10 +62,18 @@ export default function SearchResults() {
             vendorName: p.vendorName || "District Vendor",
             img: p.img || p.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
             mrp: calculatedMrp,
-            price: calculatedPrice,
+            price: itemPrice,
             rating: p.rating || "4.9",
             reviews: p.reviews || 36,
           });
+        } else {
+          // Pick lowest vendor price when multiple vendors sell the same product
+          const existing = map.get(key);
+          if (itemPrice < existing.price) {
+            existing.price = itemPrice;
+            existing.mrp = p.mrp || Math.round(itemPrice * 1.15);
+            existing.id = p.id;
+          }
         }
       }
     });

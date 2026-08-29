@@ -61,20 +61,29 @@ export default function CategoryListing() {
         if (!matches) return;
       }
 
-      const key = `${(p.name || "").toLowerCase()}_${p.vendorId || ""}`;
+      const key = (p.masterProductId || p.name || p.id).toLowerCase().trim();
+      const itemPrice = Math.round(Number(p.price || 100));
+
       if (!map.has(key)) {
         map.set(key, {
           id: p.id,
           name: p.name,
           brand: p.brand || "Generic",
           img: p.img || p.imageUrl || CATEGORY_IMAGES[slugLower] || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
-          mrp: Math.round(Number(p.price || 100) * 1.15),
-          price: Number(p.price) || 100,
+          mrp: Math.round(itemPrice * 1.15),
+          price: itemPrice,
           rating: "4.9",
           reviews: 42,
           vendorName: p.vendorName,
           vendorId: p.vendorId,
         });
+      } else {
+        const existing = map.get(key);
+        if (itemPrice < existing.price) {
+          existing.price = itemPrice;
+          existing.mrp = Math.round(itemPrice * 1.15);
+          existing.id = p.id;
+        }
       }
     });
 

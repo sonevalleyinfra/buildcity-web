@@ -10,14 +10,14 @@ async function sendRealSMSOTP(phone, otpCode) {
   
   const username = process.env.ARADHYA_SMS_USERNAME || "sonevalley";
   const apikey = process.env.ARADHYA_SMS_APIKEY || "0A8CC-B46EE";
-  const sender = process.env.ARADHYA_SMS_SENDER || "SONVLY";
-  const templateId = process.env.ARADHYA_SMS_TEMPLATE_ID || "1702160915855670817";
+  const sender = process.env.ARADHYA_SMS_SENDER || "SNVLY";
+  const templateId = process.env.ARADHYA_SMS_TEMPLATE_ID || "1707175298595096991";
   const peid = process.env.ARADHYA_SMS_PE_ID || "1701175266640135857";
   const route = process.env.ARADHYA_SMS_ROUTE || "TRANS";
 
   const message = process.env.ARADHYA_SMS_TEMPLATE_TEXT
     ? process.env.ARADHYA_SMS_TEMPLATE_TEXT.replace("{OTP}", otpCode)
-    : `Your BuildCity OTP verification code is ${otpCode}. Valid for 10 minutes.`;
+    : `Dear user, Thankyou for visiting Sonevalley. Your OTP for login is ${otpCode}. Please do not share this OTP with anyone. Regards SNVLY`;
 
   const queryParams = new URLSearchParams({
     username,

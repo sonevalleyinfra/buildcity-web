@@ -32,8 +32,6 @@ app.get("/api/v1/cloud-sync", async (req, res) => {
       prisma.coupon.findMany({ orderBy: { createdAt: "desc" } }).catch(() => []),
     ]);
 
-    const activeCouponsList = coupons && coupons.length > 0 ? coupons : couponsList;
-
     res.json({
       drs,
       vendors,
@@ -42,7 +40,7 @@ app.get("/api/v1/cloud-sync", async (req, res) => {
       regions,
       orders,
       listings,
-      coupons: activeCouponsList,
+      coupons: coupons || [],
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -200,10 +198,9 @@ app.post("/api/v1/auth/vendor/login", async (req, res) => {
 app.get("/api/v1/coupons", async (req, res) => {
   try {
     const dbCoupons = await prisma.coupon.findMany({ orderBy: { createdAt: "desc" } }).catch(() => []);
-    if (dbCoupons && dbCoupons.length > 0) return res.json(dbCoupons);
-    res.json(couponsList);
+    res.json(dbCoupons || []);
   } catch {
-    res.json(couponsList);
+    res.json([]);
   }
 });
 
@@ -303,20 +300,24 @@ app.patch("/api/v1/coupons/:id", async (req, res) => {
 
 app.delete("/api/v1/coupons/:id", async (req, res) => {
   const { id } = req.params;
+  const rawId = (id || "").trim();
 
   try {
-    const targetCoupon = await prisma.coupon.findFirst({
-      where: { OR: [{ id }, { code: { equals: id.trim(), mode: "insensitive" } }] },
+    const del = await prisma.coupon.deleteMany({
+      where: {
+        OR: [
+          { id: rawId },
+          { code: { equals: rawId.toUpperCase(), mode: "insensitive" } },
+        ],
+      },
     }).catch(() => null);
 
-    if (targetCoupon) {
-      await prisma.coupon.delete({ where: { id: targetCoupon.id } }).catch(() => null);
-    }
+    console.log(`✓ Deleted ${del?.count || 0} coupon(s) for "${rawId}" from Supabase DB`);
   } catch (err) {
     console.error("Delete coupon DB error:", err.message);
   }
 
-  couponsList = couponsList.filter((c) => c.id !== id && c.code !== id.toUpperCase());
+  couponsList = couponsList.filter((c) => c.id !== rawId && c.code !== rawId.toUpperCase());
   res.json({ success: true, message: "Coupon deleted" });
 });
 

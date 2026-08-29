@@ -146,7 +146,7 @@ export function AdminProvider({ children }) {
 
       const { drs: drsRes, vendors: vendorsRes, masterProducts: masterRes, categories: categoriesRes, regions: regionsRes, orders: ordersRes, listings: listingsRes, coupons: couponsRes } = syncRes;
 
-      if (couponsRes && Array.isArray(couponsRes) && couponsRes.length > 0) {
+      if (couponsRes && Array.isArray(couponsRes)) {
         localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(couponsRes));
         setCoupons((prev) => (JSON.stringify(prev) === JSON.stringify(couponsRes) ? prev : couponsRes));
       }

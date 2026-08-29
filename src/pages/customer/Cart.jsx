@@ -115,8 +115,7 @@ export default function Cart() {
     };
   }, []);
 
-  const activeSource = dbCoupons.length > 0 ? dbCoupons : adminCoupons;
-  const availableCouponsList = Array.isArray(activeSource) && activeSource.length > 0 ? activeSource : AVAILABLE_COUPONS;
+  const availableCouponsList = dbCoupons.length > 0 ? dbCoupons : adminCoupons;
 
   const handleApplyCoupon = (codeToApply) => {
     const targetCode = (codeToApply || couponCode).trim().toUpperCase();

@@ -78,33 +78,8 @@ export default function CategoryListing() {
       }
     });
 
-    const vendorItems = Array.from(map.values());
-    if (vendorItems.length > 0) return vendorItems;
-
-    // 2. If no vendor listings match, display real DB Master Products catalog items
-    const matchedMaster = masterProducts.filter((m) => {
-      if (!slugLower || slugLower === "all") return true;
-      const catName = (m.categoryName || m.category?.name || "").toLowerCase();
-      const catId = (m.categoryId || "").toLowerCase();
-      const mName = (m.name || "").toLowerCase();
-      return catName.includes(slugLower) || slugLower.includes(catName) || catId === slugLower || mName.includes(slugLower);
-    });
-
-    return matchedMaster.map((m) => {
-      const priceFactor = region?.priceFactor || 1;
-      const basePrice = Math.round((Number(m.suggestedPrice) || 100) * priceFactor);
-      return {
-        id: m.id,
-        name: m.name,
-        brand: m.brand || "BuildCity Certified",
-        img: m.imageUrl || CATEGORY_IMAGES[slugLower] || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
-        mrp: Math.round(basePrice * 1.15),
-        price: basePrice,
-        rating: "4.8",
-        reviews: 28,
-      };
-    });
-  }, [slug, products, masterProducts, region]);
+    return Array.from(map.values());
+  }, [slug, products]);
   const brands = BRAND_POOL[slug] || [];
 
   const [selectedBrands, setSelectedBrands] = useState([]);

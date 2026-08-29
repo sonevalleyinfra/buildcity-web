@@ -17,49 +17,61 @@ export default function SearchResults() {
   const results = useMemo(() => {
     if (!activeQuery || activeQuery.trim().length === 0) return [];
 
-    // Combine live vendor approved products and master products catalog from DB
-    const allRealProducts = [...products, ...masterProducts];
+    const activeRegName = (region?.name || "Varanasi").toLowerCase().trim();
+
+    // STRICT VENDOR LISTED PRODUCTS ONLY
+    const vendorProductsOnly = products.filter((p) => {
+      // Must be approved vendor listing
+      if (p.approvalStatus !== "APPROVED" || p.isActive === false || p.isVendorSuspended) return false;
+
+      // Must belong to active region (or match active region)
+      const pRegName = (p.regionName || p.districtName || p.vendor?.region?.name || "").toLowerCase().trim();
+      if (pRegName && activeRegName) {
+        const matchesReg = pRegName === activeRegName || pRegName.includes(activeRegName) || activeRegName.includes(pRegName);
+        if (!matchesReg) return false;
+      }
+
+      return true;
+    });
 
     const map = new Map();
-    allRealProducts.forEach((p) => {
-      if (p.approvalStatus && p.approvalStatus !== "APPROVED") return;
-
+    vendorProductsOnly.forEach((p) => {
       const name = (p.name || "").toLowerCase();
       const brand = (p.brand || "").toLowerCase();
       const category = (p.categoryName || p.category?.name || p.type || "").toLowerCase();
       const grade = (p.grade || "").toLowerCase();
       const desc = (p.desc || p.description || "").toLowerCase();
 
-      const matches =
+      const matchesQuery =
         name.includes(activeQuery) ||
         brand.includes(activeQuery) ||
         category.includes(activeQuery) ||
         grade.includes(activeQuery) ||
         desc.includes(activeQuery);
 
-      if (matches) {
-        const key = (p.name || p.id).toLowerCase().trim();
+      if (matchesQuery) {
+        const key = (p.id || p.name).toLowerCase().trim();
         if (!map.has(key)) {
-          const calculatedPrice = p.price !== undefined && p.price !== null && !isNaN(Number(p.price))
-            ? Math.round(Number(p.price))
-            : Math.round(Number(p.suggestedPrice || 100) * (region?.priceFactor || 1));
+          const calculatedPrice = Math.round(Number(p.price) || 100);
+          const calculatedMrp = p.mrp || Math.round(calculatedPrice * 1.15);
 
           map.set(key, {
             id: p.id,
             name: p.name,
-            brand: p.brand || "BuildCity Certified",
+            brand: p.brand || "Vendor Certified",
+            vendorName: p.vendorName || "District Vendor",
             img: p.img || p.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
-            mrp: p.mrp || Math.round(calculatedPrice * 1.15),
+            mrp: calculatedMrp,
             price: calculatedPrice,
-            rating: p.rating || "4.8",
-            reviews: p.reviews || 24,
+            rating: p.rating || "4.9",
+            reviews: p.reviews || 36,
           });
         }
       }
     });
 
     return Array.from(map.values());
-  }, [products, masterProducts, activeQuery, region]);
+  }, [products, activeQuery, region]);
 
   const handleSubmit = (e) => {
     e.preventDefault();

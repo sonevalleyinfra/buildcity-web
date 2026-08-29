@@ -4,6 +4,7 @@ import Navbar from "../../components/Navbar";
 import { useCart } from "../../context/CartContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useAlert } from "../../context/AlertContext";
+import { useRegion } from "../../context/RegionContext";
 import { API_BASE_URL } from "../../config/api";
 
 const AVAILABLE_COUPONS = [
@@ -25,6 +26,7 @@ export default function Cart() {
     updateCartToCurrentRegion,
   } = useCart();
   const { coupons: adminCoupons = [], products = [] } = useAdmin();
+  const { region } = useRegion();
   const { showAlert } = useAlert();
   const navigate = useNavigate();
 

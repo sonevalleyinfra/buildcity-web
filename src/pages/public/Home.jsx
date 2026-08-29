@@ -102,6 +102,7 @@ export default function Home() {
   const [slide, setSlide] = useState(0);
   const [justAddedId, setJustAddedId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState("grid");
 
   const [maxGridItems, setMaxGridItems] = useState(() =>
     typeof window !== "undefined" && window.innerWidth < 640 ? 6 : 10
@@ -408,13 +409,13 @@ export default function Home() {
           </div>
         </section>
 
-        {/* 🏗️ 1. All Certified District Products Grid (PLACED ABOVE DEALS OF THE WEEK & COMPACT GRID) */}
-        <section className="bg-white border border-slate-200/90 rounded-2xl p-3.5 sm:p-4 shadow-xs relative z-10 space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+        {/* 🏗️ 1. All Certified District Products (WITH GRID ⊞ / LIST ☰ VIEW TOGGLE) */}
+        <section className="bg-white border border-slate-200/90 rounded-2xl p-3.5 sm:p-4 shadow-xs relative z-10 space-y-3 overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
             <div>
-              <h2 className="text-sm sm:text-base font-black text-navy-900 flex items-center gap-1.5 tracking-tight">
+              <h2 className="text-sm sm:text-base font-black text-navy-900 flex flex-wrap items-center gap-1.5 tracking-tight">
                 <span>🏗️ All Certified District Products</span>
-                <span className="bg-emerald-50 border border-emerald-200 text-emerald-700 font-extrabold text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wide">
+                <span className="bg-emerald-50 border border-emerald-200 text-emerald-700 font-extrabold text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wide shrink-0">
                   Live Stock ({liveDisplayProducts.length})
                 </span>
               </h2>
@@ -422,16 +423,40 @@ export default function Home() {
                 Explore all verified building and construction materials available for delivery in {region?.name || "your region"}.
               </p>
             </div>
-            <Link to="/categories" className="text-[11px] font-bold text-brand-600 hover:text-brand-700 active:scale-[0.98] transition-all duration-200 shrink-0">
-              Browse Categories →
-            </Link>
+            <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
+              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("grid")}
+                  className={`px-2 py-1 rounded text-[10px] sm:text-xs font-bold transition-all cursor-pointer ${
+                    viewMode === "grid" ? "bg-white text-navy-900 shadow-2xs" : "text-slate-500 hover:text-navy-900"
+                  }`}
+                  title="Grid View"
+                >
+                  ⊞ Grid
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("list")}
+                  className={`px-2 py-1 rounded text-[10px] sm:text-xs font-bold transition-all cursor-pointer ${
+                    viewMode === "list" ? "bg-white text-navy-900 shadow-2xs" : "text-slate-500 hover:text-navy-900"
+                  }`}
+                  title="List View"
+                >
+                  ☰ List
+                </button>
+              </div>
+              <Link to="/categories" className="text-[11px] font-bold text-brand-600 hover:text-brand-700 active:scale-[0.98] transition-all duration-200 shrink-0">
+                Categories →
+              </Link>
+            </div>
           </div>
 
           {liveDisplayProducts.length === 0 ? (
             <div className="py-8 text-center text-slate-500 text-xs font-extrabold bg-slate-50 rounded-xl border border-slate-200">
               📦 No vendor products listed for this region yet.
             </div>
-          ) : (
+          ) : viewMode === "grid" ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-3">
               {liveDisplayProducts.slice(0, maxGridItems).map((p, i) => (
                 <div
@@ -485,29 +510,76 @@ export default function Home() {
                 </div>
               ))}
             </div>
+          ) : (
+            /* LIST VIEW RENDERING */
+            <div className="space-y-2">
+              {liveDisplayProducts.slice(0, maxGridItems).map((p, i) => (
+                <div
+                  key={`list-${p.id || i}`}
+                  className="bg-white rounded-xl border border-slate-200 p-2.5 flex items-center justify-between gap-3 hover:border-brand-300 hover:shadow-xs transition-all duration-200"
+                >
+                  <Link to={`/product/${p.id}`} className="flex items-center gap-3 flex-1 min-w-0">
+                    <img
+                      src={p.imageUrl || p.img || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80"}
+                      alt={p.name}
+                      className="w-14 h-14 object-cover rounded-lg shrink-0 bg-slate-100 border border-slate-100"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                        <span className="text-[8px] font-black text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded">
+                          {p.categoryName || "Material"}
+                        </span>
+                        <span className="text-[8px] font-bold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-100 truncate max-w-[120px]">
+                          🏪 {p.vendorName || p.addedBy || "Vendor"}
+                        </span>
+                      </div>
+                      <p className="text-xs font-extrabold text-navy-900 truncate leading-tight">{p.name}</p>
+                      <span className="text-[10px] text-slate-400 font-medium">{p.brand || "Generic"}</span>
+                    </div>
+                  </Link>
+
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="text-right">
+                      <div className="text-xs font-black text-navy-900">₹{p.price || p.suggestedPrice}</div>
+                      <div className="text-[8px] text-slate-400">per {p.unit || "unit"}</div>
+                    </div>
+                    <button
+                      onClick={() => handleAddToCart(p)}
+                      className={`text-xs font-extrabold px-3 py-1.5 rounded-lg transition-all duration-200 active:scale-[0.98] shadow-2xs cursor-pointer ${
+                        justAddedId === p.id
+                          ? "bg-emerald-600 text-white"
+                          : "bg-amber-400 hover:bg-amber-500 text-navy-950 font-black"
+                      }`}
+                    >
+                      {justAddedId === p.id ? "Added ✓" : "+ ADD"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </section>
 
         {/* ⚡ 2. DEALS OF THE WEEK (TOP 5 DEALS HORIZONTAL SLIDER BELOW DISTRICT PRODUCTS) */}
-        <section className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs relative z-10">
-          <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+        <section className="bg-white border border-slate-200/90 rounded-2xl p-3.5 sm:p-4 shadow-xs relative z-10 overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 border-b border-slate-100 pb-2.5 gap-2">
             <div>
-              <h2 className="text-base sm:text-lg font-black text-navy-900 flex items-center gap-2 tracking-tight">
+              <h2 className="text-sm sm:text-base font-black text-navy-900 flex flex-wrap items-center gap-1.5 tracking-tight">
                 <span>⚡ Deals Of The Week</span>
-                <span className="bg-warning/20 border border-amber-400/40 text-amber-800 font-extrabold text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wide">
+                <span className="bg-warning/20 border border-amber-400/40 text-amber-800 font-extrabold text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wide shrink-0">
                   Top 5 Deals
                 </span>
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-[11px] text-slate-500 mt-0.5">
                 All certified construction products from database for {region?.name || "your region"}.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
               <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-2xs">
                 <button
                   type="button"
                   onClick={() => scrollDeals("left")}
-                  className="w-7 h-7 rounded-lg bg-white hover:bg-brand-500 hover:text-white text-navy-900 font-black text-xs flex items-center justify-center shadow-2xs active:scale-95 transition-all cursor-pointer"
+                  className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-white hover:bg-brand-500 hover:text-white text-navy-900 font-black text-xs flex items-center justify-center shadow-2xs active:scale-95 transition-all cursor-pointer"
                   title="Scroll Left"
                 >
                   ◀
@@ -515,14 +587,14 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => scrollDeals("right")}
-                  className="w-7 h-7 rounded-lg bg-white hover:bg-brand-500 hover:text-white text-navy-900 font-black text-xs flex items-center justify-center shadow-2xs active:scale-95 transition-all cursor-pointer"
+                  className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-white hover:bg-brand-500 hover:text-white text-navy-900 font-black text-xs flex items-center justify-center shadow-2xs active:scale-95 transition-all cursor-pointer"
                   title="Scroll Right"
                 >
                   ▶
                 </button>
               </div>
-              <Link to="/categories" className="text-xs font-bold text-brand-600 hover:text-brand-700 active:scale-[0.98] transition-all duration-200 shrink-0">
-                View All ({liveDisplayProducts.length}) →
+              <Link to="/categories" className="text-[11px] font-bold text-brand-600 hover:text-brand-700 active:scale-[0.98] transition-all duration-200 shrink-0">
+                View All →
               </Link>
             </div>
           </div>

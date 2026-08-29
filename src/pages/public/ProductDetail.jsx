@@ -82,27 +82,6 @@ export default function ProductDetail() {
   const [directProduct, setDirectProduct] = useState(null);
   const [directLoading, setDirectLoading] = useState(false);
 
-  // Check if vendor is suspended
-  const isVendorSuspended = useMemo(() => {
-    if (!product) return false;
-    if (product.isVendorSuspended) return true;
-    if (product.vendorId) {
-      const v = vendors.find(
-        (v) =>
-          v.id === product.vendorId ||
-          (v.shopName && (v.shopName || "").toLowerCase() === (product.vendorName || "").toLowerCase())
-      );
-      if (v && v.status === "SUSPENDED") return true;
-    }
-    if (product.vendorName) {
-      const v = vendors.find(
-        (v) => (v.shopName || "").toLowerCase() === product.vendorName.toLowerCase()
-      );
-      if (v && v.status === "SUSPENDED") return true;
-    }
-    return false;
-  }, [product, vendors]);
-
   // Direct fetch fallback from Cloud API if context products is still loading or missing
   useEffect(() => {
     const decodedId = decodeURIComponent(id || "").trim();
@@ -185,6 +164,27 @@ export default function ProductDetail() {
     }
     return generateProduct(id, region.priceFactor, region.name);
   }, [id, products, directProduct, region]);
+
+  // Check if vendor is suspended
+  const isVendorSuspended = useMemo(() => {
+    if (!product) return false;
+    if (product.isVendorSuspended) return true;
+    if (product.vendorId) {
+      const v = vendors.find(
+        (v) =>
+          v.id === product.vendorId ||
+          (v.shopName && (v.shopName || "").toLowerCase() === (product.vendorName || "").toLowerCase())
+      );
+      if (v && v.status === "SUSPENDED") return true;
+    }
+    if (product.vendorName) {
+      const v = vendors.find(
+        (v) => (v.shopName || "").toLowerCase() === product.vendorName.toLowerCase()
+      );
+      if (v && v.status === "SUSPENDED") return true;
+    }
+    return false;
+  }, [product, vendors]);
 
   const [qty, setQty] = useState(1);
   const [justAdded, setJustAdded] = useState(false);

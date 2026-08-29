@@ -358,7 +358,7 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
     const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins expiry
 
-    // Save OTP record asynchronously in background without blocking response
+    // Save OTP record in DB
     prisma.oTPVerification.create({
       data: {
         phone,
@@ -367,12 +367,47 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
       },
     }).catch((e) => console.warn("Background OTP save note:", e.message));
 
-    // Return instant response for lightning fast UI
+    // Dispatch Live SMS via Aradhya Technologies SMS Gateway API
+    const username = process.env.ARADHYA_SMS_USERNAME || "sonevalley";
+    const apikey = process.env.ARADHYA_SMS_APIKEY || "0A8CC-B46EE";
+    const sender = process.env.ARADHYA_SMS_SENDER || "SenderID";
+    const templateId = process.env.ARADHYA_SMS_TEMPLATE_ID || "DLT-Template-ID";
+    const route = process.env.ARADHYA_SMS_ROUTE || "TRANS";
+
+    const cleanMobile = cleanPhone.slice(-10);
+    const messageText = process.env.ARADHYA_SMS_TEMPLATE_TEXT
+      ? process.env.ARADHYA_SMS_TEMPLATE_TEXT.replace("{OTP}", generatedOtp)
+      : `Your BuildCity OTP verification code is ${generatedOtp}. Valid for 10 minutes.`;
+
+    let smsGatewayStatus = "dispatched";
+    try {
+      const query = new URLSearchParams({
+        username,
+        apikey,
+        apirequest: "Text",
+        sender,
+        mobile: cleanMobile,
+        message: messageText,
+        route,
+        TemplateID: templateId,
+        format: "JSON"
+      }).toString();
+
+      fetch(`https://sms.aradhyatechnologies.in/sms-panel/api/http/index.php?${query}`)
+        .then((res) => res.json().catch(() => res.text()))
+        .then((respData) => console.log(`[Aradhya SMS Gateway] Dispatched to +91 ${cleanMobile}:`, respData))
+        .catch((err) => console.error("[Aradhya SMS Gateway] HTTP Error:", err.message));
+    } catch (smsErr) {
+      console.warn("SMS dispatch warning:", smsErr.message);
+      smsGatewayStatus = "pending_configuration";
+    }
+
     return res.json({
       success: true,
       message: `OTP dispatched to +91 ${phone}`,
-      gateway: "SupabaseCloudDB",
-      otp: generatedOtp, // Instant auto-fill badge
+      gateway: "AradhyaTechnologiesSMS",
+      smsStatus: smsGatewayStatus,
+      otp: process.env.NODE_ENV === "development" ? generatedOtp : undefined,
     });
   } catch (err) {
     console.error("OTP dispatch error:", err);

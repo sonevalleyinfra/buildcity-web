@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import { useAuth } from "../../context/AuthContext";
 import { useOrders } from "../../context/OrderContext";
 import { useAddresses } from "../../context/AddressContext";
+import { useAdmin } from "../../context/AdminContext";
+import { API_BASE_URL } from "../../config/api";
 import { formatShortId } from "../../utils/formatId";
 
 const accountLinks = [
@@ -20,7 +22,25 @@ export default function Profile() {
   const { user, logout, updateProfile } = useAuth();
   const { orders } = useOrders();
   const { addresses } = useAddresses();
+  const { coupons = [] } = useAdmin();
+  const [dbCoupons, setDbCoupons] = useState(coupons);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/v1/coupons`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) setDbCoupons(data);
+      })
+      .catch(() => {});
+  }, []);
+
+  const activeSource = dbCoupons.length > 0 ? dbCoupons : coupons;
+  const todayStr = new Date().toISOString().split("T")[0];
+  const activeCouponsCount = (activeSource || []).filter((c) => {
+    const isExpired = c.expiryDate && c.expiryDate < todayStr;
+    return c.isActive !== false && !isExpired;
+  }).length;
 
   const customerPhone = (user?.phone || "").trim();
   const customerId = user?.id;
@@ -137,8 +157,10 @@ export default function Profile() {
               <p className="text-[11px] font-medium text-slate-500 mt-0.5">Wallet Balance</p>
             </div>
             <div className="bg-white rounded-2xl border border-slate-200 p-4 text-center shadow-xs">
-              <p className="text-lg font-black text-brand-600">3 Active</p>
-              <p className="text-[11px] font-medium text-slate-500 mt-0.5">Coupons Available</p>
+              <p className="text-lg font-black text-brand-600">{activeCouponsCount} Active</p>
+              <p className="text-[11px] font-medium text-slate-500 mt-0.5">
+                {activeCouponsCount === 1 ? "Coupon Available" : "Coupons Available"}
+              </p>
             </div>
             <div className="bg-white rounded-2xl border border-slate-200 p-4 text-center shadow-xs">
               <p className="text-lg font-black text-navy-900">{myOrders.length}</p>

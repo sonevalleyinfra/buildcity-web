@@ -9,7 +9,6 @@ import { formatShortId } from "../../utils/formatId";
 const accountLinks = [
   { label: "My District Orders", icon: "📋", to: "/orders", sub: "Track order status & history" },
   { label: "Delivery Addresses", icon: "📍", to: "/addresses", sub: "Manage delivery locations" },
-  { label: "My Coupons & Offers", icon: "🏷️", to: "/cart", sub: "BUILDCITY100, SUPER500 & active promos" },
 ];
 
 const supportLinks = [

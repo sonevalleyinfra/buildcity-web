@@ -367,51 +367,14 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
       },
     }).catch((e) => console.warn("Background OTP save note:", e.message));
 
-    // Dispatch Live SMS via Aradhya Technologies SMS Gateway API (Awaited for guaranteed delivery)
-    const username = process.env.ARADHYA_SMS_USERNAME || "sonevalley";
-    const apikey = process.env.ARADHYA_SMS_APIKEY || "0A8CC-B46EE";
-    const sender = process.env.ARADHYA_SMS_SENDER || "SONVLY";
-    const templateId = process.env.ARADHYA_SMS_TEMPLATE_ID || "1702160915855670817";
-    const route = process.env.ARADHYA_SMS_ROUTE || "TRANS";
-    const peid = process.env.ARADHYA_SMS_PE_ID || "1701175266640135857";
-
-    const cleanMobile = cleanPhone.slice(-10);
-    const messageText = process.env.ARADHYA_SMS_TEMPLATE_TEXT
-      ? process.env.ARADHYA_SMS_TEMPLATE_TEXT.replace("{OTP}", generatedOtp)
-      : `Your BuildCity OTP verification code is ${generatedOtp}. Valid for 10 minutes.`;
-
-    let smsGatewayStatus = "dispatched";
-    try {
-      const queryParams = new URLSearchParams({
-        username,
-        apikey,
-        apirequest: "Text",
-        sender,
-        mobile: cleanMobile,
-        message: messageText,
-        route,
-        TemplateID: templateId,
-        peid,
-        format: "JSON"
-      }).toString();
-
-      const smsRes = await fetch(`http://sms.aradhyatechnologies.in/sms-panel/api/http/index.php?${queryParams}`);
-      const smsData = await smsRes.json().catch(async () => {
-        const text = await smsRes.text().catch(() => "");
-        return { raw: text };
-      });
-
-      console.log(`[Aradhya SMS Gateway] Awaited dispatch response to +91 ${cleanMobile}:`, smsData);
-    } catch (smsErr) {
-      console.error("[Aradhya SMS Gateway] Dispatch error:", smsErr.message);
-      smsGatewayStatus = "error";
-    }
+    // Dispatch Live SMS via Aradhya Technologies SMS Gateway (HTTPS with timeout safety)
+    const smsResult = await sendRealSMSOTP(cleanPhone, generatedOtp);
 
     return res.json({
       success: true,
-      message: `OTP dispatched to +91 ${cleanMobile}`,
-      gateway: "AradhyaTechnologiesSMS",
-      smsStatus: smsGatewayStatus,
+      message: `OTP dispatched to +91 ${cleanPhone.slice(-10)}`,
+      gateway: smsResult.gateway || "AradhyaSMS",
+      smsStatus: smsResult.success ? "dispatched" : "failed",
     });
   } catch (err) {
     console.error("OTP dispatch error:", err);

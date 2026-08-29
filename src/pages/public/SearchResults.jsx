@@ -3,50 +3,63 @@ import { useSearchParams, Link } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import ProductCard from "../../components/ProductCard";
 import { useRegion } from "../../context/RegionContext";
-
-const ALL_KEYWORDS = [
-  "cement", "paint", "steel", "tiles", "plumbing", "electrical",
-  "hardware", "sanitary", "furniture", "drill", "pipe", "wire",
-];
-
-// TEMPORARY MOCK hai  - replace with GET /api/v1/products?q= jab backend is ready
-function searchProducts(query, priceFactor) {
-  const q = query.trim().toLowerCase();
-  if (!q) return [];
-
-  const matches = ALL_KEYWORDS.filter(
-    (k) => k.includes(q) || q.includes(k)
-  );
-  const keywords = matches.length ? matches : [q];
-
-  return keywords.flatMap((kw, ki) =>
-    Array.from({ length: 4 }).map((_, i) => {
-      const mrp = Math.round((300 + ((ki * 4 + i) * 173) % 4200) * priceFactor);
-      const discount = i % 2 === 0 ? Math.round(mrp * 0.12) : 0;
-      return {
-        id: `search-${kw}-${i}`,
-        name: `${kw[0].toUpperCase() + kw.slice(1)} Product ${i + 1}`,
-        brand: "BuildCity Trusted Brand",
-        img: `https://picsum.photos/seed/${kw}${i}/400/400`,
-        mrp,
-        price: mrp - discount,
-        rating: (3.9 + ((ki + i) % 10) / 10).toFixed(1),
-        reviews: 15 + ((ki + i) * 17) % 250,
-      };
-    })
-  );
-}
+import { useAdmin } from "../../context/AdminContext";
 
 export default function SearchResults() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { region } = useRegion();
+  const { products = [], masterProducts = [] } = useAdmin();
   const initialQuery = searchParams.get("q") || "";
   const [query, setQuery] = useState(initialQuery);
 
-  const results = useMemo(
-    () => searchProducts(searchParams.get("q") || "", region.priceFactor),
-    [searchParams, region]
-  );
+  const activeQuery = (searchParams.get("q") || "").trim().toLowerCase();
+
+  const results = useMemo(() => {
+    if (!activeQuery || activeQuery.trim().length === 0) return [];
+
+    // Combine live vendor approved products and master products catalog from DB
+    const allRealProducts = [...products, ...masterProducts];
+
+    const map = new Map();
+    allRealProducts.forEach((p) => {
+      if (p.approvalStatus && p.approvalStatus !== "APPROVED") return;
+
+      const name = (p.name || "").toLowerCase();
+      const brand = (p.brand || "").toLowerCase();
+      const category = (p.categoryName || p.category?.name || p.type || "").toLowerCase();
+      const grade = (p.grade || "").toLowerCase();
+      const desc = (p.desc || p.description || "").toLowerCase();
+
+      const matches =
+        name.includes(activeQuery) ||
+        brand.includes(activeQuery) ||
+        category.includes(activeQuery) ||
+        grade.includes(activeQuery) ||
+        desc.includes(activeQuery);
+
+      if (matches) {
+        const key = (p.name || p.id).toLowerCase().trim();
+        if (!map.has(key)) {
+          const calculatedPrice = p.price !== undefined && p.price !== null && !isNaN(Number(p.price))
+            ? Math.round(Number(p.price))
+            : Math.round(Number(p.suggestedPrice || 100) * (region?.priceFactor || 1));
+
+          map.set(key, {
+            id: p.id,
+            name: p.name,
+            brand: p.brand || "BuildCity Certified",
+            img: p.img || p.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+            mrp: p.mrp || Math.round(calculatedPrice * 1.15),
+            price: calculatedPrice,
+            rating: p.rating || "4.8",
+            reviews: p.reviews || 24,
+          });
+        }
+      }
+    });
+
+    return Array.from(map.values());
+  }, [products, masterProducts, activeQuery, region]);
 
   const handleSubmit = (e) => {
     e.preventDefault();

@@ -27,40 +27,29 @@ const BRAND_POOL = {
   plumbing: ["Cera", "Jaquar", "Somany", "Astral"],
 };
 
-// Fallback product generator
-function generateProducts(slug, priceFactor = 1) {
-  const brandList = BRAND_POOL[slug] || ["Generic Brand"];
-  const label = CATEGORY_LABELS[slug] || slug;
-  return Array.from({ length: 18 }).map((_, i) => {
-    const brand = brandList[i % brandList.length];
-    const baseMrp = 300 + ((i * 137) % 4800);
-    const mrp = Math.round(baseMrp * priceFactor);
-    const discount = i % 3 === 0 ? Math.round(mrp * 0.15) : 0;
-    return {
-      id: `${slug}-${i + 1}`,
-      name: `${brand} ${label} Product ${i + 1}`,
-      brand,
-      img: `https://picsum.photos/seed/${slug}${i}/400/400`,
-      mrp,
-      price: mrp - discount,
-      rating: (3.8 + ((i * 7) % 12) / 10).toFixed(1),
-      reviews: 10 + ((i * 23) % 300),
-    };
-  });
-}
+const CATEGORY_IMAGES = {
+  cement: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+  paints: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=400&q=80",
+  steel: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=400&q=80",
+  plumbing: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=400&q=80",
+  electrical: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=400&q=80",
+  hardware: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=80",
+  furniture: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=400&q=80",
+};
 
 const PAGE_SIZE = 9;
 
 export default function CategoryListing() {
   const { slug } = useParams();
   const { region } = useRegion();
-  const { products = [] } = useAdmin();
+  const { products = [], masterProducts = [] } = useAdmin();
   const label = CATEGORY_LABELS[slug] || slug || "Products";
 
   const allProducts = useMemo(() => {
     const slugLower = (slug || "").toLowerCase();
     const map = new Map();
 
+    // 1. First add live vendor products matching this category
     products.forEach((p) => {
       const isApproved = p.approvalStatus === "APPROVED" || p.approvalStatus === undefined || p.isActive === true;
       if (!isApproved) return;
@@ -78,8 +67,8 @@ export default function CategoryListing() {
           id: p.id,
           name: p.name,
           brand: p.brand || "Generic",
-          img: p.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
-          mrp: Math.round(Number(p.price) * 1.15),
+          img: p.img || p.imageUrl || CATEGORY_IMAGES[slugLower] || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+          mrp: Math.round(Number(p.price || 100) * 1.15),
           price: Number(p.price) || 100,
           rating: "4.9",
           reviews: 42,
@@ -89,8 +78,33 @@ export default function CategoryListing() {
       }
     });
 
-    return Array.from(map.values());
-  }, [slug, products]);
+    const vendorItems = Array.from(map.values());
+    if (vendorItems.length > 0) return vendorItems;
+
+    // 2. If no vendor listings match, display real DB Master Products catalog items
+    const matchedMaster = masterProducts.filter((m) => {
+      if (!slugLower || slugLower === "all") return true;
+      const catName = (m.categoryName || m.category?.name || "").toLowerCase();
+      const catId = (m.categoryId || "").toLowerCase();
+      const mName = (m.name || "").toLowerCase();
+      return catName.includes(slugLower) || slugLower.includes(catName) || catId === slugLower || mName.includes(slugLower);
+    });
+
+    return matchedMaster.map((m) => {
+      const priceFactor = region?.priceFactor || 1;
+      const basePrice = Math.round((Number(m.suggestedPrice) || 100) * priceFactor);
+      return {
+        id: m.id,
+        name: m.name,
+        brand: m.brand || "BuildCity Certified",
+        img: m.imageUrl || CATEGORY_IMAGES[slugLower] || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+        mrp: Math.round(basePrice * 1.15),
+        price: basePrice,
+        rating: "4.8",
+        reviews: 28,
+      };
+    });
+  }, [slug, products, masterProducts, region]);
   const brands = BRAND_POOL[slug] || [];
 
   const [selectedBrands, setSelectedBrands] = useState([]);

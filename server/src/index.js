@@ -367,12 +367,13 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
       },
     }).catch((e) => console.warn("Background OTP save note:", e.message));
 
-    // Dispatch Live SMS via Aradhya Technologies SMS Gateway API
+    // Dispatch Live SMS via Aradhya Technologies SMS Gateway API (Awaited for guaranteed delivery)
     const username = process.env.ARADHYA_SMS_USERNAME || "sonevalley";
     const apikey = process.env.ARADHYA_SMS_APIKEY || "0A8CC-B46EE";
     const sender = process.env.ARADHYA_SMS_SENDER || "SONVLY";
     const templateId = process.env.ARADHYA_SMS_TEMPLATE_ID || "1702160915855670817";
     const route = process.env.ARADHYA_SMS_ROUTE || "TRANS";
+    const peid = process.env.ARADHYA_SMS_PE_ID || "1701175266640135857";
 
     const cleanMobile = cleanPhone.slice(-10);
     const messageText = process.env.ARADHYA_SMS_TEMPLATE_TEXT
@@ -381,7 +382,7 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
 
     let smsGatewayStatus = "dispatched";
     try {
-      const queryParams = {
+      const queryParams = new URLSearchParams({
         username,
         apikey,
         apirequest: "Text",
@@ -390,29 +391,27 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
         message: messageText,
         route,
         TemplateID: templateId,
+        peid,
         format: "JSON"
-      };
-      if (process.env.ARADHYA_SMS_PE_ID || "1701175266640135857") {
-        queryParams.peid = process.env.ARADHYA_SMS_PE_ID || "1701175266640135857";
-      }
+      }).toString();
 
-      const query = new URLSearchParams(queryParams).toString();
+      const smsRes = await fetch(`http://sms.aradhyatechnologies.in/sms-panel/api/http/index.php?${queryParams}`);
+      const smsData = await smsRes.json().catch(async () => {
+        const text = await smsRes.text().catch(() => "");
+        return { raw: text };
+      });
 
-      fetch(`http://sms.aradhyatechnologies.in/sms-panel/api/http/index.php?${query}`)
-        .then((res) => res.json().catch(() => res.text()))
-        .then((respData) => console.log(`[Aradhya SMS Gateway] Dispatched to +91 ${cleanMobile}:`, respData))
-        .catch((err) => console.error("[Aradhya SMS Gateway] HTTP Error:", err.message));
+      console.log(`[Aradhya SMS Gateway] Awaited dispatch response to +91 ${cleanMobile}:`, smsData);
     } catch (smsErr) {
-      console.warn("SMS dispatch warning:", smsErr.message);
-      smsGatewayStatus = "pending_configuration";
+      console.error("[Aradhya SMS Gateway] Dispatch error:", smsErr.message);
+      smsGatewayStatus = "error";
     }
 
     return res.json({
       success: true,
-      message: `OTP dispatched to +91 ${phone}`,
+      message: `OTP dispatched to +91 ${cleanMobile}`,
       gateway: "AradhyaTechnologiesSMS",
       smsStatus: smsGatewayStatus,
-      otp: process.env.NODE_ENV === "development" ? generatedOtp : undefined,
     });
   } catch (err) {
     console.error("OTP dispatch error:", err);

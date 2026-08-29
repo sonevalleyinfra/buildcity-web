@@ -526,12 +526,6 @@ export default function VendorDashboard() {
                           >
                             ✏️ Edit Price/Stock
                           </button>
-                          <button
-                            onClick={() => handleRemoveListing(p.id, p.name)}
-                            className="text-[11px] font-semibold text-rose-600 hover:bg-rose-50 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer"
-                          >
-                            Remove
-                          </button>
                         </div>
                       </td>
                     </tr>

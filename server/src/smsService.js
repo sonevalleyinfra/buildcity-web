@@ -17,7 +17,7 @@ async function sendRealSMSOTP(phone, otpCode) {
 
   const message = process.env.ARADHYA_SMS_TEMPLATE_TEXT
     ? process.env.ARADHYA_SMS_TEMPLATE_TEXT.replace("{OTP}", otpCode)
-    : `Dear user, Thankyou for visiting Sonevalley. Your OTP for login is ${otpCode}. Please do not share this OTP with anyone. Regards SNVLY`;
+    : `Dear user, Thankyou for visiting Sonevalley. Your OTP for login is ${otpCode}. Please do not share this OTP with anyone.\nRegards SNVLY`;
 
   const queryParams = new URLSearchParams({
     username,

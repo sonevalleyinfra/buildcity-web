@@ -570,14 +570,9 @@ export default function Categories() {
 
         {/* Best Selling Products */}
         <section>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-lg font-black text-navy-900 tracking-tight">Best Selling District Products</h2>
-              <p className="text-xs text-slate-500 font-medium">Highest ordered construction items · Rotates daily with live database stock</p>
-            </div>
-            <span className="text-xs font-extrabold bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1 rounded-full shadow-2xs">
-              🔄 Rotates Daily
-            </span>
+          <div className="mb-4">
+            <h2 className="text-lg font-black text-navy-900 tracking-tight">Best Selling District Products</h2>
+            <p className="text-xs text-slate-500 font-medium">Highest ordered construction items across Varanasi & nearby districts</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

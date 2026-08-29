@@ -465,11 +465,13 @@ export default function Home() {
                   </Link>
 
                   <div className="mt-1">
-                    <div className="flex items-baseline justify-between mb-2">
-                      <span className="text-sm sm:text-base font-black text-navy-950 tracking-tight tabular-nums">
+                    <div className="flex flex-col mb-2 min-h-[34px] justify-end">
+                      <span className="text-sm sm:text-base font-black text-navy-950 tracking-tight tabular-nums leading-none">
                         ₹{(p.price || p.suggestedPrice || 0).toLocaleString("en-IN")}
                       </span>
-                      <span className="text-[9px] font-extrabold text-slate-400">per {p.unit || "unit"}</span>
+                      <span className="text-[9px] font-extrabold text-slate-400 truncate mt-1">
+                        per {p.unit || "unit"}
+                      </span>
                     </div>
 
                     <button
@@ -610,11 +612,13 @@ export default function Home() {
                   </Link>
 
                   <div>
-                    <div className="flex items-baseline justify-between mb-2">
-                      <span className="text-base font-black text-navy-900 tracking-tight tabular-nums">
-                        ₹{p.price || p.suggestedPrice}
+                    <div className="flex flex-col mb-2 min-h-[34px] justify-end">
+                      <span className="text-base font-black text-navy-900 tracking-tight tabular-nums leading-none">
+                        ₹{(p.price || p.suggestedPrice || 0).toLocaleString("en-IN")}
                       </span>
-                      <span className="text-[9px] font-medium text-slate-400">per {p.unit || "unit"}</span>
+                      <span className="text-[9px] font-extrabold text-slate-400 truncate mt-1">
+                        per {p.unit || "unit"}
+                      </span>
                     </div>
 
                     {p.isVendorSuspended ? (

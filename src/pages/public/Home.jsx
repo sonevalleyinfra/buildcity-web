@@ -103,6 +103,18 @@ export default function Home() {
   const [justAddedId, setJustAddedId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
 
+  const [maxGridItems, setMaxGridItems] = useState(() =>
+    typeof window !== "undefined" && window.innerWidth < 640 ? 6 : 10
+  );
+
+  useEffect(() => {
+    const handleResize = () => {
+      setMaxGridItems(window.innerWidth < 640 ? 6 : 10);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   const dealsScrollRef = useRef(null);
 
   const scrollDeals = (direction) => {
@@ -420,8 +432,8 @@ export default function Home() {
               📦 No vendor products listed for this region yet.
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-3">
-              {liveDisplayProducts.map((p, i) => (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-3">
+              {liveDisplayProducts.slice(0, maxGridItems).map((p, i) => (
                 <div
                   key={`grid-${p.id || i}`}
                   className="bg-white rounded-xl border border-slate-200 p-2 sm:p-2.5 flex flex-col justify-between hover:shadow-md hover:border-brand-300 transition-all duration-200 group"

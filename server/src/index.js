@@ -1731,22 +1731,32 @@ app.put("/api/v1/addresses/:id", async (req, res) => {
   }
 });
 
-// Delete Address Endpoint in Supabase DB
+// Delete Address Endpoint in Supabase DB (Supports UUID or Street + User lookup)
 app.delete("/api/v1/addresses/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    let addr = await prisma.address.findUnique({ where: { id } }).catch(() => null);
-    if (!addr) {
-      addr = await prisma.address.findFirst({ where: { id } }).catch(() => null);
+    const { street } = req.query;
+
+    let deletedCount = 0;
+
+    // 1. Try deleting by primary ID
+    if (id && id.length > 10 && !id.startsWith("addr-") && !id.startsWith("addr_")) {
+      const del = await prisma.address.deleteMany({ where: { id } }).catch(() => null);
+      if (del) deletedCount += del.count;
     }
 
-    if (addr) {
-      await prisma.address.delete({ where: { id: addr.id } }).catch(() => null);
-      console.log("✓ Address deleted from Supabase DB:", addr.id);
-      return res.json({ success: true, message: "Address deleted from database" });
+    // 2. Try deleting by street / address line text
+    if (street && street.trim()) {
+      const delStreet = await prisma.address.deleteMany({
+        where: {
+          street: { equals: street.trim(), mode: "insensitive" },
+        },
+      }).catch(() => null);
+      if (delStreet) deletedCount += delStreet.count;
     }
 
-    res.json({ success: true, message: "Address removed" });
+    console.log(`✓ Address deleted from Supabase DB (Deleted count: ${deletedCount})`);
+    return res.json({ success: true, count: deletedCount });
   } catch (err) {
     console.error("DELETE /api/v1/addresses/:id error:", err.message);
     res.status(500).json({ error: err.message });

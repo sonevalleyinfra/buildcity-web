@@ -22,6 +22,29 @@ export function AddressProvider({ children }) {
     } catch {}
   }, []);
 
+  const getDeletedStorageKey = () => {
+    const uKey = user?.phone ? user.phone.replace(/\D/g, "") : user?.id || "guest";
+    return `buildcity_deleted_addrs_${uKey}`;
+  };
+
+  const getDeletedKeys = () => {
+    try {
+      const saved = localStorage.getItem(getDeletedStorageKey());
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  };
+
+  const addDeletedKey = (key) => {
+    if (!key || typeof key !== "string") return;
+    try {
+      const set = getDeletedKeys();
+      set.add(key.toLowerCase().trim());
+      localStorage.setItem(getDeletedStorageKey(), JSON.stringify(Array.from(set)));
+    } catch {}
+  };
+
   // Fetch saved addresses from Supabase DB & sync local storage
   const fetchDbAddresses = async () => {
     if (!user) return;
@@ -33,17 +56,23 @@ export function AddressProvider({ children }) {
       if (res.ok) {
         const dbList = await res.json();
         if (Array.isArray(dbList) && dbList.length > 0) {
-          const formatted = dbList.map((a) => ({
-            id: a.id,
-            fullName: a.fullName || user.name || "Customer",
-            phone: a.phone || user.phone || "",
-            line: a.street,
-            street: a.street,
-            city: a.city,
-            state: a.state || "Uttar Pradesh",
-            pincode: a.pincode,
-            isDefault: a.isDefault || false,
-          }));
+          const deletedSet = getDeletedKeys();
+          const formatted = dbList
+            .map((a) => ({
+              id: a.id,
+              fullName: a.fullName || user.name || "Customer",
+              phone: a.phone || user.phone || "",
+              line: a.street,
+              street: a.street,
+              city: a.city,
+              state: a.state || "Uttar Pradesh",
+              pincode: a.pincode,
+              isDefault: a.isDefault || false,
+            }))
+            .filter((a) => {
+              const streetKey = (a.street || a.line || "").toLowerCase().trim();
+              return !deletedSet.has(a.id) && !deletedSet.has(streetKey);
+            });
 
           const uniqueList = Array.from(
             new Map(
@@ -194,9 +223,20 @@ export function AddressProvider({ children }) {
   };
 
   const removeAddress = async (id) => {
-    // 1. Immediately remove from local state & localStorage
+    const target = addresses.find((a) => a.id === id);
+    const streetStr = target?.street || target?.line || "";
+
+    // 1. Blacklist address ID & street text so fetchDbAddresses never re-hydrates it
+    addDeletedKey(id);
+    if (streetStr) addDeletedKey(streetStr);
+
+    // 2. Immediately remove from local state & localStorage
     setAddresses((prev) => {
-      const updated = prev.filter((a) => a.id !== id);
+      const updated = prev.filter(
+        (a) =>
+          a.id !== id &&
+          (!streetStr || (a.street || a.line || "").toLowerCase().trim() !== streetStr.toLowerCase().trim())
+      );
       if (addressStorageKey) {
         try {
           localStorage.setItem(addressStorageKey, JSON.stringify(updated));
@@ -205,12 +245,11 @@ export function AddressProvider({ children }) {
       return updated;
     });
 
-    // 2. Delete from Supabase Cloud DB via API
+    // 3. Delete from Supabase Cloud DB via API
     try {
-      await fetch(`${API_BASE_URL}/api/v1/addresses/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      });
-      console.log("✓ Address deleted from DB:", id);
+      const url = `${API_BASE_URL}/api/v1/addresses/${encodeURIComponent(id)}?street=${encodeURIComponent(streetStr)}`;
+      await fetch(url, { method: "DELETE" });
+      console.log("✓ Address deleted from DB:", id, streetStr);
     } catch (err) {
       console.warn("DB address delete note:", err.message);
     }

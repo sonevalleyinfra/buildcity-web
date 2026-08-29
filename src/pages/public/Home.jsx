@@ -409,63 +409,39 @@ export default function Home() {
           </div>
         </section>
 
-        {/* 🏗️ 1. All Certified District Products (WITH GRID ⊞ / LIST ☰ VIEW TOGGLE) */}
-        <section className="bg-white border border-slate-200/90 rounded-2xl p-3.5 sm:p-4 shadow-xs relative z-10 space-y-3 overflow-hidden">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2.5 gap-2">
+        {/* 🏗️ 1. All Certified District Products (HIGH-END PREMIUM GRID) */}
+        <section className="bg-white border border-slate-200/90 rounded-2xl p-3.5 sm:p-5 shadow-xs relative z-10 space-y-4 overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-2">
             <div>
-              <h2 className="text-sm sm:text-base font-black text-navy-900 flex flex-wrap items-center gap-1.5 tracking-tight">
+              <h2 className="text-base sm:text-lg font-black text-navy-900 flex flex-wrap items-center gap-2 tracking-tight">
                 <span>🏗️ All Certified District Products</span>
-                <span className="bg-emerald-50 border border-emerald-200 text-emerald-700 font-extrabold text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wide shrink-0">
+                <span className="bg-emerald-50 border border-emerald-200 text-emerald-700 font-extrabold text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wide shrink-0 shadow-2xs">
                   Live Stock ({liveDisplayProducts.length})
                 </span>
               </h2>
-              <p className="text-[11px] text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-500 mt-0.5">
                 Explore all verified building and construction materials available for delivery in {region?.name || "your region"}.
               </p>
             </div>
-            <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
-              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 shadow-2xs">
-                <button
-                  type="button"
-                  onClick={() => setViewMode("grid")}
-                  className={`px-2 py-1 rounded text-[10px] sm:text-xs font-bold transition-all cursor-pointer ${
-                    viewMode === "grid" ? "bg-white text-navy-900 shadow-2xs" : "text-slate-500 hover:text-navy-900"
-                  }`}
-                  title="Grid View"
-                >
-                  ⊞ Grid
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("list")}
-                  className={`px-2 py-1 rounded text-[10px] sm:text-xs font-bold transition-all cursor-pointer ${
-                    viewMode === "list" ? "bg-white text-navy-900 shadow-2xs" : "text-slate-500 hover:text-navy-900"
-                  }`}
-                  title="List View"
-                >
-                  ☰ List
-                </button>
-              </div>
-              <Link to="/categories" className="text-[11px] font-bold text-brand-600 hover:text-brand-700 active:scale-[0.98] transition-all duration-200 shrink-0">
-                Categories →
-              </Link>
-            </div>
+            <Link to="/categories" className="text-xs font-extrabold text-brand-600 hover:text-brand-700 active:scale-[0.98] transition-all duration-200 shrink-0 self-start sm:self-auto bg-brand-50 px-3 py-1.5 rounded-xl border border-brand-100">
+              Browse All Categories →
+            </Link>
           </div>
 
           {liveDisplayProducts.length === 0 ? (
-            <div className="py-8 text-center text-slate-500 text-xs font-extrabold bg-slate-50 rounded-xl border border-slate-200">
+            <div className="py-10 text-center text-slate-500 text-xs font-extrabold bg-slate-50 rounded-xl border border-slate-200">
               📦 No vendor products listed for this region yet.
             </div>
-          ) : viewMode === "grid" ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-3">
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
               {liveDisplayProducts.slice(0, maxGridItems).map((p, i) => (
                 <div
                   key={`grid-${p.id || i}`}
-                  className="bg-white rounded-xl border border-slate-200 p-2 sm:p-2.5 flex flex-col justify-between hover:shadow-md hover:border-brand-300 transition-all duration-200 group"
+                  className="bg-gradient-to-b from-white to-slate-50/60 rounded-2xl border border-slate-200/90 p-3 sm:p-3.5 flex flex-col justify-between hover:shadow-xl hover:border-brand-400 hover:-translate-y-1 active:scale-[0.99] transition-all duration-300 group"
                 >
                   <Link to={`/product/${p.id}`} className="block flex-1">
-                    <div className="relative aspect-[4/3] rounded-lg overflow-hidden bg-slate-100 mb-1.5 border border-slate-100 group-hover:border-brand-300">
-                      <span className="absolute top-1 left-1 z-10 bg-amber-400 text-navy-950 text-[8px] font-black px-1.5 py-0.5 rounded shadow-2xs">
+                    <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 mb-2.5 border border-slate-100 group-hover:border-brand-200 shadow-2xs">
+                      <span className="absolute top-2 left-2 z-10 bg-slate-900/85 backdrop-blur-md text-amber-400 text-[9px] font-black px-2 py-0.5 rounded-md shadow-sm uppercase tracking-wider">
                         {p.categoryName || "Material"}
                       </span>
                       <img
@@ -476,82 +452,35 @@ export default function Home() {
                       />
                     </div>
 
-                    <div className="flex items-center justify-between text-[9px] font-medium text-slate-500 mb-0.5 gap-1">
-                      <span className="truncate text-slate-400 font-semibold">{p.brand || "Generic"}</span>
-                      <span className="text-brand-600 font-bold bg-brand-50 px-1 py-0.5 rounded border border-brand-100/80 truncate max-w-[80px]">
+                    <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 mb-1 gap-1">
+                      <span className="truncate text-slate-400 font-bold uppercase tracking-wider text-[9px]">{p.brand || "Generic"}</span>
+                      <span className="text-brand-700 font-bold bg-brand-50/90 border border-brand-200/80 px-2 py-0.5 rounded-md truncate max-w-[110px] shadow-2xs text-[9px]">
                         🏪 {p.vendorName || p.addedBy || "Vendor"}
                       </span>
                     </div>
 
-                    <p className="text-[11px] font-bold text-navy-900 leading-snug mb-1 line-clamp-2 min-h-[28px] tracking-tight group-hover:text-brand-600 transition-colors">
+                    <p className="text-xs font-black text-navy-950 leading-snug mb-2 line-clamp-2 min-h-[32px] tracking-tight group-hover:text-brand-600 transition-colors">
                       {p.name}
                     </p>
                   </Link>
 
                   <div className="mt-1">
-                    <div className="flex items-baseline justify-between mb-1.5">
-                      <span className="text-xs font-black text-navy-900 tracking-tight tabular-nums">
-                        ₹{p.price || p.suggestedPrice}
+                    <div className="flex items-baseline justify-between mb-2">
+                      <span className="text-sm sm:text-base font-black text-navy-950 tracking-tight tabular-nums">
+                        ₹{(p.price || p.suggestedPrice || 0).toLocaleString("en-IN")}
                       </span>
-                      <span className="text-[8px] font-medium text-slate-400">per {p.unit || "unit"}</span>
+                      <span className="text-[9px] font-extrabold text-slate-400">per {p.unit || "unit"}</span>
                     </div>
 
                     <button
                       onClick={() => handleAddToCart(p)}
-                      className={`w-full text-[10px] font-extrabold rounded-md py-1 transition-all duration-200 active:scale-[0.98] shadow-2xs cursor-pointer ${
+                      className={`w-full text-xs font-black rounded-xl py-2 transition-all duration-200 active:scale-[0.97] shadow-xs cursor-pointer ${
                         justAddedId === p.id
                           ? "bg-emerald-600 text-white shadow-xs"
-                          : "bg-amber-400 hover:bg-amber-500 text-navy-950 font-black shadow-xs"
+                          : "bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-navy-950 shadow-sm hover:shadow"
                       }`}
                     >
-                      {justAddedId === p.id ? "Added ✓" : "+ ADD"}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            /* LIST VIEW RENDERING */
-            <div className="space-y-2">
-              {liveDisplayProducts.slice(0, maxGridItems).map((p, i) => (
-                <div
-                  key={`list-${p.id || i}`}
-                  className="bg-white rounded-xl border border-slate-200 p-2.5 flex items-center justify-between gap-3 hover:border-brand-300 hover:shadow-xs transition-all duration-200"
-                >
-                  <Link to={`/product/${p.id}`} className="flex items-center gap-3 flex-1 min-w-0">
-                    <img
-                      src={p.imageUrl || p.img || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80"}
-                      alt={p.name}
-                      className="w-14 h-14 object-cover rounded-lg shrink-0 bg-slate-100 border border-slate-100"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                        <span className="text-[8px] font-black text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded">
-                          {p.categoryName || "Material"}
-                        </span>
-                        <span className="text-[8px] font-bold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-100 truncate max-w-[120px]">
-                          🏪 {p.vendorName || p.addedBy || "Vendor"}
-                        </span>
-                      </div>
-                      <p className="text-xs font-extrabold text-navy-900 truncate leading-tight">{p.name}</p>
-                      <span className="text-[10px] text-slate-400 font-medium">{p.brand || "Generic"}</span>
-                    </div>
-                  </Link>
-
-                  <div className="flex items-center gap-3 shrink-0">
-                    <div className="text-right">
-                      <div className="text-xs font-black text-navy-900">₹{p.price || p.suggestedPrice}</div>
-                      <div className="text-[8px] text-slate-400">per {p.unit || "unit"}</div>
-                    </div>
-                    <button
-                      onClick={() => handleAddToCart(p)}
-                      className={`text-xs font-extrabold px-3 py-1.5 rounded-lg transition-all duration-200 active:scale-[0.98] shadow-2xs cursor-pointer ${
-                        justAddedId === p.id
-                          ? "bg-emerald-600 text-white"
-                          : "bg-amber-400 hover:bg-amber-500 text-navy-950 font-black"
-                      }`}
-                    >
-                      {justAddedId === p.id ? "Added ✓" : "+ ADD"}
+                      {justAddedId === p.id ? "Added ✓" : "+ Add to Cart"}
                     </button>
                   </div>
                 </div>

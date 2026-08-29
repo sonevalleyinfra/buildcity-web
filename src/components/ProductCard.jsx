@@ -34,7 +34,14 @@ export default function ProductCard({ product }) {
       </Link>
 
       <div className="p-3 flex flex-col flex-1">
-        <span className="text-[11px] text-slate-400 mb-0.5">{product.brand}</span>
+        <div className="flex items-center justify-between text-[11px] mb-0.5 gap-1">
+          <span className="text-slate-400 truncate">{product.brand}</span>
+          {product.vendorName && (
+            <span className="text-brand-600 font-bold bg-brand-50 border border-brand-200/80 px-1.5 py-0.5 rounded text-[10px] shrink-0 truncate max-w-[130px]" title={product.vendorName}>
+              🏪 {product.vendorName}
+            </span>
+          )}
+        </div>
         <Link
           to={`/product/${product.id}`}
           className="text-sm font-medium text-navy-900 leading-snug line-clamp-2 mb-1.5 hover:text-brand-500"

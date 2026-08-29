@@ -19,12 +19,10 @@ export default function SearchResults() {
 
     const activeRegName = (region?.name || "Varanasi").toLowerCase().trim();
 
-    // STRICT VENDOR LISTED PRODUCTS ONLY
-    const vendorProductsOnly = products.filter((p) => {
-      // Must be approved vendor listing
+    // 1. Filter ALL approved vendor product listings in active region
+    const vendorListingsInRegion = products.filter((p) => {
       if (p.approvalStatus !== "APPROVED" || p.isActive === false || p.isVendorSuspended) return false;
 
-      // Must belong to active region (or match active region)
       const pRegName = (p.regionName || p.districtName || p.vendor?.region?.name || "").toLowerCase().trim();
       if (pRegName && activeRegName) {
         const matchesReg = pRegName === activeRegName || pRegName.includes(activeRegName) || activeRegName.includes(pRegName);
@@ -34,51 +32,42 @@ export default function SearchResults() {
       return true;
     });
 
-    const map = new Map();
-    vendorProductsOnly.forEach((p) => {
+    // 2. Filter vendor listings matching active search query
+    const matchedListings = vendorListingsInRegion.filter((p) => {
       const name = (p.name || "").toLowerCase();
       const brand = (p.brand || "").toLowerCase();
       const category = (p.categoryName || p.category?.name || p.type || "").toLowerCase();
       const grade = (p.grade || "").toLowerCase();
       const desc = (p.desc || p.description || "").toLowerCase();
+      const seller = (p.vendorName || p.vendor?.shopName || "").toLowerCase();
 
-      const matchesQuery =
+      return (
         name.includes(activeQuery) ||
         brand.includes(activeQuery) ||
         category.includes(activeQuery) ||
         grade.includes(activeQuery) ||
-        desc.includes(activeQuery);
-
-      if (matchesQuery) {
-        const key = (p.masterProductId || p.name || p.id).toLowerCase().trim();
-        const itemPrice = Math.round(Number(p.price) || 100);
-
-        if (!map.has(key)) {
-          const calculatedMrp = p.mrp || Math.round(itemPrice * 1.15);
-          map.set(key, {
-            id: p.id,
-            name: p.name,
-            brand: p.brand || "Vendor Certified",
-            vendorName: p.vendorName || "District Vendor",
-            img: p.img || p.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
-            mrp: calculatedMrp,
-            price: itemPrice,
-            rating: p.rating || "4.9",
-            reviews: p.reviews || 36,
-          });
-        } else {
-          // Pick lowest vendor price when multiple vendors sell the same product
-          const existing = map.get(key);
-          if (itemPrice < existing.price) {
-            existing.price = itemPrice;
-            existing.mrp = p.mrp || Math.round(itemPrice * 1.15);
-            existing.id = p.id;
-          }
-        }
-      }
+        desc.includes(activeQuery) ||
+        seller.includes(activeQuery)
+      );
     });
 
-    return Array.from(map.values());
+    // 3. Map each vendor's listing with their seller shop name and price
+    return matchedListings.map((p) => {
+      const itemPrice = Math.round(Number(p.price) || 100);
+      const calculatedMrp = p.mrp || Math.round(itemPrice * 1.15);
+
+      return {
+        id: p.id,
+        name: p.name,
+        brand: p.brand || "Vendor Certified",
+        vendorName: p.vendorName || p.vendor?.shopName || "District Vendor",
+        img: p.img || p.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+        mrp: calculatedMrp,
+        price: itemPrice,
+        rating: p.rating || "4.9",
+        reviews: p.reviews || 36,
+      };
+    });
   }, [products, activeQuery, region]);
 
   const handleSubmit = (e) => {

@@ -42,25 +42,17 @@ export function AuthProvider({ children }) {
   };
 
   const requestOtp = async (phone) => {
-    const cleanPhone = phone.trim();
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/auth/otp/request`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: cleanPhone }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to dispatch OTP");
-      }
-      return data;
-    } catch (err) {
-      if (err.message.toLowerCase().includes("vendor")) {
-        throw err;
-      }
-      console.warn("Backend API requestOtp note:", err.message);
-      return { success: true, message: "OTP Dispatched" };
+    const cleanPhone = phone.trim().replace(/\D/g, "").slice(-10);
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/otp/request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: cleanPhone }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to dispatch OTP");
     }
+    return data;
   };
 
   const verifyOtp = async ({ phone, otp, role = "customer", name }) => {

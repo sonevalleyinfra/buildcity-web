@@ -25,14 +25,15 @@ export default function Login() {
   const handleSendOtp = async (e) => {
     e.preventDefault();
     setError("");
-    if (!/^\d{10}$/.test(phone.trim())) {
+    const cleanedMobile = phone.replace(/\D/g, "").slice(-10);
+    if (cleanedMobile.length !== 10) {
       setError("Please enter a valid 10-digit mobile number");
       return;
     }
 
     setLoading(true);
     try {
-      const resData = await requestOtp(phone.trim());
+      const resData = await requestOtp(cleanedMobile);
       if (resData?.otp) {
         setDemoOtp(resData.otp);
       }

@@ -150,7 +150,8 @@ export default function Cart() {
     setCouponError("");
   };
 
-  const deliveryCharge = subtotal >= 999 ? 0 : 49;
+  const baseDeliveryFee = Number(region?.baseDeliveryCharge) || 49;
+  const deliveryCharge = subtotal >= 25000 ? 0 : baseDeliveryFee;
   const couponDiscount = appliedCoupon ? appliedCoupon.discountAmount : 0;
   const total = Math.max(0, subtotal + deliveryCharge - couponDiscount);
   const mrpDiscount = Math.max(0, mrpTotal - subtotal);

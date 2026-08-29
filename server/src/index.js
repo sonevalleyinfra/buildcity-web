@@ -1920,7 +1920,14 @@ app.post("/api/v1/orders/checkout", async (req, res) => {
       }
     }
 
-    const calculatedDeliveryFee = Number(deliveryFee) || 49;
+    let regForDelivery = await prisma.region.findFirst({
+      where: { name: { equals: targetRegionName, mode: "insensitive" } },
+    }).catch(() => null);
+
+    const defaultRegFee = regForDelivery ? Number(regForDelivery.baseDeliveryCharge) : 49;
+    const calculatedDeliveryFee = deliveryFee !== undefined && !isNaN(Number(deliveryFee))
+      ? Number(deliveryFee)
+      : defaultRegFee;
     const finalOrderAmount = serverTotalAmount + calculatedDeliveryFee;
 
     const newOrder = await prisma.order.create({

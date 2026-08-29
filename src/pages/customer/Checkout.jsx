@@ -91,7 +91,8 @@ export default function Checkout() {
     return <Navigate to="/cart" replace />;
   }
 
-  const deliveryCharge = subtotal >= 999 ? 0 : 49;
+  const baseDeliveryFee = Number(region?.baseDeliveryCharge) || 49;
+  const deliveryCharge = subtotal >= 25000 ? 0 : baseDeliveryFee;
   const total = subtotal + deliveryCharge;
   const activeAddress = dbAddresses.find((a) => a.id === selectedAddrId) || dbAddresses[0];
 

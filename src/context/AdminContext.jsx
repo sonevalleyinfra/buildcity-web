@@ -185,8 +185,26 @@ export function AdminProvider({ children }) {
             addedByDr: v.addedByDr || "Admin",
           };
         });
-        localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(formattedVendors));
-        setVendors((prev) => (JSON.stringify(prev) === JSON.stringify(formattedVendors) ? prev : formattedVendors));
+
+        setVendors((prev) => {
+          const prevMap = new Map(prev.map((v) => [v.id, v]));
+          const merged = formattedVendors.map((fv) => {
+            const local = prevMap.get(fv.id) || prev.find((pv) => pv.phone && fv.phone && pv.phone === fv.phone);
+            if (local && local.status && local.status !== fv.status) {
+              return { ...fv, status: local.status };
+            }
+            return fv;
+          });
+          prev.forEach((pv) => {
+            if (!merged.some((m) => m.id === pv.id || (m.phone && pv.phone && m.phone === pv.phone))) {
+              merged.push(pv);
+            }
+          });
+          try {
+            localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(merged));
+          } catch {}
+          return JSON.stringify(prev) === JSON.stringify(merged) ? prev : merged;
+        });
       }
 
       if (masterRes && Array.isArray(masterRes)) {

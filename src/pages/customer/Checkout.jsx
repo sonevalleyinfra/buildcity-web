@@ -14,7 +14,7 @@ export default function Checkout() {
   const { placeOrder } = useOrders();
   const { showAlert } = useAlert();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, updateProfile } = useAuth();
   const { region } = useRegion();
   const { addresses: contextAddresses = [], addAddress: addContextAddress } = useAddresses();
 
@@ -31,6 +31,27 @@ export default function Checkout() {
   const [newCity, setNewCity] = useState(region?.name || "Varanasi");
   const [newPincode, setNewPincode] = useState("221001");
   const [savingAddr, setSavingAddr] = useState(false);
+
+  // Auto-update profile name if current name is missing, default, or placeholder
+  const maybeUpdateProfileName = (enteredName) => {
+    if (!enteredName || typeof enteredName !== "string" || !updateProfile) return;
+    const clean = enteredName.trim();
+    if (clean.length < 2) return;
+
+    const current = (user?.name || "").trim().toLowerCase();
+    const isPlaceholder =
+      !current ||
+      current === "customer" ||
+      current === "user" ||
+      current === "verified customer" ||
+      /^customer\s*\d*$/i.test(current) ||
+      /^user\s*\d*$/i.test(current);
+
+    if (isPlaceholder && clean.toLowerCase() !== current) {
+      console.log("👤 Auto-updating customer profile name to:", clean);
+      updateProfile({ name: clean }).catch(() => null);
+    }
+  };
 
   // Load Profile / Context Addresses for Logged-In Customer (Zero 404 network errors)
   useEffect(() => {
@@ -92,6 +113,11 @@ export default function Checkout() {
     if (!newStreet || !newCity) return;
 
     setSavingAddr(true);
+
+    if (newFullName && newFullName.trim()) {
+      maybeUpdateProfileName(newFullName);
+    }
+
     addContextAddress({
       line: newStreet,
       city: newCity,
@@ -153,6 +179,10 @@ export default function Checkout() {
         state: "Uttar Pradesh",
         pincode: newPincode || "221001",
       };
+    }
+
+    if (targetAddr.fullName && targetAddr.fullName.trim()) {
+      maybeUpdateProfileName(targetAddr.fullName);
     }
 
     setPlacing(true);

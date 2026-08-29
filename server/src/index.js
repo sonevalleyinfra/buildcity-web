@@ -1634,6 +1634,25 @@ app.post("/api/v1/addresses", async (req, res) => {
       });
     }
 
+    // Auto-update customer profile name in DB if name was previously default or placeholder
+    if (targetUser && targetUser.id && fullName && fullName.trim()) {
+      const currentName = (targetUser.name || "").trim().toLowerCase();
+      const isPlaceholder =
+        !currentName ||
+        currentName === "customer" ||
+        currentName === "user" ||
+        currentName === "verified customer" ||
+        /^customer\s*\d*$/i.test(currentName) ||
+        /^user\s*\d*$/i.test(currentName);
+
+      if (isPlaceholder && fullName.trim().length > 1) {
+        await prisma.user.update({
+          where: { id: targetUser.id },
+          data: { name: fullName.trim() },
+        }).catch(() => null);
+      }
+    }
+
     const regName = city || "Mirzapur";
     let reg = await prisma.region.findFirst({
       where: { name: { equals: regName.trim(), mode: "insensitive" } },

@@ -2,9 +2,11 @@ import { useState } from "react";
 import Navbar from "../../components/Navbar";
 import BottomNav from "../../components/BottomNav";
 import { useAddresses } from "../../context/AddressContext";
+import { useAuth } from "../../context/AuthContext";
 
 const emptyForm = {
   label: "Home",
+  fullName: "",
   line: "",
   city: "",
   state: "",
@@ -15,6 +17,7 @@ const emptyForm = {
 export default function Addresses() {
   const { addresses, addAddress, updateAddress, removeAddress, setDefault } =
     useAddresses();
+  const { user, updateProfile } = useAuth();
 
   const uniqueAddresses = Array.from(
     new Map(
@@ -28,19 +31,39 @@ export default function Addresses() {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
 
+  const maybeUpdateProfileName = (enteredName) => {
+    if (!enteredName || typeof enteredName !== "string" || !updateProfile) return;
+    const clean = enteredName.trim();
+    if (clean.length < 2) return;
+
+    const current = (user?.name || "").trim().toLowerCase();
+    const isPlaceholder =
+      !current ||
+      current === "customer" ||
+      current === "user" ||
+      current === "verified customer" ||
+      /^customer\s*\d*$/i.test(current) ||
+      /^user\s*\d*$/i.test(current);
+
+    if (isPlaceholder && clean.toLowerCase() !== current) {
+      console.log("👤 Auto-updating customer profile name to:", clean);
+      updateProfile({ name: clean }).catch(() => null);
+    }
+  };
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setForm((f) => ({ ...f, [name]: type === "checkbox" ? checked : value }));
   };
 
   const openAdd = () => {
-    setForm(emptyForm);
+    setForm({ ...emptyForm, fullName: user?.name || "" });
     setEditingId(null);
     setShowForm(true);
   };
 
   const openEdit = (addr) => {
-    setForm(addr);
+    setForm({ ...addr, fullName: addr.fullName || user?.name || "" });
     setEditingId(addr.id);
     setShowForm(true);
   };
@@ -48,6 +71,10 @@ export default function Addresses() {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.line.trim() || !form.city.trim() || !form.pincode.trim()) return;
+
+    if (form.fullName && form.fullName.trim()) {
+      maybeUpdateProfileName(form.fullName);
+    }
 
     if (editingId) {
       updateAddress(editingId, form);
@@ -100,6 +127,13 @@ export default function Addresses() {
               ))}
             </div>
 
+            <input
+              name="fullName"
+              value={form.fullName || ""}
+              onChange={handleChange}
+              placeholder="Full Name (Receiver Name)"
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 outline-none focus:border-brand-500 font-semibold"
+            />
             <input
               name="line"
               value={form.line}

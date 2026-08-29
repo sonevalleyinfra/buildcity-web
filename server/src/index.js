@@ -370,8 +370,8 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
     // Dispatch Live SMS via Aradhya Technologies SMS Gateway API
     const username = process.env.ARADHYA_SMS_USERNAME || "sonevalley";
     const apikey = process.env.ARADHYA_SMS_APIKEY || "0A8CC-B46EE";
-    const sender = process.env.ARADHYA_SMS_SENDER || "SenderID";
-    const templateId = process.env.ARADHYA_SMS_TEMPLATE_ID || "DLT-Template-ID";
+    const sender = process.env.ARADHYA_SMS_SENDER || "SONVLY";
+    const templateId = process.env.ARADHYA_SMS_TEMPLATE_ID || "1702160915855670817";
     const route = process.env.ARADHYA_SMS_ROUTE || "TRANS";
 
     const cleanMobile = cleanPhone.slice(-10);
@@ -381,7 +381,7 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
 
     let smsGatewayStatus = "dispatched";
     try {
-      const query = new URLSearchParams({
+      const queryParams = {
         username,
         apikey,
         apirequest: "Text",
@@ -391,7 +391,12 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
         route,
         TemplateID: templateId,
         format: "JSON"
-      }).toString();
+      };
+      if (process.env.ARADHYA_SMS_PE_ID || "1701175266640135857") {
+        queryParams.peid = process.env.ARADHYA_SMS_PE_ID || "1701175266640135857";
+      }
+
+      const query = new URLSearchParams(queryParams).toString();
 
       fetch(`https://sms.aradhyatechnologies.in/sms-panel/api/http/index.php?${query}`)
         .then((res) => res.json().catch(() => res.text()))

@@ -139,6 +139,7 @@ export default function ProductDetail() {
         category: realProd.categoryName || "Material",
         vendorId: realProd.vendorId,
         vendorName: realProd.vendorName,
+        isVendorSuspended: realProd.isVendorSuspended === true,
         images: extractedImages,
         mrp,
         price: Number(realProd.price) || 100,
@@ -168,14 +169,14 @@ export default function ProductDetail() {
   // Check if vendor is suspended (strict unique ID check)
   const isVendorSuspended = useMemo(() => {
     if (!product) return false;
-    if (product.isVendorSuspended === true) return true;
     if (product.vendorId && Array.isArray(vendors) && vendors.length > 0) {
       const v = vendors.find(
         (v) => String(v.id).toLowerCase() === String(product.vendorId).toLowerCase()
       );
       if (v && v.status === "SUSPENDED") return true;
+      if (v && v.status === "APPROVED") return false;
     }
-    return false;
+    return Boolean(product.isVendorSuspended);
   }, [product, vendors]);
 
   const [qty, setQty] = useState(1);

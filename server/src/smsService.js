@@ -44,6 +44,8 @@ async function sendRealSMSOTP(phone, otpCode) {
       }
     }, 3500);
 
+    const path = `/sms-panel/api/http/index.php?${queryParams}`;
+
     const options = {
       hostname: "sms.aradhyatechnologies.in",
       port: 443,

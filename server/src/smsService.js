@@ -46,47 +46,52 @@ async function sendRealSMSOTP(phone, otpCode) {
 
     const path = `/sms-panel/api/http/index.php?${queryParams}`;
 
-    const options = {
-      hostname: "sms.aradhyatechnologies.in",
-      port: 443,
-      path: path,
-      method: "GET",
-      rejectUnauthorized: false,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Connection": "close"
-      }
-    };
+    function doFetch(protocol, port) {
+      const client = protocol === "https" ? https : http;
+      const opts = {
+        hostname: "sms.aradhyatechnologies.in",
+        port,
+        path,
+        method: "GET",
+        rejectUnauthorized: false,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Connection": "close"
+        }
+      };
 
-    const req = https.request(options, (res) => {
-      let responseBody = "";
-      res.on("data", (chunk) => { responseBody += chunk; });
-      res.on("end", () => {
-        if (!resolved) {
+      const req = client.request(opts, (res) => {
+        let body = "";
+        res.on("data", (chunk) => { body += chunk; });
+        res.on("end", () => {
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeoutTimer);
+            let parsed = null;
+            try { parsed = JSON.parse(body); } catch { parsed = { raw: body }; }
+            console.log(`[Aradhya SMS Gateway] ${protocol.toUpperCase()} Response for +91 ${cleanMobile}:`, parsed);
+            resolve({ success: true, data: parsed, gateway: "AradhyaSMS" });
+          }
+        });
+      });
+
+      req.on("error", (err) => {
+        console.warn(`[Aradhya SMS] ${protocol.toUpperCase()} failed:`, err.message);
+        if (protocol === "https" && !resolved) {
+          console.log(`[Aradhya SMS] Triggering HTTP fallback for +91 ${cleanMobile}...`);
+          doFetch("http", 80);
+        } else if (!resolved) {
           resolved = true;
           clearTimeout(timeoutTimer);
-          let parsedData = null;
-          try {
-            parsedData = JSON.parse(responseBody);
-          } catch {
-            parsedData = { raw: responseBody };
-          }
-          console.log(`[Aradhya SMS Gateway] HTTPS Response for +91 ${cleanMobile}:`, parsedData);
-          resolve({ success: true, data: parsedData, gateway: "AradhyaSMS" });
+          resolve({ success: false, error: err.message, gateway: "AradhyaSMS" });
         }
       });
-    });
 
-    req.on("error", (err) => {
-      console.error(`[Aradhya HTTPS Error] +91 ${cleanMobile}:`, err.message);
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timeoutTimer);
-        resolve({ success: false, error: err.message, gateway: "AradhyaSMS" });
-      }
-    });
+      req.end();
+    }
 
-    req.end();
+    // Try HTTPS first, auto-fallback to HTTP
+    doFetch("https", 443);
   });
 }
 

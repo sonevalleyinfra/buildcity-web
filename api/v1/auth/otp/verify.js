@@ -1,24 +1,7 @@
 const otpStore = global.__otpStore || new Map();
 global.__otpStore = otpStore;
 
-async function getRequestBody(req) {
-  if (req.body && typeof req.body === "object") return req.body;
-  if (typeof req.body === "string") {
-    try { return JSON.parse(req.body); } catch { return {}; }
-  }
-  try {
-    const chunks = [];
-    for await (const chunk of req) {
-      chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
-    }
-    const raw = Buffer.concat(chunks).toString("utf8");
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -32,8 +15,11 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const body = await getRequestBody(req);
-    const { phone, otp, name } = body;
+    let body = req.body;
+    if (typeof body === "string") {
+      try { body = JSON.parse(body); } catch { body = {}; }
+    }
+    const { phone, otp, name } = body || {};
 
     if (!phone || !otp) {
       return res.status(400).json({ error: "Phone and OTP required" });
@@ -74,4 +60,4 @@ module.exports = async (req, res) => {
   } catch (err) {
     return res.status(500).json({ error: "Verification error", details: err.message });
   }
-};
+}

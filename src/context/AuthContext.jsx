@@ -41,44 +41,32 @@ export function AuthProvider({ children }) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(userObj));
   };
 
+  const getOtpEndpoint = (path) => {
+    if (typeof window !== "undefined" && window.location.hostname === "localhost") {
+      return `http://localhost:5000${path}`;
+    }
+    return path;
+  };
+
   const requestOtp = async (phone) => {
     const cleanPhone = phone.trim().replace(/\D/g, "").slice(-10);
-    
-    // Tier 1: Try Primary Backend API
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/auth/otp/request`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: cleanPhone }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (response.ok && data.success) {
-        return data;
-      }
-      if (data.error && (data.isStaffBlocked || data.error.includes("Vendor"))) {
-        throw new Error(data.error);
-      }
-    } catch (err) {
-      if (err.message && (err.message.includes("Vendor") || err.message.includes("Partner"))) {
-        throw err;
-      }
-    }
+    const endpoint = getOtpEndpoint("/api/v1/auth/otp/request");
 
-    // Tier 2: Direct Mumbai Serverless Edge Fallback
-    const fallbackRes = await fetch(`/api/v1/auth/otp/request`, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone: cleanPhone }),
     });
-    const fallbackData = await fallbackRes.json();
-    if (!fallbackRes.ok) {
-      throw new Error(fallbackData.error || "Failed to dispatch OTP");
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || "Failed to dispatch OTP");
     }
-    return fallbackData;
+    return data;
   };
 
   const verifyOtp = async ({ phone, otp, role = "customer", name }) => {
-    const cleanPhone = phone.trim();
+    const cleanPhone = phone.trim().replace(/\D/g, "").slice(-10);
     const cleanOtp = otp.trim();
 
     // Check vendor account locally to block OTP login for vendors immediately
@@ -93,28 +81,14 @@ export function AuthProvider({ children }) {
       throw new Error("Vendor accounts cannot log in using Mobile OTP. Please click 'Login as a Vendor Partner' at the bottom right!");
     }
 
-    // Verify with Express REST API or Mumbai Serverless Edge
-    let apiRes = null;
-    let apiData = null;
+    const endpoint = getOtpEndpoint("/api/v1/auth/otp/verify");
+    const apiRes = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: cleanPhone, otp: cleanOtp, name }),
+    });
 
-    try {
-      apiRes = await fetch(`${API_BASE_URL}/api/v1/auth/otp/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: cleanPhone, otp: cleanOtp }),
-      });
-      apiData = await apiRes.json().catch(() => ({}));
-    } catch {}
-
-    if (!apiRes || !apiRes.ok || !apiData?.success) {
-      apiRes = await fetch(`/api/v1/auth/otp/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: cleanPhone, otp: cleanOtp }),
-      });
-      apiData = await apiRes.json();
-    }
-
+    const apiData = await apiRes.json().catch(() => ({}));
     if (!apiRes.ok || !apiData.success) {
       throw new Error(apiData.error || "Incorrect OTP. Please enter the valid code sent to your mobile number.");
     }

@@ -43,16 +43,38 @@ export function AuthProvider({ children }) {
 
   const requestOtp = async (phone) => {
     const cleanPhone = phone.trim().replace(/\D/g, "").slice(-10);
-    const response = await fetch(`${API_BASE_URL}/api/v1/auth/otp/request`, {
+    
+    // Tier 1: Try Primary Backend API
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/otp/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: cleanPhone }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data.success) {
+        return data;
+      }
+      if (data.error && (data.isStaffBlocked || data.error.includes("Vendor"))) {
+        throw new Error(data.error);
+      }
+    } catch (err) {
+      if (err.message && (err.message.includes("Vendor") || err.message.includes("Partner"))) {
+        throw err;
+      }
+    }
+
+    // Tier 2: Direct Mumbai Serverless Edge Fallback
+    const fallbackRes = await fetch(`/api/v1/auth/otp/request`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone: cleanPhone }),
     });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || "Failed to dispatch OTP");
+    const fallbackData = await fallbackRes.json();
+    if (!fallbackRes.ok) {
+      throw new Error(fallbackData.error || "Failed to dispatch OTP");
     }
-    return data;
+    return fallbackData;
   };
 
   const verifyOtp = async ({ phone, otp, role = "customer", name }) => {
@@ -71,13 +93,28 @@ export function AuthProvider({ children }) {
       throw new Error("Vendor accounts cannot log in using Mobile OTP. Please click 'Login as a Vendor Partner' at the bottom right!");
     }
 
-    // Verify strictly with Express REST API & Supabase PostgreSQL Database
-    const apiRes = await fetch(`${API_BASE_URL}/api/v1/auth/otp/verify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: cleanPhone, otp: cleanOtp }),
-    });
-    const apiData = await apiRes.json();
+    // Verify with Express REST API or Mumbai Serverless Edge
+    let apiRes = null;
+    let apiData = null;
+
+    try {
+      apiRes = await fetch(`${API_BASE_URL}/api/v1/auth/otp/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: cleanPhone, otp: cleanOtp }),
+      });
+      apiData = await apiRes.json().catch(() => ({}));
+    } catch {}
+
+    if (!apiRes || !apiRes.ok || !apiData?.success) {
+      apiRes = await fetch(`/api/v1/auth/otp/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: cleanPhone, otp: cleanOtp }),
+      });
+      apiData = await apiRes.json();
+    }
+
     if (!apiRes.ok || !apiData.success) {
       throw new Error(apiData.error || "Incorrect OTP. Please enter the valid code sent to your mobile number.");
     }

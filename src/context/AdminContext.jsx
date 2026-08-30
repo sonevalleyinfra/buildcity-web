@@ -18,6 +18,7 @@ const seedRegions = [];
 
 const seedMasterProducts = [];
 const seedProducts = [];
+const seedUsers = [];
 
 const CATS_STORAGE_KEY = "buildcity_admin_categories";
 const REGS_STORAGE_KEY = "buildcity_admin_regions";

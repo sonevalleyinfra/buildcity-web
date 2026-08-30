@@ -1767,11 +1767,57 @@ app.post("/api/v1/orders/checkout", async (req, res) => {
       }
     }
 
-    let targetCustomerId = customerId;
-    if (!targetCustomerId) {
-      const defaultCust = await prisma.user.findFirst({ where: { role: "CUSTOMER" } });
-      targetCustomerId = defaultCust ? defaultCust.id : (await prisma.user.create({ data: { phone: "7607650875", name: "Customer", role: "CUSTOMER", tokenVersion: 1 } })).id;
+    // 1. Resolve or create valid User in Supabase DB (FK-Safe UUID Resolution)
+    let targetCustomerId = null;
+    let targetUser = null;
+
+    const incomingPhone = (
+      req.body.phone ||
+      req.body.address?.phone ||
+      (typeof customerId === "string" && customerId.startsWith("cust_") ? customerId.replace("cust_", "") : "") ||
+      (typeof customerId === "string" && !customerId.includes("-") ? customerId : "")
+    ).replace(/\D/g, "");
+
+    // A. Check if customerId is a valid UUID in users table
+    if (customerId && customerId.length > 20 && !customerId.startsWith("cust_") && !customerId.startsWith("user_")) {
+      targetUser = await prisma.user.findUnique({ where: { id: customerId } }).catch(() => null);
     }
+
+    // B. Check by phone number
+    if (!targetUser && incomingPhone && incomingPhone.length >= 8) {
+      targetUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { phone: incomingPhone },
+            { phone: { contains: incomingPhone.slice(-10) } },
+          ],
+        },
+      }).catch(() => null);
+    }
+
+    // C. If user not found, create new customer user in DB
+    if (!targetUser) {
+      const userPhone = incomingPhone && incomingPhone.length >= 10 ? incomingPhone : `cust_${Date.now()}`;
+      targetUser = await prisma.user.create({
+        data: {
+          phone: userPhone,
+          name: req.body.address?.fullName || "Customer",
+          role: "CUSTOMER",
+          tokenVersion: 1,
+        },
+      }).catch(async () => {
+        return await prisma.user.findFirst({ where: { role: "CUSTOMER" } }).catch(() => null);
+      });
+    }
+
+    if (!targetUser) {
+      targetUser = await prisma.user.findFirst().catch(() => null);
+    }
+
+    targetCustomerId = targetUser?.id;
+
+    // Ensure we always have a valid default Vendor for OrderItem relations
+    let defaultVendor = await prisma.vendor.findFirst().catch(() => null);
 
     // Customer Address Save / Link Logic (FK-Safe UUID Resolution)
     let addressId = null;
@@ -1787,7 +1833,7 @@ app.post("/api/v1/orders/checkout", async (req, res) => {
         reg = await prisma.region.findFirst().catch(() => null);
       }
 
-      if (reg && reg.id) {
+      if (reg && reg.id && targetCustomerId) {
         const createdAddress = await prisma.address.create({
           data: {
             userId: targetCustomerId,
@@ -1818,7 +1864,7 @@ app.post("/api/v1/orders/checkout", async (req, res) => {
         const itemQty = Math.max(1, Number(item.quantity) || 1);
         const prodName = item.name || item.productName || "Material Item";
 
-        // Fetch live vendor product from Supabase DB specifically FOR THE SELECTED REGION
+        // Fetch live vendor product from Supabase DB
         let liveVp = null;
 
         if (item.id || item.productId) {
@@ -1873,14 +1919,12 @@ app.post("/api/v1/orders/checkout", async (req, res) => {
           const fallbackTotal = itemQty * fallbackPrice;
           serverTotalAmount += fallbackTotal;
 
-          const defaultVendor = await prisma.vendor.findFirst().catch(() => null);
-
           validatedItems.push({
             productName: prodName,
             priceAtPurchase: fallbackPrice,
             quantity: itemQty,
             totalPrice: fallbackTotal,
-            vendorId: item.vendorId || (defaultVendor ? defaultVendor.id : null),
+            vendorId: item.vendorId || defaultVendor?.id,
           });
           continue;
         }
@@ -1904,7 +1948,7 @@ app.post("/api/v1/orders/checkout", async (req, res) => {
           priceAtPurchase: verifiedPrice,
           quantity: itemQty,
           totalPrice: itemTotal,
-          vendorId: targetVendor ? targetVendor.id : item.vendorId,
+          vendorId: targetVendor ? targetVendor.id : (defaultVendor ? defaultVendor.id : item.vendorId),
         });
       }
     }
@@ -1932,16 +1976,19 @@ app.post("/api/v1/orders/checkout", async (req, res) => {
     });
 
     for (const vItem of validatedItems) {
-      await prisma.orderItem.create({
-        data: {
-          orderId: newOrder.id,
-          productName: vItem.productName,
-          priceAtPurchase: vItem.priceAtPurchase,
-          quantity: vItem.quantity,
-          totalPrice: vItem.totalPrice,
-          vendorId: vItem.vendorId || null,
-        },
-      }).catch((e) => console.warn("OrderItem creation note:", e.message));
+      const vId = vItem.vendorId || defaultVendor?.id;
+      if (vId) {
+        await prisma.orderItem.create({
+          data: {
+            orderId: newOrder.id,
+            productName: vItem.productName,
+            priceAtPurchase: vItem.priceAtPurchase,
+            quantity: vItem.quantity,
+            totalPrice: vItem.totalPrice,
+            vendorId: vId,
+          },
+        }).catch((e) => console.warn("OrderItem creation note:", e.message));
+      }
     }
 
     const fullOrder = await prisma.order.findUnique({
@@ -1949,6 +1996,7 @@ app.post("/api/v1/orders/checkout", async (req, res) => {
       include: { items: true, customer: true, address: true },
     });
 
+    console.log(`✅ Order ${newOrder.id} created successfully for customer ${targetCustomerId}`);
     res.status(201).json({ success: true, order: fullOrder });
   } catch (err) {
     console.error("Order checkout error:", err);

@@ -18,15 +18,15 @@ const categoryTiles = [
 ];
 
 const brands = [
-  { name: "UltraTech", category: "Cement", short: "UltraTech", logo: "https://www.google.com/s2/favicons?domain=ultratechcement.com&sz=128", logoAlt: "https://logo.clearbit.com/ultratechcement.com", initials: "UT", color: "#D97706", bg: "#FEF3C7" },
-  { name: "Asian Paints", category: "Paints", short: "Asian Paints", logo: "https://www.google.com/s2/favicons?domain=asianpaints.com&sz=128", logoAlt: "https://logo.clearbit.com/asianpaints.com", initials: "AP", color: "#DC2626", bg: "#FEE2E2" },
-  { name: "Tata Tiscon", category: "Steel 550D", short: "Tata Tiscon", logo: "https://www.google.com/s2/favicons?domain=tatatiscon.co.in&sz=128", logoAlt: "https://logo.clearbit.com/tatatiscon.co.in", initials: "TT", color: "#0284C7", bg: "#E0F2FE" },
-  { name: "Ambuja", category: "Waterproof", short: "Ambuja", logo: "https://www.google.com/s2/favicons?domain=ambujacement.com&sz=128", logoAlt: "https://logo.clearbit.com/ambujacement.com", initials: "AC", color: "#16A34A", bg: "#DCFCE7" },
-  { name: "Astral Pipes", category: "Plumbing", short: "Astral", logo: "https://www.google.com/s2/favicons?domain=astralpipes.com&sz=128", logoAlt: "https://logo.clearbit.com/astralpipes.com", initials: "AP", color: "#0EA5E9", bg: "#E0F2FE" },
-  { name: "Finolex", category: "Electrical", short: "Finolex", logo: "https://www.google.com/s2/favicons?domain=finolex.com&sz=128", logoAlt: "https://logo.clearbit.com/finolex.com", initials: "FC", color: "#E11D48", bg: "#FFE4E6" },
-  { name: "Berger", category: "Coatings", short: "Berger", logo: "https://www.google.com/s2/favicons?domain=bergerpaints.com&sz=128", logoAlt: "https://logo.clearbit.com/bergerpaints.com", initials: "BP", color: "#9333EA", bg: "#F3E8FF" },
-  { name: "Havells", category: "Switches", short: "Havells", logo: "https://www.google.com/s2/favicons?domain=havells.com&sz=128", logoAlt: "https://logo.clearbit.com/havells.com", initials: "HI", color: "#2563EB", bg: "#DBEAFE" },
-  { name: "Kajaria", category: "Ceramics", short: "Kajaria", logo: "https://www.google.com/s2/favicons?domain=kajariaceramics.com&sz=128", logoAlt: "https://logo.clearbit.com/kajariaceramics.com", initials: "KC", color: "#B45309", bg: "#FEF3C7" },
+  { name: "UltraTech", category: "Cement", short: "UltraTech", initials: "UT", color: "#D97706", bg: "#FEF3C7" },
+  { name: "Asian Paints", category: "Paints", short: "Asian Paints", initials: "AP", color: "#DC2626", bg: "#FEE2E2" },
+  { name: "Tata Tiscon", category: "Steel 550D", short: "Tata Tiscon", initials: "TT", color: "#0284C7", bg: "#E0F2FE" },
+  { name: "Ambuja", category: "Waterproof", short: "Ambuja", initials: "AC", color: "#16A34A", bg: "#DCFCE7" },
+  { name: "Astral Pipes", category: "Plumbing", short: "Astral", initials: "AP", color: "#0EA5E9", bg: "#E0F2FE" },
+  { name: "Finolex", category: "Electrical", short: "Finolex", initials: "FC", color: "#E11D48", bg: "#FFE4E6" },
+  { name: "Berger", category: "Coatings", short: "Berger", initials: "BP", color: "#9333EA", bg: "#F3E8FF" },
+  { name: "Havells", category: "Switches", short: "Havells", initials: "HI", color: "#2563EB", bg: "#DBEAFE" },
+  { name: "Kajaria", category: "Ceramics", short: "Kajaria", initials: "KC", color: "#B45309", bg: "#FEF3C7" },
 ];
 
 const services = [

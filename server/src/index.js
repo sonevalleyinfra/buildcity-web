@@ -355,22 +355,41 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins expiry
 
     // Save OTP record in DB
-    prisma.oTPVerification.create({
-      data: {
-        phone,
-        otp: generatedOtp,
-        expiresAt,
-      },
-    }).catch((e) => console.warn("Background OTP save note:", e.message));
+    try {
+      await prisma.oTPVerification.create({
+        data: {
+          phone: cleanPhone,
+          otp: generatedOtp,
+          expiresAt,
+        },
+      });
+    } catch (dbErr) {
+      console.error("[OTP DB Error]:", dbErr.message);
+      return res.status(500).json({
+        success: false,
+        error: "Database error: Could not save OTP verification record. Please check DATABASE_URL."
+      });
+    }
 
-    // Dispatch Live SMS via Aradhya Technologies SMS Gateway (HTTPS with timeout safety)
+    // Dispatch Live SMS via Aradhya Technologies SMS Gateway
     const smsResult = await sendRealSMSOTP(cleanPhone, generatedOtp);
+
+    if (!smsResult.success) {
+      return res.status(502).json({
+        success: false,
+        error: smsResult.message || smsResult.error || "SMS Gateway delivery failed",
+        gateway: smsResult.gateway || "AradhyaSMS",
+        smsStatus: "failed",
+        details: smsResult.data || smsResult.raw || null
+      });
+    }
 
     return res.json({
       success: true,
       message: `OTP dispatched to +91 ${cleanPhone.slice(-10)}`,
       gateway: smsResult.gateway || "AradhyaSMS",
-      smsStatus: smsResult.success ? "dispatched" : "failed",
+      smsStatus: "dispatched",
+      details: smsResult.data || null
     });
   } catch (err) {
     console.error("OTP dispatch error:", err);

@@ -8,12 +8,13 @@ const http = require("http");
 async function sendRealSMSOTP(phone, otpCode) {
   const cleanMobile = (phone || "").toString().trim().replace(/\D/g, "").slice(-10);
   
-  const username = "sonevalley";
-  const apikey = "0A8CC-B46EE";
-  const sender = "SNVLY";
-  const templateId = "1707175298595096991";
-  const peid = "1701175266640135857";
-  const route = "TRANS";
+  const username = process.env.SMS_USERNAME || process.env.ARADHYA_SMS_USERNAME || "sonevalley";
+  const apikey = process.env.SMS_APIKEY || process.env.ARADHYA_SMS_APIKEY || "0A8CC-B46EE";
+  const sender = process.env.SMS_SENDER || process.env.ARADHYA_SMS_SENDER || "SNVLY";
+  const templateId = process.env.SMS_TEMPLATE_ID || process.env.ARADHYA_SMS_TEMPLATE_ID || "1707175298595096991";
+  const peid = process.env.SMS_PEID || process.env.ARADHYA_SMS_PE_ID || "1701175266640135857";
+  const route = process.env.SMS_ROUTE || process.env.ARADHYA_SMS_ROUTE || "TRANS";
+  const timeoutMs = parseInt(process.env.SMS_TIMEOUT_MS || "15000", 10);
 
   const message = `Dear user, Thankyou for visiting Sonevalley. Your OTP for login is ${otpCode}. Please do not share this OTP with anyone. Regards SNVLY`;
 
@@ -30,28 +31,29 @@ async function sendRealSMSOTP(phone, otpCode) {
     format: "JSON"
   }).toString();
 
-  console.log(`[Aradhya SMS Gateway] GET Dispatching OTP ${otpCode} to +91 ${cleanMobile}...`);
+  const path = `/sms-panel/api/http/index.php?${queryParams}`;
 
   return new Promise((resolve) => {
     let resolved = false;
 
-    // Timeout safety (3.5s) so UI response never hangs or freezes
     const timeoutTimer = setTimeout(() => {
       if (!resolved) {
         resolved = true;
-        console.warn(`[Aradhya SMS Gateway] Timeout safety triggered after 3.5s for +91 ${cleanMobile}`);
-        resolve({ success: true, warning: "Timeout background dispatch", gateway: "AradhyaSMS" });
+        console.warn(`[SMS] Gateway timeout after ${timeoutMs}ms for +91 ${cleanMobile}`);
+        resolve({
+          success: false,
+          error: `SMS Gateway timeout after ${timeoutMs}ms`,
+          gateway: "AradhyaSMS"
+        });
       }
-    }, 3500);
-
-    const path = `/sms-panel/api/http/index.php?${queryParams}`;
+    }, timeoutMs);
 
     const options = {
       hostname: "sms.aradhyatechnologies.in",
       port: 443,
       path: path,
       method: "GET",
-      rejectUnauthorized: false // Handle SSL cert altname mismatch safely
+      rejectUnauthorized: false
     };
 
     const req = https.request(options, (res) => {
@@ -67,15 +69,31 @@ async function sendRealSMSOTP(phone, otpCode) {
           } catch {
             parsedData = { raw: responseBody };
           }
-          console.log(`[Aradhya SMS Gateway] Response for +91 ${cleanMobile}:`, parsedData);
-          resolve({ success: true, data: parsedData, gateway: "AradhyaSMS" });
+
+          const isSuccess =
+            res.statusCode >= 200 &&
+            res.statusCode < 300 &&
+            (parsedData?.status === "success" ||
+              parsedData?.status === "000" ||
+              (typeof responseBody === "string" && responseBody.toLowerCase().includes("successfully")));
+
+          console.log(`[SMS] HTTP ${res.statusCode} | ok=${isSuccess} | body:`, responseBody);
+
+          resolve({
+            success: isSuccess,
+            status: res.statusCode,
+            message: parsedData?.message || responseBody,
+            data: parsedData,
+            raw: responseBody,
+            gateway: "AradhyaSMS"
+          });
         }
       });
     });
 
     req.on("error", (err) => {
-      console.error(`[Aradhya HTTPS Error] +91 ${cleanMobile}:`, err.message);
-      // HTTP fallback if HTTPS fails
+      console.error(`[SMS HTTPS Error] +91 ${cleanMobile}:`, err.message);
+      // HTTP fallback
       http.get(`http://sms.aradhyatechnologies.in${path}`, (httpRes) => {
         let httpData = "";
         httpRes.on("data", (chunk) => { httpData += chunk; });
@@ -83,16 +101,38 @@ async function sendRealSMSOTP(phone, otpCode) {
           if (!resolved) {
             resolved = true;
             clearTimeout(timeoutTimer);
-            console.log(`[Aradhya HTTP Fallback Response] +91 ${cleanMobile}:`, httpData);
-            resolve({ success: true, data: httpData, gateway: "AradhyaSMS" });
+            let parsed = null;
+            try { parsed = JSON.parse(httpData); } catch { parsed = { raw: httpData }; }
+
+            const isSuccess =
+              httpRes.statusCode >= 200 &&
+              httpRes.statusCode < 300 &&
+              (parsed?.status === "success" ||
+                parsed?.status === "000" ||
+                (typeof httpData === "string" && httpData.toLowerCase().includes("successfully")));
+
+            console.log(`[SMS HTTP Fallback] HTTP ${httpRes.statusCode} | ok=${isSuccess} | body:`, httpData);
+
+            resolve({
+              success: isSuccess,
+              status: httpRes.statusCode,
+              message: parsed?.message || httpData,
+              data: parsed,
+              raw: httpData,
+              gateway: "AradhyaSMS"
+            });
           }
         });
       }).on("error", (httpErr) => {
         if (!resolved) {
           resolved = true;
           clearTimeout(timeoutTimer);
-          console.error(`[Aradhya HTTP Fallback Error]:`, httpErr.message);
-          resolve({ success: false, error: httpErr.message, gateway: "AradhyaSMS" });
+          console.error(`[SMS HTTP Fallback Error]:`, httpErr.message);
+          resolve({
+            success: false,
+            error: httpErr.message,
+            gateway: "AradhyaSMS"
+          });
         }
       });
     });

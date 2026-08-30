@@ -8,6 +8,7 @@ import { useRegion } from "../../context/RegionContext";
 import { useAddresses } from "../../context/AddressContext";
 import { useAlert } from "../../context/AlertContext";
 import { API_BASE_URL } from "../../config/api";
+import { formatShortId } from "../../utils/formatId";
 
 export default function Checkout() {
   const { items, subtotal, mrpTotal = subtotal, clearCart, hasRegionMismatch } = useCart();
@@ -32,6 +33,8 @@ export default function Checkout() {
   const [newPincode, setNewPincode] = useState("221001");
   const [savingAddr, setSavingAddr] = useState(false);
 
+  const [successOrder, setSuccessOrder] = useState(null);
+
   // Auto-update profile name if current name is missing, default, or placeholder
   const maybeUpdateProfileName = (enteredName) => {
     if (!enteredName || typeof enteredName !== "string" || !updateProfile) return;
@@ -53,7 +56,7 @@ export default function Checkout() {
     }
   };
 
-  // Load Profile / Context Addresses for Logged-In Customer (Zero 404 network errors)
+  // Load Profile / Context Addresses for Logged-In Customer (Zero 404 network errors & zero flickering)
   useEffect(() => {
     const cleanContext = (contextAddresses || []).map((ca) => ({
       id: ca.id || "addr_" + Date.now(),
@@ -87,7 +90,7 @@ export default function Checkout() {
     }
   }, [user, contextAddresses, region]);
 
-  if (items.length === 0) {
+  if (items.length === 0 && !successOrder) {
     return <Navigate to="/cart" replace />;
   }
 
@@ -102,7 +105,7 @@ export default function Checkout() {
         const res = await fetch(url, options);
         if (res.ok) return res;
       } catch (err) {
-        console.warn(`Render API retry ${i + 1}/${retries}:`, err.message);
+        console.warn(`API retry ${i + 1}/${retries}:`, err.message);
         if (i === retries - 1) throw err;
         await new Promise((r) => setTimeout(r, 800 * (i + 1)));
       }
@@ -119,13 +122,24 @@ export default function Checkout() {
       maybeUpdateProfileName(newFullName);
     }
 
-    addContextAddress({
+    const newObj = {
+      fullName: newFullName || user?.name || "Customer",
+      phone: newPhone || user?.phone || "7607650875",
       line: newStreet,
+      street: newStreet,
       city: newCity,
       state: "Uttar Pradesh",
       pincode: newPincode || "221001",
       isDefault: true,
-    });
+    };
+
+    try {
+      const added = await addContextAddress(newObj);
+      if (added && added.id) {
+        setDbAddresses((prev) => [added, ...prev.filter((p) => p.id !== added.id)]);
+        setSelectedAddrId(added.id);
+      }
+    } catch {}
 
     try {
       const res = await fetchWithRetry(`${API_BASE_URL}/api/v1/addresses`, {
@@ -133,18 +147,18 @@ export default function Checkout() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user?.id,
-          fullName: newFullName || user?.name || "Customer",
-          phone: newPhone || user?.phone || "7607650875",
-          street: newStreet,
-          city: newCity,
-          state: "Uttar Pradesh",
-          pincode: newPincode || "221001",
+          fullName: newObj.fullName,
+          phone: newObj.phone,
+          street: newObj.street,
+          city: newObj.city,
+          state: newObj.state,
+          pincode: newObj.pincode,
         }),
       });
 
       if (res && res.ok) {
         const created = await res.json();
-        setDbAddresses((prev) => [created, ...prev]);
+        setDbAddresses((prev) => [created, ...prev.filter((p) => p.id !== created.id)]);
         setSelectedAddrId(created.id);
       }
     } catch (err) {
@@ -233,7 +247,7 @@ export default function Checkout() {
 
       clearCart();
       setPlacing(false);
-      navigate(`/orders/${order.id}`, { replace: true });
+      setSuccessOrder(order);
     } catch (err) {
       setPlacing(false);
       showAlert({
@@ -546,19 +560,108 @@ export default function Checkout() {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="flex-1 bg-slate-100 text-slate-700 font-bold py-2.5 rounded-xl"
+                  className="flex-1 bg-slate-100 text-slate-700 font-bold py-2.5 rounded-xl cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={savingAddr}
-                  className="flex-1 bg-brand-500 text-white font-bold py-2.5 rounded-xl shadow-xs hover:bg-brand-600"
+                  className="flex-1 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] transition-all text-white font-bold py-2.5 rounded-xl shadow-xs disabled:opacity-60 cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  {savingAddr ? "Saving..." : "Save Address"}
+                  {savingAddr ? (
+                    <>
+                      <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                      </svg>
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    "✓ Save Address"
+                  )}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modern Order Success Celebration Screen / Modal */}
+      {successOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/80 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-emerald-100 text-center relative overflow-hidden animate-in zoom-in-95 duration-300">
+            {/* Ambient Top Glow */}
+            <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-64 h-64 bg-emerald-400/20 rounded-full blur-3xl pointer-events-none" />
+
+            {/* Success Checkmark Badge */}
+            <div className="relative mx-auto mb-4 w-20 h-20 rounded-full bg-emerald-50 border-4 border-emerald-100 flex items-center justify-center shadow-lg shadow-emerald-500/10">
+              <div className="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center text-2xl font-black shadow-md animate-bounce">
+                ✓
+              </div>
+            </div>
+
+            <span className="inline-block text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full uppercase tracking-wider mb-2">
+              Order Confirmed & Placed
+            </span>
+
+            <h2 className="text-2xl font-black text-navy-900 tracking-tight mb-1">
+              Thank You For Your Order!
+            </h2>
+            <p className="text-xs text-slate-500 font-medium mb-5">
+              Your construction material order has been dispatched to district vendors for immediate site delivery.
+            </p>
+
+            {/* Order Details Card */}
+            <div className="bg-slate-50/90 rounded-2xl p-4 border border-slate-200/80 text-left space-y-3 mb-6 shadow-2xs">
+              <div className="flex items-center justify-between pb-2.5 border-b border-slate-200/80">
+                <span className="text-xs font-bold text-slate-500">Order ID:</span>
+                <span className="text-xs font-black text-brand-700 font-mono bg-brand-50 border border-brand-200/60 px-2.5 py-0.5 rounded-md">
+                  {formatShortId(successOrder.id, "ORD")}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between pb-2.5 border-b border-slate-200/80">
+                <span className="text-xs font-bold text-slate-500">Total Amount:</span>
+                <span className="text-sm font-black text-navy-900">
+                  ₹{Number(successOrder.total || total).toLocaleString("en-IN")}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between pb-2.5 border-b border-slate-200/80">
+                <span className="text-xs font-bold text-slate-500">Payment:</span>
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                  💵 Cash on Delivery (Pay on Site)
+                </span>
+              </div>
+
+              <div>
+                <span className="text-xs font-bold text-slate-500 block mb-1">📍 Site Delivery Destination:</span>
+                <p className="text-xs font-bold text-navy-900">
+                  {successOrder.address?.fullName || user?.name || "Customer"} · {successOrder.address?.phone || user?.phone}
+                </p>
+                <p className="text-xs text-slate-600 font-medium mt-0.5">
+                  {successOrder.address?.street || successOrder.address?.line}, {successOrder.address?.city}
+                </p>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => navigate(`/orders/${successOrder.id}`, { replace: true })}
+                className="flex-1 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] transition-all duration-200 text-white font-black text-xs py-3.5 rounded-xl shadow-md cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>🚚</span>
+                <span>Track Live Order Status</span>
+              </button>
+              <button
+                onClick={() => navigate("/", { replace: true })}
+                className="sm:w-36 bg-slate-100 hover:bg-slate-200 active:scale-[0.98] transition-all text-slate-700 font-bold text-xs py-3.5 rounded-xl cursor-pointer"
+              >
+                Continue Shopping
+              </button>
+            </div>
           </div>
         </div>
       )}

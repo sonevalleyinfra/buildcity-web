@@ -1,12 +1,14 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useAuth } from "./AuthContext";
+import { API_BASE_URL } from "../config/api";
 
-const API_BASE_URL = "https://buildcity-web.onrender.com";
 const AddressContext = createContext(null);
 
 export function AddressProvider({ children }) {
   const { user } = useAuth();
   const [addresses, setAddresses] = useState([]);
+  const [isAddressLoading, setIsAddressLoading] = useState(false);
+  const [isSavingAddress, setIsSavingAddress] = useState(false);
 
   // Compute unique storage key for logged-in user or guest
   const addressStorageKey = user?.phone
@@ -45,13 +47,14 @@ export function AddressProvider({ children }) {
     } catch {}
   };
 
-  // Fetch saved addresses from Supabase DB & sync local storage
+  // Fetch saved addresses from Supabase DB & sync local storage without wiping local additions
   const fetchDbAddresses = async () => {
     if (!user) return;
     const userKey = user.phone || user.id;
     if (!userKey) return;
 
     try {
+      setIsAddressLoading(true);
       const res = await fetch(`${API_BASE_URL}/api/v1/addresses/user/${userKey}`);
       if (res.ok) {
         const dbList = await res.json();
@@ -74,24 +77,29 @@ export function AddressProvider({ children }) {
               return !deletedSet.has(a.id) && !deletedSet.has(streetKey);
             });
 
-          const uniqueList = Array.from(
-            new Map(
-              formatted.map((a) => {
-                const key = `${(a.street || a.line || "").toLowerCase().trim()}_${(a.city || "").toLowerCase().trim()}_${(a.pincode || "").trim()}`;
-                return [key, a];
-              })
-            ).values()
-          );
-
-          setAddresses(uniqueList);
-          if (addressStorageKey) {
-            localStorage.setItem(addressStorageKey, JSON.stringify(uniqueList));
-          }
-          return;
+          setAddresses((prev) => {
+            const combined = [...prev, ...formatted];
+            const unique = Array.from(
+              new Map(
+                combined.map((a) => {
+                  const key = `${(a.street || a.line || "").toLowerCase().trim()}_${(a.city || "").toLowerCase().trim()}_${(a.pincode || "").trim()}`;
+                  return [key, a];
+                })
+              ).values()
+            );
+            if (addressStorageKey) {
+              try {
+                localStorage.setItem(addressStorageKey, JSON.stringify(unique));
+              } catch {}
+            }
+            return unique;
+          });
         }
       }
     } catch (err) {
       console.warn("DB address fetch note:", err.message);
+    } finally {
+      setIsAddressLoading(false);
     }
   };
 
@@ -134,6 +142,7 @@ export function AddressProvider({ children }) {
   }, [addresses, addressStorageKey]);
 
   const addAddress = async (addr) => {
+    setIsSavingAddress(true);
     const tempId = "addr-" + Date.now();
     const formattedAddr = {
       id: tempId,
@@ -152,10 +161,16 @@ export function AddressProvider({ children }) {
       const updated = formattedAddr.isDefault
         ? prev.map((a) => ({ ...a, isDefault: false }))
         : prev;
-      return [...updated, formattedAddr];
+      const combined = [...updated, formattedAddr];
+      if (addressStorageKey) {
+        try {
+          localStorage.setItem(addressStorageKey, JSON.stringify(combined));
+        } catch {}
+      }
+      return combined;
     });
 
-    // 2. Save directly into Supabase PostgreSQL DB (public.addresses table)
+    // 2. Save into Supabase PostgreSQL DB
     try {
       const res = await fetch(`${API_BASE_URL}/api/v1/addresses`, {
         method: "POST",
@@ -178,18 +193,20 @@ export function AddressProvider({ children }) {
           setAddresses((prev) =>
             prev.map((a) => (a.id === tempId ? finalObj : a))
           );
-          console.log("✓ Address saved to Supabase DB addresses table:", dbCreated.id);
           return finalObj;
         }
       }
     } catch (err) {
       console.warn("DB Address insert note:", err.message);
+    } finally {
+      setIsSavingAddress(false);
     }
 
     return formattedAddr;
   };
 
   const updateAddress = async (id, updates) => {
+    setIsSavingAddress(true);
     // 1. Immediately update local state & localStorage
     setAddresses((prev) => {
       const updated = prev.map((a) => (a.id === id ? { ...a, ...updates, line: updates.line || updates.street || a.line, street: updates.street || updates.line || a.street } : a));
@@ -201,7 +218,7 @@ export function AddressProvider({ children }) {
       return updated;
     });
 
-    // 2. Sync to Supabase Cloud DB via API
+    // 2. Sync to DB via API
     try {
       await fetch(`${API_BASE_URL}/api/v1/addresses/${encodeURIComponent(id)}`, {
         method: "PUT",
@@ -216,9 +233,10 @@ export function AddressProvider({ children }) {
           isDefault: updates.isDefault,
         }),
       });
-      console.log("✓ Address updated in DB:", id);
     } catch (err) {
       console.warn("DB address update note:", err.message);
+    } finally {
+      setIsSavingAddress(false);
     }
   };
 
@@ -226,11 +244,9 @@ export function AddressProvider({ children }) {
     const target = addresses.find((a) => a.id === id);
     const streetStr = target?.street || target?.line || "";
 
-    // 1. Blacklist address ID & street text so fetchDbAddresses never re-hydrates it
     addDeletedKey(id);
     if (streetStr) addDeletedKey(streetStr);
 
-    // 2. Immediately remove from local state & localStorage
     setAddresses((prev) => {
       const updated = prev.filter(
         (a) =>
@@ -245,11 +261,9 @@ export function AddressProvider({ children }) {
       return updated;
     });
 
-    // 3. Delete from Supabase Cloud DB via API
     try {
       const url = `${API_BASE_URL}/api/v1/addresses/${encodeURIComponent(id)}?street=${encodeURIComponent(streetStr)}`;
       await fetch(url, { method: "DELETE" });
-      console.log("✓ Address deleted from DB:", id, streetStr);
     } catch (err) {
       console.warn("DB address delete note:", err.message);
     }
@@ -277,7 +291,16 @@ export function AddressProvider({ children }) {
 
   return (
     <AddressContext.Provider
-      value={{ addresses, addAddress, updateAddress, removeAddress, setDefault, fetchDbAddresses }}
+      value={{
+        addresses,
+        isAddressLoading,
+        isSavingAddress,
+        addAddress,
+        updateAddress,
+        removeAddress,
+        setDefault,
+        fetchDbAddresses,
+      }}
     >
       {children}
     </AddressContext.Provider>

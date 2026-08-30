@@ -15,7 +15,7 @@ const emptyForm = {
 };
 
 export default function Addresses() {
-  const { addresses, addAddress, updateAddress, removeAddress, setDefault } =
+  const { addresses, addAddress, updateAddress, removeAddress, setDefault, isSavingAddress } =
     useAddresses();
   const { user, updateProfile } = useAuth();
 
@@ -30,6 +30,13 @@ export default function Addresses() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [submitting, setSubmitting] = useState(false);
+  const [statusMsg, setStatusMsg] = useState("");
+
+  const showStatus = (msg) => {
+    setStatusMsg(msg);
+    setTimeout(() => setStatusMsg(""), 3500);
+  };
 
   const maybeUpdateProfileName = (enteredName) => {
     if (!enteredName || typeof enteredName !== "string" || !updateProfile) return;
@@ -68,19 +75,26 @@ export default function Addresses() {
     setShowForm(true);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.line.trim() || !form.city.trim() || !form.pincode.trim()) return;
 
+    setSubmitting(true);
     if (form.fullName && form.fullName.trim()) {
       maybeUpdateProfileName(form.fullName);
     }
 
-    if (editingId) {
-      updateAddress(editingId, form);
-    } else {
-      addAddress(form);
-    }
+    try {
+      if (editingId) {
+        await updateAddress(editingId, form);
+        showStatus("✓ Address updated successfully!");
+      } else {
+        await addAddress(form);
+        showStatus("✓ New address added successfully!");
+      }
+    } catch {}
+
+    setSubmitting(false);
     setShowForm(false);
   };
 
@@ -89,12 +103,19 @@ export default function Addresses() {
       <Navbar />
 
       <main className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
+        {statusMsg && (
+          <div className="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold px-4 py-3 rounded-xl shadow-2xs flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
+            <span>✓</span>
+            <span>{statusMsg}</span>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-5">
           <h1 className="text-xl font-bold text-navy-900">My Addresses</h1>
           {!showForm && (
             <button
               onClick={openAdd}
-              className="text-sm font-semibold text-brand-500 hover:underline"
+              className="text-sm font-semibold text-brand-500 hover:underline cursor-pointer"
             >
               + Add New
             </button>
@@ -180,14 +201,27 @@ export default function Addresses() {
             <div className="flex gap-3 pt-1">
               <button
                 type="submit"
-                className="flex-1 bg-brand-500 text-white text-sm font-semibold rounded-lg py-2.5"
+                disabled={submitting || isSavingAddress}
+                className="flex-1 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] transition-all duration-200 text-white text-sm font-bold rounded-xl py-2.5 shadow-xs disabled:opacity-60 cursor-pointer flex items-center justify-center gap-2"
               >
-                {editingId ? "Save Changes" : "Add Address"}
+                {submitting || isSavingAddress ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                    </svg>
+                    <span>Saving Address...</span>
+                  </>
+                ) : editingId ? (
+                  "✓ Save Changes"
+                ) : (
+                  "✓ Add Address"
+                )}
               </button>
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="flex-1 border border-slate-200 text-slate-600 text-sm font-semibold rounded-lg py-2.5"
+                className="flex-1 border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-xl py-2.5 transition-colors cursor-pointer"
               >
                 Cancel
               </button>

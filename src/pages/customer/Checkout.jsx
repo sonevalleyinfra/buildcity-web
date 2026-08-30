@@ -202,35 +202,10 @@ export default function Checkout() {
 
     setPlacing(true);
 
-    // Save address to Supabase DB public.addresses table (with auto-retry)
-    try {
-      const dbRes = await fetchWithRetry(`${API_BASE_URL}/api/v1/addresses`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user?.id,
-          fullName: targetAddr.fullName,
-          phone: targetAddr.phone,
-          street: targetAddr.street,
-          city: targetAddr.city,
-          state: targetAddr.state || "Uttar Pradesh",
-          pincode: targetAddr.pincode,
-        }),
-      });
-      if (dbRes && dbRes.ok) {
-        const savedDbAddr = await dbRes.json();
-        if (savedDbAddr && savedDbAddr.id) {
-          targetAddr = savedDbAddr;
-        }
-      }
-    } catch (err) {
-      console.warn("DB Address save note:", err.message);
-    }
-
     const orderItems = items.map((i) => ({
-      name: i.name,
+      name: i.name || i.productName || "Material Item",
       quantity: i.qty || i.quantity || 1,
-      price: i.price,
+      price: i.price || 100,
       vendorId: i.vendorId,
       vendorName: i.vendorName,
     }));
@@ -478,10 +453,26 @@ export default function Checkout() {
             <button
               onClick={handlePlaceOrder}
               disabled={placing}
-              className="w-full mt-4 bg-brand-500 hover:bg-brand-600 active:scale-[0.98] text-white text-sm font-bold rounded-xl py-3 shadow-md transition-all cursor-pointer disabled:opacity-60"
+              className="w-full mt-4 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white text-sm font-bold rounded-xl py-3.5 shadow-md transition-all cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              {placing ? "Placing Order..." : "Place Order"}
+              {placing ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                  <span>⚡ Placing Order & Dispatching...</span>
+                </>
+              ) : (
+                "Place Order (Cash on Delivery)"
+              )}
             </button>
+
+            {placing && (
+              <p className="text-[11px] text-amber-600 font-bold text-center mt-2 animate-pulse">
+                ⏳ Processing site delivery dispatch... Please wait.
+              </p>
+            )}
           </div>
         </div>
       </main>

@@ -85,16 +85,20 @@ export function OrderProvider({ children }) {
         const createdOrder = {
           id: resData.order.id,
           userId: customerId || resData.order.userId || resData.order.customerId,
-          userPhone: resData.order.userPhone || address?.phone,
+          userPhone: resData.order.userPhone || address?.phone || resData.order.customer?.phone,
           date: resData.order.createdAt || new Date().toISOString(),
           status: resData.order.status || "Pending",
           districtName: districtName || resData.order.districtName || "Varanasi",
           regionId: regionId || resData.order.regionId || "varanasi",
-          items: formattedItems,
-          address,
-          total: Number(total) || 0,
+          items: resData.order.items && resData.order.items.length > 0 ? resData.order.items : formattedItems,
+          address: resData.order.address || address,
+          total: Number(total) || Number(resData.order.totalAmount) || 0,
         };
-        setOrders((prev) => [createdOrder, ...prev]);
+        setOrders((prev) => {
+          const updated = [createdOrder, ...prev.filter((p) => p.id !== createdOrder.id)];
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch {}
+          return updated;
+        });
         return createdOrder;
       }
     } catch (err) {
@@ -104,6 +108,8 @@ export function OrderProvider({ children }) {
     // Local fallback if server unreachable
     const fallbackOrder = {
       id: "BC" + Math.floor(10000 + Math.random() * 89999),
+      userId: customerId,
+      userPhone: address?.phone,
       date: new Date().toISOString(),
       status: "Pending",
       districtName: districtName || "Varanasi",
@@ -112,7 +118,11 @@ export function OrderProvider({ children }) {
       address,
       total: Number(total) || 0,
     };
-    setOrders((prev) => [fallbackOrder, ...prev]);
+    setOrders((prev) => {
+      const updated = [fallbackOrder, ...prev.filter((p) => p.id !== fallbackOrder.id)];
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
     return fallbackOrder;
   };
 

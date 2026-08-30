@@ -14,6 +14,14 @@ export function NotificationProvider({ children }) {
 
   const [notifications, setNotifications] = useState([]);
   const [isSending, setIsSending] = useState(false);
+  const [toastNotif, setToastNotif] = useState(null);
+
+  const showToast = (notif) => {
+    setToastNotif(notif);
+    setTimeout(() => {
+      setToastNotif((curr) => (curr?.id === notif.id ? null : curr));
+    }, 6000);
+  };
 
   // Fetch real database notifications from backend
   const fetchDbNotifications = async () => {
@@ -42,6 +50,14 @@ export function NotificationProvider({ children }) {
           }));
 
           setNotifications((prev) => {
+            const prevIds = new Set(prev.map((p) => p.id));
+            const newItems = formatted.filter((f) => !prevIds.has(f.id));
+
+            // If a new notification came from backend, trigger instant toast
+            if (newItems.length > 0 && prev.length > 0) {
+              showToast(newItems[0]);
+            }
+
             const combined = [...prev, ...formatted];
             const unique = Array.from(new Map(combined.map((x) => [x.id || `${x.title}_${x.message}`, x])).values())
               .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
@@ -57,7 +73,28 @@ export function NotificationProvider({ children }) {
     }
   };
 
-  // Load from user storage on start and poll DB
+  // Cross-Tab Broadcast Channel for Zero-Latency Real-Time Alerts
+  useEffect(() => {
+    let bc = null;
+    try {
+      if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+        bc = new BroadcastChannel("buildcity_notifications_channel");
+        bc.onmessage = (event) => {
+          if (event.data && event.data.type === "NEW_NOTIFICATION") {
+            const incoming = event.data.notification;
+            setNotifications((prev) => [incoming, ...prev.filter((p) => p.id !== incoming.id)]);
+            showToast(incoming);
+          }
+        };
+      }
+    } catch {}
+
+    return () => {
+      if (bc) bc.close();
+    };
+  }, []);
+
+  // Load from user storage on start and poll DB every 4s
   useEffect(() => {
     try {
       const saved = localStorage.getItem(storageKey);
@@ -71,7 +108,7 @@ export function NotificationProvider({ children }) {
     }
 
     fetchDbNotifications();
-    const interval = setInterval(fetchDbNotifications, 8000);
+    const interval = setInterval(fetchDbNotifications, 4000);
     return () => clearInterval(interval);
   }, [storageKey, user]);
 
@@ -94,6 +131,17 @@ export function NotificationProvider({ children }) {
       }
       return updated;
     });
+
+    showToast(newNotif);
+
+    try {
+      if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+        const bc = new BroadcastChannel("buildcity_notifications_channel");
+        bc.postMessage({ type: "NEW_NOTIFICATION", notification: newNotif });
+        bc.close();
+      }
+    } catch {}
+
     return newNotif;
   };
 
@@ -113,11 +161,27 @@ export function NotificationProvider({ children }) {
       });
 
       if (res.ok) {
-        addNotification({
+        const data = await res.json();
+        const createdObj = {
+          id: data.notification?.id || "n-" + Date.now(),
           title: `📢 ${title}`,
           message,
+          timestamp: Date.now(),
+          read: false,
           type: "info",
-        });
+        };
+
+        setNotifications((prev) => [createdObj, ...prev.filter((p) => p.id !== createdObj.id)]);
+        showToast(createdObj);
+
+        try {
+          if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+            const bc = new BroadcastChannel("buildcity_notifications_channel");
+            bc.postMessage({ type: "NEW_NOTIFICATION", notification: createdObj });
+            bc.close();
+          }
+        } catch {}
+
         await fetchDbNotifications();
         return true;
       }
@@ -196,6 +260,32 @@ export function NotificationProvider({ children }) {
       }}
     >
       {children}
+
+      {/* Real-Time Floating Notification Toast Banner on Customer Screen */}
+      {toastNotif && (
+        <div className="fixed top-5 right-5 z-[9999] max-w-sm w-full animate-in slide-in-from-top-4 fade-in duration-300 pointer-events-auto">
+          <div className="bg-navy-950/95 text-white border border-brand-400/40 rounded-2xl p-4 shadow-2xl backdrop-blur-md flex items-start gap-3 relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 to-brand-500 animate-pulse" />
+            <span className="h-8 w-8 rounded-xl bg-brand-500/20 border border-brand-400/40 flex items-center justify-center text-lg shrink-0 mt-0.5">
+              🔔
+            </span>
+            <div className="min-w-0 flex-1">
+              <h4 className="font-black text-xs text-white leading-tight tracking-tight">
+                {toastNotif.title}
+              </h4>
+              <p className="text-[11px] text-slate-300 mt-1 leading-snug font-medium">
+                {toastNotif.message}
+              </p>
+            </div>
+            <button
+              onClick={() => setToastNotif(null)}
+              className="text-slate-400 hover:text-white text-xs font-bold leading-none p-1 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
     </NotificationContext.Provider>
   );
 }

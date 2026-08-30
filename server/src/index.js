@@ -2046,17 +2046,23 @@ app.get("/api/v1/notifications", async (req, res) => {
       whereClause.OR = [
         { userId },
         { user: { role: "CUSTOMER" } },
+        { user: { role: "ADMIN" } },
       ];
     }
 
-    const notifications = await prisma.notification.findMany({
+    const rawList = await prisma.notification.findMany({
       where: whereClause,
       include: { user: true },
       orderBy: { createdAt: "desc" },
-      take: 50,
-    });
+      take: 60,
+    }).catch(() => []);
 
-    res.json(notifications);
+    // Clean deduplicate by title & message so customers see clean unique cards
+    const uniqueList = Array.from(
+      new Map(rawList.map((n) => [`${n.title.trim().toLowerCase()}_${n.message.trim().toLowerCase()}`, n])).values()
+    );
+
+    res.json(uniqueList);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2069,44 +2075,37 @@ app.post("/api/v1/notifications", async (req, res) => {
       return res.status(400).json({ error: "Title and message are required" });
     }
 
-    // If specific userId provided, use it; otherwise broadcast to customers / admin
-    let targetUsers = [];
+    let targetUser = null;
     if (userId && userId.length > 20) {
-      const u = await prisma.user.findUnique({ where: { id: userId } }).catch(() => null);
-      if (u) targetUsers.push(u);
+      targetUser = await prisma.user.findUnique({ where: { id: userId } }).catch(() => null);
+    }
+    if (!targetUser) {
+      targetUser = await prisma.user.findFirst({ where: { role: "ADMIN" } }).catch(() => null);
+    }
+    if (!targetUser) {
+      targetUser = await prisma.user.findFirst().catch(() => null);
+    }
+    if (!targetUser) {
+      targetUser = await prisma.user.create({
+        data: {
+          phone: "7607650875",
+          name: "BuildCity Central System",
+          role: "ADMIN",
+        },
+      }).catch(() => null);
     }
 
-    if (targetUsers.length === 0) {
-      targetUsers = await prisma.user.findMany({
-        where: { role: "CUSTOMER" },
-        take: 100,
-      }).catch(() => []);
-    }
+    const notif = await prisma.notification.create({
+      data: {
+        userId: targetUser ? targetUser.id : (await prisma.user.findFirst()).id,
+        title: title.trim(),
+        message: message.trim(),
+        isRead: false,
+      },
+    });
 
-    if (targetUsers.length === 0) {
-      const firstUser = await prisma.user.findFirst().catch(() => null);
-      if (firstUser) targetUsers.push(firstUser);
-    }
-
-    const createdList = [];
-    for (const u of targetUsers) {
-      try {
-        const notif = await prisma.notification.create({
-          data: {
-            userId: u.id,
-            title: title.trim(),
-            message: message.trim(),
-            isRead: false,
-          },
-        });
-        createdList.push(notif);
-      } catch (e) {
-        console.warn("Notification insert note:", e.message);
-      }
-    }
-
-    console.log(`📢 Broadcast notification sent to ${createdList.length} user(s): "${title}"`);
-    res.status(201).json({ success: true, count: createdList.length, notifications: createdList });
+    console.log(`📢 Real-Time Notification saved in Supabase PostgreSQL DB: "${notif.title}" (${notif.id})`);
+    res.status(201).json({ success: true, notification: notif });
   } catch (err) {
     console.error("POST /api/v1/notifications error:", err);
     res.status(500).json({ error: err.message });
@@ -2129,7 +2128,7 @@ app.patch("/api/v1/notifications/:id/read", async (req, res) => {
 app.delete("/api/v1/notifications/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.notification.delete({ where: { id } }).catch(() => null);
+    await prisma.notification.deleteMany({ where: { id } }).catch(() => null);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

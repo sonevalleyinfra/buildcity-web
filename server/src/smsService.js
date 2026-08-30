@@ -46,7 +46,19 @@ async function sendRealSMSOTP(phone, otpCode) {
 
     const path = `/sms-panel/api/http/index.php?${queryParams}`;
 
-    http.get(`http://sms.aradhyatechnologies.in${path}`, (res) => {
+    const options = {
+      hostname: "sms.aradhyatechnologies.in",
+      port: 443,
+      path: path,
+      method: "GET",
+      rejectUnauthorized: false,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "*/*"
+      }
+    };
+
+    const req = https.request(options, (res) => {
       let responseBody = "";
       res.on("data", (chunk) => { responseBody += chunk; });
       res.on("end", () => {
@@ -63,14 +75,18 @@ async function sendRealSMSOTP(phone, otpCode) {
           resolve({ success: true, data: parsedData, gateway: "AradhyaSMS" });
         }
       });
-    }).on("error", (err) => {
-      console.error(`[Aradhya HTTP Error] +91 ${cleanMobile}:`, err.message);
+    });
+
+    req.on("error", (err) => {
+      console.error(`[Aradhya HTTPS Error] +91 ${cleanMobile}:`, err.message);
       if (!resolved) {
         resolved = true;
         clearTimeout(timeoutTimer);
         resolve({ success: false, error: err.message, gateway: "AradhyaSMS" });
       }
     });
+
+    req.end();
   });
 }
 

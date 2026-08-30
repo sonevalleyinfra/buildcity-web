@@ -5,7 +5,7 @@ const { PrismaClient } = require("@prisma/client");
 
 const app = express();
 const prisma = new PrismaClient();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 5000;
+const PORT = process.env.PORT || 5000;
 
 // Enable CORS & JSON Parsing
 app.use(cors());
@@ -2002,6 +2002,6 @@ app.post("/api/v1/reviews", async (req, res) => {
 });
 
 // Start Express Server
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 BuildCity Express Gateway running live on port ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`🚀 BuildCity Express Gateway running live on http://localhost:${PORT}`);
 });

@@ -4,7 +4,7 @@ import AuthLayout from "../../layouts/AuthLayout";
 import Button from "../../components/Button";
 import { useAuth } from "../../context/AuthContext";
 
-// Login Page component — User / Vendor / DR / Admin ka universal login screen (Vercel CDN Purge 2026)
+// Login Page component — User / Vendor / DR / Admin ka universal login screen
 export default function Login() {
   const navigate = useNavigate();
   const { requestOtp, verifyOtp, vendorLogin } = useAuth();

@@ -48,12 +48,9 @@ export function AuthProvider({ children }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone: cleanPhone }),
     });
-    const data = await response.json().catch(() => ({}));
+    const data = await response.json();
     if (!response.ok) {
-      const errMessage = data.error || data.message || `Server Error (${response.status})`;
-      const customErr = new Error(errMessage);
-      customErr.isStaffBlocked = data.isStaffBlocked || false;
-      throw customErr;
+      throw new Error(data.error || "Failed to dispatch OTP");
     }
     return data;
   };

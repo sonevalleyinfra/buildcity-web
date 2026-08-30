@@ -56,7 +56,8 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const user = await verifyOtp({ phone: phone.trim(), otp: otp.trim(), role });
+      const cleanedMobile = phone.replace(/\D/g, "").slice(-10);
+      const user = await verifyOtp({ phone: cleanedMobile, otp: otp.trim(), role });
       
       const home =
         user.role === "admin"

@@ -35,35 +35,22 @@ async function sendRealSMSOTP(phone, otpCode) {
   return new Promise((resolve) => {
     let resolved = false;
 
-    // Timeout safety (12s) for cloud hosts (Render to Aradhya cross-region API dispatch)
+    // Timeout safety (3.5s) so UI response never hangs or freezes
     const timeoutTimer = setTimeout(() => {
       if (!resolved) {
         resolved = true;
-        console.warn(`[Aradhya SMS Gateway] Timeout safety triggered after 12s for +91 ${cleanMobile}`);
+        console.warn(`[Aradhya SMS Gateway] Timeout safety triggered after 3.5s for +91 ${cleanMobile}`);
         resolve({ success: true, warning: "Timeout background dispatch", gateway: "AradhyaSMS" });
       }
-    }, 12000);
+    }, 3500);
 
     const path = `/sms-panel/api/http/index.php?${queryParams}`;
 
-    const options = {
-      hostname: "sms.aradhyatechnologies.in",
-      port: 443,
-      path: path,
-      method: "GET",
-      rejectUnauthorized: false,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "*/*",
-        "Connection": "close"
-      }
-    };
-
-    const req = https.request(options, (res) => {
+    http.get(`http://sms.aradhyatechnologies.in${path}`, (res) => {
       let responseBody = "";
-
-      const parseAndResolve = () => {
-        if (!resolved && responseBody.trim()) {
+      res.on("data", (chunk) => { responseBody += chunk; });
+      res.on("end", () => {
+        if (!resolved) {
           resolved = true;
           clearTimeout(timeoutTimer);
           let parsedData = null;
@@ -75,30 +62,15 @@ async function sendRealSMSOTP(phone, otpCode) {
           console.log(`[Aradhya SMS Gateway] Response for +91 ${cleanMobile}:`, parsedData);
           resolve({ success: true, data: parsedData, gateway: "AradhyaSMS" });
         }
-      };
-
-      res.on("data", (chunk) => {
-        responseBody += chunk;
-        if (responseBody.includes('"status"') || responseBody.includes('"message"')) {
-          parseAndResolve();
-        }
       });
-
-      res.on("end", () => {
-        parseAndResolve();
-      });
-    });
-
-    req.on("error", (err) => {
-      console.error(`[Aradhya HTTPS Error] +91 ${cleanMobile}:`, err.message);
+    }).on("error", (err) => {
+      console.error(`[Aradhya HTTP Error] +91 ${cleanMobile}:`, err.message);
       if (!resolved) {
         resolved = true;
         clearTimeout(timeoutTimer);
         resolve({ success: false, error: err.message, gateway: "AradhyaSMS" });
       }
     });
-
-    req.end();
   });
 }
 

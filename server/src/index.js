@@ -371,22 +371,10 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
       message: `OTP dispatched to +91 ${cleanPhone.slice(-10)}`,
       gateway: smsResult.gateway || "AradhyaSMS",
       smsStatus: smsResult.success ? "dispatched" : "failed",
-      smsDetail: smsResult
     });
   } catch (err) {
     console.error("OTP dispatch error:", err);
     res.status(500).json({ error: "Failed to dispatch OTP", details: err.message });
-  }
-});
-
-app.get("/api/v1/test-sms-gateway", async (req, res) => {
-  const phone = (req.query.phone || "8299739959").trim();
-  const testOtp = "123456";
-  try {
-    const result = await sendRealSMSOTP(phone, testOtp);
-    res.json({ testPhone: phone, result });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
   }
 });
 

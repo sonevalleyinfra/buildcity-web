@@ -39,3 +39,5 @@ server/set_*
 server/.env
 server/.env.*
 
+.vercel
+.env*

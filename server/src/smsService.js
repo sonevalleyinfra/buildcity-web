@@ -3,7 +3,7 @@ const http = require("http");
 
 /**
  * BuildCity Aradhya Technologies SMS Gateway Module
- * Dispatches 6-digit OTP SMS via Aradhya Technologies HTTP API (Port 80)
+ * Dispatches 6-digit OTP SMS via Aradhya Technologies HTTPS/HTTP API
  */
 async function sendRealSMSOTP(phone, otpCode) {
   const cleanMobile = (phone || "").toString().trim().replace(/\D/g, "").slice(-10);
@@ -30,19 +30,19 @@ async function sendRealSMSOTP(phone, otpCode) {
     format: "JSON"
   }).toString();
 
-  console.log(`[Aradhya SMS Gateway] HTTP GET Dispatching OTP ${otpCode} to +91 ${cleanMobile}...`);
+  console.log(`[Aradhya SMS Gateway] Dispatching OTP ${otpCode} to +91 ${cleanMobile}...`);
 
   return new Promise((resolve) => {
     let resolved = false;
 
-    // Timeout safety (8s) so UI response never hangs
+    // 12-Second Timeout safety for Render cloud latency
     const timeoutTimer = setTimeout(() => {
       if (!resolved) {
         resolved = true;
-        console.warn(`[Aradhya SMS Gateway] HTTP Timeout safety triggered after 8s for +91 ${cleanMobile}`);
+        console.warn(`[Aradhya SMS Gateway] Timeout safety triggered after 12s for +91 ${cleanMobile}`);
         resolve({ success: false, warning: "timeout", gateway: "AradhyaSMS" });
       }
-    }, 8000);
+    }, 12000);
 
     const path = `/sms-panel/api/http/index.php?${queryParams}`;
 

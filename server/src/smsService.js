@@ -1,13 +1,12 @@
-const https = require("https");
 const http = require("http");
 
 /**
  * BuildCity Aradhya Technologies SMS Gateway Module
- * Dispatches 6-digit OTP SMS via Aradhya Technologies HTTP/HTTPS API
+ * Dispatches 6-digit OTP SMS via Aradhya Technologies HTTP API (Port 80)
  */
 async function sendRealSMSOTP(phone, otpCode) {
   const cleanMobile = (phone || "").toString().trim().replace(/\D/g, "").slice(-10);
-  
+
   const username = "sonevalley";
   const apikey = "0A8CC-B46EE";
   const sender = "SNVLY";
@@ -30,35 +29,23 @@ async function sendRealSMSOTP(phone, otpCode) {
     format: "JSON"
   }).toString();
 
-  console.log(`[Aradhya SMS Gateway] GET Dispatching OTP ${otpCode} to +91 ${cleanMobile}...`);
+  console.log(`[Aradhya SMS Gateway] HTTP GET Dispatching OTP ${otpCode} to +91 ${cleanMobile}...`);
 
   return new Promise((resolve) => {
     let resolved = false;
 
-    // Timeout safety (12s) so Aradhya Gateway has full time to respond
+    // Timeout safety (8s) so UI response never hangs
     const timeoutTimer = setTimeout(() => {
       if (!resolved) {
         resolved = true;
-        console.warn(`[Aradhya SMS Gateway] Timeout safety triggered after 12s for +91 ${cleanMobile}`);
-        resolve({ success: false, warning: "Timeout background dispatch", gateway: "AradhyaSMS" });
+        console.warn(`[Aradhya SMS Gateway] HTTP Timeout safety triggered after 8s for +91 ${cleanMobile}`);
+        resolve({ success: false, warning: "timeout", gateway: "AradhyaSMS" });
       }
-    }, 12000);
+    }, 8000);
 
     const path = `/sms-panel/api/http/index.php?${queryParams}`;
 
-    const options = {
-      hostname: "sms.aradhyatechnologies.in",
-      port: 443,
-      path: path,
-      method: "GET",
-      rejectUnauthorized: false,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Connection": "close"
-      }
-    };
-
-    const req = https.request(options, (res) => {
+    const req = http.get(`http://sms.aradhyatechnologies.in${path}`, (res) => {
       let responseBody = "";
       res.on("data", (chunk) => { responseBody += chunk; });
       res.on("end", () => {
@@ -71,22 +58,20 @@ async function sendRealSMSOTP(phone, otpCode) {
           } catch {
             parsedData = { raw: responseBody };
           }
-          console.log(`[Aradhya SMS Gateway] HTTPS Response for +91 ${cleanMobile}:`, parsedData);
+          console.log(`[Aradhya SMS Gateway] HTTP Response for +91 ${cleanMobile}:`, parsedData);
           resolve({ success: true, data: parsedData, gateway: "AradhyaSMS" });
         }
       });
     });
 
     req.on("error", (err) => {
-      console.error(`[Aradhya HTTPS Error] +91 ${cleanMobile}:`, err.message);
+      console.error(`[Aradhya HTTP Error] +91 ${cleanMobile}:`, err.message);
       if (!resolved) {
         resolved = true;
         clearTimeout(timeoutTimer);
         resolve({ success: false, error: err.message, gateway: "AradhyaSMS" });
       }
     });
-
-    req.end();
   });
 }
 

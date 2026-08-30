@@ -1,18 +1,51 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import { useNotifications } from "../context/NotificationContext";
 
 const TYPE_ICON = {
   offer: "🎁",
   price: "🏷️",
   order: "📦",
+  address: "📍",
+  auth: "👤",
   info: "ℹ️",
 };
 
+function formatTime(timestamp) {
+  if (!timestamp) return "Recently";
+  const diff = Date.now() - Number(timestamp);
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "Yesterday";
+  return `${days}d ago`;
+}
+
 export default function NotificationPanel({ className }) {
-  const { notifications, markAsRead, markAllAsRead, unreadCount } = useNotifications();
+  const navigate = useNavigate();
+  const {
+    notifications,
+    markAsRead,
+    markAllAsRead,
+    clearAllNotifications,
+    removeNotification,
+    unreadCount,
+  } = useNotifications();
+
   const [open, setOpen] = useState(false);
   const [visible, setVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState("All");
+
+  const filtered = useMemo(() => {
+    if (activeTab === "All") return notifications;
+    if (activeTab === "Orders") return notifications.filter((n) => n.type === "order");
+    if (activeTab === "Offers") return notifications.filter((n) => n.type === "offer" || n.type === "price");
+    return notifications.filter((n) => n.type === activeTab.toLowerCase());
+  }, [notifications, activeTab]);
 
   const handleOpen = () => {
     setOpen(true);
@@ -24,12 +57,21 @@ export default function NotificationPanel({ className }) {
     setTimeout(() => setOpen(false), 200);
   };
 
+  const handleClickNotification = (n) => {
+    markAsRead(n.id);
+    if (n.link) {
+      handleClose();
+      navigate(n.link);
+    }
+  };
+
   return (
     <>
       <button
         type="button"
         onClick={handleOpen}
-        className={className || "relative text-slate-600 hover:text-navy-900 active:scale-[0.95] transition-all duration-200 p-1.5 rounded-xl hover:bg-slate-100/80"}
+        className={className || "relative text-slate-600 hover:text-navy-900 active:scale-[0.95] transition-all duration-200 p-1.5 rounded-xl hover:bg-slate-100/80 cursor-pointer"}
+        title="Notifications"
       >
         <BellIcon />
         {unreadCount > 0 && (
@@ -45,88 +87,136 @@ export default function NotificationPanel({ className }) {
           <div className="fixed inset-0 z-[999]">
             {/* Backdrop */}
             <div
-              className={`absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity duration-200 ${
+              className={`absolute inset-0 bg-navy-950/40 backdrop-blur-xs transition-opacity duration-200 ${
                 visible ? "opacity-100" : "opacity-0"
               }`}
               onClick={handleClose}
             />
 
-            {/* Panel - elevated glassmorphic panel */}
+            {/* Panel */}
             <div
-              className={`fixed top-14 right-3 left-3 sm:left-auto w-auto sm:w-80 max-w-sm bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl shadow-2xl overflow-hidden transition-all duration-200 ease-out ${
+              className={`fixed top-14 right-3 left-3 sm:left-auto w-auto sm:w-96 max-w-md bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl shadow-2xl overflow-hidden transition-all duration-200 ease-out ${
                 visible
                   ? "translate-y-0 opacity-100 scale-100"
                   : "-translate-y-6 opacity-0 scale-95"
               }`}
             >
-              <div className="flex items-center justify-between px-4 py-3.5 border-b border-slate-100 bg-white">
-                <div className="flex items-center gap-2">
-                  <span className="h-8 w-8 rounded-full bg-brand-50 flex items-center justify-center text-brand-500">
-                    <BellIcon />
-                  </span>
-                  <h3 className="font-bold text-navy-900">Notifications</h3>
-                  {unreadCount > 0 && (
-                    <span className="text-[11px] font-semibold bg-brand-500 text-white rounded-full h-5 min-w-5 px-1.5 flex items-center justify-center">
-                      {unreadCount}
+              {/* Header */}
+              <div className="px-4 py-3 border-b border-slate-100 bg-white">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="h-8 w-8 rounded-full bg-brand-50 flex items-center justify-center text-brand-600 text-sm shadow-2xs">
+                      <BellIcon />
                     </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-3">
-                  {unreadCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={markAllAsRead}
-                      className="text-xs font-medium text-brand-500 hover:underline"
-                    >
-                      Mark all read
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleClose}
-                    className="text-slate-400 hover:text-slate-600 text-xl leading-none"
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-              <div className="max-h-96 overflow-y-auto">
-              
-                {notifications.length === 0 ? (
-                  <div className="p-10 text-center text-sm text-slate-500">
-                    Koi notification nahi hai.
+                    <h3 className="font-extrabold text-navy-900 text-sm">Notifications</h3>
+                    {unreadCount > 0 && (
+                      <span className="text-[10px] font-black bg-brand-500 text-white rounded-full h-4.5 min-w-4.5 px-1.5 flex items-center justify-center">
+                        {unreadCount}
+                      </span>
+                    )}
                   </div>
-                ) : (
-                  <div className="divide-y divide-slate-100">
-                    {notifications.map((n, i) => (
+                  <div className="flex items-center gap-2">
+                    {unreadCount > 0 && (
                       <button
                         type="button"
-                        key={n.id}
-                        onClick={() => markAsRead(n.id)}
-                        className={`w-full text-left flex gap-3 px-4 py-3.5 transition-colors ${
-                          n.read ? "bg-white hover:bg-surface" : "bg-brand-50 hover:bg-brand-50/70"
-                        }`}
+                        onClick={markAllAsRead}
+                        className="text-[11px] font-bold text-brand-600 hover:underline cursor-pointer"
                       >
-                        <span className="h-9 w-9 shrink-0 rounded-full bg-white border border-slate-200 flex items-center justify-center text-base">
-                          {TYPE_ICON[n.type] || "🔔"}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-semibold text-navy-900 truncate">
-                              {n.title}
-                            </span>
-                            {!n.read && (
-                              <span className="h-1.5 w-1.5 rounded-full bg-brand-500 shrink-0" />
-                            )}
-                          </div>
-                          <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                            {n.message}
-                          </p>
-                          <p className="text-[11px] text-slate-400 mt-1">{n.time}</p>
-                        </div>
+                        Mark all read
                       </button>
-                    ))}
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleClose}
+                      className="text-slate-400 hover:text-slate-700 text-xl leading-none px-1 cursor-pointer"
+                    >
+                      ✕
+                    </button>
                   </div>
+                </div>
+
+                {/* Filter Tabs */}
+                <div className="flex gap-1.5 mt-2.5 pt-2 border-t border-slate-100">
+                  {["All", "Orders", "Offers"].map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setActiveTab(t)}
+                      className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                        activeTab === t
+                          ? "bg-navy-900 text-white"
+                          : "text-slate-600 bg-slate-100 hover:bg-slate-200"
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                  {notifications.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearAllNotifications}
+                      className="text-[11px] font-bold text-slate-400 hover:text-rose-600 ml-auto transition-colors cursor-pointer"
+                    >
+                      Clear all
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Notification List */}
+              <div className="max-h-96 overflow-y-auto divide-y divide-slate-100">
+                {filtered.length === 0 ? (
+                  <div className="p-10 text-center text-xs text-slate-500">
+                    <p className="text-2xl mb-1">🔔</p>
+                    <p className="font-bold text-navy-900">No notifications here</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">You're all caught up with your site updates!</p>
+                  </div>
+                ) : (
+                  filtered.map((n) => (
+                    <div
+                      key={n.id}
+                      onClick={() => handleClickNotification(n)}
+                      className={`w-full text-left flex gap-3 px-4 py-3 transition-colors cursor-pointer group relative ${
+                        n.read ? "bg-white hover:bg-slate-50/80" : "bg-brand-50/40 hover:bg-brand-50/80"
+                      }`}
+                    >
+                      <span className="h-9 w-9 shrink-0 rounded-full bg-white border border-slate-200 flex items-center justify-center text-base shadow-2xs group-hover:scale-105 transition-transform">
+                        {TYPE_ICON[n.type] || "🔔"}
+                      </span>
+                      <div className="min-w-0 flex-1 pr-4">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-black text-navy-900 truncate">
+                            {n.title}
+                          </span>
+                          {!n.read && (
+                            <span className="h-1.5 w-1.5 rounded-full bg-brand-500 shrink-0" />
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed font-medium">
+                          {n.message}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] text-slate-400 font-bold">{formatTime(n.timestamp)}</span>
+                          {n.link && (
+                            <span className="text-[10px] text-brand-600 font-black group-hover:underline">
+                              View details →
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeNotification(n.id);
+                        }}
+                        className="text-slate-300 hover:text-rose-500 text-xs absolute right-3 top-3 p-1 transition-colors cursor-pointer"
+                        title="Dismiss"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))
                 )}
               </div>
             </div>
@@ -139,7 +229,7 @@ export default function NotificationPanel({ className }) {
 
 function BellIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9Z" />
       <path d="M13.7 21a2 2 0 0 1-3.4 0" />
     </svg>

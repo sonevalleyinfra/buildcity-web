@@ -7,6 +7,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useRegion } from "../../context/RegionContext";
 import { useAddresses } from "../../context/AddressContext";
 import { useAlert } from "../../context/AlertContext";
+import { useNotifications } from "../../context/NotificationContext";
 import { API_BASE_URL } from "../../config/api";
 import { formatShortId } from "../../utils/formatId";
 
@@ -14,6 +15,7 @@ export default function Checkout() {
   const { items, subtotal, mrpTotal = subtotal, clearCart, hasRegionMismatch } = useCart();
   const { placeOrder } = useOrders();
   const { showAlert } = useAlert();
+  const { addNotification } = useNotifications();
   const navigate = useNavigate();
   const { user, updateProfile } = useAuth();
   const { region } = useRegion();
@@ -223,6 +225,14 @@ export default function Checkout() {
       clearCart();
       setPlacing(false);
       setSuccessOrder(order);
+
+      // Trigger interactive real-time notification
+      addNotification({
+        title: "Order Placed Successfully! 📦",
+        message: `Order #${formatShortId(order.id, "ORD")} confirmed. Pay ₹${Number(order.total || total).toLocaleString("en-IN")} on site arrival.`,
+        type: "order",
+        link: `/orders/${order.id}`,
+      });
     } catch (err) {
       setPlacing(false);
       showAlert({

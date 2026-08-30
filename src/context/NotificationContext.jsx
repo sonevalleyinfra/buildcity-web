@@ -1,70 +1,75 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { useAuth } from "./AuthContext";
 
 const NotificationContext = createContext(null);
-const STORAGE_KEY = "buildcity_notifications";
 
-// TEMPORARY MOCK - replace with GET /api/v1/notifications jab backend ban jaye 
-const seedNotifications = [
+const DEFAULT_NOTIFICATIONS = [
   {
-    id: "n1",
-    title: "Welcome to BuildCity! 🎉",
-    message: "Get 20% off on your first order. Use code WELCOME20 at checkout.",
-    time: "2 hours ago",
+    id: "n-welcome",
+    title: "Welcome to Sonevalley BuildCity! 🏗️",
+    message: "Certified building materials, steel, cement & sanitary delivered direct to your construction site.",
+    link: "/categories",
+    timestamp: Date.now() - 3600000 * 2,
+    read: false,
+    type: "info",
+  },
+  {
+    id: "n-offer",
+    title: "Bulk Construction Site Discount 🎉",
+    message: "Free express site delivery across Uttar Pradesh districts on all bulk orders above ₹25,000.",
+    link: "/categories",
+    timestamp: Date.now() - 3600000 * 5,
     read: false,
     type: "offer",
-  },
-  {
-    id: "n2",
-    title: "Price Drop Alert",
-    message: "UltraTech Cement 50kg is now ₹350, down from ₹390 in your region.",
-    time: "5 hours ago",
-    read: false,
-    type: "price",
-  },
-  {
-    id: "n3",
-    title: "New vendors added",
-    message: "3 new trusted vendors are now delivering in your area.",
-    time: "1 day ago",
-    read: true,
-    type: "info",
   },
 ];
 
 export function NotificationProvider({ children }) {
+  const { user } = useAuth();
+  const storageKey = user?.phone
+    ? `buildcity_notifications_${user.phone.replace(/\D/g, "")}`
+    : user?.id
+    ? `buildcity_notifications_${user.id}`
+    : "buildcity_notifications_guest";
+
   const [notifications, setNotifications] = useState([]);
 
+  // Load user-specific notifications
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
         setNotifications(JSON.parse(saved));
-      } catch {
-        setNotifications(seedNotifications);
+      } else {
+        setNotifications(DEFAULT_NOTIFICATIONS);
       }
-    } else {
-      setNotifications(seedNotifications);
+    } catch {
+      setNotifications(DEFAULT_NOTIFICATIONS);
     }
-  }, []);
+  }, [storageKey]);
 
+  // Persist to user storage key
   useEffect(() => {
-    if (notifications.length) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(notifications));
+    if (notifications.length > 0 && storageKey) {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(notifications));
+      } catch {}
     }
-  }, [notifications]);
+  }, [notifications, storageKey]);
 
-  const addNotification = ({ title, message, type = "info" }) => {
-    setNotifications((prev) => [
-      {
-        id: "n-" + Date.now(),
-        title,
-        message,
-        time: "Just now",
-        read: false,
-        type,
-      },
-      ...prev,
-    ]);
+  const addNotification = ({ title, message, type = "info", link = null }) => {
+    const newNotif = {
+      id: "n-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6),
+      title,
+      message,
+      link,
+      timestamp: Date.now(),
+      read: false,
+      type,
+    };
+
+    setNotifications((prev) => [newNotif, ...prev]);
+    return newNotif;
   };
 
   const markAsRead = (id) => {
@@ -77,11 +82,30 @@ export function NotificationProvider({ children }) {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
+  const clearAllNotifications = () => {
+    setNotifications([]);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify([]));
+    } catch {}
+  };
+
+  const removeNotification = (id) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  };
+
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
     <NotificationContext.Provider
-      value={{ notifications, addNotification, markAsRead, markAllAsRead, unreadCount }}
+      value={{
+        notifications,
+        addNotification,
+        markAsRead,
+        markAllAsRead,
+        clearAllNotifications,
+        removeNotification,
+        unreadCount,
+      }}
     >
       {children}
     </NotificationContext.Provider>

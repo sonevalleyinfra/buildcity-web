@@ -1,5 +1,6 @@
-const otpStore = global.__otpStore || new Map();
-global.__otpStore = otpStore;
+import crypto from "node:crypto";
+
+const OTP_SECRET = "BuildCity_Super_Secret_OTP_HMAC_Key_2026_Varanasi_UP";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -19,7 +20,7 @@ export default async function handler(req, res) {
     if (typeof body === "string") {
       try { body = JSON.parse(body); } catch { body = {}; }
     }
-    const { phone, otp, name } = body || {};
+    const { phone, otp, otpToken, name } = body || {};
 
     if (!phone || !otp) {
       return res.status(400).json({ error: "Phone and OTP required" });
@@ -28,12 +29,18 @@ export default async function handler(req, res) {
     const cleanPhone = phone.toString().trim().replace(/\D/g, "").slice(-10);
     const otpInput = otp.toString().trim();
 
-    const record = otpStore.get(cleanPhone);
     let isValid = false;
 
-    if (record && record.otp === otpInput && record.expiresAt > Date.now()) {
-      isValid = true;
-      otpStore.delete(cleanPhone);
+    // Verify cryptographic HMAC token across any Vercel serverless container
+    if (otpToken && typeof otpToken === "string" && otpToken.includes(".")) {
+      const [expiresAtStr, hash] = otpToken.split(".");
+      const expiresAt = parseInt(expiresAtStr, 10);
+      if (expiresAt > Date.now()) {
+        const expectedHash = crypto.createHmac("sha256", OTP_SECRET).update(`${cleanPhone}:${otpInput}:${expiresAt}`).digest("hex");
+        if (expectedHash === hash) {
+          isValid = true;
+        }
+      }
     } else if (otpInput === "123456") {
       isValid = true;
     }

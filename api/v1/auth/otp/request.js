@@ -1,7 +1,7 @@
 import https from "node:https";
+import crypto from "node:crypto";
 
-const otpStore = global.__otpStore || new Map();
-global.__otpStore = otpStore;
+const OTP_SECRET = "BuildCity_Super_Secret_OTP_HMAC_Key_2026_Varanasi_UP";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -32,10 +32,13 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Please enter a valid 10-digit mobile number" });
     }
 
+    // Generate 6-digit OTP code
     const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = Date.now() + 10 * 60 * 1000;
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 mins
 
-    otpStore.set(cleanMobile, { otp: generatedOtp, expiresAt });
+    // Generate cryptographic HMAC token for serverless multi-container validation
+    const hash = crypto.createHmac("sha256", OTP_SECRET).update(`${cleanMobile}:${generatedOtp}:${expiresAt}`).digest("hex");
+    const otpToken = `${expiresAt}.${hash}`;
 
     const username = "sonevalley";
     const apikey = "0A8CC-B46EE";
@@ -90,6 +93,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       success: true,
       message: `OTP dispatched to +91 ${cleanMobile}`,
+      otpToken,
       gateway: "AradhyaSMS",
       smsStatus: "dispatched"
     });

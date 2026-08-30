@@ -48,6 +48,8 @@ export function AuthProvider({ children }) {
     return path;
   };
 
+  const [currentOtpToken, setCurrentOtpToken] = useState("");
+
   const requestOtp = async (phone) => {
     const cleanPhone = phone.trim().replace(/\D/g, "").slice(-10);
     const endpoint = getOtpEndpoint("/api/v1/auth/otp/request");
@@ -62,12 +64,26 @@ export function AuthProvider({ children }) {
     if (!response.ok || !data.success) {
       throw new Error(data.error || "Failed to dispatch OTP");
     }
+
+    if (data.otpToken) {
+      setCurrentOtpToken(data.otpToken);
+      try {
+        sessionStorage.setItem("buildcity_otp_token", data.otpToken);
+      } catch {}
+    }
+
     return data;
   };
 
   const verifyOtp = async ({ phone, otp, role = "customer", name }) => {
     const cleanPhone = phone.trim().replace(/\D/g, "").slice(-10);
     const cleanOtp = otp.trim();
+    let storedOtpToken = currentOtpToken;
+    if (!storedOtpToken) {
+      try {
+        storedOtpToken = sessionStorage.getItem("buildcity_otp_token") || "";
+      } catch {}
+    }
 
     // Check vendor account locally to block OTP login for vendors immediately
     let localVendor = null;
@@ -85,7 +101,7 @@ export function AuthProvider({ children }) {
     const apiRes = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: cleanPhone, otp: cleanOtp, name }),
+      body: JSON.stringify({ phone: cleanPhone, otp: cleanOtp, otpToken: storedOtpToken, name }),
     });
 
     const apiData = await apiRes.json().catch(() => ({}));

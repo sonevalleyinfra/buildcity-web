@@ -56,7 +56,7 @@ export default async function handler(req, res) {
     const user = {
       id: `cust_${cleanPhone}`,
       phone: cleanPhone,
-      name: name || "Customer",
+      name: name || "",
       role: "customer",
       token: `jwt_token_${cleanPhone}_${Date.now()}`
     };

@@ -146,19 +146,23 @@ export function AuthProvider({ children }) {
       throw new Error("Admin, DR, and Vendor accounts cannot log in using Mobile OTP. Please click 'Partner Login (Password)' at the bottom right!");
     }
 
-    const defaultName =
-      fetchedDbUser?.name ||
-      (assignedRole === "admin"
-        ? "Admin User"
-        : assignedRole === "dr"
-        ? drMatch?.name || "District Representative"
-        : assignedRole === "vendor"
-        ? vendorMatch?.shopName || "Vendor Partner"
-        : `Customer ${cleanPhone.slice(-4)}`);
+    let savedCustomerName = "";
+    try {
+      const savedUsers = localStorage.getItem("buildcity_admin_users");
+      const usersList = savedUsers ? JSON.parse(savedUsers) : [];
+      const found = usersList.find((u) => (u.phone || "").trim() === cleanPhone);
+      if (found && found.name && found.name !== "Customer") savedCustomerName = found.name;
+    } catch {}
+
+    const resolvedName =
+      (name && name !== "Customer" ? name.trim() : "") ||
+      (fetchedDbUser?.name && fetchedDbUser.name !== "Customer" ? fetchedDbUser.name : "") ||
+      savedCustomerName ||
+      `Customer ${cleanPhone.slice(-4)}`;
 
     const userObj = {
       id: fetchedDbUser?.id || drMatch?.id || vendorMatch?.id || "user-" + Date.now(),
-      name: name || defaultName,
+      name: resolvedName,
       email: fetchedDbUser?.email || "",
       phone: cleanPhone,
       role: assignedRole,

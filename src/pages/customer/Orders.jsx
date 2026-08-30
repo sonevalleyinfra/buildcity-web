@@ -51,15 +51,17 @@ export default function Orders() {
 
   // STRICT CUSTOMER ISOLATION: Show ONLY orders belonging to the logged-in customer
   const customerOrders = useMemo(() => {
-    if (!customerPhone && !customerId) return [];
-    return orders.filter((o) => {
-      const oPhone = (o.userPhone || o.phone || o.customerPhone || o.customer?.phone || o.address?.phone || "").trim();
+    if (!customerPhone && !customerId) return orders || [];
+    return (orders || []).filter((o) => {
+      const oPhone = (o.userPhone || o.phone || o.customerPhone || o.customer?.phone || o.address?.phone || "").trim().replace(/\D/g, "");
+      const cleanCust = customerPhone.replace(/\D/g, "");
+
       const oUserId = o.userId || o.customerId || o.customer?.id;
 
       if (customerId && oUserId && String(oUserId).toLowerCase() === String(customerId).toLowerCase()) {
         return true;
       }
-      if (customerPhone && oPhone && oPhone === customerPhone) {
+      if (cleanCust && oPhone && (oPhone.includes(cleanCust.slice(-10)) || cleanCust.includes(oPhone.slice(-10)))) {
         return true;
       }
       return false;

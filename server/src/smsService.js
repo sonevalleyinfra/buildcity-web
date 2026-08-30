@@ -54,15 +54,16 @@ async function sendRealSMSOTP(phone, otpCode) {
       rejectUnauthorized: false,
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "*/*"
+        "Accept": "*/*",
+        "Connection": "close"
       }
     };
 
     const req = https.request(options, (res) => {
       let responseBody = "";
-      res.on("data", (chunk) => { responseBody += chunk; });
-      res.on("end", () => {
-        if (!resolved) {
+
+      const parseAndResolve = () => {
+        if (!resolved && responseBody.trim()) {
           resolved = true;
           clearTimeout(timeoutTimer);
           let parsedData = null;
@@ -74,6 +75,17 @@ async function sendRealSMSOTP(phone, otpCode) {
           console.log(`[Aradhya SMS Gateway] Response for +91 ${cleanMobile}:`, parsedData);
           resolve({ success: true, data: parsedData, gateway: "AradhyaSMS" });
         }
+      };
+
+      res.on("data", (chunk) => {
+        responseBody += chunk;
+        if (responseBody.includes('"status"') || responseBody.includes('"message"')) {
+          parseAndResolve();
+        }
+      });
+
+      res.on("end", () => {
+        parseAndResolve();
       });
     });
 

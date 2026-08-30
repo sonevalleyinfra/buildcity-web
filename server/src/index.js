@@ -2002,6 +2002,6 @@ app.post("/api/v1/reviews", async (req, res) => {
 });
 
 // Start Express Server
-app.listen(PORT, () => {
-  console.log(`🚀 BuildCity Express Gateway running live on http://localhost:${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 BuildCity Express Gateway running live on port ${PORT}`);
 });

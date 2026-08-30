@@ -18,15 +18,15 @@ const categoryTiles = [
 ];
 
 const brands = [
-  { name: "UltraTech", category: "Cement", short: "UltraTech", initials: "UT", color: "#D97706", bg: "#FEF3C7" },
-  { name: "Asian Paints", category: "Paints", short: "Asian Paints", initials: "AP", color: "#DC2626", bg: "#FEE2E2" },
-  { name: "Tata Tiscon", category: "Steel 550D", short: "Tata Tiscon", initials: "TT", color: "#0284C7", bg: "#E0F2FE" },
-  { name: "Ambuja", category: "Waterproof", short: "Ambuja", initials: "AC", color: "#16A34A", bg: "#DCFCE7" },
-  { name: "Astral Pipes", category: "Plumbing", short: "Astral", initials: "AP", color: "#0EA5E9", bg: "#E0F2FE" },
-  { name: "Finolex", category: "Electrical", short: "Finolex", initials: "FC", color: "#E11D48", bg: "#FFE4E6" },
-  { name: "Berger", category: "Coatings", short: "Berger", initials: "BP", color: "#9333EA", bg: "#F3E8FF" },
-  { name: "Havells", category: "Switches", short: "Havells", initials: "HI", color: "#2563EB", bg: "#DBEAFE" },
-  { name: "Kajaria", category: "Ceramics", short: "Kajaria", initials: "KC", color: "#B45309", bg: "#FEF3C7" },
+  { name: "UltraTech", category: "Cement", short: "UltraTech", logo: "https://www.google.com/s2/favicons?domain=ultratechcement.com&sz=128", initials: "UT", color: "#D97706", bg: "#FEF3C7" },
+  { name: "Asian Paints", category: "Paints", short: "Asian Paints", logo: "https://www.google.com/s2/favicons?domain=asianpaints.com&sz=128", initials: "AP", color: "#DC2626", bg: "#FEE2E2" },
+  { name: "Tata Tiscon", category: "Steel 550D", short: "Tata Tiscon", logo: "https://www.google.com/s2/favicons?domain=tatatiscon.co.in&sz=128", initials: "TT", color: "#0284C7", bg: "#E0F2FE" },
+  { name: "Ambuja", category: "Waterproof", short: "Ambuja", logo: "https://www.google.com/s2/favicons?domain=ambujacement.com&sz=128", initials: "AC", color: "#16A34A", bg: "#DCFCE7" },
+  { name: "Astral Pipes", category: "Plumbing", short: "Astral", logo: "https://www.google.com/s2/favicons?domain=astralpipes.com&sz=128", initials: "AP", color: "#0EA5E9", bg: "#E0F2FE" },
+  { name: "Finolex", category: "Electrical", short: "Finolex", logo: "https://www.google.com/s2/favicons?domain=finolex.com&sz=128", initials: "FC", color: "#E11D48", bg: "#FFE4E6" },
+  { name: "Berger", category: "Coatings", short: "Berger", logo: "https://www.google.com/s2/favicons?domain=bergerpaints.com&sz=128", initials: "BP", color: "#9333EA", bg: "#F3E8FF" },
+  { name: "Havells", category: "Switches", short: "Havells", logo: "https://www.google.com/s2/favicons?domain=havells.com&sz=128", initials: "HI", color: "#2563EB", bg: "#DBEAFE" },
+  { name: "Kajaria", category: "Ceramics", short: "Kajaria", logo: "https://www.google.com/s2/favicons?domain=kajariaceramics.com&sz=128", initials: "KC", color: "#B45309", bg: "#FEF3C7" },
 ];
 
 const services = [
@@ -376,27 +376,25 @@ export default function Home() {
                 className="bg-white border border-slate-200/90 rounded-2xl p-2.5 flex flex-col items-center text-center shadow-2xs hover:border-brand-400 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 group"
               >
                 <div
-                  className="w-12 h-12 rounded-xl flex items-center justify-center p-1.5 mb-1.5 shadow-2xs border border-slate-100 bg-white group-hover:scale-105 transition-transform duration-200 overflow-hidden relative"
+                  className="w-12 h-12 rounded-xl flex items-center justify-center p-1.5 mb-1.5 shadow-2xs border border-slate-100 group-hover:scale-105 transition-transform duration-200 overflow-hidden relative"
+                  style={{ backgroundColor: b.bg }}
                 >
-                  <img
-                    src={b.logo}
-                    alt={b.name}
-                    className="w-7 h-7 object-contain"
-                    onError={(e) => {
-                      if (e.target.src !== b.logoAlt) {
-                        e.target.src = b.logoAlt;
-                      } else {
-                        e.target.style.display = 'none';
-                        if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
-                      }
-                    }}
-                  />
-                  <div
-                    className="w-full h-full rounded-lg font-black text-xs hidden items-center justify-center tracking-tight shadow-2xs"
-                    style={{ backgroundColor: b.bg, color: b.color }}
+                  <span
+                    className="absolute inset-0 flex items-center justify-center font-black text-xs tracking-tight select-none"
+                    style={{ color: b.color }}
                   >
                     {b.initials}
-                  </div>
+                  </span>
+                  {b.logo && (
+                    <img
+                      src={b.logo}
+                      alt={b.name}
+                      className="w-7 h-7 object-contain relative z-10"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                    />
+                  )}
                 </div>
                 <span className="text-xs font-black text-navy-900 leading-tight tracking-tight group-hover:text-brand-600 transition-colors">
                   {b.name}

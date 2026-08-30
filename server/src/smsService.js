@@ -46,15 +46,7 @@ async function sendRealSMSOTP(phone, otpCode) {
 
     const path = `/sms-panel/api/http/index.php?${queryParams}`;
 
-    const options = {
-      hostname: "sms.aradhyatechnologies.in",
-      port: 443,
-      path: path,
-      method: "GET",
-      rejectUnauthorized: false // Handle SSL cert altname mismatch safely
-    };
-
-    const req = https.request(options, (res) => {
+    http.get(`http://sms.aradhyatechnologies.in${path}`, (res) => {
       let responseBody = "";
       res.on("data", (chunk) => { responseBody += chunk; });
       res.on("end", () => {
@@ -71,33 +63,14 @@ async function sendRealSMSOTP(phone, otpCode) {
           resolve({ success: true, data: parsedData, gateway: "AradhyaSMS" });
         }
       });
+    }).on("error", (err) => {
+      console.error(`[Aradhya HTTP Error] +91 ${cleanMobile}:`, err.message);
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timeoutTimer);
+        resolve({ success: false, error: err.message, gateway: "AradhyaSMS" });
+      }
     });
-
-    req.on("error", (err) => {
-      console.error(`[Aradhya HTTPS Error] +91 ${cleanMobile}:`, err.message);
-      // HTTP fallback if HTTPS fails
-      http.get(`http://sms.aradhyatechnologies.in${path}`, (httpRes) => {
-        let httpData = "";
-        httpRes.on("data", (chunk) => { httpData += chunk; });
-        httpRes.on("end", () => {
-          if (!resolved) {
-            resolved = true;
-            clearTimeout(timeoutTimer);
-            console.log(`[Aradhya HTTP Fallback Response] +91 ${cleanMobile}:`, httpData);
-            resolve({ success: true, data: httpData, gateway: "AradhyaSMS" });
-          }
-        });
-      }).on("error", (httpErr) => {
-        if (!resolved) {
-          resolved = true;
-          clearTimeout(timeoutTimer);
-          console.error(`[Aradhya HTTP Fallback Error]:`, httpErr.message);
-          resolve({ success: false, error: httpErr.message, gateway: "AradhyaSMS" });
-        }
-      });
-    });
-
-    req.end();
   });
 }
 

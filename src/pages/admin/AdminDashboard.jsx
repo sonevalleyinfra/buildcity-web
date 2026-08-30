@@ -3,6 +3,7 @@ import Logo from "../../components/Logo";
 import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useAlert } from "../../context/AlertContext";
+import { useNotifications } from "../../context/NotificationContext";
 import { formatShortId } from "../../utils/formatId";
 
 const PRESET_IMAGES = [
@@ -24,6 +25,7 @@ const TABS = [
   { id: "Categories", label: "🏷️ Categories" },
   { id: "Regions", label: "🗺️ Regions" },
   { id: "Coupons", label: "🎟️ Coupons" },
+  { id: "Notifications", label: "📢 Send Notifications" },
 ];
 
 const STATUS_STYLE = {
@@ -120,6 +122,35 @@ export default function AdminDashboard() {
   const [showCouponForm, setShowCouponForm] = useState(false);
   const [isSubmittingCoupon, setIsSubmittingCoupon] = useState(false);
   const [deletingCouponId, setDeletingCouponId] = useState(null);
+
+  // Admin Real-Time Customer Notification Broadcast State
+  const {
+    notifications: adminNotifs = [],
+    sendBroadcastNotification,
+    isSending: isSendingNotif,
+    removeNotification: removeAdminNotif,
+    clearAllNotifications: clearAllAdminNotifs,
+  } = useNotifications();
+  const [notifTitle, setNotifTitle] = useState("");
+  const [notifMessage, setNotifMessage] = useState("");
+  const [notifStatusMsg, setNotifStatusMsg] = useState("");
+
+  const handleSendBroadcast = async (e) => {
+    e.preventDefault();
+    if (!notifTitle.trim() || !notifMessage.trim()) return;
+
+    const ok = await sendBroadcastNotification({
+      title: notifTitle.trim(),
+      message: notifMessage.trim(),
+    });
+
+    if (ok) {
+      setNotifStatusMsg("✓ Broadcast notification sent to all registered customers in real-time!");
+      setNotifTitle("");
+      setNotifMessage("");
+      setTimeout(() => setNotifStatusMsg(""), 4500);
+    }
+  };
 
   const handleAddCoupon = async (e) => {
     e.preventDefault();
@@ -2007,6 +2038,131 @@ export default function AdminDashboard() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {/* NOTIFICATIONS BROADCAST TAB */}
+        {tab === "Notifications" && (
+          <div className="space-y-5 font-sans">
+            {notifStatusMsg && (
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold px-4 py-3 rounded-2xl shadow-2xs flex items-center gap-2 animate-in fade-in duration-200">
+                <span>✓</span>
+                <span>{notifStatusMsg}</span>
+              </div>
+            )}
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+              <div className="flex items-center gap-3 border-b border-slate-100 pb-4 mb-5">
+                <span className="h-10 w-10 rounded-2xl bg-brand-50 border border-brand-200 flex items-center justify-center text-xl shadow-2xs">
+                  📢
+                </span>
+                <div>
+                  <h2 className="text-base font-extrabold text-navy-900">
+                    Send Real-Time Notification to Customers
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Broadcast instant site alerts, price drop notices, or festival offers directly to all customer devices and Supabase database.
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSendBroadcast} className="space-y-4 max-w-2xl">
+                <div>
+                  <label className="block text-xs font-bold text-navy-900 mb-1.5">
+                    Notification Title *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 🏗️ Special Cement Rates Live Today!"
+                    value={notifTitle}
+                    onChange={(e) => setNotifTitle(e.target.value)}
+                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3.5 py-3 outline-none font-bold focus:border-brand-500 focus:bg-white transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-navy-900 mb-1.5">
+                    Notification Message / Body *
+                  </label>
+                  <textarea
+                    required
+                    rows={3}
+                    placeholder="e.g. UltraTech & Ambuja Cement available at wholesale rates with same-day site delivery across Mirzapur & Varanasi."
+                    value={notifMessage}
+                    onChange={(e) => setNotifMessage(e.target.value)}
+                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl p-3.5 outline-none font-medium focus:border-brand-500 focus:bg-white transition-all leading-relaxed"
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={isSendingNotif}
+                    className="bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white text-xs font-extrabold px-6 py-3 rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-60 flex items-center gap-2"
+                  >
+                    {isSendingNotif ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Sending Broadcast...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🚀</span>
+                        <span>Broadcast to All Customers</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Broadcast History */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                <h3 className="text-xs font-black text-navy-900 uppercase tracking-wider">
+                  Active Live Notifications ({adminNotifs.length})
+                </h3>
+                {adminNotifs.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={clearAllAdminNotifs}
+                    className="text-xs font-bold text-rose-600 hover:underline cursor-pointer"
+                  >
+                    Clear All Notifications
+                  </button>
+                )}
+              </div>
+
+              {adminNotifs.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  No active broadcast notifications sent yet. Use the form above to send your first real-time alert!
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {adminNotifs.map((n) => (
+                    <div key={n.id} className="py-3 flex items-center justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-navy-900">{n.title}</span>
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            {new Date(n.timestamp || Date.now()).toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 mt-0.5 leading-snug">{n.message}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeAdminNotif(n.id)}
+                        className="text-xs font-bold text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+                      >
+                        🗑️ Delete
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

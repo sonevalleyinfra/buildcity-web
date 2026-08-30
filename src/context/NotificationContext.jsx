@@ -1,28 +1,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useAuth } from "./AuthContext";
+import { API_BASE_URL } from "../config/api";
 
 const NotificationContext = createContext(null);
-
-const DEFAULT_NOTIFICATIONS = [
-  {
-    id: "n-welcome",
-    title: "Welcome to Sonevalley BuildCity! 🏗️",
-    message: "Certified building materials, steel, cement & sanitary delivered direct to your construction site.",
-    link: "/categories",
-    timestamp: Date.now() - 3600000 * 2,
-    read: false,
-    type: "info",
-  },
-  {
-    id: "n-offer",
-    title: "Bulk Construction Site Discount 🎉",
-    message: "Free express site delivery across Uttar Pradesh districts on all bulk orders above ₹25,000.",
-    link: "/categories",
-    timestamp: Date.now() - 3600000 * 5,
-    read: false,
-    type: "offer",
-  },
-];
 
 export function NotificationProvider({ children }) {
   const { user } = useAuth();
@@ -33,30 +13,69 @@ export function NotificationProvider({ children }) {
     : "buildcity_notifications_guest";
 
   const [notifications, setNotifications] = useState([]);
+  const [isSending, setIsSending] = useState(false);
 
-  // Load user-specific notifications
+  // Fetch real database notifications from backend
+  const fetchDbNotifications = async () => {
+    try {
+      const url = user?.id
+        ? `${API_BASE_URL}/api/v1/notifications?userId=${encodeURIComponent(user.id)}`
+        : `${API_BASE_URL}/api/v1/notifications`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const dbList = await res.json();
+        if (Array.isArray(dbList)) {
+          const formatted = dbList.map((n) => ({
+            id: n.id,
+            title: n.title,
+            message: n.message,
+            link: n.link || (n.title.toLowerCase().includes("order") ? "/orders" : "/categories"),
+            timestamp: new Date(n.createdAt).getTime() || Date.now(),
+            read: Boolean(n.isRead),
+            type: n.title.toLowerCase().includes("order")
+              ? "order"
+              : n.title.toLowerCase().includes("price") || n.title.toLowerCase().includes("discount")
+              ? "price"
+              : n.title.toLowerCase().includes("offer")
+              ? "offer"
+              : "info",
+          }));
+
+          setNotifications((prev) => {
+            const combined = [...prev, ...formatted];
+            const unique = Array.from(new Map(combined.map((x) => [x.id || `${x.title}_${x.message}`, x])).values())
+              .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+            if (storageKey) {
+              try { localStorage.setItem(storageKey, JSON.stringify(unique)); } catch {}
+            }
+            return unique;
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("DB notification fetch note:", err.message);
+    }
+  };
+
+  // Load from user storage on start and poll DB
   useEffect(() => {
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         setNotifications(JSON.parse(saved));
       } else {
-        setNotifications(DEFAULT_NOTIFICATIONS);
+        setNotifications([]);
       }
     } catch {
-      setNotifications(DEFAULT_NOTIFICATIONS);
+      setNotifications([]);
     }
-  }, [storageKey]);
 
-  // Persist to user storage key
-  useEffect(() => {
-    if (notifications.length > 0 && storageKey) {
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(notifications));
-      } catch {}
-    }
-  }, [notifications, storageKey]);
+    fetchDbNotifications();
+    const interval = setInterval(fetchDbNotifications, 8000);
+    return () => clearInterval(interval);
+  }, [storageKey, user]);
 
+  // Real-Time Local/Event Notification Addition
   const addNotification = ({ title, message, type = "info", link = null }) => {
     const newNotif = {
       id: "n-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6),
@@ -68,18 +87,72 @@ export function NotificationProvider({ children }) {
       type,
     };
 
-    setNotifications((prev) => [newNotif, ...prev]);
+    setNotifications((prev) => {
+      const updated = [newNotif, ...prev];
+      if (storageKey) {
+        try { localStorage.setItem(storageKey, JSON.stringify(updated)); } catch {}
+      }
+      return updated;
+    });
     return newNotif;
   };
 
-  const markAsRead = (id) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
+  // Admin Broadcast Dispatcher (Saves directly to database and pushes to all customers)
+  const sendBroadcastNotification = async ({ title, message }) => {
+    if (!title || !message) return false;
+    setIsSending(true);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/notifications`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          message,
+        }),
+      });
+
+      if (res.ok) {
+        addNotification({
+          title: `📢 ${title}`,
+          message,
+          type: "info",
+        });
+        await fetchDbNotifications();
+        return true;
+      }
+    } catch (err) {
+      console.warn("Broadcast send note:", err.message);
+    } finally {
+      setIsSending(false);
+    }
+    return false;
+  };
+
+  const markAsRead = async (id) => {
+    setNotifications((prev) => {
+      const updated = prev.map((n) => (n.id === id ? { ...n, read: true } : n));
+      if (storageKey) {
+        try { localStorage.setItem(storageKey, JSON.stringify(updated)); } catch {}
+      }
+      return updated;
+    });
+
+    if (id && id.length > 20) {
+      try {
+        await fetch(`${API_BASE_URL}/api/v1/notifications/${encodeURIComponent(id)}/read`, { method: "PATCH" });
+      } catch {}
+    }
   };
 
   const markAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setNotifications((prev) => {
+      const updated = prev.map((n) => ({ ...n, read: true }));
+      if (storageKey) {
+        try { localStorage.setItem(storageKey, JSON.stringify(updated)); } catch {}
+      }
+      return updated;
+    });
   };
 
   const clearAllNotifications = () => {
@@ -89,8 +162,20 @@ export function NotificationProvider({ children }) {
     } catch {}
   };
 
-  const removeNotification = (id) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  const removeNotification = async (id) => {
+    setNotifications((prev) => {
+      const updated = prev.filter((n) => n.id !== id);
+      if (storageKey) {
+        try { localStorage.setItem(storageKey, JSON.stringify(updated)); } catch {}
+      }
+      return updated;
+    });
+
+    if (id && id.length > 20) {
+      try {
+        await fetch(`${API_BASE_URL}/api/v1/notifications/${encodeURIComponent(id)}`, { method: "DELETE" });
+      } catch {}
+    }
   };
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -100,11 +185,14 @@ export function NotificationProvider({ children }) {
       value={{
         notifications,
         addNotification,
+        sendBroadcastNotification,
+        isSending,
         markAsRead,
         markAllAsRead,
         clearAllNotifications,
         removeNotification,
         unreadCount,
+        fetchDbNotifications,
       }}
     >
       {children}

@@ -2037,7 +2037,100 @@ app.post("/api/v1/reviews", async (req, res) => {
       },
     });
 
-    res.status(201).json(review);
+// 13. NOTIFICATIONS ENDPOINTS (Admin Broadcast & Real-Time Customer Alerts)
+app.get("/api/v1/notifications", async (req, res) => {
+  try {
+    const { userId } = req.query;
+    const whereClause = {};
+    if (userId && userId.length > 20) {
+      whereClause.OR = [
+        { userId },
+        { user: { role: "CUSTOMER" } },
+      ];
+    }
+
+    const notifications = await prisma.notification.findMany({
+      where: whereClause,
+      include: { user: true },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+
+    res.json(notifications);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/v1/notifications", async (req, res) => {
+  try {
+    const { title, message, userId } = req.body;
+    if (!title || !message) {
+      return res.status(400).json({ error: "Title and message are required" });
+    }
+
+    // If specific userId provided, use it; otherwise broadcast to customers / admin
+    let targetUsers = [];
+    if (userId && userId.length > 20) {
+      const u = await prisma.user.findUnique({ where: { id: userId } }).catch(() => null);
+      if (u) targetUsers.push(u);
+    }
+
+    if (targetUsers.length === 0) {
+      targetUsers = await prisma.user.findMany({
+        where: { role: "CUSTOMER" },
+        take: 100,
+      }).catch(() => []);
+    }
+
+    if (targetUsers.length === 0) {
+      const firstUser = await prisma.user.findFirst().catch(() => null);
+      if (firstUser) targetUsers.push(firstUser);
+    }
+
+    const createdList = [];
+    for (const u of targetUsers) {
+      try {
+        const notif = await prisma.notification.create({
+          data: {
+            userId: u.id,
+            title: title.trim(),
+            message: message.trim(),
+            isRead: false,
+          },
+        });
+        createdList.push(notif);
+      } catch (e) {
+        console.warn("Notification insert note:", e.message);
+      }
+    }
+
+    console.log(`📢 Broadcast notification sent to ${createdList.length} user(s): "${title}"`);
+    res.status(201).json({ success: true, count: createdList.length, notifications: createdList });
+  } catch (err) {
+    console.error("POST /api/v1/notifications error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch("/api/v1/notifications/:id/read", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const notif = await prisma.notification.update({
+      where: { id },
+      data: { isRead: true },
+    }).catch(() => null);
+    res.json(notif || { success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/v1/notifications/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.notification.delete({ where: { id } }).catch(() => null);
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

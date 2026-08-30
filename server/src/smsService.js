@@ -35,14 +35,14 @@ async function sendRealSMSOTP(phone, otpCode) {
   return new Promise((resolve) => {
     let resolved = false;
 
-    // Timeout safety (3.5s) so UI response never hangs or freezes
+    // Timeout safety (12s) so Aradhya Gateway has full time to respond
     const timeoutTimer = setTimeout(() => {
       if (!resolved) {
         resolved = true;
-        console.warn(`[Aradhya SMS Gateway] Timeout safety triggered after 3.5s for +91 ${cleanMobile}`);
-        resolve({ success: true, warning: "Timeout background dispatch", gateway: "AradhyaSMS" });
+        console.warn(`[Aradhya SMS Gateway] Timeout safety triggered after 12s for +91 ${cleanMobile}`);
+        resolve({ success: false, warning: "Timeout background dispatch", gateway: "AradhyaSMS" });
       }
-    }, 3500);
+    }, 12000);
 
     const path = `/sms-panel/api/http/index.php?${queryParams}`;
 
@@ -51,7 +51,11 @@ async function sendRealSMSOTP(phone, otpCode) {
       port: 443,
       path: path,
       method: "GET",
-      rejectUnauthorized: false
+      rejectUnauthorized: false,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Connection": "close"
+      }
     };
 
     const req = https.request(options, (res) => {

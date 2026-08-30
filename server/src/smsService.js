@@ -26,6 +26,7 @@ async function sendRealSMSOTP(phone, otpCode) {
     message,
     route,
     TemplateID: templateId,
+    peid,
     format: "JSON"
   }).toString();
 

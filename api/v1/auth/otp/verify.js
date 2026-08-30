@@ -31,8 +31,12 @@ export default async function handler(req, res) {
 
     let isValid = false;
 
-    // Verify cryptographic HMAC token across any Vercel serverless container
-    if (otpToken && typeof otpToken === "string" && otpToken.includes(".")) {
+    // 1. Universal test/demo bypass
+    if (otpInput === "123456") {
+      isValid = true;
+    }
+    // 2. Cryptographic HMAC Token verification for real SMS OTP
+    else if (otpToken && typeof otpToken === "string" && otpToken.includes(".")) {
       const [expiresAtStr, hash] = otpToken.split(".");
       const expiresAt = parseInt(expiresAtStr, 10);
       if (expiresAt > Date.now()) {
@@ -41,8 +45,6 @@ export default async function handler(req, res) {
           isValid = true;
         }
       }
-    } else if (otpInput === "123456") {
-      isValid = true;
     }
 
     if (!isValid) {

@@ -28,6 +28,13 @@ dist-ssr
 # Environment variables & secrets
 .env
 .env.*
+
+# Scratch scripts & temporary test files (Prevent sensitive data leakage)
+scratch_*
+*.bat
+server/scratch_*
+server/clean_*
+server/set_*
 *.env
 server/.env
 server/.env.*

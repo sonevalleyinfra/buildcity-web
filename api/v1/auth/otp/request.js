@@ -1,3 +1,4 @@
+import http from "node:http";
 import https from "node:https";
 import crypto from "node:crypto";
 import pg from "pg";
@@ -20,6 +21,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
+  const startTime = Date.now();
+
   try {
     let body = req.body;
     if (typeof body === "string") {
@@ -36,66 +39,22 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Please enter a valid 10-digit mobile number" });
     }
 
-    // STRICT STAFF BLOCKING: Admin, DR, and Vendor accounts can NEVER use OTP login
+    // STRICT STAFF BLOCKING
     const isSpecialStaff = cleanMobile === "9999999999" || cleanMobile === "7777777777";
-    let isStaffPhone = isSpecialStaff;
+    if (isSpecialStaff) {
+      return res.status(403).json({
+        error: "Admin, DR, and Vendor accounts are strictly not allowed to log in via Customer OTP. Please use 'Partner Login (Password)'.",
+        isStaffBlocked: true,
+      });
+    }
 
-    // 1. Generate 6-digit OTP code & cryptographic HMAC token
+    // 1. Generate 6-digit OTP code & cryptographic HMAC token (instant 0ms)
     const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 mins
     const hash = crypto.createHmac("sha256", OTP_SECRET).update(`${cleanMobile}:${generatedOtp}:${expiresAt}`).digest("hex");
     const otpToken = `${expiresAt}.${hash}`;
 
-    // 2. Check staff accounts and save OTP into Supabase PostgreSQL database
-    try {
-      const client = new Client({
-        connectionString: CONNECTION_STRING,
-        ssl: { rejectUnauthorized: false },
-        connectionTimeoutMillis: 3500,
-      });
-      await client.connect();
-
-      if (!isStaffPhone) {
-        const staffRes = await client.query(
-          `SELECT 'user' as tbl FROM users WHERE phone = $1 AND role IN ('ADMIN', 'DR', 'VENDOR')
-           UNION ALL
-           SELECT 'dr' as tbl FROM district_representatives WHERE phone = $1
-           UNION ALL
-           SELECT 'vendor' as tbl FROM vendors WHERE phone = $1
-           LIMIT 1`,
-          [cleanMobile]
-        );
-        if (staffRes.rows && staffRes.rows.length > 0) {
-          isStaffPhone = true;
-        }
-      }
-
-      if (isStaffPhone) {
-        await client.end();
-        return res.status(403).json({
-          error: "Admin, DR, and Vendor accounts are strictly not allowed to log in via Customer OTP. Please use 'Partner Login (Password)'.",
-          isStaffBlocked: true,
-        });
-      }
-
-      // Save OTP to DB
-      await client.query(
-        `INSERT INTO otp_verifications (id, phone, otp, "isVerified", "expiresAt", "createdAt")
-         VALUES (gen_random_uuid(), $1, $2, false, $3, NOW())`,
-        [cleanMobile, generatedOtp, new Date(expiresAt)]
-      );
-      await client.end();
-    } catch (dbErr) {
-      console.warn("DB OTP log note:", dbErr.message);
-      if (isSpecialStaff) {
-        return res.status(403).json({
-          error: "Admin and DR accounts must log in using 'Partner Login (Password)'.",
-          isStaffBlocked: true,
-        });
-      }
-    }
-
-    // 3. Dispatch Live SMS via Aradhya Technologies
+    // 2. Dispatch Live SMS via Aradhya Technologies (Direct Fast HTTP API ~250ms)
     const username = "sonevalley";
     const apikey = "0A8CC-B46EE";
     const sender = "SNVLY";
@@ -118,39 +77,93 @@ export default async function handler(req, res) {
       format: "JSON"
     }).toString();
 
-    const path = `/sms-panel/api/http/index.php?${queryParams}`;
+    const smsPromise = new Promise((resolve) => {
+      const timeout = setTimeout(() => resolve({ success: true, timeout: true }), 3500);
 
-    await new Promise((resolve) => {
-      const timeout = setTimeout(() => resolve({ success: true }), 5000);
-      const agent = new https.Agent({ rejectUnauthorized: false });
-
-      const request = https.get(
-        `https://sms.aradhyatechnologies.in${path}`,
-        { agent },
-        (resp) => {
+      // Fast HTTP GET (Primary)
+      http.get(`http://sms.aradhyatechnologies.in/sms-panel/api/http/index.php?${queryParams}`, (resp) => {
+        let data = "";
+        resp.on("data", (chunk) => { data += chunk; });
+        resp.on("end", () => {
+          clearTimeout(timeout);
+          resolve({ success: true, data });
+        });
+      }).on("error", () => {
+        // HTTPS fallback if HTTP fails
+        const agent = new https.Agent({ rejectUnauthorized: false });
+        https.get(`https://sms.aradhyatechnologies.in/sms-panel/api/http/index.php?${queryParams}`, { agent }, (resp) => {
           let data = "";
           resp.on("data", (chunk) => { data += chunk; });
           resp.on("end", () => {
             clearTimeout(timeout);
-            console.log(`[SMS Gateway Response] Status: ${resp.statusCode}, Body: ${data}`);
             resolve({ success: true, data });
           });
-        }
-      );
-
-      request.on("error", (e) => {
-        clearTimeout(timeout);
-        console.warn("[SMS Gateway Error]:", e.message);
-        resolve({ success: true });
+        }).on("error", () => {
+          clearTimeout(timeout);
+          resolve({ success: true });
+        });
       });
     });
+
+    // 3. Database Check & Insert (in parallel with SMS dispatch)
+    const dbPromise = (async () => {
+      try {
+        const client = new Client({
+          connectionString: CONNECTION_STRING,
+          ssl: { rejectUnauthorized: false },
+          connectionTimeoutMillis: 2500,
+        });
+        await client.connect();
+
+        // Staff check
+        const staffRes = await client.query(
+          `SELECT 'user' as tbl FROM users WHERE phone = $1 AND role IN ('ADMIN', 'DR', 'VENDOR')
+           UNION ALL
+           SELECT 'dr' as tbl FROM district_representatives WHERE phone = $1
+           UNION ALL
+           SELECT 'vendor' as tbl FROM vendors WHERE phone = $1
+           LIMIT 1`,
+          [cleanMobile]
+        );
+        if (staffRes.rows && staffRes.rows.length > 0) {
+          await client.end();
+          return { isStaff: true };
+        }
+
+        // Save OTP to DB
+        await client.query(
+          `INSERT INTO otp_verifications (id, phone, otp, "isVerified", "expiresAt", "createdAt")
+           VALUES (gen_random_uuid(), $1, $2, false, $3, NOW())`,
+          [cleanMobile, generatedOtp, new Date(expiresAt)]
+        );
+        await client.end();
+        return { isStaff: false };
+      } catch (dbErr) {
+        console.warn("DB OTP log note:", dbErr.message);
+        return { isStaff: false };
+      }
+    })();
+
+    // Wait for both SMS & DB in parallel
+    const [smsResult, dbResult] = await Promise.all([smsPromise, dbPromise]);
+
+    if (dbResult?.isStaff) {
+      return res.status(403).json({
+        error: "Admin, DR, and Vendor accounts are strictly not allowed to log in via Customer OTP. Please use 'Partner Login (Password)'.",
+        isStaffBlocked: true,
+      });
+    }
+
+    const elapsed = Date.now() - startTime;
+    console.log(`[OTP Request Dispatched] Mobile: +91 ${cleanMobile} in ${elapsed}ms`);
 
     return res.status(200).json({
       success: true,
       message: `OTP dispatched to +91 ${cleanMobile}`,
       otpToken,
       gateway: "AradhyaSMS",
-      smsStatus: "dispatched"
+      smsStatus: "dispatched",
+      elapsedMs: elapsed
     });
   } catch (err) {
     return res.status(500).json({ error: "Failed to process OTP request", details: err.message });

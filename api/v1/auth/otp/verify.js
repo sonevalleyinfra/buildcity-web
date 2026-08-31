@@ -2,7 +2,10 @@ import crypto from "node:crypto";
 import pg from "pg";
 const { Client } = pg;
 
-const OTP_SECRET = "BuildCity_Super_Secret_OTP_HMAC_Key_2026_Varanasi_UP";
+const JWT_SECRET =
+  process.env.JWT_SECRET && process.env.JWT_SECRET.trim().length >= 32
+    ? process.env.JWT_SECRET.trim()
+    : "458680874aaa9f70b9805ecd2e76b4856956b063d538b81ba88cbba7ee804e3b0b22a112e2119510fa047cbb8fc09c7b";
 const CONNECTION_STRING =
   "postgresql://postgres.dskzdhfkrpvibwsqfnab:BuildCity2026Pass@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true";
 
@@ -40,7 +43,7 @@ export default async function handler(req, res) {
       const [expiresAtStr, hash] = otpToken.split(".");
       const expiresAt = parseInt(expiresAtStr, 10);
       if (expiresAt > Date.now()) {
-        const expectedHash = crypto.createHmac("sha256", OTP_SECRET).update(`${cleanPhone}:${otpInput}:${expiresAt}`).digest("hex");
+        const expectedHash = crypto.createHmac("sha256", JWT_SECRET).update(`${cleanPhone}:${otpInput}:${expiresAt}`).digest("hex");
         if (expectedHash === hash) {
           isValid = true;
         }
@@ -180,7 +183,7 @@ export default async function handler(req, res) {
     };
     const headerB64 = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
     const payloadB64 = Buffer.from(JSON.stringify(jwtPayload)).toString("base64url");
-    const signatureB64 = crypto.createHmac("sha256", OTP_SECRET).update(`${headerB64}.${payloadB64}`).digest("base64url");
+    const signatureB64 = crypto.createHmac("sha256", JWT_SECRET).update(`${headerB64}.${payloadB64}`).digest("base64url");
     const token = `${headerB64}.${payloadB64}.${signatureB64}`;
 
     const user = {

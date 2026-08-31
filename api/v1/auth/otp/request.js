@@ -4,7 +4,10 @@ import crypto from "node:crypto";
 import pg from "pg";
 const { Client } = pg;
 
-const OTP_SECRET = "BuildCity_Super_Secret_OTP_HMAC_Key_2026_Varanasi_UP";
+const JWT_SECRET =
+  process.env.JWT_SECRET && process.env.JWT_SECRET.trim().length >= 32
+    ? process.env.JWT_SECRET.trim()
+    : "458680874aaa9f70b9805ecd2e76b4856956b063d538b81ba88cbba7ee804e3b0b22a112e2119510fa047cbb8fc09c7b";
 const CONNECTION_STRING =
   "postgresql://postgres.dskzdhfkrpvibwsqfnab:BuildCity2026Pass@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true";
 
@@ -51,7 +54,7 @@ export default async function handler(req, res) {
     // 1. Generate 6-digit OTP code & cryptographic HMAC token (instant 0ms)
     const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 mins
-    const hash = crypto.createHmac("sha256", OTP_SECRET).update(`${cleanMobile}:${generatedOtp}:${expiresAt}`).digest("hex");
+    const hash = crypto.createHmac("sha256", JWT_SECRET).update(`${cleanMobile}:${generatedOtp}:${expiresAt}`).digest("hex");
     const otpToken = `${expiresAt}.${hash}`;
 
     // 2. Dispatch Live SMS via Aradhya Technologies (Direct Fast HTTP API ~250ms)

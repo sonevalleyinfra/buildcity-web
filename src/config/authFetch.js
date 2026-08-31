@@ -67,17 +67,19 @@ export const authFetch = async (path, options = {}) => {
     headers,
   });
 
-  // If 401 Unauthorized occurs on a protected resource, clear tokens and redirect to login
-  if (response.status === 401) {
+  // If 401 Unauthorized occurs on an expired/invalid token, clear the invalid token
+  if (response.status === 401 && token) {
     clearToken();
     try {
       localStorage.removeItem(AUTH_KEY);
     } catch {}
 
+    // Only redirect if actively inside a protected dashboard route
     if (
       typeof window !== "undefined" &&
-      !window.location.pathname.startsWith("/login") &&
-      !window.location.pathname.startsWith("/auth")
+      (window.location.pathname.startsWith("/admin") ||
+       window.location.pathname.startsWith("/vendor") ||
+       window.location.pathname.startsWith("/dr"))
     ) {
       window.location.href = "/login";
     }

@@ -2,7 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { PrismaClient } = require("@prisma/client");
-const { issueToken } = require("./middleware/auth");
+const { issueToken, requireAuth, requireRole, requireSelfOrAdmin } = require("./middleware/auth");
 
 const app = express();
 const prisma = new PrismaClient();
@@ -20,7 +20,7 @@ let couponsList = [
 ];
 
 // Single Unified Cloud Sync Endpoint (Replaces 7 separate HTTP requests with 1 request to free browser TCP sockets)
-app.get("/api/v1/cloud-sync", async (req, res) => {
+app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const [drs, vendors, masterProducts, categories, regions, orders, listings, coupons] = await Promise.all([
       prisma.dR.findMany({ include: { region: true }, orderBy: { joinedOn: "desc" } }).catch(() => []),
@@ -535,7 +535,7 @@ app.put("/api/v1/users/profile", async (req, res) => {
   }
 });
 
-app.get("/api/v1/users", async (req, res) => {
+app.get("/api/v1/users", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const users = await prisma.user.findMany({
       orderBy: { createdAt: "desc" },
@@ -1463,7 +1463,7 @@ app.delete("/api/v1/regions/:id", async (req, res) => {
 });
 
 // 7. ORDERS & CHECKOUT ENDPOINTS (With Vendor Isolation & Status Updates)
-app.get("/api/v1/orders", async (req, res) => {
+app.get("/api/v1/orders", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const orders = await prisma.order.findMany({
       include: { items: true, customer: true, address: true },

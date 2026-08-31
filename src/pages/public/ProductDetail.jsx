@@ -96,20 +96,19 @@ export default function ProductDetail() {
 
     if (!existing) {
       setDirectLoading(true);
-      authFetch(`${API_BASE_URL}/api/v1/cloud-sync`)
+      authFetch(`${API_BASE_URL}/api/v1/vendor/listings`)
         .then((r) => r.json())
         .then((data) => {
-          if (data && Array.isArray(data.listings)) {
-            const found = data.listings.find(
-              (l) =>
-                l.id === id ||
-                l.id === decodedId ||
-                (l.name && l.name.toLowerCase() === decodedId.toLowerCase()) ||
-                (l.name && encodeURIComponent(l.name) === id)
-            );
-            if (found) {
-              setDirectProduct(found);
-            }
+          const list = Array.isArray(data) ? data : (data?.listings || []);
+          const found = list.find(
+            (l) =>
+              l.id === id ||
+              l.id === decodedId ||
+              (l.name && l.name.toLowerCase() === decodedId.toLowerCase()) ||
+              (l.name && encodeURIComponent(l.name) === id)
+          );
+          if (found) {
+            setDirectProduct(found);
           }
           setDirectLoading(false);
         })

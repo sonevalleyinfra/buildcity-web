@@ -4,7 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useAlert } from "../../context/AlertContext";
 import { useNotifications } from "../../context/NotificationContext";
-import { formatShortId } from "../../utils/formatId";
+import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
 
 const PRESET_IMAGES = [
   { label: "Cement Bag", url: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80" },
@@ -1676,7 +1676,7 @@ export default function AdminDashboard() {
                         cityAddr = o.districtName || o.regionName || "Mirzapur";
                       }
 
-                      const dateStr = o.createdAt ? new Date(o.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "Today";
+                      const dateStr = formatDateTimeIST(o.createdAt || o.date);
                       const statusStyle = STATUS_STYLE[o.status] || "bg-amber-50 text-amber-700 border-amber-200";
 
                       return (

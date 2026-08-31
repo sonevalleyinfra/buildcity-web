@@ -15,3 +15,26 @@ export const formatShortId = (rawId, prefix = "ORD") => {
   const lastFour = clean.length > 4 ? clean.slice(-4) : clean;
   return `#${prefix.toUpperCase()}-*${lastFour}`;
 };
+
+/**
+ * Utility helper to format any ISO or DB timestamp strictly into Indian Standard Time (IST / Asia/Kolkata)
+ */
+export const formatDateTimeIST = (dateValue) => {
+  if (!dateValue) return "Today";
+  try {
+    const d = new Date(dateValue);
+    if (isNaN(d.getTime())) return "Today";
+    return d.toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    return "Today";
+  }
+};
+

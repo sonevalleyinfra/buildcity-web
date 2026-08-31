@@ -2,7 +2,7 @@ import { useParams, Link, Navigate } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import BottomNav from "../../components/BottomNav";
 import { useOrders } from "../../context/OrderContext";
-import { formatShortId } from "../../utils/formatId";
+import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
 
 const STATUS_MAP = {
   PENDING: { label: "Pending", color: "bg-amber-50 text-amber-700 border-amber-200" },
@@ -59,11 +59,7 @@ export default function OrderDetail() {
               </span>
             </h1>
             <span className="text-xs text-slate-400 font-medium">
-              {new Date(orderDateStr).toLocaleDateString("en-IN", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-              })}
+              {formatDateTimeIST(orderDateStr)}
             </span>
           </div>
           <p className="text-sm text-slate-500">

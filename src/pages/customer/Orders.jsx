@@ -7,7 +7,7 @@ import { useAdmin } from "../../context/AdminContext";
 import Navbar from "../../components/Navbar";
 import RegionPicker from "../../components/RegionPicker";
 import NotificationPanel from "../../components/NotificationPanel";
-import { formatShortId } from "../../utils/formatId";
+import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
 
 const TABS = ["All", "Pending", "Processing", "Out for Delivery", "Delivered", "Cancelled"];
 
@@ -214,11 +214,7 @@ export default function Orders() {
                           {statusInfo.label}
                         </span>
                         <span className="text-[11px] text-slate-400 font-medium">
-                          {new Date(order.date || order.createdAt || Date.now()).toLocaleDateString("en-IN", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })}
+                          {formatDateTimeIST(order.date || order.createdAt)}
                         </span>
                       </div>
 

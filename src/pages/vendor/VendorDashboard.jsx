@@ -4,7 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useOrders } from "../../context/OrderContext";
 import { useAlert } from "../../context/AlertContext";
-import { formatShortId } from "../../utils/formatId";
+import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
 
 // Vendor Dashboard component — Vendor partner ka main portal (Master Catalog selection, Custom Price & Stock setting, Orders management)
 export default function VendorDashboard() {
@@ -604,7 +604,10 @@ export default function VendorDashboard() {
 
                     return (
                       <tr key={ord.id} className="hover:bg-slate-50/80 transition-colors duration-150">
-                        <td className="py-3.5 px-4 font-extrabold text-brand-700 tracking-wide text-xs">{formattedOrderId}</td>
+                        <td className="py-3.5 px-4">
+                          <span className="font-extrabold text-brand-700 tracking-wide text-xs block">{formattedOrderId}</span>
+                          <span className="text-[11px] text-slate-400 font-medium block mt-0.5">{formatDateTimeIST(ord.createdAt || ord.date)}</span>
+                        </td>
                         <td className="py-3.5 px-4 text-slate-800 min-w-[260px]">
                           <p className="font-extrabold text-navy-900 text-xs">👤 Recipient: {custFullName}</p>
                           {custPhone && (

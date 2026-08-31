@@ -103,6 +103,58 @@ export default async function handler(req, res) {
         }
       }
 
+      // 1. Check if user already exists in DB and get their real registered name
+      let realName = (name && typeof name === "string" && name.trim().length > 0) ? name.trim() : null;
+      let realEmail = "";
+      let realUserId = `cust_${cleanPhone}`;
+
+      try {
+        const userRes = await client.query(
+          `SELECT id, name, phone, email, role FROM users WHERE phone = $1 OR phone LIKE $2 LIMIT 1`,
+          [cleanPhone, `%${cleanPhone.slice(-10)}`]
+        );
+
+        if (userRes.rows && userRes.rows.length > 0) {
+          const u = userRes.rows[0];
+          realUserId = u.id;
+          if (!realName && u.name && !/^customer\s*\d*$/i.test(u.name) && u.name.trim()) {
+            realName = u.name.trim();
+          }
+          realEmail = u.email || "";
+        }
+
+        // 2. If name is not found in users table, look in saved addresses
+        if (!realName || /^customer\s*\d*$/i.test(realName)) {
+          const addrRes = await client.query(
+            `SELECT "fullName" FROM addresses WHERE (phone = $1 OR phone LIKE $2) AND "fullName" IS NOT NULL AND "fullName" != '' ORDER BY "createdAt" DESC LIMIT 1`,
+            [cleanPhone, `%${cleanPhone.slice(-10)}`]
+          );
+          if (addrRes.rows && addrRes.rows.length > 0 && addrRes.rows[0].fullName && !/^customer\s*\d*$/i.test(addrRes.rows[0].fullName)) {
+            realName = addrRes.rows[0].fullName.trim();
+          }
+        }
+
+        // 3. Create or update customer record in DB
+        if (!userRes.rows || userRes.rows.length === 0) {
+          const insRes = await client.query(
+            `INSERT INTO users (id, phone, name, role, "tokenVersion", "createdAt", "updatedAt")
+             VALUES (gen_random_uuid(), $1, $2, 'CUSTOMER', 1, NOW(), NOW())
+             RETURNING id, name, phone, email, role`,
+            [cleanPhone, realName || `Customer ${cleanPhone.slice(-4)}`]
+          );
+          if (insRes.rows && insRes.rows.length > 0) {
+            realUserId = insRes.rows[0].id;
+          }
+        } else if (realName && userRes.rows[0].name !== realName && !/^customer\s*\d*$/i.test(realName)) {
+          await client.query(
+            `UPDATE users SET name = $1 WHERE id = $2`,
+            [realName, userRes.rows[0].id]
+          ).catch(() => null);
+        }
+      } catch (err) {
+        console.warn("DB user profile sync note:", err.message);
+      }
+
       await client.query(
         'UPDATE otp_verifications SET "isVerified" = true WHERE phone = $1 AND otp = $2',
         [cleanPhone, otpInput]
@@ -119,10 +171,13 @@ export default async function handler(req, res) {
       });
     }
 
+    const finalName = realName || `Customer ${cleanPhone.slice(-4)}`;
+
     const user = {
-      id: `cust_${cleanPhone}`,
+      id: realUserId,
       phone: cleanPhone,
-      name: name || `Customer ${cleanPhone.slice(-4)}`,
+      name: finalName,
+      email: realEmail,
       role: "customer",
       token: `jwt_token_${cleanPhone}_${Date.now()}`
     };

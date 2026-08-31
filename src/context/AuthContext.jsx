@@ -155,9 +155,10 @@ export function AuthProvider({ children }) {
     } catch {}
 
     const resolvedName =
-      (name && name !== "Customer" ? name.trim() : "") ||
-      (fetchedDbUser?.name && fetchedDbUser.name !== "Customer" ? fetchedDbUser.name : "") ||
-      savedCustomerName ||
+      (fetchedDbUser?.name && fetchedDbUser.name !== "Customer" && !/^customer\s*\d*$/i.test(fetchedDbUser.name) ? fetchedDbUser.name : "") ||
+      (name && name !== "Customer" && !/^customer\s*\d*$/i.test(name) ? name.trim() : "") ||
+      (savedCustomerName && !/^customer\s*\d*$/i.test(savedCustomerName) ? savedCustomerName : "") ||
+      fetchedDbUser?.name ||
       `Customer ${cleanPhone.slice(-4)}`;
 
     const userObj = {

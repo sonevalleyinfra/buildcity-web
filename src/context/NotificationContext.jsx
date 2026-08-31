@@ -54,6 +54,9 @@ export function NotificationProvider({ children }) {
 
   // Fetch real database notifications from backend (Vercel Serverless Edge + Render DB)
   const fetchDbNotifications = async (showLoading = false) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("buildcity_token") : null;
+    if (!user || !token) return;
+
     if (showLoading) setIsLoadingNotifs(true);
     try {
       let dbList = null;

@@ -17,6 +17,9 @@ export function OrderProvider({ children }) {
   const [orders, setOrders] = useState([]);
 
   const fetchOrdersForCurrentRole = async () => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("buildcity_token") : null;
+    if (!user || !token) return orders;
+
     try {
       if (isAdmin) {
         const res = await authFetch(`${API_BASE_URL}/api/v1/orders`);

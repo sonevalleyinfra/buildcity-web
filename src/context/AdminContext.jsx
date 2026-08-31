@@ -196,8 +196,9 @@ export function AdminProvider({ children }) {
         if (savedAuth) currentUser = JSON.parse(savedAuth);
       } catch {}
     }
+    const currentToken = typeof window !== "undefined" ? localStorage.getItem("buildcity_token") : null;
     const currentRole = (currentUser?.role || "").toLowerCase();
-    const isStaff = currentRole === "admin" || currentRole === "dr";
+    const isStaff = (currentRole === "admin" || currentRole === "dr") && Boolean(currentToken);
 
     if (!isStaff) {
       return fetchPublicCatalog();

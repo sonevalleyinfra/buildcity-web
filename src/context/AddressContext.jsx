@@ -50,7 +50,8 @@ export function AddressProvider({ children }) {
 
   // Fetch saved addresses from Supabase DB & sync local storage without wiping local additions
   const fetchDbAddresses = async () => {
-    if (!user) return;
+    const token = typeof window !== "undefined" ? localStorage.getItem("buildcity_token") : null;
+    if (!user || !token) return;
     const userKey = user.phone || user.id;
     if (!userKey) return;
 

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { useAuth } from "./AuthContext";
 import { authFetch } from "../config/authFetch";
 import { API_BASE_URL } from "../config/api";
 
@@ -119,6 +120,10 @@ const loadInitialProducts = () => {
 };
 
 export function AdminProvider({ children }) {
+  const { user } = useAuth() || {};
+  const userRole = (user?.role || "").toLowerCase();
+  const isAdminOrDr = userRole === "admin" || userRole === "dr";
+
   const [drs, setDrs] = useState(loadInitialDrs);
   const [vendors, setVendors] = useState(loadInitialVendors);
   const [users, setUsers] = useState(loadInitialUsers);
@@ -130,18 +135,53 @@ export function AdminProvider({ children }) {
   const [products, setProducts] = useState(loadInitialProducts);
   const [productsLoading, setProductsLoading] = useState(true);
 
-  // Single Source of Truth: Supabase Cloud DB se live data sync karne ke liye (Zero flickering guard ke sath)
-  const fetchCloudData = async () => {
+  // Fetch Public Catalog for standard customers and visitors (without triggering 403)
+  const fetchPublicCatalog = async () => {
     try {
-      authFetch(`${API_BASE_URL}/api/v1/users`)
-        .then((r) => r.json())
-        .then((u) => {
-          if (Array.isArray(u) && u.length > 0) {
-            localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(u));
-            setUsers((prev) => (JSON.stringify(prev) === JSON.stringify(u) ? prev : u));
-          }
-        })
-        .catch(() => {});
+      const [catsRes, regsRes, listingsRes, couponsRes] = await Promise.all([
+        authFetch(`${API_BASE_URL}/api/v1/categories`).then((r) => r.json()).catch(() => []),
+        authFetch(`${API_BASE_URL}/api/v1/regions`).then((r) => r.json()).catch(() => []),
+        authFetch(`${API_BASE_URL}/api/v1/vendor/listings`).then((r) => r.json()).catch(() => []),
+        authFetch(`${API_BASE_URL}/api/v1/coupons`).then((r) => r.json()).catch(() => []),
+      ]);
+
+      if (Array.isArray(catsRes) && catsRes.length > 0) {
+        setCategories(catsRes);
+      }
+      if (Array.isArray(regsRes) && regsRes.length > 0) {
+        setRegions(regsRes);
+      }
+      if (Array.isArray(listingsRes) && listingsRes.length > 0) {
+        setProducts(listingsRes);
+      }
+      if (Array.isArray(couponsRes) && couponsRes.length > 0) {
+        setCoupons(couponsRes);
+      }
+    } catch (e) {
+      console.warn("Public catalog sync note:", e.message);
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+
+  // Single Source of Truth: Supabase Cloud DB se live data sync karne ke liye (Admin / DR only)
+  const fetchCloudData = async () => {
+    if (!isAdminOrDr) {
+      return fetchPublicCatalog();
+    }
+
+    try {
+      if (userRole === "admin") {
+        authFetch(`${API_BASE_URL}/api/v1/users`)
+          .then((r) => r.json())
+          .then((u) => {
+            if (Array.isArray(u) && u.length > 0) {
+              localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(u));
+              setUsers((prev) => (JSON.stringify(prev) === JSON.stringify(u) ? prev : u));
+            }
+          })
+          .catch(() => {});
+      }
 
       const syncRes = await authFetch(`${API_BASE_URL}/api/v1/cloud-sync`).then((r) => r.json()).catch(() => null);
       if (!syncRes) return;

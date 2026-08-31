@@ -1475,6 +1475,30 @@ app.get("/api/v1/orders", requireAuth, requireRole("ADMIN"), async (req, res) =>
   }
 });
 
+// Customer Isolated Orders Fetch (Self or Admin)
+app.get("/api/v1/orders/user/:userId", requireAuth, requireSelfOrAdmin("userId"), async (req, res) => {
+  try {
+    const targetUserId = req.auth?.role === "ADMIN" ? req.params.userId : (req.auth?.userId || req.params.userId);
+    const cleanPhone = (req.auth?.phone || req.params.userId || "").replace(/\D/g, "");
+
+    const orders = await prisma.order.findMany({
+      where: {
+        OR: [
+          { customerId: targetUserId },
+          ...(cleanPhone ? [{ customer: { phone: { contains: cleanPhone.slice(-10) } } }] : []),
+          ...(cleanPhone ? [{ address: { phone: { contains: cleanPhone.slice(-10) } } }] : []),
+        ],
+      },
+      include: { items: true, customer: true, address: true },
+      orderBy: { createdAt: "desc" },
+    }).catch(() => []);
+
+    res.json(orders || []);
+  } catch (err) {
+    res.json([]);
+  }
+});
+
 // Strict Vendor Isolated Orders Fetch
 app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {

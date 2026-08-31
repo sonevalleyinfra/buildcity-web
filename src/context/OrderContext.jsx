@@ -1,5 +1,6 @@
 import { authFetch } from "../config/authFetch";
 import { createContext, useContext, useEffect, useState } from "react";
+import { useAuth } from "./AuthContext";
 import { API_BASE_URL } from "../config/api";
 
 // OrderContext Provider — Customer checkout, Vendor isolated orders, Status tracking aur Supabase DB sync handle karta hai
@@ -7,11 +8,17 @@ const OrderContext = createContext(null);
 const STORAGE_KEY = "buildcity_orders";
 
 export function OrderProvider({ children }) {
+  const { user } = useAuth() || {};
+  const userRole = (user?.role || "").toLowerCase();
+  const isAdmin = userRole === "admin";
+  const isVendor = userRole === "vendor";
+  const userIdent = user?.id || user?.phone;
+
   const [orders, setOrders] = useState([]);
 
-  const fetchAllOrders = async () => {
-    for (let i = 0; i < 3; i++) {
-      try {
+  const fetchOrdersForCurrentRole = async () => {
+    try {
+      if (isAdmin) {
         const res = await authFetch(`${API_BASE_URL}/api/v1/orders`);
         if (res.ok) {
           const data = await res.json();
@@ -19,10 +26,29 @@ export function OrderProvider({ children }) {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
           return data;
         }
-      } catch (err) {
-        if (i === 2) console.warn("Fetch orders network note:", err.message);
-        await new Promise((r) => setTimeout(r, 800 * (i + 1)));
+      } else if (isVendor && (user?.vendorInfo?.id || user?.id)) {
+        const vId = user.vendorInfo?.id || user.id;
+        const res = await authFetch(`${API_BASE_URL}/api/v1/orders/vendor/${encodeURIComponent(vId)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setOrders(data);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+          return data;
+        }
+      } else if (userIdent) {
+        // Customer isolated orders
+        const res = await authFetch(`${API_BASE_URL}/api/v1/orders/user/${encodeURIComponent(userIdent)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setOrders(data);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            return data;
+          }
+        }
       }
+    } catch (err) {
+      console.warn("Fetch orders role note:", err.message);
     }
     return orders;
   };
@@ -36,10 +62,10 @@ export function OrderProvider({ children }) {
         localStorage.removeItem(STORAGE_KEY);
       }
     }
-    fetchAllOrders();
-    const interval = setInterval(fetchAllOrders, 5000);
+    fetchOrdersForCurrentRole();
+    const interval = setInterval(fetchOrdersForCurrentRole, 6000);
     return () => clearInterval(interval);
-  }, []);
+  }, [user, userRole, userIdent]);
 
   // Instant Cross-Tab Storage Synchronization
   useEffect(() => {

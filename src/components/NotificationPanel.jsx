@@ -42,8 +42,16 @@ export default function NotificationPanel({ className }) {
 
   const filtered = useMemo(() => {
     if (activeTab === "All") return notifications;
-    if (activeTab === "Orders") return notifications.filter((n) => n.type === "order");
-    if (activeTab === "Offers") return notifications.filter((n) => n.type === "offer" || n.type === "price");
+    if (activeTab === "Orders") {
+      return notifications.filter(
+        (n) => n.type === "order" || (n.title || "").toLowerCase().includes("order")
+      );
+    }
+    if (activeTab === "Offers") {
+      return notifications.filter(
+        (n) => n.type !== "order" && !(n.title || "").toLowerCase().includes("order")
+      );
+    }
     return notifications.filter((n) => n.type === activeTab.toLowerCase());
   }, [notifications, activeTab]);
 

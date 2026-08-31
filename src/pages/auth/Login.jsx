@@ -9,7 +9,7 @@ export default function Login() {
   const navigate = useNavigate();
   const { requestOtp, verifyOtp, vendorLogin } = useAuth();
 
-  // Mode: "standard" (OTP for Customer/DR) vs "vendor" (Phone & Password for Vendor Partners)
+  // Mode: "standard" (OTP for Customer) vs "vendor" (Phone & Password for Vendor / DR / Admin Partners)
   const [mode, setMode] = useState("standard");
   const [step, setStep] = useState("phone"); // "phone" | "otp"
   const [phone, setPhone] = useState("");
@@ -18,8 +18,6 @@ export default function Login() {
   const [role, setRole] = useState("customer");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const [demoOtp, setDemoOtp] = useState("");
 
   // Customer OTP Request
   const handleSendOtp = async (e) => {
@@ -31,12 +29,33 @@ export default function Login() {
       return;
     }
 
+    // Check if entered phone belongs to a Partner (Vendor / DR / Admin)
+    let isPartnerPhone = false;
+    if (cleanedMobile === "9999999999" || cleanedMobile === "7777777777") {
+      isPartnerPhone = true;
+    } else {
+      try {
+        const savedVendors = localStorage.getItem("buildcity_admin_vendors");
+        const vendors = savedVendors ? JSON.parse(savedVendors) : [];
+        if (vendors.some((v) => (v.phone || "").replace(/\D/g, "").slice(-10) === cleanedMobile)) {
+          isPartnerPhone = true;
+        }
+        const savedDrs = localStorage.getItem("buildcity_admin_drs");
+        const drs = savedDrs ? JSON.parse(savedDrs) : [];
+        if (drs.some((d) => (d.phone || "").replace(/\D/g, "").slice(-10) === cleanedMobile)) {
+          isPartnerPhone = true;
+        }
+      } catch {}
+    }
+
+    if (isPartnerPhone) {
+      setError("⚠️ Partner Account Detected! Vendors, DRs, and Admins must log in using 'Partner Login (Password)'.");
+      return;
+    }
+
     setLoading(true);
     try {
-      const resData = await requestOtp(cleanedMobile);
-      if (resData?.otp) {
-        setDemoOtp(resData.otp);
-      }
+      await requestOtp(cleanedMobile);
       setStep("otp");
     } catch (err) {
       setError(err?.message || "Failed to send OTP. Please check mobile number.");
@@ -144,7 +163,15 @@ export default function Login() {
           : `Enter the OTP sent to +91 ${phone}`}
       </p>
 
-      {error && <p className="mb-4 text-xs font-extrabold text-rose-600 bg-rose-50 p-3 rounded-xl border border-rose-200 leading-snug">{error}</p>}
+      {error && (
+        <div className={`mb-5 p-3.5 rounded-2xl border ${
+          error.includes("Partner") || error.includes("Vendor") || error.includes("DR") || error.includes("Admin")
+            ? "bg-amber-50 border-amber-200 text-amber-900"
+            : "bg-rose-50 border-rose-200 text-rose-700"
+        } text-xs font-bold leading-relaxed shadow-2xs animate-in fade-in`}>
+          <p>{error}</p>
+        </div>
+      )}
 
       {mode === "vendor" ? (
         /* PARTNER / ADMIN / DR / VENDOR PASSWORD LOGIN FORM */
@@ -216,7 +243,7 @@ export default function Login() {
           </Button>
         </form>
       ) : (
-        /* CUSTOMER / DR OTP VERIFY FORM */
+        /* CUSTOMER OTP VERIFY FORM */
         <form onSubmit={handleVerify} noValidate>
           <label className="block text-sm font-medium text-navy-900 mb-1.5">
             One-Time Password
@@ -229,24 +256,8 @@ export default function Login() {
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
             placeholder="Enter 6-digit OTP"
             autoFocus
-            className="w-full text-center tracking-[0.5em] text-lg font-semibold rounded-xl border border-slate-200 bg-white px-3.5 py-3 mb-4 outline-none focus:border-brand-500"
+            className="w-full text-center tracking-[0.5em] text-lg font-bold rounded-xl border border-slate-200 bg-white px-3.5 py-3 mb-5 outline-none focus:border-brand-500 shadow-2xs"
           />
-
-          {demoOtp && (
-            <div className="mb-4 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-left shadow-2xs">
-              <div>
-                <span className="text-[10px] uppercase tracking-wider font-extrabold text-emerald-700 block">📲 Generated OTP (Saved in Supabase DB)</span>
-                <span className="text-xl font-black text-navy-900 tracking-widest">{demoOtp}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOtp(demoOtp)}
-                className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-3 py-1.5 rounded-lg shadow-2xs cursor-pointer transition-all"
-              >
-                Auto Fill ✨
-              </button>
-            </div>
-          )}
 
           <Button type="submit" disabled={loading}>
             {loading ? "Verifying..." : "Verify & Login"}
@@ -267,7 +278,7 @@ export default function Login() {
             <button
               type="button"
               onClick={handleSendOtp}
-              className="text-sm font-medium text-brand-500 hover:underline cursor-pointer"
+              className="text-sm font-bold text-brand-500 hover:underline cursor-pointer"
             >
               Resend OTP
             </button>

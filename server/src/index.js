@@ -2037,6 +2037,12 @@ app.post("/api/v1/reviews", async (req, res) => {
       },
     });
 
+    res.status(201).json(review);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 13. NOTIFICATIONS ENDPOINTS (Admin Broadcast & Real-Time Customer Alerts)
 app.get("/api/v1/notifications", async (req, res) => {
   try {

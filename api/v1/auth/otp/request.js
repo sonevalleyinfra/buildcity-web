@@ -1,7 +1,11 @@
 import https from "node:https";
 import crypto from "node:crypto";
+import pg from "pg";
+const { Client } = pg;
 
 const OTP_SECRET = "BuildCity_Super_Secret_OTP_HMAC_Key_2026_Varanasi_UP";
+const CONNECTION_STRING =
+  "postgresql://postgres.dskzdhfkrpvibwsqfnab:BuildCity2026Pass@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -40,6 +44,25 @@ export default async function handler(req, res) {
     const hash = crypto.createHmac("sha256", OTP_SECRET).update(`${cleanMobile}:${generatedOtp}:${expiresAt}`).digest("hex");
     const otpToken = `${expiresAt}.${hash}`;
 
+    // 1. Log & Save OTP into Supabase PostgreSQL database `otp_verifications` table
+    try {
+      const client = new Client({
+        connectionString: CONNECTION_STRING,
+        ssl: { rejectUnauthorized: false },
+        connectionTimeoutMillis: 4000,
+      });
+      await client.connect();
+      await client.query(
+        `INSERT INTO otp_verifications (id, phone, otp, "isVerified", "expiresAt", "createdAt")
+         VALUES (gen_random_uuid(), $1, $2, false, $3, NOW())`,
+        [cleanMobile, generatedOtp, new Date(expiresAt)]
+      );
+      await client.end();
+    } catch (dbErr) {
+      console.warn("DB OTP log note:", dbErr.message);
+    }
+
+    // 2. Dispatch Live SMS via Aradhya Technologies
     const username = "sonevalley";
     const apikey = "0A8CC-B46EE";
     const sender = "SNVLY";
@@ -98,6 +121,6 @@ export default async function handler(req, res) {
       smsStatus: "dispatched"
     });
   } catch (err) {
-    return res.status(500).json({ error: "Failed to dispatch OTP", details: err.message });
+    return res.status(500).json({ error: "Failed to process OTP request", details: err.message });
   }
 }

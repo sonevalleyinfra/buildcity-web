@@ -128,27 +128,45 @@ export default function AdminDashboard() {
     notifications: adminNotifs = [],
     sendBroadcastNotification,
     isSending: isSendingNotif,
+    isLoadingNotifs,
+    fetchDbNotifications,
     removeNotification: removeAdminNotif,
     clearAllNotifications: clearAllAdminNotifs,
   } = useNotifications();
   const [notifTitle, setNotifTitle] = useState("");
   const [notifMessage, setNotifMessage] = useState("");
+  const [notifCategory, setNotifCategory] = useState("offer");
   const [notifStatusMsg, setNotifStatusMsg] = useState("");
+  const [deletingNotifId, setDeletingNotifId] = useState(null);
+  const [isClearingAllNotifs, setIsClearingAllNotifs] = useState(false);
 
   const handleSendBroadcast = async (e) => {
     e.preventDefault();
-    if (!notifTitle.trim() || !notifMessage.trim()) return;
+    if (!notifTitle.trim() || !notifMessage.trim()) {
+      showAlert({ title: "Missing Information", message: "Please provide both a Title and Message for the broadcast.", type: "warning" });
+      return;
+    }
 
-    const ok = await sendBroadcastNotification({
-      title: notifTitle.trim(),
-      message: notifMessage.trim(),
-    });
+    try {
+      const ok = await sendBroadcastNotification({
+        title: notifTitle.trim(),
+        message: notifMessage.trim(),
+        type: notifCategory,
+      });
 
-    if (ok) {
-      setNotifStatusMsg("✓ Broadcast notification sent to all registered customers in real-time!");
-      setNotifTitle("");
-      setNotifMessage("");
-      setTimeout(() => setNotifStatusMsg(""), 4500);
+      if (ok) {
+        setNotifStatusMsg("✓ Broadcast notification sent & saved to Supabase Database in real-time!");
+        setNotifTitle("");
+        setNotifMessage("");
+        showAlert({
+          title: "📢 Broadcast Sent Successfully!",
+          message: "Notification has been saved to Supabase Database and delivered to all customer devices in real-time.",
+          type: "success",
+        });
+        setTimeout(() => setNotifStatusMsg(""), 5000);
+      }
+    } catch (err) {
+      showAlert({ title: "Broadcast Error", message: err.message || "Failed to send broadcast.", type: "error" });
     }
   };
 
@@ -548,37 +566,39 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Tabs Bar */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-2 overflow-x-auto py-2 border-t border-slate-100 no-scrollbar">
-          {TABS.map((t) => {
-            const pendingCount = products.filter(
-              (p) => (p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW")) === "PENDING_REVIEW"
-            ).length;
+        {/* Tabs Bar with Smooth Horizontal Scroll */}
+        <div className="border-t border-slate-100 bg-slate-50/50">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-2 overflow-x-auto py-2.5 custom-scrollbar scroll-smooth">
+            {TABS.map((t) => {
+              const pendingCount = products.filter(
+                (p) => (p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW")) === "PENDING_REVIEW"
+              ).length;
 
-            return (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`px-3.5 py-2 text-xs font-bold rounded-xl active:scale-[0.98] transition-all duration-200 whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
-                  tab === t.id
-                    ? "bg-navy-900 text-white shadow-xs"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-navy-900"
-                }`}
-              >
-                <span>{t.label}</span>
-                {t.id === "Users" && (
-                  <span className="bg-brand-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-2xs">
-                    {users.filter((u) => !u.role || u.role === "CUSTOMER").length}
-                  </span>
-                )}
-                {t.id === "Listings" && pendingCount > 0 && (
-                  <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full animate-pulse">
-                    {pendingCount}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  className={`px-3.5 py-2 text-xs font-bold rounded-xl active:scale-[0.98] transition-all duration-200 whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                    tab === t.id
+                      ? "bg-navy-900 text-white shadow-xs"
+                      : "text-slate-600 bg-white hover:bg-slate-100 border border-slate-200/80 hover:text-navy-900"
+                  }`}
+                >
+                  <span>{t.label}</span>
+                  {t.id === "Users" && (
+                    <span className="bg-brand-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-2xs">
+                      {users.filter((u) => !u.role || u.role === "CUSTOMER").length}
+                    </span>
+                  )}
+                  {t.id === "Listings" && pendingCount > 0 && (
+                    <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full animate-pulse">
+                      {pendingCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </header>
 
@@ -2070,6 +2090,32 @@ export default function AdminDashboard() {
               <form onSubmit={handleSendBroadcast} className="space-y-4 max-w-2xl">
                 <div>
                   <label className="block text-xs font-bold text-navy-900 mb-1.5">
+                    Notification Category / Section *
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { id: "offer", label: "🎁 Offer & Discounts", color: "border-emerald-300 bg-emerald-50 text-emerald-800" },
+                      { id: "price", label: "🏷️ Price Drop / Rates", color: "border-blue-300 bg-blue-50 text-blue-800" },
+                      { id: "info", label: "📢 General Announcement", color: "border-slate-300 bg-slate-50 text-slate-800" },
+                    ].map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setNotifCategory(cat.id)}
+                        className={`text-xs font-bold px-3.5 py-2 rounded-xl border transition-all cursor-pointer ${
+                          notifCategory === cat.id
+                            ? `${cat.color} ring-2 ring-brand-500 font-black shadow-xs`
+                            : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        {cat.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-navy-900 mb-1.5">
                     Notification Title *
                   </label>
                   <input
@@ -2121,21 +2167,55 @@ export default function AdminDashboard() {
             {/* Broadcast History */}
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-                <h3 className="text-xs font-black text-navy-900 uppercase tracking-wider">
-                  Active Live Notifications ({adminNotifs.length})
-                </h3>
+                <div className="flex items-center gap-3">
+                  <h3 className="text-xs font-black text-navy-900 uppercase tracking-wider">
+                    Active Live Notifications ({adminNotifs.length})
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => fetchDbNotifications(true)}
+                    disabled={isLoadingNotifs}
+                    className="text-[11px] font-bold text-slate-500 hover:text-brand-600 bg-slate-50 hover:bg-brand-50 border border-slate-200 px-2 py-0.5 rounded-md transition-all cursor-pointer inline-flex items-center gap-1"
+                  >
+                    <span>{isLoadingNotifs ? "⌛ Refreshing..." : "🔄 Refresh"}</span>
+                  </button>
+                </div>
                 {adminNotifs.length > 0 && (
                   <button
                     type="button"
-                    onClick={clearAllAdminNotifs}
-                    className="text-xs font-bold text-rose-600 hover:underline cursor-pointer"
+                    disabled={isClearingAllNotifs}
+                    onClick={async () => {
+                      if (confirm("Are you sure you want to clear all active broadcast notifications?")) {
+                        setIsClearingAllNotifs(true);
+                        try {
+                          await clearAllAdminNotifs();
+                        } finally {
+                          setIsClearingAllNotifs(false);
+                        }
+                      }
+                    }}
+                    className="text-xs font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
                   >
-                    Clear All Notifications
+                    {isClearingAllNotifs ? (
+                      <>
+                        <svg className="animate-spin h-3.5 w-3.5 text-rose-600" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Clearing all...</span>
+                      </>
+                    ) : (
+                      <span>Clear All Notifications</span>
+                    )}
                   </button>
                 )}
               </div>
 
-              {adminNotifs.length === 0 ? (
+              {isLoadingNotifs && adminNotifs.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-400 animate-pulse">
+                  Loading active notifications from Supabase DB...
+                </div>
+              ) : adminNotifs.length === 0 ? (
                 <div className="py-8 text-center text-xs text-slate-400">
                   No active broadcast notifications sent yet. Use the form above to send your first real-time alert!
                 </div>
@@ -2154,10 +2234,28 @@ export default function AdminDashboard() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => removeAdminNotif(n.id)}
-                        className="text-xs font-bold text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+                        disabled={deletingNotifId === n.id || isClearingAllNotifs}
+                        onClick={async () => {
+                          setDeletingNotifId(n.id);
+                          try {
+                            await removeAdminNotif(n.id);
+                          } finally {
+                            setDeletingNotifId(null);
+                          }
+                        }}
+                        className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 disabled:opacity-50 border border-rose-200/80 px-3 py-1.5 rounded-xl transition-all cursor-pointer shrink-0 inline-flex items-center gap-1.5 shadow-2xs active:scale-[0.98]"
                       >
-                        🗑️ Delete
+                        {deletingNotifId === n.id ? (
+                          <>
+                            <svg className="animate-spin h-3.5 w-3.5 text-rose-600" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>Deleting...</span>
+                          </>
+                        ) : (
+                          <span>🗑️ Delete</span>
+                        )}
                       </button>
                     </div>
                   ))}

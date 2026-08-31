@@ -226,7 +226,7 @@ app.get("/api/v1/coupons", async (req, res) => {
   }
 });
 
-app.post("/api/v1/coupons", async (req, res) => {
+app.post("/api/v1/coupons", requireAuth, requireRole("ADMIN"), async (req, res) => {
   const { code, title, discountAmount, minOrder, expiryDate, desc, isActive } = req.body;
   if (!code || !code.trim()) {
     return res.status(400).json({ error: "Coupon code is required" });
@@ -268,7 +268,7 @@ app.post("/api/v1/coupons", async (req, res) => {
   }
 });
 
-app.patch("/api/v1/coupons/:id", async (req, res) => {
+app.patch("/api/v1/coupons/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   const { id } = req.params;
   const { code, title, discountAmount, minOrder, expiryDate, desc, isActive } = req.body;
 
@@ -320,7 +320,7 @@ app.patch("/api/v1/coupons/:id", async (req, res) => {
   res.status(404).json({ error: "Coupon not found" });
 });
 
-app.delete("/api/v1/coupons/:id", async (req, res) => {
+app.delete("/api/v1/coupons/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   const { id } = req.params;
   const rawId = (id || "").trim();
 
@@ -497,7 +497,7 @@ app.post("/api/v1/auth/otp/verify", async (req, res) => {
 });
 
 // Fetch User Profile by Phone Number from Supabase PostgreSQL
-app.get("/api/v1/users/by-phone/:phone", async (req, res) => {
+app.get("/api/v1/users/by-phone/:phone", requireAuth, requireSelfOrAdmin("phone"), async (req, res) => {
   try {
     const user = await prisma.user.findUnique({ where: { phone: req.params.phone } });
     if (!user) return res.status(404).json({ error: "User not found" });
@@ -508,7 +508,7 @@ app.get("/api/v1/users/by-phone/:phone", async (req, res) => {
 });
 
 // Update Profile (Name, Email) in Supabase PostgreSQL
-app.put("/api/v1/users/profile", async (req, res) => {
+app.put("/api/v1/users/profile", requireAuth, async (req, res) => {
   try {
     const { phone, name, email } = req.body;
     if (!phone) return res.status(400).json({ error: "Phone number is required" });
@@ -567,7 +567,7 @@ app.get("/api/v1/users", requireAuth, requireRole("ADMIN"), async (req, res) => 
   }
 });
 
-app.post("/api/v1/users", async (req, res) => {
+app.post("/api/v1/users", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const { phone, name, role, email } = req.body;
     const newUser = await prisma.user.create({
@@ -586,7 +586,7 @@ app.post("/api/v1/users", async (req, res) => {
 });
 
 // 2. DISTRICT REPRESENTATIVE (DR) ENDPOINTS
-app.get("/api/v1/drs", async (req, res) => {
+app.get("/api/v1/drs", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const drs = await prisma.dR.findMany({
       include: { region: true, user: true },
@@ -598,7 +598,7 @@ app.get("/api/v1/drs", async (req, res) => {
   }
 });
 
-app.post("/api/v1/drs", async (req, res) => {
+app.post("/api/v1/drs", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const { name, phone, password, regionId } = req.body;
     const drPassword = (password && password.trim()) || "dr123";
@@ -648,7 +648,7 @@ app.post("/api/v1/drs", async (req, res) => {
   }
 });
 
-app.patch("/api/v1/drs/:id", async (req, res) => {
+app.patch("/api/v1/drs/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const rawId = req.params.id;
     const { name, phone, password, regionId, status } = req.body;
@@ -687,7 +687,7 @@ app.patch("/api/v1/drs/:id", async (req, res) => {
   }
 });
 
-app.delete("/api/v1/drs/:id", async (req, res) => {
+app.delete("/api/v1/drs/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const rawId = req.params.id;
     let dr = await prisma.dR.findUnique({ where: { id: rawId } }).catch(() => null);
@@ -706,7 +706,7 @@ app.delete("/api/v1/drs/:id", async (req, res) => {
 });
 
 // 3. VENDOR ENDPOINTS
-app.get("/api/v1/vendors", async (req, res) => {
+app.get("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const vendors = await prisma.vendor.findMany({
       include: { region: true, user: true },
@@ -719,7 +719,7 @@ app.get("/api/v1/vendors", async (req, res) => {
 });
 
 // Vendor Add Endpoint — Admin ya DR dwara naya Vendor Supabase DB me create karne ke liye
-  app.post("/api/v1/vendors", async (req, res) => {
+  app.post("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const { shopName, ownerName, phone, password, regionId, regionName, districtName, commissionRate, addedByDr, status } = req.body;
     const reqRegName = regionName || districtName || "Mirzapur";
@@ -796,7 +796,7 @@ app.get("/api/v1/vendors", async (req, res) => {
 });
 
 // Update Vendor Details & Password Endpoint
-app.patch("/api/v1/vendors/:id", async (req, res) => {
+app.patch("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const rawId = req.params.id;
     const { shopName, ownerName, phone, password, commissionRate, status } = req.body;
@@ -849,7 +849,7 @@ app.patch("/api/v1/vendors/:id", async (req, res) => {
 });
 
 // Vendor Status Update Endpoint — Admin dwara Vendor ko Approve ya Suspend karne ke liye
-app.patch("/api/v1/vendors/:id/status", async (req, res) => {
+app.patch("/api/v1/vendors/:id/status", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const rawId = req.params.id;
     const { status } = req.body; // PENDING | APPROVED | SUSPENDED
@@ -878,7 +878,7 @@ app.patch("/api/v1/vendors/:id/status", async (req, res) => {
 });
 
 // Vendor Delete Endpoint — Admin ya DR dwara Vendor ko Supabase DB se permanent delete karne ke liye (Foreign Key cleanup ke sath)
-app.delete("/api/v1/vendors/:id", async (req, res) => {
+app.delete("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const rawId = req.params.id;
 
@@ -911,7 +911,7 @@ app.delete("/api/v1/vendors/:id", async (req, res) => {
 });
 
 // Clear ALL Vendors & Vendor Products Endpoint
-app.delete("/api/v1/clear-vendors", async (req, res) => {
+app.delete("/api/v1/clear-vendors", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     await prisma.orderItem.deleteMany({}).catch(() => null);
     await prisma.vendorProduct.deleteMany({}).catch(() => null);
@@ -936,7 +936,7 @@ app.get("/api/v1/master-products", async (req, res) => {
   }
 });
 
-app.post("/api/v1/master-products", async (req, res) => {
+app.post("/api/v1/master-products", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const { name, categoryId, brand, type, grade, unit, suggestedPrice, imageUrl, addedBy } = req.body;
     
@@ -966,7 +966,7 @@ app.post("/api/v1/master-products", async (req, res) => {
 });
 
 // Master Product Update Endpoint — Admin dwara Product Title, Brand, Grade, Unit, Price, Image update karne ke liye
-app.patch("/api/v1/master-products/:id", async (req, res) => {
+app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const rawId = req.params.id;
     const { name, categoryId, brand, type, grade, unit, suggestedPrice, price, imageUrl } = req.body;
@@ -1026,7 +1026,7 @@ app.get("/api/v1/vendor/listings", async (req, res) => {
   }
 });
 
-app.post("/api/v1/vendor/listings", async (req, res) => {
+app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
     let { masterProductId, vendorId, vendorName, regionId, regionName, price, stockQty, addedBy } = req.body;
 
@@ -1179,7 +1179,7 @@ app.post("/api/v1/vendor/listings", async (req, res) => {
 });
 
 // Vendor Update Product Listing (Price & Stock Live Update)
-app.patch("/api/v1/vendor/listings/:id", async (req, res) => {
+app.patch("/api/v1/vendor/listings/:id", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
     const rawId = req.params.id;
     const { price, stockQty, approvalStatus, isActive } = req.body;
@@ -1213,7 +1213,7 @@ app.patch("/api/v1/vendor/listings/:id", async (req, res) => {
   }
 });
 
-app.patch("/api/v1/vendor/listings/:id/status", async (req, res) => {
+app.patch("/api/v1/vendor/listings/:id/status", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const rawId = req.params.id;
     const { approvalStatus } = req.body; // PENDING_REVIEW | APPROVED | REJECTED
@@ -1256,7 +1256,7 @@ app.get("/api/v1/categories", async (req, res) => {
   }
 });
 
-app.post("/api/v1/categories", async (req, res) => {
+app.post("/api/v1/categories", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const { name, productCount } = req.body;
     if (!name || !name.trim()) {
@@ -1278,7 +1278,7 @@ app.post("/api/v1/categories", async (req, res) => {
   }
 });
 
-app.patch("/api/v1/categories/:id", async (req, res) => {
+app.patch("/api/v1/categories/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const rawId = req.params.id;
     const { name, productCount, isActive } = req.body;
@@ -1309,7 +1309,7 @@ app.patch("/api/v1/categories/:id", async (req, res) => {
   }
 });
 
-app.delete("/api/v1/categories/:id", async (req, res) => {
+app.delete("/api/v1/categories/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const rawId = req.params.id;
     if (!rawId) {
@@ -1359,7 +1359,7 @@ app.get("/api/v1/regions", async (req, res) => {
   }
 });
 
-app.post("/api/v1/regions", async (req, res) => {
+app.post("/api/v1/regions", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const { name, state, baseDeliveryCharge, isActive } = req.body;
     if (!name || !name.trim()) {
@@ -1383,7 +1383,7 @@ app.post("/api/v1/regions", async (req, res) => {
   }
 });
 
-app.patch("/api/v1/regions/:id", async (req, res) => {
+app.patch("/api/v1/regions/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const rawId = req.params.id;
     const { name, state, baseDeliveryCharge, isActive } = req.body;
@@ -1415,7 +1415,7 @@ app.patch("/api/v1/regions/:id", async (req, res) => {
   }
 });
 
-app.delete("/api/v1/regions/:id", async (req, res) => {
+app.delete("/api/v1/regions/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const rawId = req.params.id;
     if (!rawId) {
@@ -1476,7 +1476,7 @@ app.get("/api/v1/orders", requireAuth, requireRole("ADMIN"), async (req, res) =>
 });
 
 // Strict Vendor Isolated Orders Fetch
-app.get("/api/v1/orders/vendor/:vendorId", async (req, res) => {
+app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
     const { vendorId } = req.params;
     const vendor = await prisma.vendor.findFirst({
@@ -1517,7 +1517,7 @@ app.get("/api/v1/orders/vendor/:vendorId", async (req, res) => {
 });
 
 // Update Order Status (Vendor & Admin with Auto Stock Restore on Cancel)
-app.patch("/api/v1/orders/:id/status", async (req, res) => {
+app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
     const { status } = req.body; // PENDING | PROCESSING | OUT_FOR_DELIVERY | DELIVERED | CANCELLED
     const previousOrder = await prisma.order.findUnique({
@@ -1563,43 +1563,14 @@ app.patch("/api/v1/orders/:id/status", async (req, res) => {
 // Customer Addresses Fetch & Save Endpoints (Explicit Express Routes)
 const handleGetAddresses = async (req, res) => {
   try {
-    const { userId } = req.params;
-    if (!userId || userId === "undefined" || userId === "null") {
+    const targetUserId = req.auth?.role === "ADMIN" ? req.params.userId : (req.auth?.userId || req.params.userId);
+    if (!targetUserId || targetUserId === "undefined" || targetUserId === "null") {
       return res.json([]);
-    }
-
-    const cleanPhone = userId.replace(/\D/g, "");
-
-    let targetUser = null;
-    if (userId.length > 20) {
-      targetUser = await prisma.user.findUnique({ where: { id: userId } }).catch(() => null);
-    }
-    if (!targetUser && cleanPhone && cleanPhone.length >= 8) {
-      targetUser = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { phone: cleanPhone },
-            { phone: { contains: cleanPhone.slice(-10) } },
-          ],
-        },
-      }).catch(() => null);
-    }
-
-    const userIdsToSearch = [userId];
-    if (targetUser && targetUser.id) {
-      userIdsToSearch.push(targetUser.id);
-    }
-
-    const searchConditions = [
-      { userId: { in: userIdsToSearch } },
-    ];
-    if (cleanPhone && cleanPhone.length >= 8) {
-      searchConditions.push({ phone: { contains: cleanPhone.slice(-10) } });
     }
 
     const addresses = await prisma.address.findMany({
       where: {
-        OR: searchConditions,
+        userId: targetUserId,
       },
       include: { region: true },
       orderBy: { createdAt: "desc" },
@@ -1611,10 +1582,10 @@ const handleGetAddresses = async (req, res) => {
   }
 };
 
-app.get("/api/v1/addresses/user/:userId", handleGetAddresses);
-app.get("/api/v1/addresses/:userId", handleGetAddresses);
+app.get("/api/v1/addresses/user/:userId", requireAuth, requireSelfOrAdmin("userId"), handleGetAddresses);
+app.get("/api/v1/addresses/:userId", requireAuth, requireSelfOrAdmin("userId"), handleGetAddresses);
 
-app.post("/api/v1/addresses", async (req, res) => {
+app.post("/api/v1/addresses", requireAuth, async (req, res) => {
   try {
     const { userId, fullName, phone, street, city, state, pincode } = req.body;
     const cleanPhone = phone ? phone.replace(/\D/g, "") : "";
@@ -1712,7 +1683,7 @@ app.post("/api/v1/addresses", async (req, res) => {
 });
 
 // Update Address Endpoint in Supabase DB
-app.put("/api/v1/addresses/:id", async (req, res) => {
+app.put("/api/v1/addresses/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { fullName, phone, street, city, state, pincode, isDefault } = req.body;
@@ -1747,7 +1718,7 @@ app.put("/api/v1/addresses/:id", async (req, res) => {
 });
 
 // Delete Address Endpoint in Supabase DB (Supports UUID or Street + User lookup)
-app.delete("/api/v1/addresses/:id", async (req, res) => {
+app.delete("/api/v1/addresses/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { street } = req.query;
@@ -1778,7 +1749,7 @@ app.delete("/api/v1/addresses/:id", async (req, res) => {
   }
 });
 
-app.post("/api/v1/orders/checkout", async (req, res) => {
+app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
   try {
     const { customerId, totalAmount, deliveryFee, items, idempotencyKey } = req.body;
 
@@ -2043,7 +2014,7 @@ app.get("/api/v1/reviews", async (req, res) => {
   }
 });
 
-app.post("/api/v1/reviews", async (req, res) => {
+app.post("/api/v1/reviews", requireAuth, async (req, res) => {
   try {
     const { productId, name, rating, comment } = req.body;
     if (!productId || !comment) {
@@ -2066,7 +2037,7 @@ app.post("/api/v1/reviews", async (req, res) => {
 });
 
 // 13. NOTIFICATIONS ENDPOINTS (Admin Broadcast & Real-Time Customer Alerts)
-app.get("/api/v1/notifications", async (req, res) => {
+app.get("/api/v1/notifications", requireAuth, async (req, res) => {
   try {
     const { userId } = req.query;
     const whereClause = {};
@@ -2096,7 +2067,7 @@ app.get("/api/v1/notifications", async (req, res) => {
   }
 });
 
-app.post("/api/v1/notifications", async (req, res) => {
+app.post("/api/v1/notifications", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const { title, message, userId } = req.body;
     if (!title || !message) {
@@ -2140,7 +2111,7 @@ app.post("/api/v1/notifications", async (req, res) => {
   }
 });
 
-app.patch("/api/v1/notifications/:id/read", async (req, res) => {
+app.patch("/api/v1/notifications/:id/read", requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const notif = await prisma.notification.update({
@@ -2153,7 +2124,7 @@ app.patch("/api/v1/notifications/:id/read", async (req, res) => {
   }
 });
 
-app.delete("/api/v1/notifications/:id", async (req, res) => {
+app.delete("/api/v1/notifications/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const { id } = req.params;
     await prisma.notification.deleteMany({ where: { id } }).catch(() => null);

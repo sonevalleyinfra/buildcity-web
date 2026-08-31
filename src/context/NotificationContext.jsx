@@ -15,20 +15,40 @@ export function NotificationProvider({ children }) {
   const storageKey = `buildcity_notifications_${userIdent}`;
   const readKey = `buildcity_read_notifs_${userIdent}`;
   const dismissedKey = `buildcity_dismissed_notifs_${userIdent}`;
+  const seenToastsKey = `buildcity_seen_toasts_${userIdent}`;
 
-  const isAdmin = (user?.role || "").toLowerCase() === "admin";
+  const userRole = (user?.role || "").toLowerCase();
+  const isStaff = userRole === "admin" || userRole === "vendor" || userRole === "dr";
+  const isAdmin = userRole === "admin";
+
   const [notifications, setNotifications] = useState([]);
   const [isSending, setIsSending] = useState(false);
   const [isLoadingNotifs, setIsLoadingNotifs] = useState(false);
   const [toastNotif, setToastNotif] = useState(null);
 
+  // STRICT RULE: Only show Toast to Customers & exactly ONCE per notification
   const showToast = (notif) => {
-    // Strictly do NOT show toast alerts to Admin. Only for Customers!
-    if (isAdmin || !notif) return;
+    if (isStaff || !notif) return;
+
+    let seenSet = new Set();
+    try {
+      seenSet = new Set(JSON.parse(localStorage.getItem(seenToastsKey) || "[]"));
+    } catch {}
+
+    const notifSig = notif.id || `${notif.title}_${notif.message}`;
+    if (seenSet.has(notifSig)) {
+      return; // Already delivered once to this customer!
+    }
+
+    seenSet.add(notifSig);
+    try {
+      localStorage.setItem(seenToastsKey, JSON.stringify(Array.from(seenSet)));
+    } catch {}
+
     setToastNotif(notif);
     setTimeout(() => {
       setToastNotif((curr) => (curr?.id === notif.id ? null : curr));
-    }, 6000);
+    }, 6500);
   };
 
   // Fetch real database notifications from backend (Vercel Serverless Edge + Render DB)
@@ -81,9 +101,9 @@ export function NotificationProvider({ children }) {
             };
           });
 
-        // Load private customer local orders
+        // Load private customer local orders (Strictly customers only)
         let localOrders = [];
-        if (!isAdmin) {
+        if (!isStaff) {
           try {
             const orderKey = `buildcity_user_orders_${userIdent}`;
             localOrders = (JSON.parse(localStorage.getItem(orderKey) || "[]"))
@@ -92,7 +112,7 @@ export function NotificationProvider({ children }) {
           } catch {}
         }
 
-        const combined = [...localOrders, ...formatted];
+        const combined = isStaff && !isAdmin ? [] : [...localOrders, ...formatted];
         const unique = Array.from(new Map(combined.map((x) => [x.id || `${x.title}_${x.message}`, x])).values())
           .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
@@ -100,8 +120,8 @@ export function NotificationProvider({ children }) {
           const prevIds = new Set(prev.map((p) => p.id));
           const newItems = unique.filter((f) => !prevIds.has(f.id) && !f.read);
 
-          // If a new unread notification came from backend, trigger instant toast for customers
-          if (newItems.length > 0 && prev.length > 0 && !isAdmin) {
+          // Trigger one-time instant toast for customers
+          if (newItems.length > 0 && prev.length > 0 && !isStaff) {
             showToast(newItems[0]);
           }
 
@@ -127,7 +147,7 @@ export function NotificationProvider({ children }) {
         bc.onmessage = (event) => {
           if (event.data && event.data.type === "NEW_NOTIFICATION") {
             // ONLY customers should receive broadcast notifications in their bell & toast!
-            if (!isAdmin) {
+            if (!isStaff) {
               const incoming = event.data.notification;
               let dismissedIds = new Set();
               try {
@@ -146,7 +166,7 @@ export function NotificationProvider({ children }) {
     return () => {
       if (bc) bc.close();
     };
-  }, [isAdmin, dismissedKey]);
+  }, [isStaff, dismissedKey]);
 
   // Load from user storage on start and poll DB every 4s
   useEffect(() => {
@@ -396,25 +416,58 @@ export function NotificationProvider({ children }) {
     >
       {children}
 
-      {/* Real-Time Floating Notification Toast Banner on Customer Screen */}
+      {/* High-End Real-Time Floating Notification Toast Banner on Customer Screen */}
       {toastNotif && (
-        <div className="fixed top-5 right-5 z-[9999] max-w-sm w-full animate-in slide-in-from-top-4 fade-in duration-300 pointer-events-auto">
-          <div className="bg-navy-950/95 text-white border border-brand-400/40 rounded-2xl p-4 shadow-2xl backdrop-blur-md flex items-start gap-3 relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 to-brand-500 animate-pulse" />
-            <span className="h-8 w-8 rounded-xl bg-brand-500/20 border border-brand-400/40 flex items-center justify-center text-lg shrink-0 mt-0.5">
-              🔔
+        <div className="fixed top-5 right-4 sm:right-6 z-[9999] max-w-sm w-[calc(100%-2rem)] sm:w-full animate-in slide-in-from-top-4 fade-in duration-300 pointer-events-auto">
+          <div className="bg-slate-900/95 text-white border border-brand-500/40 rounded-2xl p-4 shadow-2xl backdrop-blur-xl flex items-start gap-3 relative overflow-hidden group">
+            {/* Top Accent Gradient Bar */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 via-brand-500 to-rose-500 animate-pulse" />
+
+            {/* Icon Avatar */}
+            <span className="h-10 w-10 rounded-xl bg-brand-500/20 border border-brand-400/40 flex items-center justify-center text-xl shrink-0 mt-0.5 shadow-xs">
+              {toastNotif.type === "offer" ? "🎁" : toastNotif.type === "price" ? "🏷️" : toastNotif.type === "order" ? "📦" : "📢"}
             </span>
+
+            {/* Content */}
             <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                  toastNotif.type === "offer"
+                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                    : toastNotif.type === "price"
+                    ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                    : toastNotif.type === "order"
+                    ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
+                    : "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                }`}>
+                  {toastNotif.type === "offer" ? "Special Offer" : toastNotif.type === "price" ? "Price Alert" : toastNotif.type === "order" ? "Order Update" : "Announcement"}
+                </span>
+                <span className="text-[10px] text-slate-400 font-semibold">Just now</span>
+              </div>
+
               <h4 className="font-black text-xs text-white leading-tight tracking-tight">
                 {toastNotif.title}
               </h4>
               <p className="text-[11px] text-slate-300 mt-1 leading-snug font-medium">
                 {toastNotif.message}
               </p>
+
+              {toastNotif.link && (
+                <a
+                  href={toastNotif.link}
+                  onClick={() => setToastNotif(null)}
+                  className="inline-flex items-center gap-1 text-[11px] font-black text-brand-400 hover:text-brand-300 hover:underline mt-2 cursor-pointer"
+                >
+                  View Details →
+                </a>
+              )}
             </div>
+
+            {/* Close Button */}
             <button
               onClick={() => setToastNotif(null)}
-              className="text-slate-400 hover:text-white text-xs font-bold leading-none p-1 cursor-pointer"
+              className="text-slate-400 hover:text-white text-sm font-bold leading-none p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              title="Dismiss"
             >
               ✕
             </button>

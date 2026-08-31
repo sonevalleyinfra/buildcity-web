@@ -175,8 +175,8 @@ export default function NotificationPanel({ className }) {
               <div className="max-h-96 overflow-y-auto divide-y divide-slate-100">
                 {filtered.length === 0 ? (
                   <div className="p-10 text-center text-xs text-slate-500">
-                    <p className="text-2xl mb-1">🔔</p>
-                    <p className="font-bold text-navy-900">No notifications here</p>
+                    <p className="text-3xl mb-2">🔔</p>
+                    <p className="font-extrabold text-navy-900 text-sm">No notifications here</p>
                     <p className="text-[11px] text-slate-400 mt-0.5">You're all caught up with your site updates!</p>
                   </div>
                 ) : (
@@ -184,41 +184,64 @@ export default function NotificationPanel({ className }) {
                     <div
                       key={n.id}
                       onClick={() => handleClickNotification(n)}
-                      className={`w-full text-left flex gap-3 px-4 py-3 transition-colors cursor-pointer group relative ${
-                        n.read ? "bg-white hover:bg-slate-50/80" : "bg-brand-50/40 hover:bg-brand-50/80"
+                      className={`w-full text-left flex gap-3.5 px-4 py-3.5 transition-all cursor-pointer group relative active:scale-[0.99] ${
+                        n.read ? "bg-white hover:bg-slate-50/90" : "bg-gradient-to-r from-brand-50/60 to-white hover:bg-brand-50/90"
                       }`}
                     >
-                      <span className="h-9 w-9 shrink-0 rounded-full bg-white border border-slate-200 flex items-center justify-center text-base shadow-2xs group-hover:scale-105 transition-transform">
-                        {TYPE_ICON[n.type] || "🔔"}
+                      <span className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center text-lg shadow-2xs group-hover:scale-105 transition-transform border ${
+                        n.type === "offer"
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : n.type === "price"
+                          ? "bg-amber-50 text-amber-700 border-amber-200"
+                          : n.type === "order"
+                          ? "bg-blue-50 text-blue-700 border-blue-200"
+                          : "bg-purple-50 text-purple-700 border-purple-200"
+                      }`}>
+                        {TYPE_ICON[n.type] || "📢"}
                       </span>
+
                       <div className="min-w-0 flex-1 pr-4">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                          <span className={`text-[9px] font-extrabold uppercase px-2 py-0.2 rounded-full border ${
+                            n.type === "offer"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : n.type === "price"
+                              ? "bg-amber-50 text-amber-700 border-amber-200"
+                              : n.type === "order"
+                              ? "bg-blue-50 text-blue-700 border-blue-200"
+                              : "bg-purple-50 text-purple-700 border-purple-200"
+                          }`}>
+                            {n.type === "offer" ? "Offer" : n.type === "price" ? "Price" : n.type === "order" ? "Order" : "Info"}
+                          </span>
                           <span className="text-xs font-black text-navy-900 truncate">
                             {n.title}
                           </span>
                           {!n.read && (
-                            <span className="h-1.5 w-1.5 rounded-full bg-brand-500 shrink-0" />
+                            <span className="h-1.5 w-1.5 rounded-full bg-brand-500 shrink-0 animate-pulse" />
                           )}
                         </div>
+
                         <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed font-medium">
                           {n.message}
                         </p>
-                        <div className="flex items-center gap-2 mt-1">
+
+                        <div className="flex items-center gap-2.5 mt-1.5">
                           <span className="text-[10px] text-slate-400 font-bold">{formatTime(n.timestamp)}</span>
                           {n.link && (
-                            <span className="text-[10px] text-brand-600 font-black group-hover:underline">
+                            <span className="text-[10px] text-brand-600 font-black group-hover:underline flex items-center gap-0.5">
                               View details →
                             </span>
                           )}
                         </div>
                       </div>
+
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           removeNotification(n.id);
                         }}
-                        className="text-slate-300 hover:text-rose-500 text-xs absolute right-3 top-3 p-1 transition-colors cursor-pointer"
+                        className="text-slate-300 hover:text-rose-500 text-xs absolute right-3 top-3 p-1 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
                         title="Dismiss"
                       >
                         ✕

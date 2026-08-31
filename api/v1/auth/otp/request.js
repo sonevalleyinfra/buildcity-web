@@ -40,20 +40,26 @@ export default async function handler(req, res) {
     const isSpecialStaff = cleanMobile === "9999999999" || cleanMobile === "7777777777";
     let isStaffPhone = isSpecialStaff;
 
-    const client = new Client({
-      connectionString: CONNECTION_STRING,
-      ssl: { rejectUnauthorized: false },
-      connectionTimeoutMillis: 3500,
-    });
+    // 1. Generate 6-digit OTP code & cryptographic HMAC token
+    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 mins
+    const hash = crypto.createHmac("sha256", OTP_SECRET).update(`${cleanMobile}:${generatedOtp}:${expiresAt}`).digest("hex");
+    const otpToken = `${expiresAt}.${hash}`;
 
+    // 2. Check staff accounts and save OTP into Supabase PostgreSQL database
     try {
+      const client = new Client({
+        connectionString: CONNECTION_STRING,
+        ssl: { rejectUnauthorized: false },
+        connectionTimeoutMillis: 3500,
+      });
       await client.connect();
 
       if (!isStaffPhone) {
         const staffRes = await client.query(
           `SELECT 'user' as tbl FROM users WHERE phone = $1 AND role IN ('ADMIN', 'DR', 'VENDOR')
            UNION ALL
-           SELECT 'dr' as tbl FROM drs WHERE phone = $1
+           SELECT 'dr' as tbl FROM district_representatives WHERE phone = $1
            UNION ALL
            SELECT 'vendor' as tbl FROM vendors WHERE phone = $1
            LIMIT 1`,
@@ -72,23 +78,24 @@ export default async function handler(req, res) {
         });
       }
 
-      // Generate 6-digit OTP code
-      const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-      const expiresAt = Date.now() + 10 * 60 * 1000; // 10 mins
-
-      // Generate cryptographic HMAC token for serverless multi-container validation
-      const hash = crypto.createHmac("sha256", OTP_SECRET).update(`${cleanMobile}:${generatedOtp}:${expiresAt}`).digest("hex");
-      const otpToken = `${expiresAt}.${hash}`;
-
-      // Save OTP into Supabase PostgreSQL database `otp_verifications` table
+      // Save OTP to DB
       await client.query(
         `INSERT INTO otp_verifications (id, phone, otp, "isVerified", "expiresAt", "createdAt")
          VALUES (gen_random_uuid(), $1, $2, false, $3, NOW())`,
         [cleanMobile, generatedOtp, new Date(expiresAt)]
       );
       await client.end();
+    } catch (dbErr) {
+      console.warn("DB OTP log note:", dbErr.message);
+      if (isSpecialStaff) {
+        return res.status(403).json({
+          error: "Admin and DR accounts must log in using 'Partner Login (Password)'.",
+          isStaffBlocked: true,
+        });
+      }
+    }
 
-    // 2. Dispatch Live SMS via Aradhya Technologies
+    // 3. Dispatch Live SMS via Aradhya Technologies
     const username = "sonevalley";
     const apikey = "0A8CC-B46EE";
     const sender = "SNVLY";
@@ -114,7 +121,7 @@ export default async function handler(req, res) {
     const path = `/sms-panel/api/http/index.php?${queryParams}`;
 
     await new Promise((resolve) => {
-      const timeout = setTimeout(() => resolve({ success: true }), 3500);
+      const timeout = setTimeout(() => resolve({ success: true }), 4000);
 
       const request = https.get(
         {

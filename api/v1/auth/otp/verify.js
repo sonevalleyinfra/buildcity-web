@@ -92,7 +92,7 @@ export default async function handler(req, res) {
         const staffRes = await client.query(
           `SELECT 'user' as tbl FROM users WHERE phone = $1 AND role IN ('ADMIN', 'DR', 'VENDOR')
            UNION ALL
-           SELECT 'dr' as tbl FROM drs WHERE phone = $1
+           SELECT 'dr' as tbl FROM district_representatives WHERE phone = $1
            UNION ALL
            SELECT 'vendor' as tbl FROM vendors WHERE phone = $1
            LIMIT 1`,

@@ -1,7 +1,8 @@
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import Logo from "../../components/Logo";
 import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
+import { useOrders } from "../../context/OrderContext";
 import { useAlert } from "../../context/AlertContext";
 import { useNotifications } from "../../context/NotificationContext";
 import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
@@ -85,6 +86,15 @@ export default function AdminDashboard() {
     updateOrderStatus,
     fetchCloudData,
   } = useAdmin();
+
+  const { orders: contextOrders = [], fetchAllOrders } = useOrders() || {};
+  const displayOrders = Array.isArray(orders) && orders.length > 0 ? orders : contextOrders;
+
+  // Always force cloud sync on AdminDashboard mount
+  useEffect(() => {
+    if (fetchCloudData) fetchCloudData();
+    if (fetchAllOrders) fetchAllOrders();
+  }, []);
 
   // Tab State: Overview, District Reps, Vendors, Products, Listings, Orders, Categories, Regions
   const [tab, setTab] = useState("Overview");
@@ -1625,14 +1635,14 @@ export default function AdminDashboard() {
                 <h2 className="text-base font-extrabold text-navy-900 flex items-center gap-2">
                   <span>🛒 All Platform Customer Orders</span>
                   <span className="bg-brand-50 text-brand-700 border border-brand-200 text-xs font-extrabold px-2.5 py-0.5 rounded-full">
-                    {orders.length} Total Orders
+                    {displayOrders.length} Total Orders
                   </span>
                 </h2>
                 <p className="text-xs text-slate-500">Super Admin Overview: Real-time tracking of all construction material orders across all district vendors.</p>
               </div>
             </div>
 
-            {orders.length === 0 ? (
+            {displayOrders.length === 0 ? (
               <div className="text-center py-12 text-xs text-slate-500 font-medium">
                 No customer orders recorded in system yet.
               </div>
@@ -1650,7 +1660,7 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {orders.map((o) => {
+                    {displayOrders.map((o) => {
                       const displayAmt = Number(o.totalAmount || o.total || o.amount || 0);
                       const custName = o.customer?.name || o.customerName || "Verified Customer";
                       const custPhone = o.customer?.phone || o.customerPhone || "7607650875";

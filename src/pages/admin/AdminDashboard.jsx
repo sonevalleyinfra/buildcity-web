@@ -47,11 +47,11 @@ export default function AdminDashboard() {
   const { showAlert, showConfirm } = useAlert();
   const {
     drs = [],
-    vendors,
+    vendors = [],
     users = [],
-    orders,
-    categories,
-    regions,
+    orders = [],
+    categories = [],
+    regions = [],
     coupons = [],
     masterProducts = [],
     products = [],

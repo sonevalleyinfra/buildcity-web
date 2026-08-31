@@ -121,27 +121,26 @@ export default async function handler(req, res) {
     const path = `/sms-panel/api/http/index.php?${queryParams}`;
 
     await new Promise((resolve) => {
-      const timeout = setTimeout(() => resolve({ success: true }), 4000);
+      const timeout = setTimeout(() => resolve({ success: true }), 5000);
+      const agent = new https.Agent({ rejectUnauthorized: false });
 
       const request = https.get(
-        {
-          hostname: "sms.aradhyatechnologies.in",
-          port: 443,
-          path: path,
-          rejectUnauthorized: false
-        },
+        `https://sms.aradhyatechnologies.in${path}`,
+        { agent },
         (resp) => {
           let data = "";
           resp.on("data", (chunk) => { data += chunk; });
           resp.on("end", () => {
             clearTimeout(timeout);
+            console.log(`[SMS Gateway Response] Status: ${resp.statusCode}, Body: ${data}`);
             resolve({ success: true, data });
           });
         }
       );
 
-      request.on("error", () => {
+      request.on("error", (e) => {
         clearTimeout(timeout);
+        console.warn("[SMS Gateway Error]:", e.message);
         resolve({ success: true });
       });
     });

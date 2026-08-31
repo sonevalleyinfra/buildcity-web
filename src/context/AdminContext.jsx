@@ -96,6 +96,8 @@ const loadInitialCoupons = () => {
 
 const USERS_STORAGE_KEY = "buildcity_admin_users";
 const PRODUCTS_STORAGE_KEY = "buildcity_admin_products";
+const MASTER_PRODUCTS_STORAGE_KEY = "buildcity_admin_master_products";
+const ORDERS_STORAGE_KEY = "buildcity_admin_orders";
 
 const loadInitialUsers = () => {
   try {
@@ -119,19 +121,40 @@ const loadInitialProducts = () => {
   return [];
 };
 
+const loadInitialMasterProducts = () => {
+  try {
+    const saved = localStorage.getItem(MASTER_PRODUCTS_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return [];
+};
+
+const loadInitialOrders = () => {
+  try {
+    const saved = localStorage.getItem(ORDERS_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return [];
+};
+
 export function AdminProvider({ children }) {
   const { user } = useAuth() || {};
   const userRole = (user?.role || "").toLowerCase();
-  const isAdminOrDr = userRole === "admin" || userRole === "dr";
 
   const [drs, setDrs] = useState(loadInitialDrs);
   const [vendors, setVendors] = useState(loadInitialVendors);
   const [users, setUsers] = useState(loadInitialUsers);
-  const [orders, setOrders] = useState([]);
+  const [orders, setOrders] = useState(loadInitialOrders);
   const [categories, setCategories] = useState(loadInitialCategories);
   const [regions, setRegions] = useState(loadInitialRegions);
   const [coupons, setCoupons] = useState(loadInitialCoupons);
-  const [masterProducts, setMasterProducts] = useState([]);
+  const [masterProducts, setMasterProducts] = useState(loadInitialMasterProducts);
   const [products, setProducts] = useState(loadInitialProducts);
   const [productsLoading, setProductsLoading] = useState(true);
 
@@ -166,12 +189,22 @@ export function AdminProvider({ children }) {
 
   // Single Source of Truth: Supabase Cloud DB se live data sync karne ke liye (Admin / DR only)
   const fetchCloudData = async () => {
-    if (!isAdminOrDr) {
+    let currentUser = user;
+    if (!currentUser && typeof window !== "undefined") {
+      try {
+        const savedAuth = localStorage.getItem("buildcity_auth");
+        if (savedAuth) currentUser = JSON.parse(savedAuth);
+      } catch {}
+    }
+    const currentRole = (currentUser?.role || "").toLowerCase();
+    const isStaff = currentRole === "admin" || currentRole === "dr";
+
+    if (!isStaff) {
       return fetchPublicCatalog();
     }
 
     try {
-      if (userRole === "admin") {
+      if (currentRole === "admin") {
         authFetch(`${API_BASE_URL}/api/v1/users`)
           .then((r) => r.json())
           .then((u) => {
@@ -248,6 +281,7 @@ export function AdminProvider({ children }) {
           imageUrl: m.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
           addedBy: m.addedBy || "Admin",
         }));
+        localStorage.setItem(MASTER_PRODUCTS_STORAGE_KEY, JSON.stringify(formattedMaster));
         setMasterProducts((prev) => (JSON.stringify(prev) === JSON.stringify(formattedMaster) ? prev : formattedMaster));
       }
 
@@ -298,6 +332,7 @@ export function AdminProvider({ children }) {
         fetchedOrders = await authFetch(`${API_BASE_URL}/api/v1/orders`).then((r) => r.json()).catch(() => []);
       }
       if (Array.isArray(fetchedOrders) && fetchedOrders.length > 0) {
+        localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(fetchedOrders));
         setOrders((prev) => (JSON.stringify(prev) === JSON.stringify(fetchedOrders) ? prev : fetchedOrders));
       }
 
@@ -370,10 +405,10 @@ export function AdminProvider({ children }) {
     }
   };
 
-  // Continuous Live Auto Polling (6s) & Tab Storage Sync from Supabase Cloud DB
+  // Continuous Live Auto Polling (5s) & Tab Storage Sync from Supabase Cloud DB
   useEffect(() => {
     fetchCloudData();
-    const interval = setInterval(fetchCloudData, 6000);
+    const interval = setInterval(fetchCloudData, 5000);
 
     const handleStorage = () => fetchCloudData();
     window.addEventListener("storage", handleStorage);
@@ -382,7 +417,7 @@ export function AdminProvider({ children }) {
       clearInterval(interval);
       window.removeEventListener("storage", handleStorage);
     };
-  }, []);
+  }, [user, userRole]);
 
   const addDr = async (drData) => {
     const regionObj = regions.find((r) => r.id === drData.regionId) || {};

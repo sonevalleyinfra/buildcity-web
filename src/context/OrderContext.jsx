@@ -119,7 +119,9 @@ export function OrderProvider({ children }) {
           regionId: regionId || resData.order.regionId || "varanasi",
           items: resData.order.items && resData.order.items.length > 0 ? resData.order.items : formattedItems,
           address: resData.order.address || address,
-          total: Number(total) || Number(resData.order.totalAmount) || 0,
+          total: Number(resData.order.totalAmount) || Number(total) || 0,
+          totalAmount: Number(resData.order.totalAmount) || Number(total) || 0,
+          deliveryFee: Number(resData.order.deliveryFee) || 49,
         };
         setOrders((prev) => {
           const updated = [createdOrder, ...prev.filter((p) => p.id !== createdOrder.id)];

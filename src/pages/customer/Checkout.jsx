@@ -228,9 +228,11 @@ export default function Checkout() {
       setSuccessOrder(order);
 
       // Trigger interactive real-time notification
+      const verifiedTotal = Number(order.totalAmount || order.total || total);
+      const formattedOrderId = formatShortId(order.id, "ORD");
       addNotification({
         title: "Order Placed Successfully! 📦",
-        message: `Order #${formatShortId(order.id, "ORD")} confirmed. Pay ₹${Number(order.total || total).toLocaleString("en-IN")} on site arrival.`,
+        message: `Order ${formattedOrderId} confirmed. Pay ₹${verifiedTotal.toLocaleString("en-IN")} on site arrival.`,
         type: "order",
         link: `/orders/${order.id}`,
       });

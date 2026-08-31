@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Logo from "../../components/Logo";
 import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
@@ -88,6 +88,7 @@ export default function AdminDashboard() {
 
   // Tab State: Overview, District Reps, Vendors, Products, Listings, Orders, Categories, Regions
   const [tab, setTab] = useState("Overview");
+  const tabsContainerRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [listingFilter, setListingFilter] = useState("ALL");
 
@@ -566,38 +567,67 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Tabs Bar with Smooth Horizontal Scroll */}
+        {/* Tabs Bar with Smooth Horizontal Scroll & Quick Nav Controls */}
         <div className="border-t border-slate-100 bg-slate-50/50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-2 overflow-x-auto py-2.5 custom-scrollbar scroll-smooth">
-            {TABS.map((t) => {
-              const pendingCount = products.filter(
-                (p) => (p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW")) === "PENDING_REVIEW"
-              ).length;
+          <div className="max-w-7xl mx-auto px-2 sm:px-6 flex items-center gap-1.5">
+            <button
+              onClick={() => {
+                if (tabsContainerRef.current) {
+                  tabsContainerRef.current.scrollBy({ left: -220, behavior: "smooth" });
+                }
+              }}
+              aria-label="Scroll tabs left"
+              className="hidden sm:flex items-center justify-center h-7 w-7 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-navy-900 hover:bg-slate-100 shadow-2xs shrink-0 cursor-pointer active:scale-95 transition-all text-sm font-bold"
+            >
+              ‹
+            </button>
 
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
-                  className={`px-3.5 py-2 text-xs font-bold rounded-xl active:scale-[0.98] transition-all duration-200 whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                    tab === t.id
-                      ? "bg-navy-900 text-white shadow-xs"
-                      : "text-slate-600 bg-white hover:bg-slate-100 border border-slate-200/80 hover:text-navy-900"
-                  }`}
-                >
-                  <span>{t.label}</span>
-                  {t.id === "Users" && (
-                    <span className="bg-brand-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-2xs">
-                      {users.filter((u) => !u.role || u.role === "CUSTOMER").length}
-                    </span>
-                  )}
-                  {t.id === "Listings" && pendingCount > 0 && (
-                    <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full animate-pulse">
-                      {pendingCount}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            <div
+              ref={tabsContainerRef}
+              className="flex-1 flex gap-2 overflow-x-auto py-2.5 custom-scrollbar scroll-smooth"
+            >
+              {TABS.map((t) => {
+                const pendingCount = products.filter(
+                  (p) => (p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW")) === "PENDING_REVIEW"
+                ).length;
+
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setTab(t.id)}
+                    className={`px-3.5 py-2 text-xs font-bold rounded-xl active:scale-[0.98] transition-all duration-200 whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                      tab === t.id
+                        ? "bg-navy-900 text-white shadow-xs"
+                        : "text-slate-600 bg-white hover:bg-slate-100 border border-slate-200/80 hover:text-navy-900"
+                    }`}
+                  >
+                    <span>{t.label}</span>
+                    {t.id === "Users" && (
+                      <span className="bg-brand-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-2xs">
+                        {users.filter((u) => !u.role || u.role === "CUSTOMER").length}
+                      </span>
+                    )}
+                    {t.id === "Listings" && pendingCount > 0 && (
+                      <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full animate-pulse">
+                        {pendingCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={() => {
+                if (tabsContainerRef.current) {
+                  tabsContainerRef.current.scrollBy({ left: 220, behavior: "smooth" });
+                }
+              }}
+              aria-label="Scroll tabs right"
+              className="hidden sm:flex items-center justify-center h-7 w-7 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-navy-900 hover:bg-slate-100 shadow-2xs shrink-0 cursor-pointer active:scale-95 transition-all text-sm font-bold"
+            >
+              ›
+            </button>
           </div>
         </div>
       </header>

@@ -203,7 +203,8 @@ export function OrderProvider({ children }) {
         orders,
         placeOrder,
         getOrder,
-        fetchAllOrders,
+        fetchAllOrders: fetchOrdersForCurrentRole,
+        fetchOrdersForCurrentRole,
         fetchVendorOrders,
         updateOrderStatus,
       }}

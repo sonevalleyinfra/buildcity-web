@@ -848,8 +848,8 @@ app.patch("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), async 
   }
 });
 
-// Vendor Status Update Endpoint — Admin dwara Vendor ko Approve ya Suspend karne ke liye
-app.patch("/api/v1/vendors/:id/status", requireAuth, requireRole("ADMIN"), async (req, res) => {
+// Vendor Status Update Endpoint — Admin & DR dwara Vendor ko Approve ya Suspend karne ke liye
+app.patch("/api/v1/vendors/:id/status", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const rawId = req.params.id;
     const { status } = req.body; // PENDING | APPROVED | SUSPENDED
@@ -936,7 +936,7 @@ app.get("/api/v1/master-products", async (req, res) => {
   }
 });
 
-app.post("/api/v1/master-products", requireAuth, requireRole("ADMIN"), async (req, res) => {
+app.post("/api/v1/master-products", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const { name, categoryId, brand, type, grade, unit, suggestedPrice, imageUrl, addedBy } = req.body;
     
@@ -966,7 +966,7 @@ app.post("/api/v1/master-products", requireAuth, requireRole("ADMIN"), async (re
 });
 
 // Master Product Update Endpoint — Admin dwara Product Title, Brand, Grade, Unit, Price, Image update karne ke liye
-app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
+app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const rawId = req.params.id;
     const { name, categoryId, brand, type, grade, unit, suggestedPrice, price, imageUrl } = req.body;
@@ -1213,7 +1213,7 @@ app.patch("/api/v1/vendor/listings/:id", requireAuth, requireRole("VENDOR", "DR"
   }
 });
 
-app.patch("/api/v1/vendor/listings/:id/status", requireAuth, requireRole("ADMIN"), async (req, res) => {
+app.patch("/api/v1/vendor/listings/:id/status", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const rawId = req.params.id;
     const { approvalStatus } = req.body; // PENDING_REVIEW | APPROVED | REJECTED

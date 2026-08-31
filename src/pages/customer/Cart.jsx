@@ -6,6 +6,7 @@ import { useAdmin } from "../../context/AdminContext";
 import { useAlert } from "../../context/AlertContext";
 import { useRegion } from "../../context/RegionContext";
 import { API_BASE_URL } from "../../config/api";
+import { authFetch } from "../../config/authFetch";
 
 const AVAILABLE_COUPONS = [
   { code: "BUILDCITY100", title: "Flat ₹100 OFF", minOrder: 1000, discountAmount: 100, expiryDate: "2026-12-31", isActive: true, desc: "Valid on orders above ₹1,000" },
@@ -90,7 +91,7 @@ export default function Cart() {
 
     const fetchLiveCoupons = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/v1/coupons`);
+        const res = await authFetch(`${API_BASE_URL}/api/v1/coupons`);
         if (res.ok) {
           const data = await res.json();
           if (isMounted && Array.isArray(data) && data.length > 0) {

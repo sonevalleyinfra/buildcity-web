@@ -1,3 +1,4 @@
+import { authFetch } from "../../config/authFetch";
 import { useState, useEffect } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import Navbar from "../../components/Navbar";
@@ -104,7 +105,7 @@ export default function Checkout() {
   const fetchWithRetry = async (url, options = {}, retries = 3) => {
     for (let i = 0; i < retries; i++) {
       try {
-        const res = await fetch(url, options);
+        const res = await authFetch(url, options);
         if (res.ok) return res;
       } catch (err) {
         console.warn(`API retry ${i + 1}/${retries}:`, err.message);

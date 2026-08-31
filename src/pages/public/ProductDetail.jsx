@@ -7,6 +7,7 @@ import { useRegion } from "../../context/RegionContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useAuth } from "../../context/AuthContext";
 import { API_BASE_URL } from "../../config/api";
+import { authFetch } from "../../config/authFetch";
 
 // Fallback single-product lookup
 function generateProduct(id, priceFactor = 1, regionName = "Varanasi") {
@@ -95,7 +96,7 @@ export default function ProductDetail() {
 
     if (!existing) {
       setDirectLoading(true);
-      fetch(`${API_BASE_URL}/api/v1/cloud-sync`)
+      authFetch(`${API_BASE_URL}/api/v1/cloud-sync`)
         .then((r) => r.json())
         .then((data) => {
           if (data && Array.isArray(data.listings)) {
@@ -227,7 +228,7 @@ export default function ProductDetail() {
   // Fetch Reviews from Database (Supabase PostgreSQL API via API_BASE_URL)
   useEffect(() => {
     let isMounted = true;
-    fetch(`${API_BASE_URL}/api/v1/reviews?productId=${encodeURIComponent(id)}`)
+    authFetch(`${API_BASE_URL}/api/v1/reviews?productId=${encodeURIComponent(id)}`)
       .then((res) => {
         if (!res.ok) throw new Error("API status " + res.status);
         return res.json();
@@ -325,7 +326,7 @@ export default function ProductDetail() {
 
     // 2. Persist to Supabase DB via REST API
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/reviews`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/reviews`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

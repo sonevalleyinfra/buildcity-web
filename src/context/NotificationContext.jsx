@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { authFetch } from "../config/authFetch";
 import { useAuth } from "./AuthContext";
 import { API_BASE_URL } from "../config/api";
 
@@ -59,7 +60,7 @@ export function NotificationProvider({ children }) {
 
       // 1. Try Vercel Serverless Edge endpoint (Direct Supabase DB in 50ms)
       try {
-        const vRes = await fetch("/api/v1/notifications");
+        const vRes = await authFetch("/api/v1/notifications");
         if (vRes.ok) {
           dbList = await vRes.json();
         }
@@ -70,7 +71,7 @@ export function NotificationProvider({ children }) {
         const url = user?.id
           ? `${API_BASE_URL}/api/v1/notifications?userId=${encodeURIComponent(user.id)}`
           : `${API_BASE_URL}/api/v1/notifications`;
-        const res = await fetch(url);
+        const res = await authFetch(url);
         if (res.ok) {
           dbList = await res.json();
         }
@@ -242,7 +243,7 @@ export function NotificationProvider({ children }) {
 
       // 1. Send to Vercel Serverless Edge (Direct Supabase DB save in 50ms)
       try {
-        const vRes = await fetch("/api/v1/notifications", {
+        const vRes = await authFetch("/api/v1/notifications", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title, message, type }),
@@ -256,7 +257,7 @@ export function NotificationProvider({ children }) {
       // 2. Backup to Render DB if Vercel endpoint didn't respond
       if (!createdNotif) {
         try {
-          const res = await fetch(`${API_BASE_URL}/api/v1/notifications`, {
+          const res = await authFetch(`${API_BASE_URL}/api/v1/notifications`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ title, message, type }),
@@ -319,8 +320,8 @@ export function NotificationProvider({ children }) {
 
     if (id && id.length > 20) {
       try {
-        await fetch(`/api/v1/notifications?id=${encodeURIComponent(id)}`, { method: "PATCH" });
-        await fetch(`${API_BASE_URL}/api/v1/notifications/${encodeURIComponent(id)}/read`, { method: "PATCH" });
+        await authFetch(`/api/v1/notifications?id=${encodeURIComponent(id)}`, { method: "PATCH" });
+        await authFetch(`${API_BASE_URL}/api/v1/notifications/${encodeURIComponent(id)}/read`, { method: "PATCH" });
       } catch {}
     }
   };
@@ -345,8 +346,8 @@ export function NotificationProvider({ children }) {
       // Admin actually wipes all from Supabase Database
       try {
         await Promise.allSettled([
-          fetch("/api/v1/notifications", { method: "DELETE" }),
-          fetch(`${API_BASE_URL}/api/v1/notifications`, { method: "DELETE" }),
+          authFetch("/api/v1/notifications", { method: "DELETE" }),
+          authFetch(`${API_BASE_URL}/api/v1/notifications`, { method: "DELETE" }),
           new Promise((r) => setTimeout(r, 450)),
         ]);
       } catch {}
@@ -371,8 +372,8 @@ export function NotificationProvider({ children }) {
       // Admin deletes from Database
       try {
         await Promise.allSettled([
-          fetch(`/api/v1/notifications?id=${encodeURIComponent(id)}`, { method: "DELETE" }),
-          fetch(`${API_BASE_URL}/api/v1/notifications/${encodeURIComponent(id)}`, { method: "DELETE" }),
+          authFetch(`/api/v1/notifications?id=${encodeURIComponent(id)}`, { method: "DELETE" }),
+          authFetch(`${API_BASE_URL}/api/v1/notifications/${encodeURIComponent(id)}`, { method: "DELETE" }),
           new Promise((r) => setTimeout(r, 450)),
         ]);
       } catch {}

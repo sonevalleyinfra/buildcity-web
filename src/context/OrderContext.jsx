@@ -1,3 +1,4 @@
+import { authFetch } from "../config/authFetch";
 import { createContext, useContext, useEffect, useState } from "react";
 import { API_BASE_URL } from "../config/api";
 
@@ -11,7 +12,7 @@ export function OrderProvider({ children }) {
   const fetchAllOrders = async () => {
     for (let i = 0; i < 3; i++) {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/v1/orders`);
+        const res = await authFetch(`${API_BASE_URL}/api/v1/orders`);
         if (res.ok) {
           const data = await res.json();
           setOrders(data);
@@ -65,7 +66,7 @@ export function OrderProvider({ children }) {
     }));
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/orders/checkout`, {
+      const response = await authFetch(`${API_BASE_URL}/api/v1/orders/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -129,7 +130,7 @@ export function OrderProvider({ children }) {
   // Vendor Isolated Orders fetch from Supabase Cloud DB
   const fetchVendorOrders = async (vendorId) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/orders/vendor/${vendorId}`);
+      const res = await authFetch(`${API_BASE_URL}/api/v1/orders/vendor/${vendorId}`);
       if (res.ok) {
         const vendorData = await res.json();
         return vendorData;
@@ -146,7 +147,7 @@ export function OrderProvider({ children }) {
   // Update Order Status in Supabase Cloud DB
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/orders/${orderId}/status`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/orders/${orderId}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),

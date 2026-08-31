@@ -6,6 +6,7 @@ import { useOrders } from "../../context/OrderContext";
 import { useAddresses } from "../../context/AddressContext";
 import { useAdmin } from "../../context/AdminContext";
 import { API_BASE_URL } from "../../config/api";
+import { authFetch } from "../../config/authFetch";
 import { formatShortId } from "../../utils/formatId";
 
 const accountLinks = [
@@ -27,7 +28,7 @@ export default function Profile() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/api/v1/coupons`)
+    authFetch(`${API_BASE_URL}/api/v1/coupons`)
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) setDbCoupons(data);

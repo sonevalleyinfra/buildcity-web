@@ -1,3 +1,4 @@
+import { authFetch } from "../config/authFetch";
 import { createContext, useContext, useEffect, useState } from "react";
 import { API_BASE_URL } from "../config/api";
 
@@ -26,7 +27,7 @@ export function RegionProvider({ children }) {
   // Fetch live active regions directly from Supabase Database
   const loadDbRegions = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/regions`);
+      const res = await authFetch(`${API_BASE_URL}/api/v1/regions`);
       if (res.ok) {
         const dbRegs = await res.json();
         if (Array.isArray(dbRegs) && dbRegs.length > 0) {

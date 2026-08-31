@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { authFetch } from "../config/authFetch";
 import { API_BASE_URL } from "../config/api";
 
 const AdminContext = createContext(null);
@@ -132,7 +133,7 @@ export function AdminProvider({ children }) {
   // Single Source of Truth: Supabase Cloud DB se live data sync karne ke liye (Zero flickering guard ke sath)
   const fetchCloudData = async () => {
     try {
-      fetch(`${API_BASE_URL}/api/v1/users`)
+      authFetch(`${API_BASE_URL}/api/v1/users`)
         .then((r) => r.json())
         .then((u) => {
           if (Array.isArray(u) && u.length > 0) {
@@ -142,7 +143,7 @@ export function AdminProvider({ children }) {
         })
         .catch(() => {});
 
-      const syncRes = await fetch(`${API_BASE_URL}/api/v1/cloud-sync`).then((r) => r.json()).catch(() => null);
+      const syncRes = await authFetch(`${API_BASE_URL}/api/v1/cloud-sync`).then((r) => r.json()).catch(() => null);
       if (!syncRes) return;
 
       const { drs: drsRes, vendors: vendorsRes, masterProducts: masterRes, categories: categoriesRes, regions: regionsRes, orders: ordersRes, listings: listingsRes, coupons: couponsRes } = syncRes;
@@ -230,7 +231,7 @@ export function AdminProvider({ children }) {
 
       let fetchedRegsList = regionsRes;
       if (!Array.isArray(fetchedRegsList) || fetchedRegsList.length === 0) {
-        fetchedRegsList = await fetch(`${API_BASE_URL}/api/v1/regions`).then((r) => r.json()).catch(() => []);
+        fetchedRegsList = await authFetch(`${API_BASE_URL}/api/v1/regions`).then((r) => r.json()).catch(() => []);
       }
 
       if (Array.isArray(fetchedRegsList) && fetchedRegsList.length > 0) {
@@ -254,7 +255,7 @@ export function AdminProvider({ children }) {
 
       let fetchedOrders = ordersRes;
       if (!Array.isArray(fetchedOrders) || fetchedOrders.length === 0) {
-        fetchedOrders = await fetch(`${API_BASE_URL}/api/v1/orders`).then((r) => r.json()).catch(() => []);
+        fetchedOrders = await authFetch(`${API_BASE_URL}/api/v1/orders`).then((r) => r.json()).catch(() => []);
       }
       if (Array.isArray(fetchedOrders) && fetchedOrders.length > 0) {
         setOrders((prev) => (JSON.stringify(prev) === JSON.stringify(fetchedOrders) ? prev : fetchedOrders));
@@ -346,7 +347,7 @@ export function AdminProvider({ children }) {
   const addDr = async (drData) => {
     const regionObj = regions.find((r) => r.id === drData.regionId) || {};
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/drs`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/drs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -398,7 +399,7 @@ export function AdminProvider({ children }) {
     );
 
     try {
-      await fetch(`${API_BASE_URL}/api/v1/drs/${id}`, {
+      await authFetch(`${API_BASE_URL}/api/v1/drs/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -427,7 +428,7 @@ export function AdminProvider({ children }) {
     );
 
     try {
-      await fetch(`${API_BASE_URL}/api/v1/drs/${id}`, {
+      await authFetch(`${API_BASE_URL}/api/v1/drs/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: nextStatus }),
@@ -439,7 +440,7 @@ export function AdminProvider({ children }) {
   const removeDr = async (id) => {
     setDrs((prev) => prev.filter((d) => d.id !== id));
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/drs/${id}`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/drs/${id}`, {
         method: "DELETE",
       });
       if (res.ok) {
@@ -455,7 +456,7 @@ export function AdminProvider({ children }) {
     const targetRegionName = regionObj.name || vendorData.regionName || vendorData.districtName || "Mirzapur";
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/vendors`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/vendors`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -515,7 +516,7 @@ export function AdminProvider({ children }) {
     });
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/vendors/${id}`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/vendors/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -575,7 +576,7 @@ export function AdminProvider({ children }) {
 
     // 3. Patch backend DB
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/vendors/${id}/status`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/vendors/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
@@ -598,7 +599,7 @@ export function AdminProvider({ children }) {
   const removeVendor = async (id) => {
     setVendors((prev) => prev.filter((v) => v.id !== id));
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/vendors/${id}`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/vendors/${id}`, {
         method: "DELETE",
       });
       if (res.ok) {
@@ -628,7 +629,7 @@ export function AdminProvider({ children }) {
     });
 
     try {
-      await fetch(`${API_BASE_URL}/api/v1/categories`, {
+      await authFetch(`${API_BASE_URL}/api/v1/categories`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(categoryData),
@@ -647,7 +648,7 @@ export function AdminProvider({ children }) {
       return updated;
     });
     try {
-      await fetch(`${API_BASE_URL}/api/v1/categories/${id}`, {
+      await authFetch(`${API_BASE_URL}/api/v1/categories/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
@@ -675,7 +676,7 @@ export function AdminProvider({ children }) {
     try {
       const targetParam = catId || catName;
       if (targetParam) {
-        await fetch(`${API_BASE_URL}/api/v1/categories/${encodeURIComponent(targetParam)}`, {
+        await authFetch(`${API_BASE_URL}/api/v1/categories/${encodeURIComponent(targetParam)}`, {
           method: "DELETE",
         });
       }
@@ -705,7 +706,7 @@ export function AdminProvider({ children }) {
 
     const targetParam = catId || catName;
     if (targetParam) {
-      fetch(`${API_BASE_URL}/api/v1/categories/${encodeURIComponent(targetParam)}`, {
+      authFetch(`${API_BASE_URL}/api/v1/categories/${encodeURIComponent(targetParam)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isActive: nextState }),
@@ -722,7 +723,7 @@ export function AdminProvider({ children }) {
     };
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/regions`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/regions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -766,7 +767,7 @@ export function AdminProvider({ children }) {
       return updated;
     });
     try {
-      await fetch(`${API_BASE_URL}/api/v1/regions/${id}`, {
+      await authFetch(`${API_BASE_URL}/api/v1/regions/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
@@ -793,7 +794,7 @@ export function AdminProvider({ children }) {
 
     try {
       if (regId) {
-        await fetch(`${API_BASE_URL}/api/v1/regions/${regId}`, {
+        await authFetch(`${API_BASE_URL}/api/v1/regions/${regId}`, {
           method: "DELETE",
         });
       }
@@ -823,7 +824,7 @@ export function AdminProvider({ children }) {
 
     const targetParam = regId || regName;
     if (targetParam) {
-      fetch(`${API_BASE_URL}/api/v1/regions/${encodeURIComponent(targetParam)}`, {
+      authFetch(`${API_BASE_URL}/api/v1/regions/${encodeURIComponent(targetParam)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isActive: nextState }),
@@ -844,7 +845,7 @@ export function AdminProvider({ children }) {
     };
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/coupons`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/coupons`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -888,7 +889,7 @@ export function AdminProvider({ children }) {
       return updated;
     });
     try {
-      await fetch(`${API_BASE_URL}/api/v1/coupons/${id}`, {
+      await authFetch(`${API_BASE_URL}/api/v1/coupons/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
@@ -919,7 +920,7 @@ export function AdminProvider({ children }) {
 
     const param = cpId || cpCode;
     if (param) {
-      fetch(`${API_BASE_URL}/api/v1/coupons/${encodeURIComponent(param)}`, {
+      authFetch(`${API_BASE_URL}/api/v1/coupons/${encodeURIComponent(param)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isActive: nextState }),
@@ -945,7 +946,7 @@ export function AdminProvider({ children }) {
     const param = cpId || cpCode;
     if (param) {
       try {
-        await fetch(`${API_BASE_URL}/api/v1/coupons/${encodeURIComponent(param)}`, {
+        await authFetch(`${API_BASE_URL}/api/v1/coupons/${encodeURIComponent(param)}`, {
           method: "DELETE",
         });
       } catch {}
@@ -954,7 +955,7 @@ export function AdminProvider({ children }) {
 
   const addMasterProduct = async (mpData) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/master-products`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/master-products`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(mpData),
@@ -997,7 +998,7 @@ export function AdminProvider({ children }) {
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/master-products/${id}`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/master-products/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1020,7 +1021,7 @@ export function AdminProvider({ children }) {
     const validUuidRegionId = (regionId && regionId.length > 10) ? regionId : (matchedVendor?.regionId && matchedVendor.regionId.length > 10) ? matchedVendor.regionId : undefined;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/vendor/listings`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/vendor/listings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ masterProductId, vendorId, vendorName, regionId: validUuidRegionId, regionName: regName, districtName: regName, price, stockQty, addedBy }),
@@ -1064,7 +1065,7 @@ export function AdminProvider({ children }) {
     );
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/vendor/listings/${id}`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/vendor/listings/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
@@ -1089,7 +1090,7 @@ export function AdminProvider({ children }) {
     );
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/vendor/listings/${id}/status`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/vendor/listings/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ approvalStatus }),
@@ -1129,7 +1130,7 @@ export function AdminProvider({ children }) {
 
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/orders/${orderId}/status`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/orders/${orderId}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
@@ -1147,7 +1148,7 @@ export function AdminProvider({ children }) {
     setVendors([]);
     setProducts([]);
     try {
-      await fetch(`${API_BASE_URL}/api/v1/clear-vendors`, { method: "DELETE" });
+      await authFetch(`${API_BASE_URL}/api/v1/clear-vendors`, { method: "DELETE" });
       await fetchCloudData();
     } catch {}
   };

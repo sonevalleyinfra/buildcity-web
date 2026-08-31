@@ -1,3 +1,4 @@
+import { authFetch } from "../config/authFetch";
 import { createContext, useContext, useEffect, useState } from "react";
 import { useRegion } from "./RegionContext";
 import { useAuth } from "./AuthContext";
@@ -98,7 +99,7 @@ export function CartProvider({ children }) {
 
     let listings = passedListings;
     try {
-      const syncRes = await fetch(`${API_BASE_URL}/api/v1/cloud-sync`).then((r) => r.json()).catch(() => null);
+      const syncRes = await authFetch(`${API_BASE_URL}/api/v1/cloud-sync`).then((r) => r.json()).catch(() => null);
       if (syncRes && Array.isArray(syncRes.listings) && syncRes.listings.length > 0) {
         listings = syncRes.listings;
       }

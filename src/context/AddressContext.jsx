@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { authFetch } from "../config/authFetch";
 import { useAuth } from "./AuthContext";
 import { API_BASE_URL } from "../config/api";
 
@@ -55,7 +56,7 @@ export function AddressProvider({ children }) {
 
     try {
       setIsAddressLoading(true);
-      const res = await fetch(`${API_BASE_URL}/api/v1/addresses/user/${userKey}`);
+      const res = await authFetch(`${API_BASE_URL}/api/v1/addresses/user/${userKey}`);
       if (res.ok) {
         const dbList = await res.json();
         if (Array.isArray(dbList) && dbList.length > 0) {
@@ -172,7 +173,7 @@ export function AddressProvider({ children }) {
 
     // 2. Save into Supabase PostgreSQL DB
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/addresses`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/addresses`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -220,7 +221,7 @@ export function AddressProvider({ children }) {
 
     // 2. Sync to DB via API
     try {
-      await fetch(`${API_BASE_URL}/api/v1/addresses/${encodeURIComponent(id)}`, {
+      await authFetch(`${API_BASE_URL}/api/v1/addresses/${encodeURIComponent(id)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -263,7 +264,7 @@ export function AddressProvider({ children }) {
 
     try {
       const url = `${API_BASE_URL}/api/v1/addresses/${encodeURIComponent(id)}?street=${encodeURIComponent(streetStr)}`;
-      await fetch(url, { method: "DELETE" });
+      await authFetch(url, { method: "DELETE" });
     } catch (err) {
       console.warn("DB address delete note:", err.message);
     }
@@ -281,7 +282,7 @@ export function AddressProvider({ children }) {
     });
 
     try {
-      await fetch(`${API_BASE_URL}/api/v1/addresses/${encodeURIComponent(id)}`, {
+      await authFetch(`${API_BASE_URL}/api/v1/addresses/${encodeURIComponent(id)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isDefault: true }),

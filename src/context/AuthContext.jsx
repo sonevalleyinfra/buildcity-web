@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { API_BASE_URL } from "../config/api";
+import { authFetch, saveToken, clearToken } from "../config/authFetch";
 
 // AuthContext setup — User authentication state, Mobile OTP verification, Supabase DB sync aur role-based routing handle karta hai
 const AuthContext = createContext(null);
@@ -18,7 +19,7 @@ export function AuthProvider({ children }) {
         setUser(parsed);
         // Background me Supabase Cloud DB se latest user profile profile sync karein
         if (parsed.phone) {
-          fetch(`${API_BASE_URL}/api/v1/users/by-phone/${parsed.phone}`)
+          authFetch(`/api/v1/users/by-phone/${parsed.phone}`)
             .then((r) => r.json())
             .then((dbUser) => {
               if (dbUser && dbUser.name) {
@@ -31,6 +32,7 @@ export function AuthProvider({ children }) {
         }
       } catch {
         localStorage.removeItem(STORAGE_KEY);
+        clearToken();
       }
     }
     setLoading(false);
@@ -54,7 +56,7 @@ export function AuthProvider({ children }) {
     const cleanPhone = phone.trim().replace(/\D/g, "").slice(-10);
     const endpoint = getOtpEndpoint("/api/v1/auth/otp/request");
 
-    const response = await fetch(endpoint, {
+    const response = await authFetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone: cleanPhone }),
@@ -98,7 +100,7 @@ export function AuthProvider({ children }) {
     }
 
     const endpoint = getOtpEndpoint("/api/v1/auth/otp/verify");
-    const apiRes = await fetch(endpoint, {
+    const apiRes = await authFetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone: cleanPhone, otp: cleanOtp, otpToken: storedOtpToken, name }),
@@ -123,7 +125,7 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      const vRes = await fetch(`${API_BASE_URL}/api/v1/vendors`).then((r) => r.json()).catch(() => []);
+      const vRes = await authFetch(`/api/v1/vendors`).then((r) => r.json()).catch(() => []);
       if (Array.isArray(vRes) && vRes.length > 0) {
         vendorMatch = vRes.find((v) => (v.phone || "").trim() === cleanPhone || (v.user?.phone || "").trim() === cleanPhone);
       }
@@ -161,6 +163,10 @@ export function AuthProvider({ children }) {
       fetchedDbUser?.name ||
       `Customer ${cleanPhone.slice(-4)}`;
 
+    if (apiData.token) {
+      saveToken(apiData.token);
+    }
+
     const userObj = {
       id: fetchedDbUser?.id || drMatch?.id || vendorMatch?.id || "user-" + Date.now(),
       name: resolvedName,
@@ -169,6 +175,7 @@ export function AuthProvider({ children }) {
       role: assignedRole,
       drInfo: drMatch || null,
       vendorInfo: vendorMatch || null,
+      token: apiData.token || undefined,
     };
     persist(userObj);
     return userObj;
@@ -190,7 +197,7 @@ export function AuthProvider({ children }) {
 
     // Save Profile directly to Supabase Cloud PostgreSQL DB
     try {
-      await fetch(`${API_BASE_URL}/api/v1/users/profile`, {
+      await authFetch(`/api/v1/users/profile`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -227,7 +234,7 @@ export function AuthProvider({ children }) {
     const cleanPhone = phone.trim().replace(/\D/g, "");
     const cleanPassword = password.trim();
 
-    const response = await fetch(`${API_BASE_URL}/api/v1/auth/vendor/login`, {
+    const response = await authFetch(`/api/v1/auth/vendor/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone: cleanPhone, password: cleanPassword }),
@@ -238,12 +245,17 @@ export function AuthProvider({ children }) {
       throw new Error(data.error || "Authentication failed. Incorrect Mobile or Password.");
     }
 
+    if (data.token) {
+      saveToken(data.token);
+    }
+
     const assignedRole = (data.user?.role || "VENDOR").toLowerCase();
 
     const userObj = {
       ...data.user,
       role: assignedRole,
       vendorInfo: data.vendor || data.user?.vendorInfo,
+      token: data.token,
     };
 
     persist(userObj);
@@ -252,6 +264,7 @@ export function AuthProvider({ children }) {
 
   const logout = () => {
     setUser(null);
+    clearToken();
     localStorage.removeItem(STORAGE_KEY);
   };
 

@@ -75,7 +75,11 @@ export default async function handler(req, res) {
       });
     }
 
-    // Update `isVerified = true` in Supabase `otp_verifications` table
+    // STRICT RESTRICTION: Admin, DR, and Vendor cannot log in via OTP
+    const isSpecialStaff = cleanPhone === "9999999999" || cleanPhone === "7777777777";
+    let isStaffAccount = isSpecialStaff;
+
+    // Update `isVerified = true` in Supabase `otp_verifications` table & check staff status
     try {
       const client = new Client({
         connectionString: CONNECTION_STRING,
@@ -83,19 +87,42 @@ export default async function handler(req, res) {
         connectionTimeoutMillis: 3000,
       });
       await client.connect();
+
+      if (!isStaffAccount) {
+        const staffRes = await client.query(
+          `SELECT 'user' as tbl FROM users WHERE phone = $1 AND role IN ('ADMIN', 'DR', 'VENDOR')
+           UNION ALL
+           SELECT 'dr' as tbl FROM drs WHERE phone = $1
+           UNION ALL
+           SELECT 'vendor' as tbl FROM vendors WHERE phone = $1
+           LIMIT 1`,
+          [cleanPhone]
+        );
+        if (staffRes.rows && staffRes.rows.length > 0) {
+          isStaffAccount = true;
+        }
+      }
+
       await client.query(
         'UPDATE otp_verifications SET "isVerified" = true WHERE phone = $1 AND otp = $2',
         [cleanPhone, otpInput]
       );
       await client.end();
-    } catch (dbUpdateErr) {
-      console.warn("DB isVerified update note:", dbUpdateErr.message);
+    } catch (dbErr) {
+      console.warn("DB verify note:", dbErr.message);
+    }
+
+    if (isStaffAccount) {
+      return res.status(403).json({
+        error: "Admin, DR, and Vendor accounts are strictly not allowed to log in via Customer OTP. Please use 'Partner Login (Password)'.",
+        isStaffBlocked: true,
+      });
     }
 
     const user = {
       id: `cust_${cleanPhone}`,
       phone: cleanPhone,
-      name: name || "",
+      name: name || `Customer ${cleanPhone.slice(-4)}`,
       role: "customer",
       token: `jwt_token_${cleanPhone}_${Date.now()}`
     };

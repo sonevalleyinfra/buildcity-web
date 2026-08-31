@@ -36,31 +36,57 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Please enter a valid 10-digit mobile number" });
     }
 
-    // Generate 6-digit OTP code
-    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 mins
+    // STRICT STAFF BLOCKING: Admin, DR, and Vendor accounts can NEVER use OTP login
+    const isSpecialStaff = cleanMobile === "9999999999" || cleanMobile === "7777777777";
+    let isStaffPhone = isSpecialStaff;
 
-    // Generate cryptographic HMAC token for serverless multi-container validation
-    const hash = crypto.createHmac("sha256", OTP_SECRET).update(`${cleanMobile}:${generatedOtp}:${expiresAt}`).digest("hex");
-    const otpToken = `${expiresAt}.${hash}`;
+    const client = new Client({
+      connectionString: CONNECTION_STRING,
+      ssl: { rejectUnauthorized: false },
+      connectionTimeoutMillis: 3500,
+    });
 
-    // 1. Log & Save OTP into Supabase PostgreSQL database `otp_verifications` table
     try {
-      const client = new Client({
-        connectionString: CONNECTION_STRING,
-        ssl: { rejectUnauthorized: false },
-        connectionTimeoutMillis: 4000,
-      });
       await client.connect();
+
+      if (!isStaffPhone) {
+        const staffRes = await client.query(
+          `SELECT 'user' as tbl FROM users WHERE phone = $1 AND role IN ('ADMIN', 'DR', 'VENDOR')
+           UNION ALL
+           SELECT 'dr' as tbl FROM drs WHERE phone = $1
+           UNION ALL
+           SELECT 'vendor' as tbl FROM vendors WHERE phone = $1
+           LIMIT 1`,
+          [cleanMobile]
+        );
+        if (staffRes.rows && staffRes.rows.length > 0) {
+          isStaffPhone = true;
+        }
+      }
+
+      if (isStaffPhone) {
+        await client.end();
+        return res.status(403).json({
+          error: "Admin, DR, and Vendor accounts are strictly not allowed to log in via Customer OTP. Please use 'Partner Login (Password)'.",
+          isStaffBlocked: true,
+        });
+      }
+
+      // Generate 6-digit OTP code
+      const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = Date.now() + 10 * 60 * 1000; // 10 mins
+
+      // Generate cryptographic HMAC token for serverless multi-container validation
+      const hash = crypto.createHmac("sha256", OTP_SECRET).update(`${cleanMobile}:${generatedOtp}:${expiresAt}`).digest("hex");
+      const otpToken = `${expiresAt}.${hash}`;
+
+      // Save OTP into Supabase PostgreSQL database `otp_verifications` table
       await client.query(
         `INSERT INTO otp_verifications (id, phone, otp, "isVerified", "expiresAt", "createdAt")
          VALUES (gen_random_uuid(), $1, $2, false, $3, NOW())`,
         [cleanMobile, generatedOtp, new Date(expiresAt)]
       );
       await client.end();
-    } catch (dbErr) {
-      console.warn("DB OTP log note:", dbErr.message);
-    }
 
     // 2. Dispatch Live SMS via Aradhya Technologies
     const username = "sonevalley";

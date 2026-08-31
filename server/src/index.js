@@ -413,7 +413,7 @@ app.post("/api/v1/auth/otp/verify", async (req, res) => {
       orderBy: { createdAt: "desc" },
     }).catch(() => null);
 
-    if (validRecord || otp.trim() === "123456") {
+    if (validRecord) {
       isValid = true;
     }
 

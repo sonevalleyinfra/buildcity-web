@@ -170,6 +170,18 @@ export default function Login() {
             : "bg-rose-50 border-rose-200 text-rose-700"
         } text-xs font-bold leading-relaxed shadow-2xs animate-in fade-in`}>
           <p>{error}</p>
+          {(error.includes("Partner") || error.includes("Vendor") || error.includes("DR") || error.includes("Admin")) && mode !== "vendor" && (
+            <button
+              type="button"
+              onClick={() => {
+                setMode("vendor");
+                setError("");
+              }}
+              className="mt-2.5 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-xl font-black text-xs cursor-pointer shadow-2xs transition-all flex items-center gap-1 active:scale-95"
+            >
+              <span>Switch to Partner Login (Password) →</span>
+            </button>
+          )}
         </div>
       )}
 

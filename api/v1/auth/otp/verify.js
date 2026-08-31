@@ -169,19 +169,33 @@ export default async function handler(req, res) {
 
     const finalName = realName || `Customer ${cleanPhone.slice(-4)}`;
 
+    // Generate real signed HS256 JWT (7 days expiry)
+    const jwtPayload = {
+      sub: String(realUserId),
+      phone: cleanPhone,
+      role: "CUSTOMER",
+      tv: 1,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
+    };
+    const headerB64 = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+    const payloadB64 = Buffer.from(JSON.stringify(jwtPayload)).toString("base64url");
+    const signatureB64 = crypto.createHmac("sha256", OTP_SECRET).update(`${headerB64}.${payloadB64}`).digest("base64url");
+    const token = `${headerB64}.${payloadB64}.${signatureB64}`;
+
     const user = {
       id: realUserId,
       phone: cleanPhone,
       name: finalName,
       email: realEmail,
       role: "customer",
-      token: `jwt_token_${cleanPhone}_${Date.now()}`
+      token,
     };
 
     return res.status(200).json({
       success: true,
       user,
-      token: user.token
+      token,
     });
   } catch (err) {
     return res.status(500).json({ error: "Verification error", details: err.message });

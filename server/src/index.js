@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { PrismaClient } = require("@prisma/client");
+const { issueToken } = require("./middleware/auth");
 
 const app = express();
 const prisma = new PrismaClient();
@@ -84,13 +85,23 @@ app.post("/api/v1/auth/vendor/login", async (req, res) => {
           }).catch(() => null);
         }
 
+        const adminObj = {
+          id: adminUser?.id || "u-admin-9999999999",
+          name: adminUser?.name || "Super Admin",
+          phone: "9999999999",
+          role: "ADMIN",
+          tokenVersion: adminUser?.tokenVersion || 1,
+        };
+        const token = issueToken(adminObj);
+
         return res.json({
           success: true,
+          token,
           user: {
-            id: adminUser?.id || "u-admin-9999999999",
-            name: adminUser?.name || "Super Admin",
-            phone: "9999999999",
-            role: "ADMIN",
+            id: adminObj.id,
+            name: adminObj.name,
+            phone: adminObj.phone,
+            role: adminObj.role,
           },
         });
       } else {
@@ -118,15 +129,20 @@ app.post("/api/v1/auth/vendor/login", async (req, res) => {
       const expectedDrPassword = dbPassword ? dbPassword.trim() : "dr123";
 
       if (cleanPassword === expectedDrPassword) {
+        const drUserObj = {
+          id: drInDb?.id || userInDb?.id || `u-dr-${cleanPhone}`,
+          name: drInDb?.name || userInDb?.name || "District Representative",
+          phone: cleanPhone,
+          role: "DR",
+          drInfo: drInDb || null,
+          tokenVersion: userInDb?.tokenVersion || drInDb?.user?.tokenVersion || 1,
+        };
+        const token = issueToken(drUserObj);
+
         return res.json({
           success: true,
-          user: {
-            id: drInDb?.id || userInDb?.id || `u-dr-${cleanPhone}`,
-            name: drInDb?.name || userInDb?.name || "District Representative",
-            phone: cleanPhone,
-            role: "DR",
-            drInfo: drInDb || null,
-          },
+          token,
+          user: drUserObj,
         });
       } else {
         return res.status(401).json({ error: "Incorrect Password." });
@@ -177,15 +193,21 @@ app.post("/api/v1/auth/vendor/login", async (req, res) => {
       name: vendor?.ownerName || vendor?.shopName || "Vendor Partner",
       phone: cleanPhone,
       role: "VENDOR",
+      tokenVersion: user?.tokenVersion || 1,
     };
+
+    const vendorUserObj = {
+      ...resUser,
+      role: "VENDOR",
+      vendorInfo: vendor,
+      tokenVersion: resUser.tokenVersion || 1,
+    };
+    const token = issueToken(vendorUserObj);
 
     res.json({
       success: true,
-      user: {
-        ...resUser,
-        role: "VENDOR",
-        vendorInfo: vendor,
-      },
+      token,
+      user: vendorUserObj,
       vendor,
     });
   } catch (err) {
@@ -461,7 +483,7 @@ app.post("/api/v1/auth/otp/verify", async (req, res) => {
       }
     }
 
-    const token = "jwt_token_" + user.id + "_" + user.tokenVersion;
+    const token = issueToken(user);
 
     return res.json({
       success: true,

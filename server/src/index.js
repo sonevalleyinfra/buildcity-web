@@ -521,7 +521,8 @@ app.get("/api/v1/users/by-phone/:phone", requireAuth, requireSelfOrAdmin("phone"
   try {
     const user = await prisma.user.findUnique({ where: { phone: req.params.phone } });
     if (!user) return res.status(404).json({ error: "User not found" });
-    res.json(user);
+    const { password, ...safeUser } = user;
+    res.json(safeUser);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -548,7 +549,8 @@ app.put("/api/v1/users/profile", requireAuth, async (req, res) => {
       });
     }
 
-    res.json({ success: true, user });
+    const { password, ...safeUser } = user;
+    res.json({ success: true, user: safeUser });
   } catch (err) {
     console.error("Profile update error:", err);
     res.status(500).json({ error: err.message });
@@ -575,11 +577,8 @@ app.get("/api/v1/users", requireAuth, requireRole("ADMIN"), async (req, res) => 
     });
 
     const sanitizedUsers = users.map((u) => {
-      const copy = { ...u };
-      if (!copy.role || copy.role === "CUSTOMER") {
-        delete copy.password;
-      }
-      return copy;
+      const { password, ...safeUser } = u;
+      return safeUser;
     });
     res.json(sanitizedUsers);
   } catch (err) {

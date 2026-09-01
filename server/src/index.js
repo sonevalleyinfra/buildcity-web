@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const bcrypt = require("bcryptjs");
 const { PrismaClient } = require("@prisma/client");
 const { issueToken, requireAuth, requireRole, requireSelfOrAdmin } = require("./middleware/auth");
 
@@ -84,49 +85,36 @@ app.post("/api/v1/auth/vendor/login", async (req, res) => {
 
     // 1. Super Admin Check (Phone: 9999999999)
     if (cleanPhone === "9999999999") {
-      let adminUser = await prisma.user.findUnique({ where: { phone: "9999999999" } }).catch(() => null);
+      const adminUser = await prisma.user.findUnique({ where: { phone: "9999999999" } }).catch(() => null);
 
-      const dbPass = adminUser?.password ? adminUser.password.trim() : null;
-      const isValidAdminPass =
-        (dbPass && cleanPassword === dbPass) ||
-        cleanPassword === "Maya@123#@" ||
-        cleanPassword === "admin123" ||
-        cleanPassword === "admin2026";
-
-      if (isValidAdminPass) {
-        if (!adminUser) {
-          adminUser = await prisma.user.create({
-            data: { phone: "9999999999", name: "Super Admin", role: "ADMIN", password: "Maya@123#@" },
-          }).catch(() => null);
-        } else {
-          await prisma.user.update({
-            where: { id: adminUser.id },
-            data: { password: cleanPassword, role: "ADMIN" },
-          }).catch(() => null);
-        }
-
-        const adminObj = {
-          id: adminUser?.id || "u-admin-9999999999",
-          name: adminUser?.name || "Super Admin",
-          phone: "9999999999",
-          role: "ADMIN",
-          tokenVersion: adminUser?.tokenVersion || 1,
-        };
-        const token = issueToken(adminObj);
-
-        return res.json({
-          success: true,
-          token,
-          user: {
-            id: adminObj.id,
-            name: adminObj.name,
-            phone: adminObj.phone,
-            role: adminObj.role,
-          },
-        });
-      } else {
-        return res.status(401).json({ error: "Incorrect Password." });
+      if (!adminUser || !adminUser.password) {
+        return res.status(401).json({ error: "Invalid mobile number or password." });
       }
+
+      const isMatch = await bcrypt.compare(cleanPassword, adminUser.password).catch(() => false);
+      if (!isMatch) {
+        return res.status(401).json({ error: "Invalid mobile number or password." });
+      }
+
+      const adminObj = {
+        id: adminUser.id || "u-admin-9999999999",
+        name: adminUser.name || "Super Admin",
+        phone: "9999999999",
+        role: "ADMIN",
+        tokenVersion: adminUser.tokenVersion || 1,
+      };
+      const token = issueToken(adminObj);
+
+      return res.json({
+        success: true,
+        token,
+        user: {
+          id: adminObj.id,
+          name: adminObj.name,
+          phone: adminObj.phone,
+          role: adminObj.role,
+        },
+      });
     }
 
     // 2. Lookup User in DB by phone to check assigned role

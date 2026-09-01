@@ -108,7 +108,8 @@ export default function ProductDetail() {
               (l.name && encodeURIComponent(l.name) === id)
           );
           if (found) {
-            setDirectProduct(found);
+            const isSusp = found.isVendorSuspended || found.vendor?.status === "SUSPENDED" || found.isActive === false;
+            setDirectProduct({ ...found, isVendorSuspended: Boolean(isSusp) });
           }
           setDirectLoading(false);
         })
@@ -356,6 +357,20 @@ export default function ProductDetail() {
 
     setTimeout(() => setReviewSubmitted(false), 3000);
   };
+
+  if ((productsLoading && directLoading) || (!product && directLoading)) {
+    return (
+      <div className="min-h-screen bg-surface pb-20 font-sans">
+        <Navbar />
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-16 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <span className="w-8 h-8 border-3 border-brand-500 border-t-transparent rounded-full animate-spin"></span>
+            <p className="text-xs font-bold text-slate-500">Loading Product...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-surface pb-20 font-sans">

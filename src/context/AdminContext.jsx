@@ -206,6 +206,9 @@ export function AdminProvider({ children }) {
           };
         });
         setProducts(formattedListings);
+        try {
+          localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(formattedListings));
+        } catch {}
       }
       if (Array.isArray(couponsRes) && couponsRes.length > 0) {
         setCoupons(couponsRes);

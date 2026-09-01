@@ -23,13 +23,33 @@ let couponsList = [
 app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const [drs, vendors, masterProducts, categories, regions, orders, listings, coupons] = await Promise.all([
-      prisma.dR.findMany({ include: { region: true }, orderBy: { joinedOn: "desc" } }).catch(() => []),
-      prisma.vendor.findMany({ include: { region: true, user: true, vendorProducts: true }, orderBy: { joinedOn: "desc" } }).catch(() => []),
+      prisma.dR.findMany({
+        include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
+        orderBy: { joinedOn: "desc" },
+      }).then(list => list.map(d => { const { password, ...safe } = d; return safe; })).catch(() => []),
+      prisma.vendor.findMany({
+        include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } }, vendorProducts: true },
+        orderBy: { joinedOn: "desc" },
+      }).then(list => list.map(v => { const { password, ...safe } = v; return safe; })).catch(() => []),
       prisma.productMaster.findMany({ include: { category: true }, orderBy: { createdAt: "desc" } }).catch(() => []),
       prisma.category.findMany().catch(() => []),
       prisma.region.findMany().catch(() => []),
-      prisma.order.findMany({ include: { items: true, customer: true, address: true }, orderBy: { createdAt: "desc" } }).catch(() => []),
-      prisma.vendorProduct.findMany({ include: { vendor: { include: { region: true } }, masterProduct: true }, orderBy: { submittedOn: "desc" } }).catch(() => []),
+      prisma.order.findMany({ include: { items: true, customer: { select: { id: true, name: true, phone: true, email: true, role: true } }, address: true }, orderBy: { createdAt: "desc" } }).catch(() => []),
+      prisma.vendorProduct.findMany({
+        include: {
+          vendor: {
+            select: {
+              id: true,
+              shopName: true,
+              status: true,
+              regionId: true,
+              region: true,
+            },
+          },
+          masterProduct: true,
+        },
+        orderBy: { submittedOn: "desc" },
+      }).catch(() => []),
       prisma.coupon.findMany({ orderBy: { createdAt: "desc" } }).catch(() => []),
     ]);
 
@@ -589,10 +609,11 @@ app.post("/api/v1/users", requireAuth, requireRole("ADMIN"), async (req, res) =>
 app.get("/api/v1/drs", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const drs = await prisma.dR.findMany({
-      include: { region: true, user: true },
+      include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
       orderBy: { joinedOn: "desc" },
     });
-    res.json(drs);
+    const safeDrs = drs.map(d => { const { password, ...safe } = d; return safe; });
+    res.json(safeDrs);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -709,10 +730,11 @@ app.delete("/api/v1/drs/:id", requireAuth, requireRole("ADMIN"), async (req, res
 app.get("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const vendors = await prisma.vendor.findMany({
-      include: { region: true, user: true },
+      include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
       orderBy: { joinedOn: "desc" },
     });
-    res.json(vendors);
+    const safeVendors = vendors.map(v => { const { password, ...safe } = v; return safe; });
+    res.json(safeVendors);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1013,11 +1035,30 @@ app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN", "DR")
   }
 });
 
-// 5. VENDOR PRODUCT LISTINGS & APPROVALS ENDPOINTS
+// 5. VENDOR PRODUCT LISTINGS & APPROVALS ENDPOINTS (Public Storefront - Zero PII / Zero Password)
 app.get("/api/v1/vendor/listings", async (req, res) => {
   try {
     const listings = await prisma.vendorProduct.findMany({
-      include: { vendor: { include: { region: true } }, masterProduct: true },
+      include: {
+        vendor: {
+          select: {
+            id: true,
+            shopName: true,
+            status: true,
+            regionId: true,
+            region: {
+              select: {
+                id: true,
+                name: true,
+                state: true,
+                baseDeliveryCharge: true,
+                isActive: true,
+              },
+            },
+          },
+        },
+        masterProduct: true,
+      },
       orderBy: { submittedOn: "desc" },
     });
     res.json(listings);

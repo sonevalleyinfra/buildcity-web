@@ -18,12 +18,27 @@ export default function Login() {
   const [role, setRole] = useState("customer");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [cooldown, setCooldown] = useState(0);
+  const [cooldown, setCooldown] = useState(() => {
+    try {
+      const savedExpire = sessionStorage.getItem("buildcity_otp_expire");
+      if (savedExpire) {
+        const remaining = Math.max(0, Math.ceil((Number(savedExpire) - Date.now()) / 1000));
+        return remaining;
+      }
+    } catch {}
+    return 0;
+  });
 
   useEffect(() => {
     if (cooldown <= 0) return;
     const timer = setInterval(() => {
-      setCooldown((prev) => (prev > 1 ? prev - 1 : 0));
+      setCooldown((prev) => {
+        if (prev <= 1) {
+          try { sessionStorage.removeItem("buildcity_otp_expire"); } catch {}
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
     return () => clearInterval(timer);
   }, [cooldown]);
@@ -36,7 +51,7 @@ export default function Login() {
 
   // Customer OTP Request
   const handleSendOtp = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (cooldown > 0 && step === "otp") return;
     setError("");
     const cleanedMobile = phone.replace(/\D/g, "").slice(-10);
@@ -73,6 +88,8 @@ export default function Login() {
     try {
       await requestOtp(cleanedMobile);
       setStep("otp");
+      const expireTime = Date.now() + 90 * 1000;
+      try { sessionStorage.setItem("buildcity_otp_expire", expireTime.toString()); } catch {}
       setCooldown(90);
     } catch (err) {
       setError(err?.message || "Failed to send OTP. Please check mobile number.");
@@ -280,7 +297,7 @@ export default function Login() {
             {loading ? "Verifying..." : "Verify & Login"}
           </Button>
 
-          <div className="flex items-center justify-between mt-4">
+          <div className="flex items-center justify-between mt-5 pt-3 border-t border-slate-100">
             <button
               type="button"
               onClick={() => {
@@ -288,18 +305,27 @@ export default function Login() {
                 setOtp("");
                 setError("");
               }}
-              className="text-sm font-medium text-slate-500 hover:text-navy-900 cursor-pointer"
+              className="text-xs font-semibold text-slate-500 hover:text-navy-900 cursor-pointer transition-colors"
             >
-              ← Change number
+              ← Change Number
             </button>
-            <button
-              type="button"
-              disabled={cooldown > 0 || loading}
-              onClick={handleSendOtp}
-              className="text-sm font-bold text-brand-500 hover:underline cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
-            >
-              {cooldown > 0 ? `Resend in ${formatCooldown(cooldown)}` : "Resend OTP"}
-            </button>
+
+            {cooldown > 0 ? (
+              <div className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-100/90 border border-slate-200 px-3 py-1.5 rounded-xl shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-brand-500 animate-ping shrink-0" />
+                <span>Resend OTP in</span>
+                <span className="font-mono font-black text-brand-600 tabular-nums">{formatCooldown(cooldown)}</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={loading}
+                onClick={handleSendOtp}
+                className="text-xs font-extrabold text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs active:scale-[0.98]"
+              >
+                🔄 Resend OTP
+              </button>
+            )}
           </div>
         </form>
       )}

@@ -804,11 +804,11 @@ app.get("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req, 
   }
 });
 
-// Update Vendor Details & Password Endpoint
-app.patch("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
+// Update Vendor Details & Password Endpoint (Supports PATCH and PUT)
+const handleUpdateVendor = async (req, res) => {
   try {
     const rawId = req.params.id;
-    const { shopName, ownerName, phone, password, commissionRate, status } = req.body;
+    const { shopName, ownerName, phone, password, commissionRate, status, regionId } = req.body;
 
     let vendor = await prisma.vendor.findUnique({ where: { id: rawId } }).catch(() => null);
     if (!vendor) {
@@ -826,12 +826,13 @@ app.patch("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), async 
       }
 
       const prismaUpdateData = {};
-      if (shopName) prismaUpdateData.shopName = shopName;
-      if (ownerName) prismaUpdateData.ownerName = ownerName;
-      if (phone) prismaUpdateData.phone = phone;
+      if (shopName) prismaUpdateData.shopName = shopName.trim();
+      if (ownerName) prismaUpdateData.ownerName = ownerName.trim();
+      if (phone) prismaUpdateData.phone = cleanPhone || phone.trim();
       if (password && password.trim()) prismaUpdateData.password = password.trim();
       if (commissionRate !== undefined) prismaUpdateData.commissionRate = Number(commissionRate);
       if (status) prismaUpdateData.status = status;
+      if (regionId) prismaUpdateData.regionId = regionId;
 
       const updatedVendor = await prisma.vendor.update({
         where: { id: vendor.id },
@@ -839,23 +840,47 @@ app.patch("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), async 
         include: { region: true, user: true },
       });
 
-      if (vendor.userId && password && password.trim()) {
-        await prisma.user.update({
-          where: { id: vendor.userId },
-          data: { password: password.trim() },
+      // Synchronize User account linked to this vendor
+      if (vendor.userId) {
+        const userUpdateData = {};
+        if (ownerName) userUpdateData.name = ownerName.trim();
+        if (phone && cleanPhone) userUpdateData.phone = cleanPhone;
+        if (password && password.trim()) userUpdateData.password = password.trim();
+
+        if (Object.keys(userUpdateData).length > 0) {
+          await prisma.user.update({
+            where: { id: vendor.userId },
+            data: userUpdateData,
+          }).catch(() => null);
+        }
+      }
+
+      // Synchronize Vendor Products if status changed
+      if (status === "SUSPENDED") {
+        await prisma.vendorProduct.updateMany({
+          where: { vendorId: vendor.id },
+          data: { isActive: false },
+        }).catch(() => null);
+      } else if (status === "APPROVED") {
+        await prisma.vendorProduct.updateMany({
+          where: { vendorId: vendor.id, approvalStatus: "APPROVED" },
+          data: { isActive: true },
         }).catch(() => null);
       }
 
-      console.log(`✅ Vendor & Password updated successfully in Supabase DB: ${updatedVendor.shopName} (ID: ${vendor.id})`);
+      console.log(`✅ Vendor updated successfully in Supabase DB: ${updatedVendor.shopName} (ID: ${vendor.id})`);
 
       return res.json(updatedVendor);
     }
     return res.status(404).json({ error: "Vendor not found" });
   } catch (err) {
-    console.error("PATCH Vendor error:", err);
+    console.error("Update Vendor error:", err);
     res.status(500).json({ error: err.message });
   }
-});
+};
+
+app.patch("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), handleUpdateVendor);
+app.put("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), handleUpdateVendor);
 
 // Vendor Status Update Endpoint — Admin & DR dwara Vendor ko Approve ya Suspend karne ke liye
 app.patch("/api/v1/vendors/:id/status", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
@@ -877,6 +902,20 @@ app.patch("/api/v1/vendors/:id/status", requireAuth, requireRole("ADMIN", "DR"),
         where: { id: vendor.id },
         data: { status },
       });
+
+      // Synchronize Vendor Products Active state with Vendor Status
+      if (status === "SUSPENDED") {
+        await prisma.vendorProduct.updateMany({
+          where: { vendorId: vendor.id },
+          data: { isActive: false },
+        }).catch(() => null);
+      } else if (status === "APPROVED") {
+        await prisma.vendorProduct.updateMany({
+          where: { vendorId: vendor.id, approvalStatus: "APPROVED" },
+          data: { isActive: true },
+        }).catch(() => null);
+      }
+
       return res.json(updatedVendor);
     }
 
@@ -1022,10 +1061,17 @@ app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN", "DR")
   }
 });
 
-// 5. VENDOR PRODUCT LISTINGS & APPROVALS ENDPOINTS (Public Storefront - Zero PII / Zero Password)
+// 5. VENDOR PRODUCT LISTINGS & APPROVALS ENDPOINTS (Public Storefront - Zero PII / Zero Password / Active Approved Vendors Only)
 app.get("/api/v1/vendor/listings", async (req, res) => {
   try {
     const listings = await prisma.vendorProduct.findMany({
+      where: {
+        vendor: {
+          status: "APPROVED",
+        },
+        approvalStatus: "APPROVED",
+        isActive: true,
+      },
       include: {
         vendor: {
           select: {

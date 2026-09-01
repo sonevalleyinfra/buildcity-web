@@ -53,6 +53,7 @@ export default function CategoryListing() {
     products.forEach((p) => {
       const isApproved = p.approvalStatus === "APPROVED" || p.approvalStatus === undefined || p.isActive === true;
       if (!isApproved) return;
+      if (p.isActive === false || p.isVendorSuspended || p.vendor?.status === "SUSPENDED") return;
       if (slugLower && slugLower !== "all") {
         const catName = (p.categoryName || "").toLowerCase();
         const catId = (p.categoryId || "").toLowerCase();

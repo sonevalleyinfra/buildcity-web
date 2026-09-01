@@ -132,20 +132,25 @@ export default function ProductDetail() {
     if (realProd) {
       const mrp = Math.round(Number(realProd.price) * 1.15);
       const extractedImages = getProductImages(realProd);
+      const isSuspended =
+        realProd.isVendorSuspended === true ||
+        realProd.vendor?.status === "SUSPENDED" ||
+        realProd.isActive === false;
+
       return {
         id: realProd.id,
         name: realProd.name,
         brand: realProd.brand || "Generic",
         category: realProd.categoryName || "Material",
         vendorId: realProd.vendorId,
-        vendorName: realProd.vendorName,
-        isVendorSuspended: realProd.isVendorSuspended === true,
+        vendorName: realProd.vendorName || realProd.vendor?.shopName,
+        isVendorSuspended: isSuspended,
         images: extractedImages,
         mrp,
         price: Number(realProd.price) || 100,
         rating: 5.0,
         reviews: 0,
-        inStock: (realProd.stockQty || 0) > 0,
+        inStock: (realProd.stockQty || 0) > 0 && !isSuspended,
         unit: realProd.unit || "Unit",
         description:
           realProd.description ||
@@ -169,14 +174,14 @@ export default function ProductDetail() {
   // Check if vendor is suspended (strict unique ID check)
   const isVendorSuspended = useMemo(() => {
     if (!product) return false;
+    if (product.isVendorSuspended) return true;
     if (product.vendorId && Array.isArray(vendors) && vendors.length > 0) {
       const v = vendors.find(
         (v) => String(v.id).toLowerCase() === String(product.vendorId).toLowerCase()
       );
       if (v && v.status === "SUSPENDED") return true;
-      if (v && v.status === "APPROVED") return false;
     }
-    return Boolean(product.isVendorSuspended);
+    return false;
   }, [product, vendors]);
 
   const [qty, setQty] = useState(1);

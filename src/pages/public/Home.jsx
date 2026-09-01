@@ -64,6 +64,8 @@ export default function Home() {
     .filter((p) => {
       // Require Admin/DR approval before displaying on storefront
       if (p.approvalStatus !== "APPROVED") return false;
+      if (p.isActive === false || p.isVendorSuspended) return false;
+      if (p.vendor?.status === "SUSPENDED") return false;
 
       const activeRegName = (region?.name || "Varanasi").toLowerCase().trim();
       const pRegName = (p.regionName || p.districtName || p.vendor?.region?.name || "varanasi").toLowerCase().trim();

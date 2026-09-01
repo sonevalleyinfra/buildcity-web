@@ -11,7 +11,10 @@ export default function ProductCard({ product }) {
       ? Math.round(((product.mrp - product.price) / product.mrp) * 100)
       : 0;
 
+  const isSuspended = product.isVendorSuspended || product.isActive === false || product.vendor?.status === "SUSPENDED";
+
   const handleAdd = () => {
+    if (isSuspended) return;
     addItem(product, 1);
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 1500);
@@ -67,16 +70,26 @@ export default function ProductCard({ product }) {
           )}
         </div>
 
-        <button
-          onClick={handleAdd}
-          className={`mt-auto w-full text-sm font-semibold rounded-lg py-2 transition-colors ${
-            justAdded
-              ? "bg-success text-white"
-              : "border border-brand-500 text-brand-500 hover:bg-brand-500 hover:text-white"
-          }`}
-        >
-          {justAdded ? "Added ✓" : "Add to Cart"}
-        </button>
+        {isSuspended ? (
+          <button
+            type="button"
+            disabled
+            className="mt-auto w-full text-xs font-bold rounded-lg py-2 bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+          >
+            Unavailable
+          </button>
+        ) : (
+          <button
+            onClick={handleAdd}
+            className={`mt-auto w-full text-sm font-semibold rounded-lg py-2 transition-colors ${
+              justAdded
+                ? "bg-success text-white"
+                : "border border-brand-500 text-brand-500 hover:bg-brand-500 hover:text-white"
+            }`}
+          >
+            {justAdded ? "Added ✓" : "Add to Cart"}
+          </button>
+        )}
       </div>
     </div>
   );

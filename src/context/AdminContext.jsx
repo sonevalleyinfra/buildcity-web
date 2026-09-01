@@ -174,8 +174,38 @@ export function AdminProvider({ children }) {
       if (Array.isArray(regsRes) && regsRes.length > 0) {
         setRegions(regsRes);
       }
-      if (Array.isArray(listingsRes) && listingsRes.length > 0) {
-        setProducts(listingsRes);
+      if (Array.isArray(listingsRes)) {
+        const formattedListings = listingsRes.map((l) => {
+          const isVendorSuspended = l.vendor?.status === "SUSPENDED";
+          const resolvedRegionName = l.regionName || l.districtName || l.vendor?.region?.name || "Mirzapur";
+          const resolvedRegionId = l.regionId || l.vendor?.regionId || l.vendor?.region?.id || "mirzapur";
+          const isListingApproved = l.approvalStatus === "APPROVED" || !l.approvalStatus || l.approvalStatus === "";
+
+          return {
+            id: l.id,
+            masterProductId: l.masterProductId,
+            name: l.name || l.masterProduct?.name || "Product",
+            categoryId: l.categoryId || l.masterProduct?.categoryId,
+            categoryName: l.categoryName || l.masterProduct?.category?.name || "Material",
+            brand: l.brand || l.masterProduct?.brand || "Generic",
+            type: l.type || l.masterProduct?.type || "Standard",
+            grade: l.grade || l.masterProduct?.grade || "Standard Grade",
+            unit: l.unit || l.masterProduct?.unit || "Unit",
+            vendorId: l.vendorId,
+            vendorName: l.vendor?.shopName || l.vendorName || "District Vendor",
+            regionId: resolvedRegionId,
+            regionName: resolvedRegionName,
+            districtName: resolvedRegionName,
+            price: Number(l.price) || 100,
+            stockQty: Number(l.stockQty) || 100,
+            imageUrl: l.imageUrl || l.masterProduct?.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80",
+            approvalStatus: l.approvalStatus || "APPROVED",
+            isActive: isListingApproved && l.isActive !== false && !isVendorSuspended,
+            isVendorSuspended: Boolean(isVendorSuspended),
+            addedBy: l.addedBy || "Vendor",
+          };
+        });
+        setProducts(formattedListings);
       }
       if (Array.isArray(couponsRes) && couponsRes.length > 0) {
         setCoupons(couponsRes);
@@ -674,6 +704,7 @@ export function AdminProvider({ children }) {
           } catch {}
           return fresh;
         });
+        await fetchCloudData();
       }
     } catch (err) {
       console.warn("Set vendor status error:", err.message);

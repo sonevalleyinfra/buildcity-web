@@ -958,19 +958,6 @@ app.delete("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN"), async (req,
   }
 });
 
-// Clear ALL Vendors & Vendor Products Endpoint
-app.delete("/api/v1/clear-vendors", requireAuth, requireRole("ADMIN"), async (req, res) => {
-  try {
-    await prisma.orderItem.deleteMany({}).catch(() => null);
-    await prisma.vendorProduct.deleteMany({}).catch(() => null);
-    await prisma.vendor.deleteMany({}).catch(() => null);
-    res.json({ message: "All Vendors and Vendor Products cleared successfully from Supabase DB" });
-  } catch (err) {
-    console.error("Clear vendors error:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // 4. MASTER PRODUCT CATALOG ENDPOINTS
 app.get("/api/v1/master-products", async (req, res) => {
   try {

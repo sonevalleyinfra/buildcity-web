@@ -66,7 +66,6 @@ export default function AdminDashboard() {
     updateVendor,
     setVendorStatus,
     removeVendor,
-    clearAllVendorsAndProducts,
     addCategory,
     updateCategory,
     removeCategory,

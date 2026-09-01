@@ -1252,15 +1252,6 @@ export function AdminProvider({ children }) {
     setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)));
   };
 
-  const clearAllVendorsAndProducts = async () => {
-    setVendors([]);
-    setProducts([]);
-    try {
-      await authFetch(`${API_BASE_URL}/api/v1/clear-vendors`, { method: "DELETE" });
-      await fetchCloudData();
-    } catch {}
-  };
-
   return (
     <AdminContext.Provider
       value={{
@@ -1284,7 +1275,6 @@ export function AdminProvider({ children }) {
         updateVendor,
         setVendorStatus,
         removeVendor,
-        clearAllVendorsAndProducts,
         addCategory,
         updateCategory,
         removeCategory,

@@ -380,7 +380,7 @@ app.delete("/api/v1/coupons/:id", requireAuth, requireRole("ADMIN"), async (req,
 const { sendRealSMSOTP } = require("./smsService");
 
 // 1. AUTHENTICATION & USERS ENDPOINTS (INSTANT HIGH SPEED OPTIMIZED)
-app.post("/api/v1/auth/otp/request", async (req, res) => {
+app.post("/api/v1/auth/otp/request", otpRequestLimiter, async (req, res) => {
   const { phone } = req.body;
   if (!phone || !/^\d{10}$/.test(phone)) {
     return res.status(400).json({ error: "Valid 10-digit phone number required" });
@@ -406,17 +406,30 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
       return res.status(400).json({ error: "Please enter a valid 10-digit mobile number" });
     }
 
+    // 90-second per-phone cooldown check
+    const lastOtp = await prisma.oTPVerification.findFirst({
+      where: { OR: [{ phone: cleanPhone }, { phone }] },
+      orderBy: { createdAt: "desc" },
+    }).catch(() => null);
+
+    if (lastOtp && lastOtp.createdAt) {
+      const elapsedSeconds = Math.floor((Date.now() - new Date(lastOtp.createdAt).getTime()) / 1000);
+      if (elapsedSeconds < 90) {
+        const remaining = 90 - elapsedSeconds;
+        return res.status(429).json({ error: `Please wait ${remaining}s before requesting a new OTP` });
+      }
+    }
+
     // Generate 6-digit OTP code instantly
     const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins expiry
 
     // Save OTP record in DB
-    await prisma.oTPVerification.create({
+    prisma.oTPVerification.create({
       data: {
-        phone: cleanPhone,
+        phone,
         otp: generatedOtp,
         expiresAt,
-        createdAt: new Date(),
       },
     }).catch((e) => console.warn("Background OTP save note:", e.message));
 
@@ -435,7 +448,7 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
   }
 });
 
-app.post("/api/v1/auth/otp/verify", async (req, res) => {
+app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
   const { phone, otp } = req.body;
   if (!phone || !otp) return res.status(400).json({ error: "Phone and OTP required" });
 

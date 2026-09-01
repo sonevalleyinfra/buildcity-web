@@ -50,13 +50,13 @@ async function sendRealSMSOTP(phone, otpCode) {
 
     const options = {
       hostname: "sms.aradhyatechnologies.in",
-      port: 80,
-      family: 4,
+      port: 443,
       path: path,
-      method: "GET"
+      method: "GET",
+      rejectUnauthorized: false
     };
 
-    const req = http.request(options, (res) => {
+    const req = https.request(options, (res) => {
       let responseBody = "";
       res.on("data", (chunk) => { responseBody += chunk; });
       res.on("end", () => {

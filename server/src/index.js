@@ -28,6 +28,7 @@ const otpRequestLimiter = rateLimit({
   message: { error: "Too many OTP requests. Please try again after an hour." },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false,
 });
 
 const otpVerifyLimiter = rateLimit({
@@ -37,6 +38,7 @@ const otpVerifyLimiter = rateLimit({
   message: { error: "Too many attempts. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false,
 });
 
 // Health Check Endpoint

@@ -1061,17 +1061,10 @@ app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN", "DR")
   }
 });
 
-// 5. VENDOR PRODUCT LISTINGS & APPROVALS ENDPOINTS (Public Storefront - Zero PII / Zero Password / Active Approved Vendors Only)
+// 5. VENDOR PRODUCT LISTINGS & APPROVALS ENDPOINTS (Public Storefront - Zero PII / Zero Password)
 app.get("/api/v1/vendor/listings", async (req, res) => {
   try {
     const listings = await prisma.vendorProduct.findMany({
-      where: {
-        vendor: {
-          status: "APPROVED",
-        },
-        approvalStatus: "APPROVED",
-        isActive: true,
-      },
       include: {
         vendor: {
           select: {

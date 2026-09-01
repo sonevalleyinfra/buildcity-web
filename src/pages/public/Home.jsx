@@ -63,9 +63,7 @@ export default function Home() {
   const liveVendorApproved = products
     .filter((p) => {
       // Require Admin/DR approval before displaying on storefront
-      if (p.approvalStatus !== "APPROVED") return false;
-      if (p.isActive === false || p.isVendorSuspended) return false;
-      if (p.vendor?.status === "SUSPENDED") return false;
+      if (p.approvalStatus !== "APPROVED" && p.approvalStatus !== undefined) return false;
 
       const activeRegName = (region?.name || "Varanasi").toLowerCase().trim();
       const pRegName = (p.regionName || p.districtName || p.vendor?.region?.name || "varanasi").toLowerCase().trim();
@@ -73,12 +71,16 @@ export default function Home() {
       const matches = pRegName === activeRegName || pRegName.includes(activeRegName) || activeRegName.includes(pRegName);
       return matches;
     })
-    .map((p) => ({
-      ...p,
-      price: (p.price !== undefined && p.price !== null && !isNaN(Number(p.price)))
-        ? Math.round(Number(p.price))
-        : Math.round(Number(p.suggestedPrice || 100) * (region?.priceFactor || 1)),
-    }));
+    .map((p) => {
+      const isSusp = p.isVendorSuspended || p.vendor?.status === "SUSPENDED" || p.isActive === false;
+      return {
+        ...p,
+        isVendorSuspended: Boolean(isSusp),
+        price: (p.price !== undefined && p.price !== null && !isNaN(Number(p.price)))
+          ? Math.round(Number(p.price))
+          : Math.round(Number(p.suggestedPrice || 100) * (region?.priceFactor || 1)),
+      };
+    });
 
   const liveDisplayProducts = useMemo(() => {
     if (!liveVendorApproved || liveVendorApproved.length === 0) return [];
@@ -474,16 +476,26 @@ export default function Home() {
                       </span>
                     </div>
 
-                    <button
-                      onClick={() => handleAddToCart(p)}
-                      className={`w-full text-xs font-black rounded-xl py-2 transition-all duration-200 active:scale-[0.97] shadow-xs cursor-pointer ${
-                        justAddedId === p.id
-                          ? "bg-emerald-600 text-white shadow-xs"
-                          : "bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-navy-950 shadow-sm hover:shadow"
-                      }`}
-                    >
-                      {justAddedId === p.id ? "Added ✓" : "+ Add to Cart"}
-                    </button>
+                    {p.isVendorSuspended ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="w-full text-xs font-bold rounded-xl py-2 bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+                      >
+                        Unavailable
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleAddToCart(p)}
+                        className={`w-full text-xs font-black rounded-xl py-2 transition-all duration-200 active:scale-[0.97] shadow-xs cursor-pointer ${
+                          justAddedId === p.id
+                            ? "bg-emerald-600 text-white shadow-xs"
+                            : "bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-navy-950 shadow-sm hover:shadow"
+                        }`}
+                      >
+                        {justAddedId === p.id ? "Added ✓" : "+ Add to Cart"}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

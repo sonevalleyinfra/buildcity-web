@@ -1628,14 +1628,27 @@ app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", 
 // Customer Addresses Fetch & Save Endpoints (Explicit Express Routes)
 const handleGetAddresses = async (req, res) => {
   try {
-    const targetUserId = req.auth?.role === "ADMIN" ? req.params.userId : (req.auth?.userId || req.params.userId);
-    if (!targetUserId || targetUserId === "undefined" || targetUserId === "null") {
+    const rawTarget = req.params.userId || req.auth?.userId;
+    if (!rawTarget || rawTarget === "undefined" || rawTarget === "null") {
       return res.json([]);
+    }
+
+    const cleanTarget = String(rawTarget).trim();
+    let userIds = [cleanTarget];
+
+    // If target is phone, also include user UUID
+    if (/^\d{10}$/.test(cleanTarget)) {
+      const u = await prisma.user.findFirst({ where: { phone: cleanTarget } }).catch(() => null);
+      if (u) userIds.push(u.id);
+    } else {
+      // If target is UUID, also include phone
+      const u = await prisma.user.findUnique({ where: { id: cleanTarget } }).catch(() => null);
+      if (u && u.phone) userIds.push(u.phone);
     }
 
     const addresses = await prisma.address.findMany({
       where: {
-        userId: targetUserId,
+        userId: { in: userIds },
       },
       include: { region: true },
       orderBy: { createdAt: "desc" },

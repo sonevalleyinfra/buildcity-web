@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AuthLayout from "../../layouts/AuthLayout";
 import Button from "../../components/Button";
@@ -18,10 +18,26 @@ export default function Login() {
   const [role, setRole] = useState("customer");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => {
+      setCooldown((prev) => (prev > 1 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
+
+  const formatCooldown = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return m > 0 ? `${m}:${s.toString().padStart(2, "0")}` : `${s}s`;
+  };
 
   // Customer OTP Request
   const handleSendOtp = async (e) => {
     e.preventDefault();
+    if (cooldown > 0 && step === "otp") return;
     setError("");
     const cleanedMobile = phone.replace(/\D/g, "").slice(-10);
     if (cleanedMobile.length !== 10) {
@@ -57,6 +73,7 @@ export default function Login() {
     try {
       await requestOtp(cleanedMobile);
       setStep("otp");
+      setCooldown(90);
     } catch (err) {
       setError(err?.message || "Failed to send OTP. Please check mobile number.");
     } finally {
@@ -277,10 +294,11 @@ export default function Login() {
             </button>
             <button
               type="button"
+              disabled={cooldown > 0 || loading}
               onClick={handleSendOtp}
-              className="text-sm font-bold text-brand-500 hover:underline cursor-pointer"
+              className="text-sm font-bold text-brand-500 hover:underline cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
             >
-              Resend OTP
+              {cooldown > 0 ? `Resend in ${formatCooldown(cooldown)}` : "Resend OTP"}
             </button>
           </div>
         </form>

@@ -2,11 +2,13 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 const bcrypt = require("bcryptjs");
 const { PrismaClient } = require("@prisma/client");
 const { issueToken, requireAuth, requireRole, requireSelfOrAdmin } = require("./middleware/auth");
 
 const app = express();
+app.set("trust proxy", 1);
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 5000;
 
@@ -17,6 +19,25 @@ app.disable("x-powered-by");
 // Enable CORS & JSON Parsing
 app.use(cors());
 app.use(express.json());
+
+// Dedicated Customer OTP Rate Limiters (DO NOT apply to Partner password login)
+const otpRequestLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5,
+  keyGenerator: (req) => String(req.body?.phone || req.ip),
+  message: { error: "Too many OTP requests. Please try again after an hour." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const otpVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 mins
+  max: 10,
+  keyGenerator: (req) => String(req.body?.phone || req.ip),
+  message: { error: "Too many attempts. Please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Health Check Endpoint
 let couponsList = [
@@ -359,7 +380,7 @@ app.delete("/api/v1/coupons/:id", requireAuth, requireRole("ADMIN"), async (req,
 const { sendRealSMSOTP } = require("./smsService");
 
 // 1. AUTHENTICATION & USERS ENDPOINTS (INSTANT HIGH SPEED OPTIMIZED)
-app.post("/api/v1/auth/otp/request", async (req, res) => {
+app.post("/api/v1/auth/otp/request", otpRequestLimiter, async (req, res) => {
   const { phone } = req.body;
   if (!phone || !/^\d{10}$/.test(phone)) {
     return res.status(400).json({ error: "Valid 10-digit phone number required" });
@@ -383,6 +404,20 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
     }
     if (cleanPhone.length !== 10) {
       return res.status(400).json({ error: "Please enter a valid 10-digit mobile number" });
+    }
+
+    // 90-second per-phone cooldown check
+    const lastOtp = await prisma.oTPVerification.findFirst({
+      where: { OR: [{ phone: cleanPhone }, { phone }] },
+      orderBy: { createdAt: "desc" },
+    }).catch(() => null);
+
+    if (lastOtp && lastOtp.createdAt) {
+      const elapsedSeconds = Math.floor((Date.now() - new Date(lastOtp.createdAt).getTime()) / 1000);
+      if (elapsedSeconds < 90) {
+        const remaining = 90 - elapsedSeconds;
+        return res.status(429).json({ error: `Please wait ${remaining}s before requesting a new OTP` });
+      }
     }
 
     // Generate 6-digit OTP code instantly
@@ -413,7 +448,7 @@ app.post("/api/v1/auth/otp/request", async (req, res) => {
   }
 });
 
-app.post("/api/v1/auth/otp/verify", async (req, res) => {
+app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
   const { phone, otp } = req.body;
   if (!phone || !otp) return res.status(400).json({ error: "Phone and OTP required" });
 

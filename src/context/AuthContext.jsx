@@ -43,7 +43,15 @@ export function AuthProvider({ children }) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(userObj));
   };
 
-  const getOtpEndpoint = (path) => `${API_BASE_URL}${path}`;
+  const getOtpEndpoint = (path) => {
+    if (typeof window !== "undefined") {
+      if (window.location.hostname === "localhost") {
+        return `http://localhost:5000${path}`;
+      }
+      return `${window.location.origin}${path}`;
+    }
+    return path;
+  };
 
   const [currentOtpToken, setCurrentOtpToken] = useState("");
 

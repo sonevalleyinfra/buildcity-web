@@ -51,50 +51,98 @@ export default async function handler(req, res) {
       });
     }
 
-    // 1. Generate 6-digit OTP code & cryptographic HMAC token (instant 0ms)
-    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 mins
-    const hash = crypto.createHmac("sha256", JWT_SECRET).update(`${cleanMobile}:${generatedOtp}:${expiresAt}`).digest("hex");
-    const otpToken = `${expiresAt}.${hash}`;
+    // Database checks: Staff check, Rate limiting (max 5/hr), and 90s Cooldown
+    let isStaff = false;
+    try {
+      const client = new Client({
+        connectionString: CONNECTION_STRING,
+        ssl: { rejectUnauthorized: false },
+        connectionTimeoutMillis: 2500,
+      });
+      await client.connect();
 
-    // 2. Dispatch Live SMS via Aradhya Technologies (Direct Fast HTTP API ~250ms)
-    const username = "sonevalley";
-    const apikey = "0A8CC-B46EE";
-    const sender = "SNVLY";
-    const templateId = "1707175298595096991";
-    const peid = "1701175266640135857";
-    const route = "TRANS";
-
-    const message = `Dear user, Thankyou for visiting Sonevalley. Your OTP for login is ${generatedOtp}. Please do not share this OTP with anyone. Regards SNVLY`;
-
-    const queryParams = new URLSearchParams({
-      username,
-      apikey,
-      apirequest: "Text",
-      sender,
-      mobile: cleanMobile,
-      message,
-      route,
-      TemplateID: templateId,
-      peid,
-      format: "JSON"
-    }).toString();
-
-    const smsPromise = new Promise((resolve) => {
-      const timeout = setTimeout(() => resolve({ success: true, timeout: true }), 3500);
-
-      // Fast HTTP GET (Primary)
-      http.get(`http://sms.aradhyatechnologies.in/sms-panel/api/http/index.php?${queryParams}`, (resp) => {
-        let data = "";
-        resp.on("data", (chunk) => { data += chunk; });
-        resp.on("end", () => {
-          clearTimeout(timeout);
-          resolve({ success: true, data });
+      // 1. Staff check
+      const staffRes = await client.query(
+        `SELECT 'user' as tbl FROM users WHERE phone = $1 AND role IN ('ADMIN', 'DR', 'VENDOR')
+         UNION ALL
+         SELECT 'dr' as tbl FROM district_representatives WHERE phone = $1
+         UNION ALL
+         SELECT 'vendor' as tbl FROM vendors WHERE phone = $1
+         LIMIT 1`,
+        [cleanMobile]
+      );
+      if (staffRes.rows && staffRes.rows.length > 0) {
+        await client.end();
+        return res.status(403).json({
+          error: "Admin, DR, and Vendor accounts are strictly not allowed to log in via Customer OTP. Please use 'Partner Login (Password)'.",
+          isStaffBlocked: true,
         });
-      }).on("error", () => {
-        // HTTPS fallback if HTTP fails
-        const agent = new https.Agent({ rejectUnauthorized: false });
-        https.get(`https://sms.aradhyatechnologies.in/sms-panel/api/http/index.php?${queryParams}`, { agent }, (resp) => {
+      }
+
+      // 2. Check 1-hour rate limit (max 5) & 90s cooldown via PostgreSQL
+      const recentOtpRes = await client.query(
+        `SELECT EXTRACT(EPOCH FROM (NOW() - "createdAt")) as elapsed_sec 
+         FROM otp_verifications 
+         WHERE phone = $1 AND "createdAt" > NOW() - INTERVAL '1 hour' 
+         ORDER BY "createdAt" DESC`,
+        [cleanMobile]
+      );
+
+      if (recentOtpRes.rows && recentOtpRes.rows.length >= 5) {
+        await client.end();
+        return res.status(429).json({ error: "Too many OTP requests. Please try again after an hour." });
+      }
+
+      if (recentOtpRes.rows && recentOtpRes.rows.length > 0) {
+        const elapsed = Math.floor(parseFloat(recentOtpRes.rows[0].elapsed_sec || 0));
+        if (elapsed >= 0 && elapsed < 90) {
+          const remaining = 90 - elapsed;
+          await client.end();
+          return res.status(429).json({ error: `Please wait ${remaining}s before requesting a new OTP` });
+        }
+      }
+
+      // 3. Generate 6-digit OTP code & cryptographic HMAC token
+      const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = Date.now() + 10 * 60 * 1000; // 10 mins
+      const hash = crypto.createHmac("sha256", JWT_SECRET).update(`${cleanMobile}:${generatedOtp}:${expiresAt}`).digest("hex");
+      const otpToken = `${expiresAt}.${hash}`;
+
+      // 4. Save OTP record to DB
+      await client.query(
+        `INSERT INTO otp_verifications (id, phone, otp, "isVerified", "expiresAt", "createdAt")
+         VALUES (gen_random_uuid(), $1, $2, false, $3, NOW())`,
+        [cleanMobile, generatedOtp, new Date(expiresAt)]
+      );
+      await client.end();
+
+      // 5. Dispatch Live SMS via Aradhya Technologies (Direct Fast HTTP API ~250ms)
+      const username = "sonevalley";
+      const apikey = "0A8CC-B46EE";
+      const sender = "SNVLY";
+      const templateId = "1707175298595096991";
+      const peid = "1701175266640135857";
+      const route = "TRANS";
+
+      const message = `Dear user, Thankyou for visiting Sonevalley. Your OTP for login is ${generatedOtp}. Please do not share this OTP with anyone. Regards SNVLY`;
+
+      const queryParams = new URLSearchParams({
+        username,
+        apikey,
+        apirequest: "Text",
+        sender,
+        mobile: cleanMobile,
+        message,
+        route,
+        TemplateID: templateId,
+        peid,
+        format: "JSON"
+      }).toString();
+
+      await new Promise((resolve) => {
+        const timeout = setTimeout(() => resolve({ success: true, timeout: true }), 3500);
+
+        http.get(`http://sms.aradhyatechnologies.in/sms-panel/api/http/index.php?${queryParams}`, (resp) => {
           let data = "";
           resp.on("data", (chunk) => { data += chunk; });
           resp.on("end", () => {
@@ -102,59 +150,35 @@ export default async function handler(req, res) {
             resolve({ success: true, data });
           });
         }).on("error", () => {
-          clearTimeout(timeout);
-          resolve({ success: true });
+          const agent = new https.Agent({ rejectUnauthorized: false });
+          https.get(`https://sms.aradhyatechnologies.in/sms-panel/api/http/index.php?${queryParams}`, { agent }, (resp) => {
+            let data = "";
+            resp.on("data", (chunk) => { data += chunk; });
+            resp.on("end", () => {
+              clearTimeout(timeout);
+              resolve({ success: true, data });
+            });
+          }).on("error", () => {
+            clearTimeout(timeout);
+            resolve({ success: true });
+          });
         });
       });
-    });
 
-    // 3. Database Check & Insert (in parallel with SMS dispatch)
-    const dbPromise = (async () => {
-      try {
-        const client = new Client({
-          connectionString: CONNECTION_STRING,
-          ssl: { rejectUnauthorized: false },
-          connectionTimeoutMillis: 2500,
-        });
-        await client.connect();
+      const elapsed = Date.now() - startTime;
+      console.log(`[OTP Request Dispatched] Mobile: +91 ${cleanMobile} in ${elapsed}ms`);
 
-        // Staff check
-        const staffRes = await client.query(
-          `SELECT 'user' as tbl FROM users WHERE phone = $1 AND role IN ('ADMIN', 'DR', 'VENDOR')
-           UNION ALL
-           SELECT 'dr' as tbl FROM district_representatives WHERE phone = $1
-           UNION ALL
-           SELECT 'vendor' as tbl FROM vendors WHERE phone = $1
-           LIMIT 1`,
-          [cleanMobile]
-        );
-        if (staffRes.rows && staffRes.rows.length > 0) {
-          await client.end();
-          return { isStaff: true };
-        }
-
-        // Save OTP to DB
-        await client.query(
-          `INSERT INTO otp_verifications (id, phone, otp, "isVerified", "expiresAt", "createdAt")
-           VALUES (gen_random_uuid(), $1, $2, false, $3, NOW())`,
-          [cleanMobile, generatedOtp, new Date(expiresAt)]
-        );
-        await client.end();
-        return { isStaff: false };
-      } catch (dbErr) {
-        console.warn("DB OTP log note:", dbErr.message);
-        return { isStaff: false };
-      }
-    })();
-
-    // Wait for both SMS & DB in parallel
-    const [smsResult, dbResult] = await Promise.all([smsPromise, dbPromise]);
-
-    if (dbResult?.isStaff) {
-      return res.status(403).json({
-        error: "Admin, DR, and Vendor accounts are strictly not allowed to log in via Customer OTP. Please use 'Partner Login (Password)'.",
-        isStaffBlocked: true,
+      return res.status(200).json({
+        success: true,
+        message: `OTP dispatched to +91 ${cleanMobile}`,
+        otpToken,
+        gateway: "AradhyaSMS",
+        smsStatus: "dispatched",
+        elapsedMs: elapsed
       });
+    } catch (dbErr) {
+      console.error("OTP request error:", dbErr.message);
+      return res.status(500).json({ error: "Failed to dispatch OTP", details: dbErr.message });
     }
 
     const elapsed = Date.now() - startTime;

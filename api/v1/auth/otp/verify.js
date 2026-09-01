@@ -9,6 +9,9 @@ const JWT_SECRET =
 const CONNECTION_STRING =
   "postgresql://postgres.dskzdhfkrpvibwsqfnab:BuildCity2026Pass@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true";
 
+// Rate limiting in-memory store for verification attempts (10 attempts per 15 mins per phone)
+const failedAttemptsMap = new Map();
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -35,6 +38,16 @@ export default async function handler(req, res) {
 
     const cleanPhone = phone.toString().trim().replace(/\D/g, "").slice(-10);
     const otpInput = otp.toString().trim();
+
+    // 15-minute Rate Limit Check (Max 10 failed attempts)
+    const now = Date.now();
+    const attempts = failedAttemptsMap.get(cleanPhone) || [];
+    const validAttempts = attempts.filter((t) => now - t < 15 * 60 * 1000);
+    failedAttemptsMap.set(cleanPhone, validAttempts);
+
+    if (validAttempts.length >= 10) {
+      return res.status(429).json({ error: "Too many attempts. Please try again later." });
+    }
 
     let isValid = false;
 
@@ -73,10 +86,15 @@ export default async function handler(req, res) {
     }
 
     if (!isValid) {
+      validAttempts.push(now);
+      failedAttemptsMap.set(cleanPhone, validAttempts);
       return res.status(401).json({
         error: "Invalid or expired OTP. Please enter the exact OTP code sent to your mobile."
       });
     }
+
+    // Reset failed attempts on success
+    failedAttemptsMap.delete(cleanPhone);
 
     // STRICT RESTRICTION: Admin, DR, and Vendor cannot log in via OTP
     const isSpecialStaff = cleanPhone === "9999999999" || cleanPhone === "7777777777";

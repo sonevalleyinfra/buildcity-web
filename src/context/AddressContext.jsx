@@ -57,7 +57,7 @@ export function AddressProvider({ children }) {
 
     try {
       setIsAddressLoading(true);
-      const res = await authFetch(`${API_BASE_URL}/api/v1/addresses/user/${userKey}`);
+      const res = await authFetch(`${API_BASE_URL}/api/v1/addresses/me`);
       if (res.ok) {
         const dbList = await res.json();
         if (Array.isArray(dbList) && dbList.length > 0) {

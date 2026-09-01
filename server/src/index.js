@@ -1516,7 +1516,31 @@ app.get("/api/v1/orders", requireAuth, requireRole("ADMIN"), async (req, res) =>
   }
 });
 
-// Customer Isolated Orders Fetch (Self or Admin)
+// Customer Isolated Orders Fetch (Self by Token or Admin)
+app.get("/api/v1/orders/me", requireAuth, async (req, res) => {
+  try {
+    const targetUserId = req.auth?.userId;
+    const cleanPhone = (req.auth?.phone || "").replace(/\D/g, "");
+
+    const orders = await prisma.order.findMany({
+      where: {
+        OR: [
+          ...(targetUserId ? [{ customerId: targetUserId }] : []),
+          ...(cleanPhone ? [{ customer: { phone: { contains: cleanPhone.slice(-10) } } }] : []),
+          ...(cleanPhone ? [{ address: { phone: { contains: cleanPhone.slice(-10) } } }] : []),
+        ],
+      },
+      include: { items: true, customer: true, address: true },
+      orderBy: { createdAt: "desc" },
+    }).catch(() => []);
+
+    res.json(orders || []);
+  } catch (err) {
+    res.json([]);
+  }
+});
+
+// Customer Isolated Orders Fetch (Self or Admin by Param)
 app.get("/api/v1/orders/user/:userId", requireAuth, requireSelfOrAdmin("userId"), async (req, res) => {
   try {
     const targetUserId = req.auth?.role === "ADMIN" ? req.params.userId : (req.auth?.userId || req.params.userId);
@@ -1660,6 +1684,7 @@ const handleGetAddresses = async (req, res) => {
   }
 };
 
+app.get("/api/v1/addresses/me", requireAuth, handleGetAddresses);
 app.get("/api/v1/addresses/user/:userId", requireAuth, requireSelfOrAdmin("userId"), handleGetAddresses);
 app.get("/api/v1/addresses/:userId", requireAuth, requireSelfOrAdmin("userId"), handleGetAddresses);
 
@@ -2115,6 +2140,31 @@ app.post("/api/v1/reviews", requireAuth, async (req, res) => {
 });
 
 // 13. NOTIFICATIONS ENDPOINTS (Admin Broadcast & Real-Time Customer Alerts)
+app.get("/api/v1/notifications/me", requireAuth, async (req, res) => {
+  try {
+    const targetUserId = req.auth?.userId;
+    const rawList = await prisma.notification.findMany({
+      where: {
+        OR: [
+          ...(targetUserId ? [{ userId: targetUserId }] : []),
+          { user: { role: "CUSTOMER" } },
+          { user: { role: "ADMIN" } },
+        ],
+      },
+      include: { user: true },
+      orderBy: { createdAt: "desc" },
+      take: 60,
+    }).catch(() => []);
+
+    const uniqueList = Array.from(
+      new Map(rawList.map((n) => [`${n.title.trim().toLowerCase()}_${n.message.trim().toLowerCase()}`, n])).values()
+    );
+    res.json(uniqueList);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/v1/notifications", requireAuth, async (req, res) => {
   try {
     const { userId } = req.query;

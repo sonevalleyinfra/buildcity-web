@@ -71,10 +71,7 @@ export function NotificationProvider({ children }) {
 
       // 2. Fallback to Render DB
       if (!Array.isArray(dbList) || dbList.length === 0) {
-        const url = user?.id
-          ? `${API_BASE_URL}/api/v1/notifications?userId=${encodeURIComponent(user.id)}`
-          : `${API_BASE_URL}/api/v1/notifications`;
-        const res = await authFetch(url);
+        const res = await authFetch(`${API_BASE_URL}/api/v1/notifications/me`);
         if (res.ok) {
           dbList = await res.json();
         }

@@ -39,8 +39,8 @@ export function OrderProvider({ children }) {
           return data;
         }
       } else if (userIdent) {
-        // Customer isolated orders
-        const res = await authFetch(`${API_BASE_URL}/api/v1/orders/user/${encodeURIComponent(userIdent)}`);
+        // Customer isolated orders via /me (zero phone number in URL)
+        const res = await authFetch(`${API_BASE_URL}/api/v1/orders/me`);
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {

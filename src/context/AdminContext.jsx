@@ -665,39 +665,40 @@ export function AdminProvider({ children }) {
   const setVendorStatus = async (id, status) => {
     const isSusp = status === "SUSPENDED";
 
-    // 1. Smooth in-place state & localStorage update (zero flickering)
-    setVendors((prev) => {
-      const updated = prev.map((v) => (v.id === id ? { ...v, status } : v));
-      try {
-        localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
-
-    setProducts((prev) => {
-      const targetVendor = vendors.find((v) => v.id === id);
-      const targetShop = (targetVendor?.shopName || "").toLowerCase().trim();
-
-      const updated = prev.map((p) => {
-        const pShop = (p.vendorName || "").toLowerCase().trim();
-        if (p.vendorId === id || (pShop && targetShop && pShop === targetShop)) {
-          return { ...p, isVendorSuspended: isSusp, isActive: !isSusp };
-        }
-        return p;
-      });
-      try {
-        localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
-
-    // 2. Persist to Backend DB silently without aggressive full cloud re-fetch
     try {
-      await authFetch(`${API_BASE_URL}/api/v1/vendors/${id}/status`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/vendors/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
+
+      if (res.ok) {
+        // 1. Smooth state & localStorage update after successful backend update
+        setVendors((prev) => {
+          const updated = prev.map((v) => (v.id === id ? { ...v, status } : v));
+          try {
+            localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
+
+        setProducts((prev) => {
+          const targetVendor = vendors.find((v) => v.id === id);
+          const targetShop = (targetVendor?.shopName || "").toLowerCase().trim();
+
+          const updated = prev.map((p) => {
+            const pShop = (p.vendorName || "").toLowerCase().trim();
+            if (p.vendorId === id || (pShop && targetShop && pShop === targetShop)) {
+              return { ...p, isVendorSuspended: isSusp, isActive: !isSusp };
+            }
+            return p;
+          });
+          try {
+            localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
+      }
     } catch (err) {
       console.warn("Set vendor status error:", err.message);
     }

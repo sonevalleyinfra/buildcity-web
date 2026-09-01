@@ -118,15 +118,15 @@ export default function AdminDashboard() {
   const [editingCoupon, setEditingCoupon] = useState(null);
 
   // Vendor Status Update Loading State
-  const [updatingVendorStatusId, setUpdatingVendorStatusId] = useState(null);
+  const [updatingVendorStatus, setUpdatingVendorStatus] = useState(null);
 
   const handleToggleVendorStatus = async (vendorId, nextStatus) => {
-    if (updatingVendorStatusId) return;
-    setUpdatingVendorStatusId(vendorId);
+    if (updatingVendorStatus) return;
+    setUpdatingVendorStatus({ id: vendorId, action: nextStatus });
     try {
       await setVendorStatus(vendorId, nextStatus);
     } finally {
-      setUpdatingVendorStatusId(null);
+      setUpdatingVendorStatus(null);
     }
   };
 
@@ -1225,11 +1225,11 @@ export default function AdminDashboard() {
                               </button>
                               {v.status !== "APPROVED" && (
                                 <button
-                                  disabled={updatingVendorStatusId === v.id}
+                                  disabled={Boolean(updatingVendorStatus)}
                                   onClick={() => handleToggleVendorStatus(v.id, "APPROVED")}
-                                  className="text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-2.5 py-1.5 shadow-2xs active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1 min-w-[70px] justify-center"
+                                  className="text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-2.5 py-1.5 shadow-2xs active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1 min-w-[75px] justify-center"
                                 >
-                                  {updatingVendorStatusId === v.id ? (
+                                  {updatingVendorStatus?.id === v.id && updatingVendorStatus?.action === "APPROVED" ? (
                                     <>
                                       <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                                       <span>Approving...</span>
@@ -1241,11 +1241,11 @@ export default function AdminDashboard() {
                               )}
                               {v.status !== "SUSPENDED" && (
                                 <button
-                                  disabled={updatingVendorStatusId === v.id}
+                                  disabled={Boolean(updatingVendorStatus)}
                                   onClick={() => handleToggleVendorStatus(v.id, "SUSPENDED")}
-                                  className="text-[11px] font-semibold border border-amber-300 text-amber-700 hover:bg-amber-50 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1 min-w-[70px] justify-center"
+                                  className="text-[11px] font-semibold border border-amber-300 text-amber-700 hover:bg-amber-50 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1 min-w-[75px] justify-center"
                                 >
-                                  {updatingVendorStatusId === v.id ? (
+                                  {updatingVendorStatus?.id === v.id && updatingVendorStatus?.action === "SUSPENDED" ? (
                                     <>
                                       <span className="w-3 h-3 border-2 border-amber-700 border-t-transparent rounded-full animate-spin"></span>
                                       <span>Suspending...</span>

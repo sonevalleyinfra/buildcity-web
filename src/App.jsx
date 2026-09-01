@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { CartProvider } from "./context/CartContext";
 import { OrderProvider } from "./context/OrderContext";
@@ -41,6 +42,16 @@ function CatchAll() {
   return <Navigate to={target} replace />;
 }
 
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [pathname]);
+
+  return null;
+}
+
 import { AlertProvider } from "./context/AlertContext";
 
 export default function App() {
@@ -53,8 +64,9 @@ export default function App() {
               <AddressProvider>
                 <NotificationProvider>
                   <AdminProvider>
-                  <BrowserRouter>
-                <Routes>
+                    <BrowserRouter>
+                      <ScrollToTop />
+                      <Routes>
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
 

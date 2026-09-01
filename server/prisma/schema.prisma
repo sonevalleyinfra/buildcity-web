@@ -97,7 +97,7 @@ model DR {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name        String
   phone       String
-  password    String?  @default("dr123")
+  password    String?
   regionId    String
   region      Region   @relation(fields: [regionId], references: [id])
   status      String   @default("ACTIVE")
@@ -114,7 +114,7 @@ model Vendor {
   shopName       String
   ownerName      String
   phone          String
-  password       String?      @default("vendor123")
+  password       String?
   regionId       String
   region         Region       @relation(fields: [regionId], references: [id])
   status         VendorStatus @default(PENDING)

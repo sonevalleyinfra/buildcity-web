@@ -97,9 +97,6 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR"), async (re
   }
 });
 
-// In-memory persistent Store for Vendor Passwords
-const vendorPasswordsMap = new Map();
-
 // Password Login Endpoint — Phone & Password Login for Admin, DR, and Vendor Partners
 app.post("/api/v1/auth/vendor/login", async (req, res) => {
   try {
@@ -156,33 +153,36 @@ app.post("/api/v1/auth/vendor/login", async (req, res) => {
       include: { user: true, region: true },
     }).catch(() => null);
 
-    if (drInDb || userInDb?.role === "DR" || cleanPhone === "7777777777") {
-      const dbPassword =
+    if (drInDb || userInDb?.role === "DR") {
+      const storedPassword =
         drInDb?.password ||
         drInDb?.user?.password ||
         userInDb?.password;
 
-      const expectedDrPassword = dbPassword ? dbPassword.trim() : "dr123";
-
-      if (cleanPassword === expectedDrPassword) {
-        const drUserObj = {
-          id: drInDb?.id || userInDb?.id || `u-dr-${cleanPhone}`,
-          name: drInDb?.name || userInDb?.name || "District Representative",
-          phone: cleanPhone,
-          role: "DR",
-          drInfo: drInDb || null,
-          tokenVersion: userInDb?.tokenVersion || drInDb?.user?.tokenVersion || 1,
-        };
-        const token = issueToken(drUserObj);
-
-        return res.json({
-          success: true,
-          token,
-          user: drUserObj,
-        });
-      } else {
-        return res.status(401).json({ error: "Incorrect Password." });
+      if (!storedPassword) {
+        return res.status(401).json({ error: "Invalid mobile number or password." });
       }
+
+      const isMatch = await bcrypt.compare(cleanPassword, storedPassword).catch(() => false);
+      if (!isMatch) {
+        return res.status(401).json({ error: "Invalid mobile number or password." });
+      }
+
+      const drUserObj = {
+        id: drInDb?.id || userInDb?.id || `u-dr-${cleanPhone}`,
+        name: drInDb?.name || userInDb?.name || "District Representative",
+        phone: cleanPhone,
+        role: "DR",
+        drInfo: drInDb || null,
+        tokenVersion: userInDb?.tokenVersion || drInDb?.user?.tokenVersion || 1,
+      };
+      const token = issueToken(drUserObj);
+
+      return res.json({
+        success: true,
+        token,
+        user: drUserObj,
+      });
     }
 
     // 4. Find Vendor record by phone number
@@ -206,7 +206,7 @@ app.post("/api/v1/auth/vendor/login", async (req, res) => {
     }
 
     if (!user && !vendor) {
-      return res.status(404).json({ error: "No Partner account found for this mobile number." });
+      return res.status(401).json({ error: "Invalid mobile number or password." });
     }
 
     // Verify Vendor Status (Must be APPROVED)
@@ -218,10 +218,15 @@ app.post("/api/v1/auth/vendor/login", async (req, res) => {
       return res.status(403).json({ error: "Your account is PENDING approval from Admin." });
     }
 
-    // Verify Password (Check in-memory map, stored password or fallback to vendor123)
-    const expectedPassword = vendorPasswordsMap.get(vendor?.id) || vendorPasswordsMap.get(cleanPhone) || vendor?.password || user?.password || "vendor123";
-    if (cleanPassword !== expectedPassword.trim()) {
-      return res.status(401).json({ error: "Incorrect Password." });
+    // Verify Password with Bcrypt against Vendor or User password hash
+    const storedPassword = vendor?.password || user?.password || vendor?.user?.password;
+    if (!storedPassword) {
+      return res.status(401).json({ error: "Invalid mobile number or password." });
+    }
+
+    const isMatch = await bcrypt.compare(cleanPassword, storedPassword).catch(() => false);
+    if (!isMatch) {
+      return res.status(401).json({ error: "Invalid mobile number or password." });
     }
 
     const resUser = user || {
@@ -652,7 +657,9 @@ app.get("/api/v1/drs", requireAuth, requireRole("ADMIN"), async (req, res) => {
 app.post("/api/v1/drs", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const { name, phone, password, regionId } = req.body;
-    const drPassword = (password && password.trim()) || "dr123";
+    const cleanPhone = phone?.trim().replace(/\D/g, "");
+    const rawPassword = (password && password.trim()) || null;
+    const drHashedPassword = rawPassword ? await bcrypt.hash(rawPassword, 10) : null;
 
     let targetRegionId = regionId;
     let validRegion = targetRegionId ? await prisma.region.findUnique({ where: { id: targetRegionId } }).catch(() => null) : null;
@@ -668,15 +675,19 @@ app.post("/api/v1/drs", requireAuth, requireRole("ADMIN"), async (req, res) => {
       }
     }
 
-    let user = await prisma.user.findUnique({ where: { phone } }).catch(() => null);
+    let user = await prisma.user.findUnique({ where: { phone: cleanPhone || phone } }).catch(() => null);
     if (!user) {
       user = await prisma.user.create({
-        data: { phone, name, password: drPassword, role: "DR", tokenVersion: 1 },
+        data: { phone: cleanPhone || phone, name, password: drHashedPassword, role: "DR", tokenVersion: 1 },
       });
     } else {
+      const userUpdateData = { role: "DR", name };
+      if (drHashedPassword) {
+        userUpdateData.password = drHashedPassword;
+      }
       await prisma.user.update({
         where: { id: user.id },
-        data: { role: "DR", password: drPassword, name },
+        data: userUpdateData,
       }).catch(() => null);
     }
 
@@ -684,8 +695,8 @@ app.post("/api/v1/drs", requireAuth, requireRole("ADMIN"), async (req, res) => {
       data: {
         userId: user.id,
         name,
-        phone,
-        password: drPassword,
+        phone: cleanPhone || phone,
+        password: drHashedPassword,
         regionId: targetRegionId,
         status: "ACTIVE",
       },
@@ -706,8 +717,10 @@ app.patch("/api/v1/drs/:id", requireAuth, requireRole("ADMIN"), async (req, res)
 
     const dataToUpdate = {};
     if (name) dataToUpdate.name = name;
-    if (phone) dataToUpdate.phone = phone;
-    if (password && password.trim()) dataToUpdate.password = password.trim();
+    if (phone) dataToUpdate.phone = phone.trim().replace(/\D/g, "");
+    if (password && password.trim()) {
+      dataToUpdate.password = await bcrypt.hash(password.trim(), 10);
+    }
     if (regionId) dataToUpdate.regionId = regionId;
     if (status) dataToUpdate.status = status;
 
@@ -723,11 +736,18 @@ app.patch("/api/v1/drs/:id", requireAuth, requireRole("ADMIN"), async (req, res)
         include: { region: true, user: true },
       });
 
-      if (dr.userId && password && password.trim()) {
-        await prisma.user.update({
-          where: { id: dr.userId },
-          data: { password: password.trim() },
-        }).catch(() => null);
+      if (dr.userId) {
+        const userUpdateData = {};
+        if (name) userUpdateData.name = name;
+        if (phone) userUpdateData.phone = phone.trim().replace(/\D/g, "");
+        if (dataToUpdate.password) userUpdateData.password = dataToUpdate.password;
+
+        if (Object.keys(userUpdateData).length > 0) {
+          await prisma.user.update({
+            where: { id: dr.userId },
+            data: userUpdateData,
+          }).catch(() => null);
+        }
       }
       console.log(`✅ DR updated in DB: ${updatedDr.name} (${updatedDr.phone})`);
       return res.json(updatedDr);
@@ -771,11 +791,13 @@ app.get("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req, 
 });
 
 // Vendor Add Endpoint — Admin ya DR dwara naya Vendor Supabase DB me create karne ke liye
-  app.post("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
+app.post("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const { shopName, ownerName, phone, password, regionId, regionName, districtName, commissionRate, addedByDr, status } = req.body;
     const reqRegName = regionName || districtName || "Mirzapur";
-    const vendorPassword = password?.trim() || "vendor123";
+    const cleanPhone = phone ? phone.trim().replace(/\D/g, "") : "";
+    const rawPassword = password?.trim() || null;
+    const vendorHashedPassword = rawPassword ? await bcrypt.hash(rawPassword, 10) : null;
 
     // 1. Try finding region by regionId UUID if valid
     let validRegion = null;
@@ -809,15 +831,19 @@ app.get("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req, 
       return res.status(400).json({ error: "Could not locate or create a valid Region in DB" });
     }
 
-    let user = await prisma.user.findUnique({ where: { phone } }).catch(() => null);
+    let user = await prisma.user.findUnique({ where: { phone: cleanPhone || phone } }).catch(() => null);
     if (!user) {
       user = await prisma.user.create({
-        data: { phone, name: ownerName || shopName, password: vendorPassword, role: "VENDOR", tokenVersion: 1 },
+        data: { phone: cleanPhone || phone, name: ownerName || shopName, password: vendorHashedPassword, role: "VENDOR", tokenVersion: 1 },
       });
     } else {
+      const userUpdateData = { role: "VENDOR", name: ownerName || shopName };
+      if (vendorHashedPassword) {
+        userUpdateData.password = vendorHashedPassword;
+      }
       await prisma.user.update({
         where: { id: user.id },
-        data: { role: "VENDOR", password: vendorPassword },
+        data: userUpdateData,
       }).catch(() => null);
     }
 
@@ -826,8 +852,8 @@ app.get("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req, 
         userId: user.id,
         shopName,
         ownerName,
-        phone,
-        password: vendorPassword,
+        phone: cleanPhone || phone,
+        password: vendorHashedPassword,
         regionId: validRegion.id,
         commissionRate: Number(commissionRate) || 10,
         addedByDr: addedByDr || "Admin",
@@ -836,11 +862,8 @@ app.get("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req, 
       include: { region: true, user: true },
     });
 
-    if (newVendor?.id) vendorPasswordsMap.set(newVendor.id, vendorPassword);
-    if (phone) vendorPasswordsMap.set(phone.trim().replace(/\D/g, ""), vendorPassword);
-
     console.log(`✅ Vendor created successfully in Supabase DB: ${newVendor.shopName} (${validRegion.name})`);
-    res.status(201).json({ ...newVendor, password: vendorPassword });
+    res.status(201).json(newVendor);
   } catch (err) {
     console.error("Add Vendor error:", err);
     res.status(500).json({ error: err.message });
@@ -862,17 +885,16 @@ const handleUpdateVendor = async (req, res) => {
 
     if (vendor) {
       const cleanPhone = (phone || vendor.phone || "").trim().replace(/\D/g, "");
+      let hashedPassword = null;
       if (password && password.trim()) {
-        vendorPasswordsMap.set(vendor.id, password.trim());
-        if (cleanPhone) vendorPasswordsMap.set(cleanPhone, password.trim());
-        if (rawId) vendorPasswordsMap.set(rawId, password.trim());
+        hashedPassword = await bcrypt.hash(password.trim(), 10);
       }
 
       const prismaUpdateData = {};
       if (shopName) prismaUpdateData.shopName = shopName.trim();
       if (ownerName) prismaUpdateData.ownerName = ownerName.trim();
       if (phone) prismaUpdateData.phone = cleanPhone || phone.trim();
-      if (password && password.trim()) prismaUpdateData.password = password.trim();
+      if (hashedPassword) prismaUpdateData.password = hashedPassword;
       if (commissionRate !== undefined) prismaUpdateData.commissionRate = Number(commissionRate);
       if (status) prismaUpdateData.status = status;
       if (regionId) prismaUpdateData.regionId = regionId;
@@ -888,7 +910,7 @@ const handleUpdateVendor = async (req, res) => {
         const userUpdateData = {};
         if (ownerName) userUpdateData.name = ownerName.trim();
         if (phone && cleanPhone) userUpdateData.phone = cleanPhone;
-        if (password && password.trim()) userUpdateData.password = password.trim();
+        if (hashedPassword) userUpdateData.password = hashedPassword;
 
         if (Object.keys(userUpdateData).length > 0) {
           await prisma.user.update({

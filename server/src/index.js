@@ -408,7 +408,7 @@ app.post("/api/v1/auth/otp/request", otpRequestLimiter, async (req, res) => {
       return res.status(400).json({ error: "Please enter a valid 10-digit mobile number" });
     }
 
-    // 90-second per-phone cooldown check
+    // 90-second per-phone cooldown check (safely handling server clock timezone differences)
     const lastOtp = await prisma.oTPVerification.findFirst({
       where: { OR: [{ phone: cleanPhone }, { phone }] },
       orderBy: { createdAt: "desc" },
@@ -416,8 +416,8 @@ app.post("/api/v1/auth/otp/request", otpRequestLimiter, async (req, res) => {
 
     if (lastOtp && lastOtp.createdAt) {
       const elapsedSeconds = Math.floor((Date.now() - new Date(lastOtp.createdAt).getTime()) / 1000);
-      if (elapsedSeconds < 90) {
-        const remaining = 90 - elapsedSeconds;
+      if (elapsedSeconds >= 0 && elapsedSeconds < 90) {
+        const remaining = Math.min(90, Math.max(1, 90 - elapsedSeconds));
         return res.status(429).json({ error: `Please wait ${remaining}s before requesting a new OTP` });
       }
     }
@@ -427,11 +427,12 @@ app.post("/api/v1/auth/otp/request", otpRequestLimiter, async (req, res) => {
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins expiry
 
     // Save OTP record in DB
-    prisma.oTPVerification.create({
+    await prisma.oTPVerification.create({
       data: {
-        phone,
+        phone: cleanPhone,
         otp: generatedOtp,
         expiresAt,
+        createdAt: new Date(),
       },
     }).catch((e) => console.warn("Background OTP save note:", e.message));
 

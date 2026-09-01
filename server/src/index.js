@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
 const bcrypt = require("bcryptjs");
 const { PrismaClient } = require("@prisma/client");
 const { issueToken, requireAuth, requireRole, requireSelfOrAdmin } = require("./middleware/auth");
@@ -8,6 +9,10 @@ const { issueToken, requireAuth, requireRole, requireSelfOrAdmin } = require("./
 const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 5000;
+
+// Security Headers & Protection
+app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
+app.disable("x-powered-by");
 
 // Enable CORS & JSON Parsing
 app.use(cors());

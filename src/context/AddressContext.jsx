@@ -281,8 +281,11 @@ export function AddressProvider({ children }) {
   };
 
   const setDefault = async (id) => {
+    // 1. Immediately update state & localStorage so the UI reflects the change INSTANTLY
     setAddresses((prev) => {
-      const updated = prev.map((a) => ({ ...a, isDefault: a.id === id }));
+      const target = prev.find((a) => a.id === id);
+      const rest = prev.filter((a) => a.id !== id).map((a) => ({ ...a, isDefault: false }));
+      const updated = target ? [{ ...target, isDefault: true }, ...rest] : prev;
       if (addressStorageKey) {
         try {
           localStorage.setItem(addressStorageKey, JSON.stringify(updated));
@@ -291,13 +294,16 @@ export function AddressProvider({ children }) {
       return updated;
     });
 
+    // 2. Persist to DB asynchronously
     try {
       await authFetch(`${API_BASE_URL}/api/v1/addresses/${encodeURIComponent(id)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isDefault: true }),
       });
-    } catch {}
+    } catch (err) {
+      console.warn("Set default address API note:", err.message);
+    }
   };
 
   return (

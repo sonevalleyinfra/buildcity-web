@@ -27,13 +27,16 @@ export default function Addresses() {
       const cleanPin = (a.pincode || "").trim();
       const key = `${cleanStreet}_${cleanCity}_${cleanPin}`;
 
-      if (!map.has(key) || (!map.get(key).isDefault && a.isDefault)) {
+      if (!map.has(key)) {
+        map.set(key, a);
+      } else if (a.isDefault) {
         map.set(key, a);
       }
     });
 
+    const list = Array.from(map.values());
     let defaultAssigned = false;
-    const list = Array.from(map.values()).map((a) => {
+    const sanitized = list.map((a) => {
       if (a.isDefault && !defaultAssigned) {
         defaultAssigned = true;
         return { ...a, isDefault: true };
@@ -41,11 +44,11 @@ export default function Addresses() {
       return { ...a, isDefault: false };
     });
 
-    if (!defaultAssigned && list.length > 0) {
-      list[0].isDefault = true;
+    if (!defaultAssigned && sanitized.length > 0) {
+      sanitized[0].isDefault = true;
     }
 
-    return list;
+    return sanitized.sort((a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0));
   }, [addresses]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -320,8 +323,11 @@ export default function Addresses() {
                 {!a.isDefault && (
                   <button
                     type="button"
-                    onClick={() => setDefault(a.id)}
-                    className="text-xs font-extrabold text-brand-600 hover:underline mt-3 block"
+                    onClick={async () => {
+                      await setDefault(a.id);
+                      showStatus("✓ Set as default delivery address!");
+                    }}
+                    className="text-xs font-extrabold text-brand-600 hover:text-brand-700 active:scale-95 transition-all mt-3 inline-flex items-center gap-1 cursor-pointer"
                   >
                     ★ Set as default address
                   </button>

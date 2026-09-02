@@ -22,7 +22,7 @@ async function sendRealSMSOTP(phone, otpCode) {
   const peid = (process.env.SMS_PEID || process.env.ARADHYA_SMS_PE_ID || "").trim();
   const route = (process.env.SMS_ROUTE || process.env.ARADHYA_SMS_ROUTE || "TRANS").trim().toUpperCase();
 
-  const message = `Dear user, Thankyou for visiting Sonevalley. Your OTP for login is ${otpCode}. Please do not share this OTP with anyone. Regards SNVLY`;
+  const message = `Dear user, Thankyou for visiting Sonevalley. Your OTP for login is ${otpCode}. Please do not share this OTP with anyone.\nRegards SNVLY`;
 
   const queryParams = [
     `username=${encodeURIComponent(currentUsername)}`,

@@ -28,6 +28,7 @@ dist-ssr
 # Environment variables & secrets
 .env
 .env.*
+!.env.example
 
 # Scratch scripts & temporary test files (Prevent sensitive data leakage)
 scratch_*
@@ -35,9 +36,6 @@ scratch_*
 server/scratch_*
 server/clean_*
 server/set_*
-*.env
 server/.env
 server/.env.*
-
-.vercel
-.env*
+!server/.env.example

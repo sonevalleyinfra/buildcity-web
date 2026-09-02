@@ -1745,9 +1745,26 @@ const handleGetAddresses = async (req, res) => {
       orderBy: { createdAt: "desc" },
     }).catch(() => []);
 
+    // Deduplicate by normalized street + city + pincode
+    const seen = new Map();
+    for (const a of addresses) {
+      const cleanStreet = (a.street || "").toLowerCase().trim();
+      const cleanCity = (a.city || "").toLowerCase().trim();
+      const cleanPin = (a.pincode || "").trim();
+      const key = `${cleanStreet}_${cleanCity}_${cleanPin}`;
+
+      if (!seen.has(key)) {
+        seen.set(key, a);
+      } else if (a.isDefault && !seen.get(key).isDefault) {
+        seen.set(key, a);
+      }
+    }
+
+    const uniqueList = Array.from(seen.values());
+
     // Ensure only 1 address has isDefault = true
     let defaultFound = false;
-    const sanitized = (addresses || []).map((a, idx) => {
+    const sanitized = uniqueList.map((a) => {
       if (a.isDefault && !defaultFound) {
         defaultFound = true;
         return a;
@@ -1828,13 +1845,37 @@ app.post("/api/v1/addresses", requireAuth, async (req, res) => {
       }).catch(() => null);
     }
 
+    const streetClean = (street || "Main Delivery Address").trim();
+    const existingAddr = await prisma.address.findFirst({
+      where: {
+        userId: targetUser.id,
+        street: { equals: streetClean, mode: "insensitive" },
+        city: { equals: regName.trim(), mode: "insensitive" },
+      },
+      include: { region: true },
+    }).catch(() => null);
+
+    if (existingAddr) {
+      const updated = await prisma.address.update({
+        where: { id: existingAddr.id },
+        data: {
+          fullName: fullName || existingAddr.fullName,
+          phone: phone || existingAddr.phone,
+          pincode: pincode || existingAddr.pincode,
+          isDefault: shouldBeDefault,
+        },
+        include: { region: true },
+      });
+      return res.status(200).json(updated);
+    }
+
     const newAddress = await prisma.address.create({
       data: {
         userId: targetUser.id,
         regionId: reg.id,
         fullName: fullName || targetUser.name || "Customer",
         phone: phone || targetUser.phone || "7607650875",
-        street: street || "Main Delivery Address",
+        street: streetClean,
         city: regName,
         state: state || "Uttar Pradesh",
         pincode: pincode || "221001",
@@ -1995,23 +2036,36 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       }
 
       if (reg && reg.id && targetCustomerId) {
-        const createdAddress = await prisma.address.create({
-          data: {
+        let existingAddress = await prisma.address.findFirst({
+          where: {
             userId: targetCustomerId,
-            regionId: reg.id,
-            fullName: fullNameStr,
-            phone: phoneStr,
-            street: streetStr,
-            city: cityStr,
-            state: typeof addrObj === "object" ? (addrObj.state || "Uttar Pradesh") : "Uttar Pradesh",
-            pincode: typeof addrObj === "object" ? (addrObj.pincode || "221001") : "221001",
+            street: { equals: streetStr.trim(), mode: "insensitive" },
+            city: { equals: cityStr.trim(), mode: "insensitive" },
           },
-        }).catch((err) => {
-          console.warn("Address creation note:", err.message);
-          return null;
-        });
+        }).catch(() => null);
 
-        if (createdAddress) addressId = createdAddress.id;
+        if (existingAddress) {
+          addressId = existingAddress.id;
+        } else {
+          const createdAddress = await prisma.address.create({
+            data: {
+              userId: targetCustomerId,
+              regionId: reg.id,
+              fullName: fullNameStr,
+              phone: phoneStr,
+              street: streetStr,
+              city: cityStr,
+              state: typeof addrObj === "object" ? (addrObj.state || "Uttar Pradesh") : "Uttar Pradesh",
+              pincode: typeof addrObj === "object" ? (addrObj.pincode || "221001") : "221001",
+              isDefault: false,
+            },
+          }).catch((err) => {
+            console.warn("Address creation note:", err.message);
+            return null;
+          });
+
+          if (createdAddress) addressId = createdAddress.id;
+        }
       }
     }
 

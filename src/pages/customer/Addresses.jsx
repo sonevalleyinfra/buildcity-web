@@ -20,17 +20,20 @@ export default function Addresses() {
   const { user, updateProfile } = useAuth();
 
   const uniqueAddresses = useMemo(() => {
-    let defaultAssigned = false;
-    const unique = Array.from(
-      new Map(
-        (addresses || []).map((a) => {
-          const key = a.id || `${(a.line || a.street || "").toLowerCase().trim()}_${(a.city || "").toLowerCase().trim()}_${(a.pincode || "").trim()}`;
-          return [key, a];
-        })
-      ).values()
-    );
+    const map = new Map();
+    (addresses || []).forEach((a) => {
+      const cleanStreet = (a.street || a.line || "").toLowerCase().trim();
+      const cleanCity = (a.city || "").toLowerCase().trim();
+      const cleanPin = (a.pincode || "").trim();
+      const key = `${cleanStreet}_${cleanCity}_${cleanPin}`;
 
-    const withSingleDefault = unique.map((a) => {
+      if (!map.has(key) || (!map.get(key).isDefault && a.isDefault)) {
+        map.set(key, a);
+      }
+    });
+
+    let defaultAssigned = false;
+    const list = Array.from(map.values()).map((a) => {
       if (a.isDefault && !defaultAssigned) {
         defaultAssigned = true;
         return { ...a, isDefault: true };
@@ -38,11 +41,11 @@ export default function Addresses() {
       return { ...a, isDefault: false };
     });
 
-    if (!defaultAssigned && withSingleDefault.length > 0) {
-      withSingleDefault[0].isDefault = true;
+    if (!defaultAssigned && list.length > 0) {
+      list[0].isDefault = true;
     }
 
-    return withSingleDefault;
+    return list;
   }, [addresses]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);

@@ -1745,7 +1745,21 @@ const handleGetAddresses = async (req, res) => {
       orderBy: { createdAt: "desc" },
     }).catch(() => []);
 
-    res.json(addresses || []);
+    // Ensure only 1 address has isDefault = true
+    let defaultFound = false;
+    const sanitized = (addresses || []).map((a, idx) => {
+      if (a.isDefault && !defaultFound) {
+        defaultFound = true;
+        return a;
+      }
+      return { ...a, isDefault: false };
+    });
+
+    if (!defaultFound && sanitized.length > 0) {
+      sanitized[0].isDefault = true;
+    }
+
+    res.json(sanitized);
   } catch (err) {
     res.json([]);
   }
@@ -1757,7 +1771,7 @@ app.get("/api/v1/addresses/:userId", requireAuth, requireSelfOrAdmin((req) => re
 
 app.post("/api/v1/addresses", requireAuth, async (req, res) => {
   try {
-    const { fullName, phone, street, city, state, pincode } = req.body;
+    const { fullName, phone, street, city, state, pincode, isDefault } = req.body;
     const owningUserId = req.auth.userId;
 
     const targetUser = await prisma.user.findUnique({ where: { id: owningUserId } }).catch(() => null);
@@ -1804,6 +1818,16 @@ app.post("/api/v1/addresses", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Unable to resolve target region in database." });
     }
 
+    const existingCount = await prisma.address.count({ where: { userId: targetUser.id } }).catch(() => 0);
+    const shouldBeDefault = isDefault !== undefined ? Boolean(isDefault) : existingCount === 0;
+
+    if (shouldBeDefault) {
+      await prisma.address.updateMany({
+        where: { userId: targetUser.id },
+        data: { isDefault: false },
+      }).catch(() => null);
+    }
+
     const newAddress = await prisma.address.create({
       data: {
         userId: targetUser.id,
@@ -1814,7 +1838,7 @@ app.post("/api/v1/addresses", requireAuth, async (req, res) => {
         city: regName,
         state: state || "Uttar Pradesh",
         pincode: pincode || "221001",
-        isDefault: true,
+        isDefault: shouldBeDefault,
       },
       include: { region: true },
     });
@@ -1840,6 +1864,13 @@ app.put("/api/v1/addresses/:id", requireAuth, async (req, res) => {
 
     if (addr.userId !== req.auth.userId && req.auth.role !== "ADMIN") {
       return res.status(403).json({ error: "You do not have permission for this action" });
+    }
+
+    if (isDefault) {
+      await prisma.address.updateMany({
+        where: { userId: addr.userId },
+        data: { isDefault: false },
+      }).catch(() => null);
     }
 
     const updated = await prisma.address.update({

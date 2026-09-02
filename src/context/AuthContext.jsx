@@ -128,10 +128,9 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      const vRes = await authFetch(`/api/v1/vendors`).then((r) => r.json()).catch(() => []);
-      if (Array.isArray(vRes) && vRes.length > 0) {
-        vendorMatch = vRes.find((v) => (v.phone || "").trim() === cleanPhone || (v.user?.phone || "").trim() === cleanPhone);
-      }
+      const savedVendors = localStorage.getItem("buildcity_admin_vendors");
+      const vendors = savedVendors ? JSON.parse(savedVendors) : [];
+      vendorMatch = vendors.find((v) => (v.phone || "").trim() === cleanPhone || (v.user?.phone || "").trim() === cleanPhone);
     } catch {}
 
     if (!vendorMatch) {

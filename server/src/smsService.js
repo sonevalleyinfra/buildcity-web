@@ -60,7 +60,12 @@ async function sendRealSMSOTP(phone, otpCode) {
       port: 443,
       path: path,
       method: "GET",
-      rejectUnauthorized: false
+      rejectUnauthorized: false,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "*/*",
+        "Connection": "close",
+      },
     };
 
     const req = https.request(options, (res) => {
@@ -98,10 +103,27 @@ async function sendRealSMSOTP(phone, otpCode) {
       });
     });
 
+    // If HTTPS hangs, fail fast and trigger HTTP fallback
+    req.setTimeout(6000, () => {
+      req.destroy(new Error("HTTPS Socket Timeout after 6000ms"));
+    });
+
     req.on("error", (err) => {
-      console.error(`[SMS HTTPS Error] +91 ${cleanMobile}:`, err.message);
-      // HTTP fallback
-      http.get(`http://sms.aradhyatechnologies.in${path}`, (httpRes) => {
+      console.warn(`[SMS HTTPS Notice] +91 ${cleanMobile}: ${err.message} — Switching to HTTP fallback`);
+      
+      const httpOptions = {
+        hostname: "sms.aradhyatechnologies.in",
+        port: 80,
+        path: path,
+        method: "GET",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+          "Accept": "*/*",
+          "Connection": "close",
+        },
+      };
+
+      const httpReq = http.request(httpOptions, (httpRes) => {
         let httpData = "";
         httpRes.on("data", (chunk) => { httpData += chunk; });
         httpRes.on("end", () => {
@@ -130,7 +152,13 @@ async function sendRealSMSOTP(phone, otpCode) {
             });
           }
         });
-      }).on("error", (httpErr) => {
+      });
+
+      httpReq.setTimeout(7000, () => {
+        httpReq.destroy(new Error("HTTP Socket Timeout after 7000ms"));
+      });
+
+      httpReq.on("error", (httpErr) => {
         if (!resolved) {
           resolved = true;
           clearTimeout(timeoutTimer);
@@ -142,6 +170,8 @@ async function sendRealSMSOTP(phone, otpCode) {
           });
         }
       });
+
+      httpReq.end();
     });
 
     req.end();

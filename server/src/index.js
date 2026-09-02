@@ -1597,7 +1597,11 @@ app.delete("/api/v1/regions/:id", requireAuth, requireRole("ADMIN"), async (req,
 app.get("/api/v1/orders", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const orders = await prisma.order.findMany({
-      include: { items: true, customer: true, address: true },
+      include: {
+        items: true,
+        customer: true,
+        address: { include: { region: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
     res.json(orders);

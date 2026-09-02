@@ -4,7 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useOrders } from "../../context/OrderContext";
 import { useAlert } from "../../context/AlertContext";
-import { formatShortId } from "../../utils/formatId";
+import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
 
 const PRESET_IMAGES = [
   { label: "Cement Bag", url: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80" },
@@ -14,16 +14,28 @@ const PRESET_IMAGES = [
   { label: "Electrical / Wire", url: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=400&q=80" },
 ];
 
+const ORDER_STATUS_STYLE = {
+  APPROVED: "bg-emerald-50 text-emerald-700 border-emerald-200/80 font-bold",
+  CONFIRMED: "bg-emerald-50 text-emerald-700 border-emerald-200/80 font-bold",
+  PROCESSING: "bg-blue-50 text-blue-700 border-blue-200/80 font-bold",
+  SHIPPED: "bg-blue-50 text-blue-700 border-blue-200/80 font-bold",
+  OUT_FOR_DELIVERY: "bg-indigo-50 text-indigo-700 border-indigo-200/80 font-bold",
+  DELIVERED: "bg-emerald-50 text-emerald-700 border-emerald-200/80 font-bold",
+  PENDING: "bg-amber-50 text-amber-700 border-amber-200/80 font-bold",
+  CANCELLED: "bg-rose-50 text-rose-700 border-rose-200/80 font-bold",
+};
+
 // District Representative (DR) Dashboard component — Ground Agent Portal
 export default function DrDashboard() {
   const { user, logout } = useAuth();
   const { showAlert, showConfirm } = useAlert();
   const { drs = [], masterProducts = [], vendors = [], products = [], productsLoading, categories, regions, addVendor, updateVendor, removeVendor, addMasterProduct, updateMasterProduct, setVendorStatus, updateListingApprovalStatus } = useAdmin();
-  const { orders = [] } = useOrders();
+  const { orders = [], updateOrderStatus } = useOrders() || {};
 
   const [activeTab, setActiveTab] = useState("products");
   const [searchTerm, setSearchTerm] = useState("");
   const [listingFilter, setListingFilter] = useState("ALL");
+  const [orderStatusFilter, setOrderStatusFilter] = useState("ALL");
 
   // Modals state
   const [showVendorModal, setShowVendorModal] = useState(false);
@@ -877,11 +889,7 @@ export default function DrDashboard() {
             </div>
           </div>
 
-          {products.filter((p) => {
-            const st = p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW");
-            if (listingFilter === "ALL") return true;
-            return st === listingFilter;
-          }).length === 0 ? (
+          {filteredProducts.length === 0 ? (
             <div className="text-center py-10 text-xs text-slate-500 font-medium">No product listings found for selected filter status ({listingFilter}).</div>
           ) : (
             <div className="overflow-x-auto">
@@ -905,7 +913,6 @@ export default function DrDashboard() {
                       return st === listingFilter;
                     })
                     .map((p) => {
-                      const st = p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW");
                       const stBadge =
                         st === "APPROVED"
                           ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-bold"
@@ -954,16 +961,7 @@ export default function DrDashboard() {
                                     : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs active:scale-[0.98] cursor-pointer"
                                 }`}
                               >
-                                {busyListingId === p.id ? (
-                                  <>
-                                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                    <span>...</span>
-                                  </>
-                                ) : st === "APPROVED" ? (
-                                  "✓ Approved"
-                                ) : (
-                                  "✓ Approve"
-                                )}
+                                {busyListingId === p.id ? "..." : st === "APPROVED" ? "✓ Approved" : "✓ Approve"}
                               </button>
 
                               <button
@@ -986,16 +984,7 @@ export default function DrDashboard() {
                                     : "bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 active:scale-[0.98] cursor-pointer"
                                 }`}
                               >
-                                {busyListingId === p.id ? (
-                                  <>
-                                    <span className="w-3 h-3 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
-                                    <span>...</span>
-                                  </>
-                                ) : st === "REJECTED" ? (
-                                  "✕ Rejected"
-                                ) : (
-                                  "✕ Reject"
-                                )}
+                                {busyListingId === p.id ? "..." : st === "REJECTED" ? "✕ Rejected" : "✕ Reject"}
                               </button>
                             </div>
                           </td>
@@ -1011,62 +1000,142 @@ export default function DrDashboard() {
 
       {/* Tab 4: District Orders */}
       {activeTab === "orders" && (
-        <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden">
-          <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden p-5 space-y-4 font-sans">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div>
-              <h3 className="font-extrabold text-navy-900 text-sm">Customer Orders in {districtName} District</h3>
-              <p className="text-[11px] text-slate-500">Live marketplace orders placed within {districtName} jurisdiction.</p>
+              <h2 className="text-base font-extrabold text-navy-900 flex items-center gap-2">
+                <span>🛒 Customer Orders in {districtName} District</span>
+                <span className="bg-brand-50 text-brand-700 border border-brand-200 text-xs font-extrabold px-2.5 py-0.5 rounded-full">
+                  {districtOrders.length} District Orders
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500">Live real-time tracking of marketplace orders placed for delivery within {districtName} jurisdiction.</p>
             </div>
-            <span className="bg-brand-50 text-brand-700 text-xs font-bold px-3 py-1 rounded-full border border-brand-200/80 shadow-2xs">
-              {districtOrders.length} District Orders
-            </span>
+
+            {/* Status Filter Pills */}
+            <div className="flex flex-wrap gap-1.5 bg-slate-100 p-1 rounded-xl w-fit text-xs font-bold">
+              {["ALL", "PENDING", "PROCESSING", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"].map((st) => {
+                const count = st === "ALL"
+                  ? districtOrders.length
+                  : districtOrders.filter((o) => (o.status || "PENDING").toUpperCase() === st).length;
+                return (
+                  <button
+                    key={st}
+                    onClick={() => setOrderStatusFilter(st)}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                      orderStatusFilter === st ? "bg-white text-navy-900 shadow-2xs" : "text-slate-600 hover:text-navy-900"
+                    }`}
+                  >
+                    <span>{st === "ALL" ? "All" : st === "PENDING" ? "🟡 Pending" : st === "PROCESSING" ? "🔵 Processing" : st === "OUT_FOR_DELIVERY" ? "🚚 Out for Delivery" : st === "DELIVERED" ? "🟢 Delivered" : "🔴 Cancelled"}</span>
+                    <span className="text-[10px] opacity-75 font-black">({count})</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          {districtOrders.length === 0 ? (
-            <div className="text-center py-12 px-4">
+
+          {filteredDistrictOrders.length === 0 ? (
+            <div className="text-center py-12 text-xs text-slate-500 font-medium">
               <p className="text-3xl mb-2">🛍️</p>
-              <p className="text-sm font-bold text-navy-900">No orders placed in {districtName} yet</p>
-              <p className="text-xs text-slate-500 mt-1">Orders placed by customers in {districtName} will appear here in real-time.</p>
+              <p className="text-sm font-bold text-navy-900">No {orderStatusFilter !== "ALL" ? orderStatusFilter : ""} orders found in {districtName}</p>
+              <p className="text-xs text-slate-500 mt-1">Orders placed by customers for delivery within {districtName} will appear here live in real-time.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200/90 bg-slate-50/90 text-[11px] font-black text-slate-500 uppercase tracking-wider">
-                    <th className="py-3 px-4">Order ID</th>
-                    <th className="py-3 px-4">Customer Details</th>
-                    <th className="py-3 px-4">District</th>
-                    <th className="py-3 px-4">Items Summary</th>
+            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-black text-slate-500 uppercase tracking-wider">
+                  <tr>
+                    <th className="py-3 px-4">Order ID & Date</th>
+                    <th className="py-3 px-4">Customer Info</th>
+                    <th className="py-3 px-4">Delivery Address</th>
+                    <th className="py-3 px-4">Ordered Items & Vendor</th>
                     <th className="py-3 px-4">Total Amount</th>
-                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Status & Control</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {districtOrders.map((ord) => {
-                    const orderTotal = ord.totalAmount || ord.total || 0;
-                    const itemsSummary = Array.isArray(ord.items)
-                      ? ord.items.map((i) => `${i.productName || i.name} (x${i.quantity})`).join(", ")
-                      : ord.items || "Order Items";
-                    const custName = ord.customer?.name || ord.customer || "Customer";
-                    const orderDistrict = ord.districtName || ord.address?.city || ord.address?.district || districtName;
+                  {filteredDistrictOrders.map((ord) => {
+                    const displayAmt = Number(ord.totalAmount || ord.total || 0);
+                    const custName = ord.customer?.name || ord.customerName || "Customer";
+                    const custPhone = ord.customer?.phone || ord.customerPhone || "";
+                    const rawAddr = ord.address;
+                    const isObj = typeof rawAddr === "object" && rawAddr !== null;
+                    const isStr = typeof rawAddr === "string" && rawAddr.trim().length > 0;
+
+                    let streetAddr = isObj ? (rawAddr.street || rawAddr.line || rawAddr.address) : (isStr ? rawAddr : null);
+                    let cityAddr = isObj ? rawAddr.city : (ord.districtName || ord.regionName || districtName);
+                    let pincodeAddr = isObj ? rawAddr.pincode : "";
+
+                    if (!streetAddr || streetAddr.includes("Site Delivery Address") || streetAddr.includes("Main Delivery Address")) {
+                      if (ord.customer?.address && !ord.customer.address.includes("Site Delivery Address")) {
+                        streetAddr = ord.customer.address;
+                      } else if (custPhone) {
+                        streetAddr = `Site Location for Mobile ${custPhone}`;
+                      } else {
+                        streetAddr = `Site Delivery Location (${cityAddr || districtName})`;
+                      }
+                    }
+
+                    const dateStr = formatDateTimeIST(ord.createdAt || ord.date);
+                    const statusKey = (ord.status || "PENDING").toUpperCase();
+                    const statusStyle = ORDER_STATUS_STYLE[statusKey] || "bg-amber-50 text-amber-700 border-amber-200/80 font-bold";
 
                     return (
-                      <tr key={ord.id} className="hover:bg-slate-50/80 transition-colors duration-150">
-                        <td className="py-3.5 px-4 font-bold text-navy-900">{ord.id.slice(0, 8).toUpperCase()}</td>
-                        <td className="py-3.5 px-4 font-semibold text-slate-800">
-                          👤 {custName}
-                          {ord.customer?.phone && <p className="text-[10px] text-slate-400 font-normal">📱 {ord.customer.phone}</p>}
+                      <tr key={ord.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3.5 px-4">
+                          <span className="font-extrabold text-brand-700 block text-xs">{formatShortId(ord.id || ord.orderNumber, "ORD")}</span>
+                          <span className="text-[11px] text-slate-400 font-medium">{dateStr}</span>
                         </td>
                         <td className="py-3.5 px-4">
-                          <span className="bg-amber-50 text-amber-700 font-bold px-2 py-0.5 rounded text-[10px] border border-amber-200/80">
-                            📍 {orderDistrict}
-                          </span>
+                          <span className="font-bold text-navy-900 block">👤 {custName}</span>
+                          {custPhone && <span className="text-[11px] text-slate-500 font-semibold">📱 {custPhone}</span>}
                         </td>
-                        <td className="py-3.5 px-4 text-slate-600 max-w-xs">{itemsSummary}</td>
-                        <td className="py-3.5 px-4 font-extrabold text-navy-900">₹{orderTotal}</td>
+                        <td className="py-3.5 px-4 min-w-[220px]">
+                          <div className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+                            <p className="font-bold text-navy-900 leading-snug whitespace-normal break-words">🏢 {streetAddr}</p>
+                            <p className="text-[11px] text-slate-600 font-medium mt-0.5">
+                              🏙️ <span className="font-bold text-brand-700">{cityAddr}</span> {pincodeAddr ? `- ${pincodeAddr}` : ""}
+                            </p>
+                          </div>
+                        </td>
                         <td className="py-3.5 px-4">
-                          <span className="bg-blue-50 text-blue-700 border border-blue-200/80 px-2.5 py-1 rounded-full text-[11px] font-bold">
-                            {ord.status || "Pending"}
-                          </span>
+                          {Array.isArray(ord.items) && ord.items.length > 0 ? (
+                            <div className="space-y-1">
+                              {ord.items.map((it, idx) => (
+                                <div key={idx} className="text-[11px]">
+                                  <span className="font-bold text-slate-800">• {it.productName || it.name}</span>
+                                  <span className="text-slate-500 font-medium ml-1">x{it.quantity} (₹{it.priceAtPurchase || it.price})</span>
+                                  {it.vendorName && <span className="text-[10px] text-brand-600 block pl-2 font-semibold">🏬 {it.vendorName}</span>}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-slate-500 font-medium">Construction Materials Order</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className="font-black text-navy-900 text-sm">₹{displayAmt.toLocaleString("en-IN")}</span>
+                          <span className="block text-[10px] font-bold text-emerald-600 uppercase">💵 COD</span>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold border ${statusStyle}`}>
+                              {ord.status || "PENDING"}
+                            </span>
+                            {updateOrderStatus && (
+                              <select
+                                value={(ord.status || "PENDING").toUpperCase()}
+                                onChange={(e) => updateOrderStatus(ord.id, e.target.value)}
+                                className="text-[11px] font-bold bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 outline-none text-navy-900 cursor-pointer hover:bg-slate-200 transition-colors"
+                              >
+                                <option value="PENDING">PENDING</option>
+                                <option value="PROCESSING">PROCESSING</option>
+                                <option value="OUT_FOR_DELIVERY">OUT FOR DELIVERY</option>
+                                <option value="DELIVERED">DELIVERED</option>
+                                <option value="CANCELLED">CANCELLED</option>
+                              </select>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

@@ -19,14 +19,31 @@ export default function Addresses() {
     useAddresses();
   const { user, updateProfile } = useAuth();
 
-  const uniqueAddresses = Array.from(
-    new Map(
-      (addresses || []).map((a) => {
-        const key = `${(a.line || a.street || "").toLowerCase().trim()}_${(a.city || "").toLowerCase().trim()}_${(a.pincode || "").trim()}`;
-        return [key, a];
-      })
-    ).values()
-  );
+  const uniqueAddresses = useMemo(() => {
+    let defaultAssigned = false;
+    const unique = Array.from(
+      new Map(
+        (addresses || []).map((a) => {
+          const key = a.id || `${(a.line || a.street || "").toLowerCase().trim()}_${(a.city || "").toLowerCase().trim()}_${(a.pincode || "").trim()}`;
+          return [key, a];
+        })
+      ).values()
+    );
+
+    const withSingleDefault = unique.map((a) => {
+      if (a.isDefault && !defaultAssigned) {
+        defaultAssigned = true;
+        return { ...a, isDefault: true };
+      }
+      return { ...a, isDefault: false };
+    });
+
+    if (!defaultAssigned && withSingleDefault.length > 0) {
+      withSingleDefault[0].isDefault = true;
+    }
+
+    return withSingleDefault;
+  }, [addresses]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);

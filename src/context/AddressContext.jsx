@@ -48,7 +48,34 @@ export function AddressProvider({ children }) {
     } catch {}
   };
 
-  // Fetch saved addresses from Supabase DB & sync local storage without wiping local additions
+  const sanitizeAddressList = (list) => {
+    if (!Array.isArray(list)) return [];
+    const unique = Array.from(
+      new Map(
+        list.map((a) => {
+          const key = a.id || `${(a.street || a.line || "").toLowerCase().trim()}_${(a.city || "").toLowerCase().trim()}_${(a.pincode || "").trim()}`;
+          return [key, a];
+        })
+      ).values()
+    );
+
+    let defaultAssigned = false;
+    const withOneDefault = unique.map((a) => {
+      if (a.isDefault && !defaultAssigned) {
+        defaultAssigned = true;
+        return { ...a, isDefault: true };
+      }
+      return { ...a, isDefault: false };
+    });
+
+    if (!defaultAssigned && withOneDefault.length > 0) {
+      withOneDefault[0].isDefault = true;
+    }
+
+    return withOneDefault;
+  };
+
+  // Fetch saved addresses from Supabase DB & sync local storage cleanly
   const fetchDbAddresses = async () => {
     const token = typeof window !== "undefined" ? localStorage.getItem("buildcity_token") : null;
     if (!user || !token) return;
@@ -60,7 +87,7 @@ export function AddressProvider({ children }) {
       const res = await authFetch(`${API_BASE_URL}/api/v1/addresses/me`);
       if (res.ok) {
         const dbList = await res.json();
-        if (Array.isArray(dbList) && dbList.length > 0) {
+        if (Array.isArray(dbList)) {
           const deletedSet = getDeletedKeys();
           const formatted = dbList
             .map((a) => ({
@@ -72,30 +99,20 @@ export function AddressProvider({ children }) {
               city: a.city,
               state: a.state || "Uttar Pradesh",
               pincode: a.pincode,
-              isDefault: a.isDefault || false,
+              isDefault: Boolean(a.isDefault),
             }))
             .filter((a) => {
               const streetKey = (a.street || a.line || "").toLowerCase().trim();
               return !deletedSet.has(a.id) && !deletedSet.has(streetKey);
             });
 
-          setAddresses((prev) => {
-            const combined = [...prev, ...formatted];
-            const unique = Array.from(
-              new Map(
-                combined.map((a) => {
-                  const key = `${(a.street || a.line || "").toLowerCase().trim()}_${(a.city || "").toLowerCase().trim()}_${(a.pincode || "").trim()}`;
-                  return [key, a];
-                })
-              ).values()
-            );
-            if (addressStorageKey) {
-              try {
-                localStorage.setItem(addressStorageKey, JSON.stringify(unique));
-              } catch {}
-            }
-            return unique;
-          });
+          const cleanList = sanitizeAddressList(formatted);
+          setAddresses(cleanList);
+          if (addressStorageKey) {
+            try {
+              localStorage.setItem(addressStorageKey, JSON.stringify(cleanList));
+            } catch {}
+          }
         }
       }
     } catch (err) {
@@ -119,15 +136,7 @@ export function AddressProvider({ children }) {
         const clean = (Array.isArray(parsed) ? parsed : []).filter(
           (a) => a.line && !a.line.includes("House No. 12, Lanka Road") && a.id !== "addr1"
         );
-        const uniqueClean = Array.from(
-          new Map(
-            clean.map((a) => {
-              const key = `${(a.street || a.line || "").toLowerCase().trim()}_${(a.city || "").toLowerCase().trim()}_${(a.pincode || "").trim()}`;
-              return [key, a];
-            })
-          ).values()
-        );
-        setAddresses(uniqueClean);
+        setAddresses(sanitizeAddressList(clean));
       } catch {
         setAddresses([]);
       }

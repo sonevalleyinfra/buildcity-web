@@ -128,6 +128,22 @@ export default function DrDashboard() {
     return false;
   });
 
+  // Filtered district orders by search and status filter
+  const filteredDistrictOrders = districtOrders.filter((ord) => {
+    const matchesSearch =
+      !searchTerm ||
+      (ord.id && ord.id.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (ord.orderNumber && ord.orderNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (ord.customer?.name && ord.customer.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (ord.customer?.phone && ord.customer.phone.includes(searchTerm)) ||
+      (Array.isArray(ord.items) && ord.items.some((i) => (i.productName || i.name || "").toLowerCase().includes(searchTerm.toLowerCase())));
+
+    const ordStatus = (ord.status || "PENDING").toUpperCase();
+    const matchesStatus = orderStatusFilter === "ALL" || ordStatus === orderStatusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
+
   // Filtered by search
   const filteredVendors = districtVendors.filter(
     (v) =>

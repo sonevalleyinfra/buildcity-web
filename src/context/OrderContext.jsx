@@ -21,7 +21,7 @@ export function OrderProvider({ children }) {
     if (!user || !token) return orders;
 
     try {
-      if (isAdmin) {
+      if (isAdmin || userRole === "dr") {
         const res = await authFetch(`${API_BASE_URL}/api/v1/orders`);
         if (res.ok) {
           const data = await res.json();

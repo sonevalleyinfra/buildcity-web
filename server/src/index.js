@@ -1594,7 +1594,7 @@ app.delete("/api/v1/regions/:id", requireAuth, requireRole("ADMIN"), async (req,
 });
 
 // 7. ORDERS & CHECKOUT ENDPOINTS (With Vendor Isolation & Status Updates)
-app.get("/api/v1/orders", requireAuth, requireRole("ADMIN"), async (req, res) => {
+app.get("/api/v1/orders", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const orders = await prisma.order.findMany({
       include: { items: true, customer: true, address: true },

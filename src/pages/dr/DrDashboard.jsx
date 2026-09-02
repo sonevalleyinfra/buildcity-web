@@ -92,18 +92,28 @@ export default function DrDashboard() {
     if (!user) return true;
     if (user.role === "admin") return true;
 
-    // 1. Order explicit district or city matching DR's assigned district name
+    const targetDistrict = (districtName || "").toLowerCase().trim();
+    const targetRegionId = drRegionId;
+
+    // 1. Check direct delivery district / city match
     const orderCity = (o.districtName || o.address?.city || o.address?.district || "").toLowerCase().trim();
-    const matchesCity = orderCity && (orderCity.includes(districtName.toLowerCase().trim()) || districtName.toLowerCase().trim().includes(orderCity));
+    const orderRegionId = o.regionId || o.address?.regionId || o.address?.region?.id;
 
-    // 2. Order regionId matching assigned regionId
-    const matchesRegionId = (o.regionId || o.address?.regionId) && drRegionId && (o.regionId === drRegionId || o.address?.regionId === drRegionId);
+    // Direct region ID matching
+    if (targetRegionId && orderRegionId && orderRegionId === targetRegionId) {
+      return true;
+    }
 
-    // 3. Vendor fulfilling the order item belongs to this DR's district
-    const orderVendorIds = (o.items || []).map((i) => i.vendorId).filter(Boolean);
-    const matchesVendor = orderVendorIds.some((vId) => districtVendors.some((v) => v.id === vId));
+    // Direct city / district name matching
+    if (orderCity && targetDistrict) {
+      if (orderCity === targetDistrict || orderCity.includes(targetDistrict) || targetDistrict.includes(orderCity)) {
+        return true;
+      }
+      // If order has an explicit different district, reject
+      return false;
+    }
 
-    return matchesCity || matchesRegionId || matchesVendor;
+    return false;
   });
 
   // Filtered by search

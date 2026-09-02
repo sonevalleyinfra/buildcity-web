@@ -2033,108 +2033,95 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
     const validatedItems = [];
     const targetRegionName = (req.body.districtName || req.body.address?.city || req.body.address?.district || "Varanasi").trim();
 
-    if (items && Array.isArray(items)) {
-      for (const item of items) {
-        const itemQty = Math.max(1, Number(item.quantity) || 1);
-        const prodName = item.name || item.productName || "Material Item";
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: "No items in order." });
+    }
 
-        // Fetch live vendor product from Supabase DB
-        let liveVp = null;
+    for (const item of items) {
+      const rawQty = item.quantity;
+      const itemQty = Number(rawQty);
+      const prodName = item.name || item.productName || item.title || "";
 
-        if (item.id || item.productId) {
-          liveVp = await prisma.vendorProduct.findFirst({
-            where: {
-              id: item.id || item.productId,
-              approvalStatus: "APPROVED",
-              isActive: true,
-            },
-            include: { vendor: { include: { region: true } } },
-          }).catch(() => null);
-        }
-
-        if (!liveVp && prodName) {
-          liveVp = await prisma.vendorProduct.findFirst({
-            where: {
-              name: { equals: prodName, mode: "insensitive" },
-              approvalStatus: "APPROVED",
-              isActive: true,
-              OR: [
-                { regionName: { equals: targetRegionName, mode: "insensitive" } },
-                { vendor: { region: { name: { equals: targetRegionName, mode: "insensitive" } } } },
-              ],
-            },
-            include: { vendor: { include: { region: true } } },
-          }).catch(() => null);
-        }
-
-        if (!liveVp && prodName) {
-          liveVp = await prisma.vendorProduct.findFirst({
-            where: {
-              name: { equals: prodName, mode: "insensitive" },
-              approvalStatus: "APPROVED",
-              isActive: true,
-            },
-            include: { vendor: { include: { region: true } } },
-          }).catch(() => null);
-        }
-
-        if (!liveVp && prodName) {
-          liveVp = await prisma.vendorProduct.findFirst({
-            where: {
-              name: { contains: prodName.split(" ")[0], mode: "insensitive" },
-            },
-            include: { vendor: { include: { region: true } } },
-          }).catch(() => null);
-        }
-
-        if (!liveVp) {
-          // If no vendor product in DB, fallback to price from client item or default
-          const fallbackPrice = Number(item.price) || 390;
-          const fallbackTotal = itemQty * fallbackPrice;
-          serverTotalAmount += fallbackTotal;
-
-          validatedItems.push({
-            productName: prodName,
-            priceAtPurchase: fallbackPrice,
-            quantity: itemQty,
-            totalPrice: fallbackTotal,
-            vendorId: item.vendorId || defaultVendor?.id,
-          });
-          continue;
-        }
-
-        const verifiedPrice = Number(liveVp.price) || Number(item.price) || 390;
-        const itemTotal = itemQty * verifiedPrice;
-        serverTotalAmount += itemTotal;
-
-        // Atomically decrement stock in DB if stock exists
-        if (liveVp.stockQty && liveVp.stockQty > 0) {
-          await prisma.vendorProduct.update({
-            where: { id: liveVp.id },
-            data: { stockQty: { decrement: Math.min(liveVp.stockQty, itemQty) } },
-          }).catch(() => null);
-        }
-
-        let targetVendor = liveVp.vendor || null;
-
-        validatedItems.push({
-          productName: prodName,
-          priceAtPurchase: verifiedPrice,
-          quantity: itemQty,
-          totalPrice: itemTotal,
-          vendorId: targetVendor ? targetVendor.id : (defaultVendor ? defaultVendor.id : item.vendorId),
-        });
+      if (!Number.isInteger(itemQty) || itemQty < 1) {
+        return res.status(400).json({ error: `Invalid quantity for product: ${prodName || "Item"}` });
       }
+
+      // Fetch live vendor product from Supabase DB
+      let liveVp = null;
+
+      if (item.id || item.productId) {
+        liveVp = await prisma.vendorProduct.findFirst({
+          where: {
+            id: item.id || item.productId,
+            approvalStatus: "APPROVED",
+            isActive: true,
+          },
+          include: { vendor: { include: { region: true } } },
+        }).catch(() => null);
+      }
+
+      if (!liveVp && prodName) {
+        liveVp = await prisma.vendorProduct.findFirst({
+          where: {
+            name: { equals: prodName, mode: "insensitive" },
+            approvalStatus: "APPROVED",
+            isActive: true,
+            OR: [
+              { regionName: { equals: targetRegionName, mode: "insensitive" } },
+              { vendor: { region: { name: { equals: targetRegionName, mode: "insensitive" } } } },
+            ],
+          },
+          include: { vendor: { include: { region: true } } },
+        }).catch(() => null);
+      }
+
+      if (!liveVp && prodName) {
+        liveVp = await prisma.vendorProduct.findFirst({
+          where: {
+            name: { equals: prodName, mode: "insensitive" },
+            approvalStatus: "APPROVED",
+            isActive: true,
+          },
+          include: { vendor: { include: { region: true } } },
+        }).catch(() => null);
+      }
+
+      if (!liveVp) {
+        return res.status(400).json({ error: `Product not available: ${prodName || item.id || "Item"}` });
+      }
+
+      const verifiedPrice = Number(liveVp.price);
+      if (isNaN(verifiedPrice) || verifiedPrice <= 0) {
+        return res.status(400).json({ error: `Invalid product price in database for ${liveVp.name}` });
+      }
+
+      const itemTotal = itemQty * verifiedPrice;
+      serverTotalAmount += itemTotal;
+
+      // Atomically decrement stock in DB if stock exists
+      if (liveVp.stockQty && liveVp.stockQty > 0) {
+        await prisma.vendorProduct.update({
+          where: { id: liveVp.id },
+          data: { stockQty: { decrement: Math.min(liveVp.stockQty, itemQty) } },
+        }).catch(() => null);
+      }
+
+      let targetVendor = liveVp.vendor || null;
+
+      validatedItems.push({
+        productName: liveVp.name || prodName,
+        priceAtPurchase: verifiedPrice,
+        quantity: itemQty,
+        totalPrice: itemTotal,
+        vendorId: targetVendor ? targetVendor.id : (defaultVendor ? defaultVendor.id : item.vendorId),
+      });
     }
 
     let regForDelivery = await prisma.region.findFirst({
       where: { name: { equals: targetRegionName, mode: "insensitive" } },
     }).catch(() => null);
 
-    const defaultRegFee = regForDelivery ? Number(regForDelivery.baseDeliveryCharge) : 49;
-    const calculatedDeliveryFee = deliveryFee !== undefined && !isNaN(Number(deliveryFee))
-      ? Number(deliveryFee)
-      : defaultRegFee;
+    const calculatedDeliveryFee = regForDelivery ? Number(regForDelivery.baseDeliveryCharge) : 49;
     const finalOrderAmount = serverTotalAmount + calculatedDeliveryFee;
 
     const newOrder = await prisma.order.create({

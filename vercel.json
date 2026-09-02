@@ -1,6 +1,7 @@
 {
   "regions": ["bom1"],
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/api/sms", "destination": "/api/sms.js" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

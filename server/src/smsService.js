@@ -103,13 +103,13 @@ async function sendRealSMSOTP(phone, otpCode) {
       });
     });
 
-    // If HTTPS hangs, fail fast and trigger HTTP fallback
-    req.setTimeout(6000, () => {
-      req.destroy(new Error("HTTPS Socket Timeout after 6000ms"));
+    // If HTTPS hangs, fail fast and trigger HTTP / Mumbai Edge fallback
+    req.setTimeout(2500, () => {
+      req.destroy(new Error("HTTPS Socket Timeout after 2500ms"));
     });
 
     req.on("error", (err) => {
-      console.warn(`[SMS HTTPS Notice] +91 ${cleanMobile}: ${err.message} — Switching to HTTP fallback`);
+      console.warn(`[SMS HTTPS Notice] +91 ${cleanMobile}: ${err.message} — Trying HTTP route`);
       
       const httpOptions = {
         hostname: "sms.aradhyatechnologies.in",
@@ -154,20 +154,58 @@ async function sendRealSMSOTP(phone, otpCode) {
         });
       });
 
-      httpReq.setTimeout(7000, () => {
-        httpReq.destroy(new Error("HTTP Socket Timeout after 7000ms"));
+      httpReq.setTimeout(2500, () => {
+        httpReq.destroy(new Error("HTTP Socket Timeout after 2500ms"));
       });
 
-      httpReq.on("error", (httpErr) => {
-        if (!resolved) {
-          resolved = true;
-          clearTimeout(timeoutTimer);
-          console.error(`[SMS HTTP Fallback Error]:`, httpErr.message);
-          resolve({
-            success: false,
-            error: httpErr.message,
-            gateway: "AradhyaSMS"
+      httpReq.on("error", async (httpErr) => {
+        console.warn(`[SMS Direct Notice] +91 ${cleanMobile}: ${httpErr.message} — Routing via Mumbai Edge Gateway`);
+        try {
+          const edgeRes = await fetch(`https://buildcity-web-part-2.vercel.app/api/sms?${queryParams}`, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+              "Accept": "*/*",
+            },
           });
+          const edgeText = await edgeRes.text();
+          let edgeData = null;
+          try {
+            edgeData = JSON.parse(edgeText);
+          } catch {
+            edgeData = { raw: edgeText };
+          }
+
+          const isSuccess =
+            edgeRes.ok &&
+            (edgeData?.status === "success" ||
+              edgeData?.status === "000" ||
+              (typeof edgeText === "string" && edgeText.toLowerCase().includes("successfully")));
+
+          console.log(`[SMS Mumbai Edge Gateway] HTTP ${edgeRes.status} | ok=${isSuccess} | body:`, edgeText);
+
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeoutTimer);
+            resolve({
+              success: isSuccess,
+              status: edgeRes.status,
+              message: edgeData?.message || edgeText,
+              data: edgeData,
+              raw: edgeText,
+              gateway: "AradhyaSMS"
+            });
+          }
+        } catch (edgeErr) {
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeoutTimer);
+            console.error(`[SMS Mumbai Edge Error]:`, edgeErr.message);
+            resolve({
+              success: false,
+              error: edgeErr.message,
+              gateway: "AradhyaSMS"
+            });
+          }
         }
       });
 

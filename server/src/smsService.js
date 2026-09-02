@@ -5,22 +5,29 @@ const http = require("http");
  * BuildCity Aradhya Technologies SMS Gateway Module
  * Dispatches 6-digit OTP SMS via Aradhya Technologies HTTP/HTTPS API
  */
+const username = process.env.SMS_USERNAME || process.env.ARADHYA_SMS_USERNAME;
+const apikey = process.env.SMS_APIKEY || process.env.ARADHYA_SMS_APIKEY;
+
+if (!username || !apikey) {
+  throw new Error("Missing required SMS gateway credentials: SMS_USERNAME and SMS_APIKEY must be set in environment variables.");
+}
+
 async function sendRealSMSOTP(phone, otpCode) {
   const cleanMobile = (phone || "").toString().trim().replace(/\D/g, "").slice(-10);
-  
-  const username = process.env.SMS_USERNAME || process.env.ARADHYA_SMS_USERNAME || "sonevalley";
-  const apikey = process.env.SMS_APIKEY || process.env.ARADHYA_SMS_APIKEY || "0A8CC-B46EE";
-  const sender = process.env.SMS_SENDER || process.env.ARADHYA_SMS_SENDER || "SNVLY";
-  const templateId = process.env.SMS_TEMPLATE_ID || process.env.ARADHYA_SMS_TEMPLATE_ID || "1707175298595096991";
-  const peid = process.env.SMS_PEID || process.env.ARADHYA_SMS_PE_ID || "1701175266640135857";
-  const route = process.env.SMS_ROUTE || process.env.ARADHYA_SMS_ROUTE || "TRANS";
+
+  const currentUsername = process.env.SMS_USERNAME || process.env.ARADHYA_SMS_USERNAME;
+  const currentApikey = process.env.SMS_APIKEY || process.env.ARADHYA_SMS_APIKEY;
+  const sender = process.env.SMS_SENDER || process.env.ARADHYA_SMS_SENDER;
+  const templateId = process.env.SMS_TEMPLATE_ID || process.env.ARADHYA_SMS_TEMPLATE_ID;
+  const peid = process.env.SMS_PEID || process.env.ARADHYA_SMS_PE_ID;
+  const route = process.env.SMS_ROUTE || process.env.ARADHYA_SMS_ROUTE;
   const timeoutMs = parseInt(process.env.SMS_TIMEOUT_MS || "15000", 10);
 
   const message = `Dear user, Thankyou for visiting Sonevalley. Your OTP for login is ${otpCode}. Please do not share this OTP with anyone. Regards SNVLY`;
 
   const queryParams = new URLSearchParams({
-    username,
-    apikey,
+    username: currentUsername,
+    apikey: currentApikey,
     apirequest: "Text",
     sender,
     mobile: cleanMobile,

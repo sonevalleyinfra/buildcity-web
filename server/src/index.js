@@ -2117,9 +2117,27 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       });
     }
 
-    let regForDelivery = await prisma.region.findFirst({
-      where: { name: { equals: targetRegionName, mode: "insensitive" } },
-    }).catch(() => null);
+    // Robust Region resolution for accurate District Delivery Fee
+    let regForDelivery = null;
+    const reqRegionId = req.body.regionId;
+
+    if (reqRegionId && reqRegionId.length > 10) {
+      regForDelivery = await prisma.region.findUnique({ where: { id: reqRegionId } }).catch(() => null);
+    }
+
+    if (!regForDelivery && targetRegionName) {
+      regForDelivery = await prisma.region.findFirst({
+        where: { name: { equals: targetRegionName, mode: "insensitive" } },
+      }).catch(() => null);
+    }
+
+    if (!regForDelivery && targetRegionName) {
+      const allRegions = await prisma.region.findMany().catch(() => []);
+      regForDelivery = allRegions.find((r) =>
+        targetRegionName.toLowerCase().includes(r.name.toLowerCase()) ||
+        r.name.toLowerCase().includes(targetRegionName.toLowerCase())
+      ) || null;
+    }
 
     const calculatedDeliveryFee = regForDelivery ? Number(regForDelivery.baseDeliveryCharge) : 49;
     const finalOrderAmount = serverTotalAmount + calculatedDeliveryFee;

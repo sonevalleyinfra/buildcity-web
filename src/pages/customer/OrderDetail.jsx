@@ -137,8 +137,19 @@ export default function OrderDetail() {
             })}
           </div>
           <div className="h-px bg-slate-100 my-3" />
+          <div className="space-y-1.5 text-xs text-slate-600 font-medium pb-2">
+            <div className="flex justify-between">
+              <span>Items Subtotal</span>
+              <span>₹{(order.items || []).reduce((sum, it) => sum + (Number(it.totalPrice) || (Number(it.quantity || 1) * Number(it.priceAtPurchase || 100))), 0).toLocaleString("en-IN")}</span>
+            </div>
+            <div className="flex justify-between text-brand-700 font-bold">
+              <span>District Delivery Fee</span>
+              <span>₹{Number(order.deliveryFee !== undefined ? order.deliveryFee : 49).toLocaleString("en-IN")}</span>
+            </div>
+          </div>
+          <div className="h-px bg-slate-100 my-2" />
           <div className="flex justify-between text-base font-black text-navy-900">
-            <span>Total Amount</span>
+            <span>Total Amount (COD)</span>
             <span>₹{displayTotal.toLocaleString("en-IN")}</span>
           </div>
         </div>

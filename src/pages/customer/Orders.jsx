@@ -222,7 +222,12 @@ export default function Orders() {
                         {order.items?.[0]?.name || order.items?.[0]?.productName || "Order Item"}
                         {order.items && order.items.length > 1 && ` + ${order.items.length - 1} more items`}
                       </h3>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Order ID: <strong className="font-mono text-brand-700 font-extrabold">{formatShortId(order.id || order.orderNumber, "ORD")}</strong></p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-[11px] text-slate-400">Order ID: <strong className="font-mono text-brand-700 font-extrabold">{formatShortId(order.id || order.orderNumber, "ORD")}</strong></p>
+                        <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                          Delivery: ₹{Number(order.deliveryFee !== undefined ? order.deliveryFee : 49)}
+                        </span>
+                      </div>
                     </div>
                   </div>
 

@@ -39,3 +39,8 @@ server/set_*
 server/.env
 server/.env.*
 !server/.env.example
+
+# AI agent directories (Never track or recreate)
+.agents
+.agents/*
+**/.agents

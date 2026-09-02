@@ -2039,17 +2039,39 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
 
     // Customer Address Save / Link Logic (FK-Safe UUID Resolution)
     let addressId = null;
-    if (req.body.address || req.body.districtName) {
+    if (req.body.address || req.body.districtName || req.body.regionId) {
       const addrObj = req.body.address || {};
       const streetStr = typeof addrObj === "string" ? addrObj : (addrObj.street || addrObj.line || addrObj.address || "Main Site Delivery Address");
-      const cityStr = typeof addrObj === "object" ? (addrObj.city || req.body.districtName || "Mirzapur") : (req.body.districtName || "Mirzapur");
       const fullNameStr = typeof addrObj === "object" ? (addrObj.fullName || addrObj.name || "Customer") : "Customer";
       const phoneStr = typeof addrObj === "object" ? (addrObj.phone || targetUser?.phone || "") : (targetUser?.phone || "");
 
-      let reg = await prisma.region.findFirst({ where: { name: { equals: cityStr.trim(), mode: "insensitive" } } }).catch(() => null);
+      // Robust Region Resolution: check regionId first, then districtName, then address city
+      let reg = null;
+      if (req.body.regionId && req.body.regionId.length > 10) {
+        reg = await prisma.region.findUnique({ where: { id: req.body.regionId } }).catch(() => null);
+      }
+      if (!reg && req.body.districtName) {
+        reg = await prisma.region.findFirst({
+          where: { name: { equals: req.body.districtName.trim(), mode: "insensitive" } },
+        }).catch(() => null);
+      }
+      if (!reg && addrObj.city) {
+        reg = await prisma.region.findFirst({
+          where: { name: { equals: addrObj.city.trim(), mode: "insensitive" } },
+        }).catch(() => null);
+      }
+      if (!reg) {
+        const allRegs = await prisma.region.findMany().catch(() => []);
+        const targetSearch = (req.body.districtName || addrObj.city || "").toLowerCase().trim();
+        if (targetSearch) {
+          reg = allRegs.find((r) => targetSearch.includes(r.name.toLowerCase()) || r.name.toLowerCase().includes(targetSearch)) || null;
+        }
+      }
       if (!reg) {
         reg = await prisma.region.findFirst().catch(() => null);
       }
+
+      const cityStr = typeof addrObj === "object" && addrObj.city ? addrObj.city : (reg ? reg.name : (req.body.districtName || "Mirzapur"));
 
       if (reg && reg.id && targetCustomerId) {
         let existingAddress = await prisma.address.findFirst({

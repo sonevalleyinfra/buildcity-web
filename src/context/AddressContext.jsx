@@ -218,32 +218,63 @@ export function AddressProvider({ children }) {
 
   const updateAddress = async (id, updates) => {
     setIsSavingAddress(true);
-    // 1. Immediately update local state & localStorage
+    const targetStreet = (updates.street || updates.line || "").toLowerCase().trim();
+    const targetCity = (updates.city || "").toLowerCase().trim();
+    const shouldBeDefault = Boolean(updates.isDefault);
+
+    // 1. Immediately update local state & localStorage with single default guarantee
     setAddresses((prev) => {
-      const updated = prev.map((a) => (a.id === id ? { ...a, ...updates, line: updates.line || updates.street || a.line, street: updates.street || updates.line || a.street } : a));
+      const updated = prev.map((a) => {
+        const aStreet = (a.street || a.line || "").toLowerCase().trim();
+        const aCity = (a.city || "").toLowerCase().trim();
+        const isMatch =
+          (id && String(a.id) === String(id)) ||
+          (targetStreet && aStreet === targetStreet && (!targetCity || aCity === targetCity));
+
+        if (isMatch) {
+          return {
+            ...a,
+            ...updates,
+            line: updates.line || updates.street || a.line,
+            street: updates.street || updates.line || a.street,
+            isDefault: shouldBeDefault,
+          };
+        }
+        return {
+          ...a,
+          isDefault: shouldBeDefault ? false : a.isDefault,
+        };
+      });
+
+      const def = updated.filter((a) => a.isDefault);
+      const nonDef = updated.filter((a) => !a.isDefault);
+      const sorted = [...def, ...nonDef];
+
       if (addressStorageKey) {
         try {
-          localStorage.setItem(addressStorageKey, JSON.stringify(updated));
+          localStorage.setItem(addressStorageKey, JSON.stringify(sorted));
         } catch {}
       }
-      return updated;
+      return sorted;
     });
 
     // 2. Sync to DB via API
     try {
-      await authFetch(`${API_BASE_URL}/api/v1/addresses/${encodeURIComponent(id)}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fullName: updates.fullName,
-          phone: updates.phone,
-          street: updates.street || updates.line,
-          city: updates.city,
-          state: updates.state,
-          pincode: updates.pincode,
-          isDefault: updates.isDefault,
-        }),
-      });
+      if (id && id.length > 10 && !id.startsWith("addr-") && !id.startsWith("addr_")) {
+        await authFetch(`${API_BASE_URL}/api/v1/addresses/${encodeURIComponent(id)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fullName: updates.fullName,
+            phone: updates.phone,
+            street: updates.street || updates.line,
+            city: updates.city,
+            state: updates.state,
+            pincode: updates.pincode,
+            isDefault: updates.isDefault,
+          }),
+        });
+      }
     } catch (err) {
       console.warn("DB address update note:", err.message);
     } finally {

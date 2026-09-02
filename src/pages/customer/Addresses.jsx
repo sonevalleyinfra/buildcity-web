@@ -93,7 +93,12 @@ export default function Addresses() {
   };
 
   const openEdit = (addr) => {
-    setForm({ ...addr, fullName: addr.fullName || user?.name || "" });
+    setForm({
+      ...addr,
+      line: addr.line || addr.street || "",
+      fullName: addr.fullName || user?.name || "",
+      isDefault: Boolean(addr.isDefault),
+    });
     setEditingId(addr.id);
     setShowForm(true);
   };
@@ -135,121 +140,154 @@ export default function Addresses() {
 
         <div className="flex items-center justify-between mb-5">
           <h1 className="text-xl font-bold text-navy-900">My Addresses</h1>
-          {!showForm && (
-            <button
-              onClick={openAdd}
-              className="text-sm font-semibold text-brand-500 hover:underline cursor-pointer"
-            >
-              + Add New
-            </button>
-          )}
+          <button
+            onClick={openAdd}
+            className="text-xs font-black bg-brand-500 hover:bg-brand-600 text-white px-3.5 py-2 rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
+          >
+            + Add New Address
+          </button>
         </div>
 
+        {/* Modal Dialog for Edit / Add Address */}
         {showForm && (
-          <form
-            onSubmit={handleSubmit}
-            className="bg-white rounded-xl border border-slate-200 p-4 mb-5 space-y-3"
-          >
-            <h3 className="text-sm font-bold text-navy-900">
-              {editingId ? "Edit Address" : "Add New Address"}
-            </h3>
-
-            <div className="flex gap-2">
-              {["Home", "Work", "Other"].map((l) => (
+          <div className="fixed inset-0 z-50 bg-navy-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+                <h3 className="text-base font-black text-navy-900 flex items-center gap-2">
+                  <span>{editingId ? "✏️" : "📍"}</span>
+                  <span>{editingId ? "Edit Delivery Address" : "Add New Delivery Address"}</span>
+                </h3>
                 <button
                   type="button"
-                  key={l}
-                  onClick={() => setForm((f) => ({ ...f, label: l }))}
-                  className={`text-xs font-medium px-3 py-1.5 rounded-full border ${
-                    form.label === l
-                      ? "bg-brand-500 text-white border-brand-500"
-                      : "border-slate-200 text-slate-600"
-                  }`}
+                  onClick={() => setShowForm(false)}
+                  className="h-8 w-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 font-bold transition-colors cursor-pointer"
                 >
-                  {l}
+                  ✕
                 </button>
-              ))}
-            </div>
+              </div>
 
-            <input
-              name="fullName"
-              value={form.fullName || ""}
-              onChange={handleChange}
-              placeholder="Full Name (Receiver Name)"
-              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 outline-none focus:border-brand-500 font-semibold"
-            />
-            <input
-              name="line"
-              value={form.line}
-              onChange={handleChange}
-              placeholder="House no, street, landmark"
-              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 outline-none focus:border-brand-500"
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <input
-                name="city"
-                value={form.city}
-                onChange={handleChange}
-                placeholder="City"
-                className="text-sm border border-slate-200 rounded-lg px-3 py-2.5 outline-none focus:border-brand-500"
-              />
-              <input
-                name="state"
-                value={form.state}
-                onChange={handleChange}
-                placeholder="State"
-                className="text-sm border border-slate-200 rounded-lg px-3 py-2.5 outline-none focus:border-brand-500"
-              />
-            </div>
-            <input
-              name="pincode"
-              value={form.pincode}
-              onChange={handleChange}
-              placeholder="Pincode"
-              maxLength={6}
-              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 outline-none focus:border-brand-500"
-            />
+              <form onSubmit={handleSubmit} className="p-5 space-y-3.5 max-h-[80vh] overflow-y-auto">
+                <div>
+                  <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 block">Address Type</label>
+                  <div className="flex gap-2">
+                    {["Home", "Work", "Other"].map((l) => (
+                      <button
+                        type="button"
+                        key={l}
+                        onClick={() => setForm((f) => ({ ...f, label: l }))}
+                        className={`text-xs font-bold px-3.5 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                          form.label === l
+                            ? "bg-navy-900 text-white border-navy-900 shadow-2xs"
+                            : "border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-            <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                name="isDefault"
-                checked={form.isDefault}
-                onChange={handleChange}
-                className="h-4 w-4 accent-[#1E5FD9]"
-              />
-              Set as default address
-            </label>
+                <div>
+                  <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1 block">Receiver Name</label>
+                  <input
+                    name="fullName"
+                    value={form.fullName || ""}
+                    onChange={handleChange}
+                    placeholder="Full Name (e.g. Dhirendra Kumar)"
+                    className="w-full text-sm border border-slate-200 rounded-xl px-3.5 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 font-semibold"
+                  />
+                </div>
 
-            <div className="flex gap-3 pt-1">
-              <button
-                type="submit"
-                disabled={submitting || isSavingAddress}
-                className="flex-1 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] transition-all duration-200 text-white text-sm font-bold rounded-xl py-2.5 shadow-xs disabled:opacity-60 cursor-pointer flex items-center justify-center gap-2"
-              >
-                {submitting || isSavingAddress ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                    </svg>
-                    <span>Saving Address...</span>
-                  </>
-                ) : editingId ? (
-                  "✓ Save Changes"
-                ) : (
-                  "✓ Add Address"
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                className="flex-1 border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-xl py-2.5 transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
+                <div>
+                  <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1 block">Street / Delivery Address</label>
+                  <input
+                    name="line"
+                    value={form.line || ""}
+                    onChange={handleChange}
+                    placeholder="House / Plot no, street, landmark, area"
+                    className="w-full text-sm border border-slate-200 rounded-xl px-3.5 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 font-medium"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1 block">City / District</label>
+                    <input
+                      name="city"
+                      value={form.city || ""}
+                      onChange={handleChange}
+                      placeholder="City (e.g. Varanasi)"
+                      className="w-full text-sm border border-slate-200 rounded-xl px-3.5 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1 block">State</label>
+                    <input
+                      name="state"
+                      value={form.state || ""}
+                      onChange={handleChange}
+                      placeholder="State (e.g. Uttar Pradesh)"
+                      className="w-full text-sm border border-slate-200 rounded-xl px-3.5 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1 block">Pincode</label>
+                  <input
+                    name="pincode"
+                    value={form.pincode || ""}
+                    onChange={handleChange}
+                    placeholder="6-Digit Pincode (e.g. 221001)"
+                    maxLength={6}
+                    className="w-full text-sm border border-slate-200 rounded-xl px-3.5 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 font-mono font-bold"
+                  />
+                </div>
+
+                <div className="pt-2 pb-1">
+                  <label className="flex items-center gap-2.5 text-sm font-bold text-navy-900 cursor-pointer select-none bg-slate-50 border border-slate-200/80 p-3 rounded-xl">
+                    <input
+                      type="checkbox"
+                      name="isDefault"
+                      checked={Boolean(form.isDefault)}
+                      onChange={handleChange}
+                      className="h-4.5 w-4.5 accent-brand-600 rounded cursor-pointer"
+                    />
+                    <span>Set as default primary delivery address</span>
+                  </label>
+                </div>
+
+                <div className="flex gap-3 pt-2 border-t border-slate-100">
+                  <button
+                    type="submit"
+                    disabled={submitting || isSavingAddress}
+                    className="flex-1 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] transition-all duration-200 text-white text-sm font-bold rounded-xl py-3 shadow-xs disabled:opacity-60 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    {submitting || isSavingAddress ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                        </svg>
+                        <span>Saving...</span>
+                      </>
+                    ) : editingId ? (
+                      "✓ Save Address Changes"
+                    ) : (
+                      "✓ Add Address"
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowForm(false)}
+                    className="px-5 border border-slate-200 hover:bg-slate-100 text-slate-700 text-sm font-bold rounded-xl py-3 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
             </div>
-          </form>
+          </div>
         )}
 
         {uniqueAddresses.length === 0 && !showForm ? (

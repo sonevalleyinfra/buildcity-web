@@ -553,7 +553,7 @@ app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
 });
 
 // Fetch User Profile by Phone Number from Supabase PostgreSQL
-app.get("/api/v1/users/by-phone/:phone", requireAuth, requireSelfOrAdmin("phone"), async (req, res) => {
+app.get("/api/v1/users/by-phone/:phone", requireAuth, requireSelfOrAdmin((req) => req.params.phone), async (req, res) => {
   try {
     const user = await prisma.user.findUnique({ where: { phone: req.params.phone } });
     if (!user) return res.status(404).json({ error: "User not found" });
@@ -1730,27 +1730,16 @@ app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", 
 // Customer Addresses Fetch & Save Endpoints (Explicit Express Routes)
 const handleGetAddresses = async (req, res) => {
   try {
-    const rawTarget = req.params.userId || req.auth?.userId;
-    if (!rawTarget || rawTarget === "undefined" || rawTarget === "null") {
+    const isAdmin = req.auth?.role === "ADMIN";
+    const targetUserId = isAdmin && req.params.userId ? req.params.userId : req.auth?.userId;
+
+    if (!targetUserId || targetUserId === "undefined" || targetUserId === "null") {
       return res.json([]);
-    }
-
-    const cleanTarget = String(rawTarget).trim();
-    let userIds = [cleanTarget];
-
-    // If target is phone, also include user UUID
-    if (/^\d{10}$/.test(cleanTarget)) {
-      const u = await prisma.user.findFirst({ where: { phone: cleanTarget } }).catch(() => null);
-      if (u) userIds.push(u.id);
-    } else {
-      // If target is UUID, also include phone
-      const u = await prisma.user.findUnique({ where: { id: cleanTarget } }).catch(() => null);
-      if (u && u.phone) userIds.push(u.phone);
     }
 
     const addresses = await prisma.address.findMany({
       where: {
-        userId: { in: userIds },
+        userId: targetUserId,
       },
       include: { region: true },
       orderBy: { createdAt: "desc" },
@@ -1763,46 +1752,21 @@ const handleGetAddresses = async (req, res) => {
 };
 
 app.get("/api/v1/addresses/me", requireAuth, handleGetAddresses);
-app.get("/api/v1/addresses/user/:userId", requireAuth, requireSelfOrAdmin("userId"), handleGetAddresses);
-app.get("/api/v1/addresses/:userId", requireAuth, requireSelfOrAdmin("userId"), handleGetAddresses);
+app.get("/api/v1/addresses/user/:userId", requireAuth, requireSelfOrAdmin((req) => req.params.userId), handleGetAddresses);
+app.get("/api/v1/addresses/:userId", requireAuth, requireSelfOrAdmin((req) => req.params.userId), handleGetAddresses);
 
 app.post("/api/v1/addresses", requireAuth, async (req, res) => {
   try {
-    const { userId, fullName, phone, street, city, state, pincode } = req.body;
-    const cleanPhone = phone ? phone.replace(/\D/g, "") : "";
+    const { fullName, phone, street, city, state, pincode } = req.body;
+    const owningUserId = req.auth.userId;
 
-    let targetUser = null;
-    if (userId && userId.length > 20) {
-      targetUser = await prisma.user.findUnique({ where: { id: userId } }).catch(() => null);
-    }
-    if (!targetUser && cleanPhone && cleanPhone.length >= 8) {
-      targetUser = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { phone: cleanPhone },
-            { phone: { contains: cleanPhone.slice(-10) } },
-          ],
-        },
-      }).catch(() => null);
-    }
+    const targetUser = await prisma.user.findUnique({ where: { id: owningUserId } }).catch(() => null);
     if (!targetUser) {
-      targetUser = await prisma.user.findFirst({ where: { role: "CUSTOMER" } }).catch(() => null);
-    }
-    if (!targetUser) {
-      const fallbackPhone = cleanPhone && cleanPhone.length >= 10 ? cleanPhone : `cust_${Date.now()}`;
-      targetUser = await prisma.user.create({
-        data: {
-          phone: fallbackPhone,
-          name: fullName || "Customer",
-          role: "CUSTOMER",
-        },
-      }).catch(async () => {
-        return await prisma.user.findFirst().catch(() => null);
-      });
+      return res.status(404).json({ error: "Authenticated user not found" });
     }
 
     // Auto-update customer profile name in DB if name was previously default or placeholder
-    if (targetUser && targetUser.id && fullName && fullName.trim()) {
+    if (fullName && fullName.trim()) {
       const currentName = (targetUser.name || "").trim().toLowerCase();
       const isPlaceholder =
         !currentName ||
@@ -1836,8 +1800,8 @@ app.post("/api/v1/addresses", requireAuth, async (req, res) => {
       });
     }
 
-    if (!targetUser || !reg) {
-      return res.status(400).json({ error: "Unable to resolve target user or region in database." });
+    if (!reg) {
+      return res.status(400).json({ error: "Unable to resolve target region in database." });
     }
 
     const newAddress = await prisma.address.create({
@@ -1869,61 +1833,53 @@ app.put("/api/v1/addresses/:id", requireAuth, async (req, res) => {
     const { id } = req.params;
     const { fullName, phone, street, city, state, pincode, isDefault } = req.body;
 
-    let addr = await prisma.address.findUnique({ where: { id } }).catch(() => null);
+    const addr = await prisma.address.findUnique({ where: { id } }).catch(() => null);
     if (!addr) {
-      addr = await prisma.address.findFirst({ where: { id } }).catch(() => null);
+      return res.status(404).json({ error: "Address record not found" });
     }
 
-    if (addr) {
-      const updated = await prisma.address.update({
-        where: { id: addr.id },
-        data: {
-          ...(fullName ? { fullName: fullName.trim() } : {}),
-          ...(phone ? { phone: phone.trim() } : {}),
-          ...(street ? { street: street.trim() } : {}),
-          ...(city ? { city: city.trim() } : {}),
-          ...(state ? { state: state.trim() } : {}),
-          ...(pincode ? { pincode: pincode.trim() } : {}),
-          ...(isDefault !== undefined ? { isDefault: Boolean(isDefault) } : {}),
-        },
-      });
-      console.log("✓ Address updated in Supabase DB:", addr.id);
-      return res.json(updated);
+    if (addr.userId !== req.auth.userId && req.auth.role !== "ADMIN") {
+      return res.status(403).json({ error: "You do not have permission for this action" });
     }
 
-    res.status(404).json({ error: "Address record not found" });
+    const updated = await prisma.address.update({
+      where: { id: addr.id },
+      data: {
+        ...(fullName ? { fullName: fullName.trim() } : {}),
+        ...(phone ? { phone: phone.trim() } : {}),
+        ...(street ? { street: street.trim() } : {}),
+        ...(city ? { city: city.trim() } : {}),
+        ...(state ? { state: state.trim() } : {}),
+        ...(pincode ? { pincode: pincode.trim() } : {}),
+        ...(isDefault !== undefined ? { isDefault: Boolean(isDefault) } : {}),
+      },
+      include: { region: true },
+    });
+    console.log("✓ Address updated in Supabase DB:", addr.id);
+    return res.json(updated);
   } catch (err) {
     console.error("PUT /api/v1/addresses/:id error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Delete Address Endpoint in Supabase DB (Supports UUID or Street + User lookup)
+// Delete Address Endpoint in Supabase DB
 app.delete("/api/v1/addresses/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { street } = req.query;
 
-    let deletedCount = 0;
-
-    // 1. Try deleting by primary ID
-    if (id && id.length > 10 && !id.startsWith("addr-") && !id.startsWith("addr_")) {
-      const del = await prisma.address.deleteMany({ where: { id } }).catch(() => null);
-      if (del) deletedCount += del.count;
+    const addr = await prisma.address.findUnique({ where: { id } }).catch(() => null);
+    if (!addr) {
+      return res.status(404).json({ error: "Address record not found" });
     }
 
-    // 2. Try deleting by street / address line text
-    if (street && street.trim()) {
-      const delStreet = await prisma.address.deleteMany({
-        where: {
-          street: { equals: street.trim(), mode: "insensitive" },
-        },
-      }).catch(() => null);
-      if (delStreet) deletedCount += delStreet.count;
+    if (addr.userId !== req.auth.userId && req.auth.role !== "ADMIN") {
+      return res.status(403).json({ error: "You do not have permission for this action" });
     }
 
-    console.log(`✓ Address deleted from Supabase DB (Deleted count: ${deletedCount})`);
-    return res.json({ success: true, count: deletedCount });
+    await prisma.address.delete({ where: { id: addr.id } });
+    console.log(`✓ Address deleted from Supabase DB: ${addr.id}`);
+    return res.json({ success: true, count: 1 });
   } catch (err) {
     console.error("DELETE /api/v1/addresses/:id error:", err.message);
     res.status(500).json({ error: err.message });

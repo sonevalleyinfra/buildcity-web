@@ -42,12 +42,6 @@ export function AuthProvider({ children }) {
   };
 
   const getOtpEndpoint = (path) => {
-    if (typeof window !== "undefined") {
-      if (window.location.hostname === "localhost") {
-        return `http://localhost:5000${path}`;
-      }
-      return `${window.location.origin}${path}`;
-    }
     return path;
   };
 

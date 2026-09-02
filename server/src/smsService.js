@@ -15,12 +15,12 @@ if (!username || !apikey) {
 async function sendRealSMSOTP(phone, otpCode) {
   const cleanMobile = (phone || "").toString().trim().replace(/\D/g, "").slice(-10);
 
-  const currentUsername = process.env.SMS_USERNAME || process.env.ARADHYA_SMS_USERNAME;
-  const currentApikey = process.env.SMS_APIKEY || process.env.ARADHYA_SMS_APIKEY;
-  const sender = process.env.SMS_SENDER || process.env.ARADHYA_SMS_SENDER;
-  const templateId = process.env.SMS_TEMPLATE_ID || process.env.ARADHYA_SMS_TEMPLATE_ID;
-  const peid = process.env.SMS_PEID || process.env.ARADHYA_SMS_PE_ID;
-  const route = process.env.SMS_ROUTE || process.env.ARADHYA_SMS_ROUTE;
+  const currentUsername = (process.env.SMS_USERNAME || process.env.ARADHYA_SMS_USERNAME || "").trim();
+  const currentApikey = (process.env.SMS_APIKEY || process.env.ARADHYA_SMS_APIKEY || "").trim();
+  const sender = (process.env.SMS_SENDER || process.env.ARADHYA_SMS_SENDER || "").trim();
+  const templateId = (process.env.SMS_TEMPLATE_ID || process.env.ARADHYA_SMS_TEMPLATE_ID || "").trim();
+  const peid = (process.env.SMS_PEID || process.env.ARADHYA_SMS_PE_ID || "").trim();
+  const route = (process.env.SMS_ROUTE || process.env.ARADHYA_SMS_ROUTE || "TRANS").trim().toUpperCase();
   const timeoutMs = parseInt(process.env.SMS_TIMEOUT_MS || "15000", 10);
 
   const message = `Dear user, Thankyou for visiting Sonevalley. Your OTP for login is ${otpCode}. Please do not share this OTP with anyone. Regards SNVLY`;

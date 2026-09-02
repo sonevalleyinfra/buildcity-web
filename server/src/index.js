@@ -552,6 +552,18 @@ app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
   }
 });
 
+// Fetch Current Authenticated User Profile (Zero PII in URL)
+app.get("/api/v1/users/me", requireAuth, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.auth.userId } });
+    if (!user) return res.status(404).json({ error: "User not found" });
+    const { password, ...safeUser } = user;
+    res.json(safeUser);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Fetch User Profile by Phone Number from Supabase PostgreSQL
 app.get("/api/v1/users/by-phone/:phone", requireAuth, requireSelfOrAdmin((req) => req.params.phone), async (req, res) => {
   try {
@@ -1874,7 +1886,7 @@ app.post("/api/v1/addresses", requireAuth, async (req, res) => {
         userId: targetUser.id,
         regionId: reg.id,
         fullName: fullName || targetUser.name || "Customer",
-        phone: phone || targetUser.phone || "7607650875",
+        phone: phone || targetUser.phone || "",
         street: streetClean,
         city: regName,
         state: state || "Uttar Pradesh",
@@ -2028,7 +2040,7 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       const streetStr = typeof addrObj === "string" ? addrObj : (addrObj.street || addrObj.line || addrObj.address || "Main Site Delivery Address");
       const cityStr = typeof addrObj === "object" ? (addrObj.city || req.body.districtName || "Mirzapur") : (req.body.districtName || "Mirzapur");
       const fullNameStr = typeof addrObj === "object" ? (addrObj.fullName || addrObj.name || "Customer") : "Customer";
-      const phoneStr = typeof addrObj === "object" ? (addrObj.phone || "7607650875") : "7607650875";
+      const phoneStr = typeof addrObj === "object" ? (addrObj.phone || targetUser?.phone || "") : (targetUser?.phone || "");
 
       let reg = await prisma.region.findFirst({ where: { name: { equals: cityStr.trim(), mode: "insensitive" } } }).catch(() => null);
       if (!reg) {

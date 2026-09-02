@@ -158,7 +158,7 @@ export function AddressProvider({ children }) {
     const formattedAddr = {
       id: tempId,
       fullName: addr.fullName || user?.name || "Customer",
-      phone: addr.phone || user?.phone || "7607650875",
+      phone: addr.phone || user?.phone || "",
       line: addr.street || addr.line,
       street: addr.street || addr.line,
       city: addr.city || "Mirzapur",

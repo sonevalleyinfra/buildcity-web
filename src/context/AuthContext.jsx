@@ -17,19 +17,17 @@ export function AuthProvider({ children }) {
       try {
         const parsed = JSON.parse(saved);
         setUser(parsed);
-        // Background me Supabase Cloud DB se latest user profile profile sync karein
-        if (parsed.phone) {
-          authFetch(`/api/v1/users/by-phone/${parsed.phone}`)
-            .then((r) => r.json())
-            .then((dbUser) => {
-              if (dbUser && dbUser.name) {
-                const refreshed = { ...parsed, name: dbUser.name, email: dbUser.email || parsed.email };
-                setUser(refreshed);
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(refreshed));
-              }
-            })
-            .catch(() => {});
-        }
+        // Background me Supabase Cloud DB se latest user profile sync karein (Zero PII in URL)
+        authFetch(`/api/v1/users/me`)
+          .then((r) => r.json())
+          .then((dbUser) => {
+            if (dbUser && dbUser.name) {
+              const refreshed = { ...parsed, name: dbUser.name, email: dbUser.email || parsed.email };
+              setUser(refreshed);
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(refreshed));
+            }
+          })
+          .catch(() => {});
       } catch {
         localStorage.removeItem(STORAGE_KEY);
         clearToken();

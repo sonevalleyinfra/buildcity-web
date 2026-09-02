@@ -449,6 +449,7 @@ app.post("/api/v1/auth/otp/request", otpRequestLimiter, async (req, res) => {
       message: `OTP dispatched to +91 ${cleanPhone.slice(-10)}`,
       gateway: smsResult.gateway || "AradhyaSMS",
       smsStatus: smsResult.success ? "dispatched" : "failed",
+      smsDetails: smsResult.message || smsResult.error || smsResult.raw || null,
     });
   } catch (err) {
     console.error("OTP dispatch error:", err);

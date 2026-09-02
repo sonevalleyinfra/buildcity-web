@@ -280,27 +280,45 @@ export function AddressProvider({ children }) {
     }
   };
 
-  const setDefault = async (id) => {
+  const setDefault = async (id, targetAddr = null) => {
+    const targetStreet = (targetAddr?.street || targetAddr?.line || "").toLowerCase().trim();
+    const targetCity = (targetAddr?.city || "").toLowerCase().trim();
+
     // 1. Immediately update state & localStorage so the UI reflects the change INSTANTLY
     setAddresses((prev) => {
-      const target = prev.find((a) => a.id === id);
-      const rest = prev.filter((a) => a.id !== id).map((a) => ({ ...a, isDefault: false }));
-      const updated = target ? [{ ...target, isDefault: true }, ...rest] : prev;
+      const updated = prev.map((a) => {
+        const aStreet = (a.street || a.line || "").toLowerCase().trim();
+        const aCity = (a.city || "").toLowerCase().trim();
+        const isMatch =
+          (id && String(a.id) === String(id)) ||
+          (targetStreet && aStreet === targetStreet && (!targetCity || aCity === targetCity));
+        return {
+          ...a,
+          isDefault: Boolean(isMatch),
+        };
+      });
+
+      const def = updated.filter((a) => a.isDefault);
+      const nonDef = updated.filter((a) => !a.isDefault);
+      const sorted = [...def, ...nonDef];
+
       if (addressStorageKey) {
         try {
-          localStorage.setItem(addressStorageKey, JSON.stringify(updated));
+          localStorage.setItem(addressStorageKey, JSON.stringify(sorted));
         } catch {}
       }
-      return updated;
+      return sorted;
     });
 
     // 2. Persist to DB asynchronously
     try {
-      await authFetch(`${API_BASE_URL}/api/v1/addresses/${encodeURIComponent(id)}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isDefault: true }),
-      });
+      if (id && id.length > 10 && !id.startsWith("addr-") && !id.startsWith("addr_")) {
+        await authFetch(`${API_BASE_URL}/api/v1/addresses/${encodeURIComponent(id)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isDefault: true }),
+        });
+      }
     } catch (err) {
       console.warn("Set default address API note:", err.message);
     }

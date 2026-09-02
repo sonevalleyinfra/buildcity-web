@@ -324,7 +324,7 @@ export default function Addresses() {
                   <button
                     type="button"
                     onClick={async () => {
-                      await setDefault(a.id);
+                      await setDefault(a.id, a);
                       showStatus("✓ Set as default delivery address!");
                     }}
                     className="text-xs font-extrabold text-brand-600 hover:text-brand-700 active:scale-95 transition-all mt-3 inline-flex items-center gap-1 cursor-pointer"

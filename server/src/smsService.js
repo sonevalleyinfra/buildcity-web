@@ -24,18 +24,18 @@ async function sendRealSMSOTP(phone, otpCode) {
 
   const message = `Dear user, Thankyou for visiting Sonevalley. Your OTP for login is ${otpCode}. Please do not share this OTP with anyone. Regards SNVLY`;
 
-  const queryParams = new URLSearchParams({
-    username: currentUsername,
-    apikey: currentApikey,
-    apirequest: "Text",
-    sender,
-    mobile: cleanMobile,
-    message,
-    route,
-    TemplateID: templateId,
-    peid,
-    format: "JSON"
-  }).toString();
+  const queryParams = [
+    `username=${encodeURIComponent(currentUsername)}`,
+    `apikey=${encodeURIComponent(currentApikey)}`,
+    `apirequest=Text`,
+    `sender=${encodeURIComponent(sender)}`,
+    `mobile=${encodeURIComponent(cleanMobile)}`,
+    `message=${encodeURIComponent(message)}`,
+    `route=${encodeURIComponent(route)}`,
+    `TemplateID=${encodeURIComponent(templateId)}`,
+    `peid=${encodeURIComponent(peid)}`,
+    `format=JSON`,
+  ].join("&");
 
   // 1. First Priority: High-speed Indian Mumbai Edge Relay (50ms response, zero cloud IP drop)
   try {

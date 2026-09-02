@@ -56,6 +56,24 @@ export default function Categories() {
   const [activePill, setActivePill] = useState(initialCat);
   const [slide, setSlide] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
+  const [justAddedId, setJustAddedId] = useState(null);
+
+  const handleAddToCart = (p) => {
+    addItem(
+      {
+        id: p.id,
+        name: p.name,
+        price: p.price !== undefined ? p.price : (p.suggestedPrice || 100),
+        brand: p.brand,
+        img: p.imageUrl || p.img,
+        vendorId: p.vendorId,
+        vendorName: p.vendorName || "District Vendor",
+      },
+      1
+    );
+    setJustAddedId(p.id);
+    setTimeout(() => setJustAddedId(null), 1500);
+  };
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -542,24 +560,14 @@ export default function Categories() {
                         <p className="text-[10px] font-medium text-slate-400">per {p.unit}</p>
                       </div>
                       <button
-                        onClick={() => {
-                          addItem(
-                            {
-                              id: p.id,
-                              name: p.name,
-                              price: p.price,
-                              brand: p.brand,
-                              img: p.imageUrl,
-                              vendorId: p.vendorId,
-                              vendorName: p.vendorName || "District Vendor",
-                            },
-                            1
-                          );
-                          alert(`"${p.name}" (Vendor: ${p.vendorName || "District Vendor"}) added to cart!`);
-                        }}
-                        className="bg-brand-500 hover:bg-brand-600 active:scale-[0.98] transition-all duration-200 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-xs cursor-pointer"
+                        onClick={() => handleAddToCart(p)}
+                        className={`text-xs font-bold px-3.5 py-2 rounded-xl transition-all duration-200 active:scale-[0.98] shadow-xs cursor-pointer ${
+                          justAddedId === p.id
+                            ? "bg-emerald-600 text-white shadow-xs"
+                            : "bg-brand-500 hover:bg-brand-600 text-white"
+                        }`}
                       >
-                        + Add to Cart
+                        {justAddedId === p.id ? "✓ Added!" : "+ Add to Cart"}
                       </button>
                     </div>
                   </div>
@@ -613,13 +621,14 @@ export default function Categories() {
                       <span className="text-base font-black text-navy-900">₹{p.price}</span>
                     </div>
                     <button
-                      onClick={() => {
-                        addItem(p, 1);
-                        alert(`"${p.name}" added to cart!`);
-                      }}
-                      className="bg-brand-500 hover:bg-brand-600 active:scale-[0.97] transition-all text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-xs cursor-pointer"
+                      onClick={() => handleAddToCart(p)}
+                      className={`text-xs font-bold px-3.5 py-2 rounded-xl transition-all duration-200 active:scale-[0.97] shadow-xs cursor-pointer ${
+                        justAddedId === p.id
+                          ? "bg-emerald-600 text-white shadow-xs"
+                          : "bg-brand-500 hover:bg-brand-600 text-white"
+                      }`}
                     >
-                      + Add
+                      {justAddedId === p.id ? "✓ Added!" : "+ Add"}
                     </button>
                   </div>
                 </div>

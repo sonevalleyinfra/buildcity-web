@@ -74,15 +74,13 @@ export default function Cart() {
     }
   };
 
-  const handleProceedToCheckout = () => {
+  const handleProceedToCheckout = async () => {
     if (hasRegionMismatch) {
-      showAlert({
-        title: "⚠️ Action Required",
-        message: `Please click '🔄 Update Cart Prices to ${currentRegionName}' before proceeding to checkout!`,
-        type: "warning",
-        buttonText: "Got It",
-      });
-      return;
+      try {
+        await updateCartToCurrentRegion(products);
+      } catch (err) {
+        console.warn("Auto region sync on checkout:", err.message);
+      }
     }
     if (!user) {
       navigate("/login?redirect=/checkout");

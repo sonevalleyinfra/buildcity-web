@@ -203,14 +203,31 @@ export default function Login() {
 
   return (
     <AuthLayout footerRight={footerVendorAction}>
-      <h1 className="text-2xl font-bold text-navy-900 mb-1">
+      {mode === "standard" && (
+        <div className="flex items-center bg-slate-100/80 p-1 rounded-xl mb-6 border border-slate-200/80">
+          <button
+            type="button"
+            className="flex-1 py-2 text-xs font-black rounded-lg bg-white text-navy-900 shadow-2xs transition-all"
+          >
+            🔑 Customer Login
+          </button>
+          <Link
+            to={`/register?redirect=${encodeURIComponent(redirectTo)}`}
+            className="flex-1 py-2 text-xs font-bold rounded-lg text-slate-500 hover:text-navy-900 text-center transition-all"
+          >
+            ✨ Create Account
+          </Link>
+        </div>
+      )}
+
+      <h1 className="text-2xl font-black text-navy-900 mb-1 tracking-tight">
         {mode === "vendor" ? "Partner Portal Login 🏬" : "Welcome back 👋"}
       </h1>
-      <p className="text-sm text-slate-500 mb-6">
+      <p className="text-xs text-slate-500 mb-6">
         {mode === "vendor"
           ? "Login with your registered mobile number and password"
           : step === "phone"
-          ? "Login with your phone number — no password needed"
+          ? "Login with your registered phone number via OTP"
           : `Enter the OTP sent to +91 ${phone}`}
       </p>
 
@@ -220,7 +237,7 @@ export default function Login() {
             ? "bg-amber-50 border-amber-200 text-amber-900"
             : "bg-rose-50 border-rose-200 text-rose-700"
         } text-xs font-bold leading-relaxed shadow-2xs animate-in fade-in`}>
-          <p>{error}</p>
+          <div>{error}</div>
         </div>
       )}
 
@@ -292,6 +309,18 @@ export default function Login() {
           <Button type="submit" disabled={loading}>
             {loading ? "Sending OTP..." : "Continue with OTP"}
           </Button>
+
+          <div className="mt-6 pt-5 border-t border-slate-100 text-center">
+            <p className="text-xs text-slate-500 font-medium">
+              Don't have an account yet?{" "}
+              <Link
+                to={`/register?redirect=${encodeURIComponent(redirectTo)}`}
+                className="font-black text-brand-600 hover:text-brand-700 underline ml-1 inline-flex items-center gap-0.5"
+              >
+                Create Account (Register) →
+              </Link>
+            </p>
+          </div>
         </form>
       ) : (
         /* CUSTOMER OTP VERIFY FORM */

@@ -125,6 +125,21 @@ export default function Register() {
   return (
     <AuthLayout>
       <div className="space-y-6 font-sans">
+        <div className="flex items-center bg-slate-100/80 p-1 rounded-xl border border-slate-200/80">
+          <Link
+            to={`/login?redirect=${encodeURIComponent(redirectTo)}`}
+            className="flex-1 py-2 text-xs font-bold rounded-lg text-slate-500 hover:text-navy-900 text-center transition-all"
+          >
+            🔑 Customer Login
+          </Link>
+          <button
+            type="button"
+            className="flex-1 py-2 text-xs font-black rounded-lg bg-white text-navy-900 shadow-2xs transition-all"
+          >
+            ✨ Create Account
+          </button>
+        </div>
+
         <div>
           <span className="inline-flex items-center gap-1 text-[11px] font-black uppercase tracking-wider bg-brand-50 text-brand-700 px-2.5 py-0.5 rounded-full border border-brand-200/80 mb-2">
             ✨ Customer Registration

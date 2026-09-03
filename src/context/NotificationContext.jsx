@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useMemo } from "react";
 import { authFetch } from "../config/authFetch";
 import { useAuth } from "./AuthContext";
 import { API_BASE_URL } from "../config/api";
@@ -7,16 +7,19 @@ const NotificationContext = createContext(null);
 
 export function NotificationProvider({ children }) {
   const { user } = useAuth();
+
+  // Strict user isolation key
   const userIdent = user?.phone
-    ? user.phone.replace(/\D/g, "")
+    ? user.phone.replace(/\D/g, "").slice(-10)
     : user?.id
     ? user.id
     : "guest";
 
-  const storageKey = `buildcity_notifications_${userIdent}`;
+  const storageKey = `buildcity_notifs_${userIdent}`;
   const readKey = `buildcity_read_notifs_${userIdent}`;
   const dismissedKey = `buildcity_dismissed_notifs_${userIdent}`;
   const seenToastsKey = `buildcity_seen_toasts_${userIdent}`;
+  const orderNotifsKey = `buildcity_order_notifs_${userIdent}`;
 
   const userRole = (user?.role || "").toLowerCase();
   const isStaff = userRole === "admin" || userRole === "vendor" || userRole === "dr";
@@ -26,6 +29,25 @@ export function NotificationProvider({ children }) {
   const [isSending, setIsSending] = useState(false);
   const [isLoadingNotifs, setIsLoadingNotifs] = useState(false);
   const [toastNotif, setToastNotif] = useState(null);
+
+  // Helper to get dismissed signatures set
+  const getDismissedSet = () => {
+    try {
+      const arr = JSON.parse(localStorage.getItem(dismissedKey) || "[]");
+      return new Set(Array.isArray(arr) ? arr : []);
+    } catch {
+      return new Set();
+    }
+  };
+
+  // Helper to check if a notification has been permanently dismissed
+  const isDismissed = (notif, dismissedSet = getDismissedSet()) => {
+    if (!notif) return true;
+    if (notif.id && dismissedSet.has(notif.id)) return true;
+    const sig = `${(notif.title || "").trim()}_${(notif.message || "").trim()}`;
+    if (dismissedSet.has(sig)) return true;
+    return false;
+  };
 
   // STRICT RULE: Only show Toast to Customers & exactly ONCE per notification
   const showToast = (notif) => {
@@ -37,8 +59,8 @@ export function NotificationProvider({ children }) {
     } catch {}
 
     const notifSig = notif.id || `${notif.title}_${notif.message}`;
-    if (seenSet.has(notifSig)) {
-      return; // Already delivered once to this customer!
+    if (seenSet.has(notifSig) || isDismissed(notif)) {
+      return; // Already delivered once or dismissed
     }
 
     seenSet.add(notifSig);
@@ -49,89 +71,105 @@ export function NotificationProvider({ children }) {
     setToastNotif(notif);
     setTimeout(() => {
       setToastNotif((curr) => (curr?.id === notif.id ? null : curr));
-    }, 6500);
+    }, 6000);
   };
 
-  // Fetch real database notifications from backend (Vercel Serverless Edge + Render DB)
+  // Fetch real database notifications & active offers
   const fetchDbNotifications = async (showLoading = false) => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("buildcity_token") : null;
-    if (!user || !token) return;
-
     if (showLoading) setIsLoadingNotifs(true);
     try {
-      let dbList = null;
+      let dbList = [];
 
-      // 1. Try Vercel Serverless Edge endpoint (Direct Supabase DB in 50ms)
+      // 1. Fetch from Render DB notifications
+      if (user) {
+        try {
+          const res = await authFetch(`${API_BASE_URL}/api/v1/notifications/me`);
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data)) dbList = data;
+          }
+        } catch {}
+      }
+
+      // 2. Fetch live coupons to broadcast as offers in Offers tab
+      let couponOffers = [];
       try {
-        const vRes = await authFetch("/api/v1/notifications");
-        if (vRes.ok) {
-          dbList = await vRes.json();
+        const cRes = await authFetch(`${API_BASE_URL}/api/v1/coupons`);
+        if (cRes.ok) {
+          const coupons = await cRes.json();
+          if (Array.isArray(coupons)) {
+            couponOffers = coupons
+              .filter((c) => c.isActive !== false)
+              .map((c) => ({
+                id: `offer_coupon_${c.code}`,
+                title: `🎁 ${c.title || `Special Offer: ${c.code}`}`,
+                message: `Use code ${c.code} to get ₹${c.discountAmount} OFF on orders above ₹${c.minOrder || 1000}!`,
+                link: "/cart",
+                timestamp: new Date(c.createdAt || Date.now()).getTime(),
+                type: "offer",
+                isBroadcast: true,
+              }));
+          }
         }
       } catch {}
 
-      // 2. Fallback to Render DB
-      if (!Array.isArray(dbList) || dbList.length === 0) {
-        const res = await authFetch(`${API_BASE_URL}/api/v1/notifications/me`);
-        if (res.ok) {
-          dbList = await res.json();
-        }
-      }
+      const dismissedSet = getDismissedSet();
+      let readIds = new Set();
+      try {
+        readIds = new Set(JSON.parse(localStorage.getItem(readKey) || "[]"));
+      } catch {}
 
-      if (Array.isArray(dbList)) {
-        let readIds = new Set();
-        let dismissedIds = new Set();
-        try {
-          readIds = new Set(JSON.parse(localStorage.getItem(readKey) || "[]"));
-          dismissedIds = new Set(JSON.parse(localStorage.getItem(dismissedKey) || "[]"));
-        } catch {}
-
-        const formatted = dbList
-          .filter((n) => isAdmin || !dismissedIds.has(n.id))
-          .map((n) => {
-            const titleLower = (n.title || "").toLowerCase();
-            const isOrder = titleLower.includes("order") || titleLower.includes("📦");
-            const isPrice = titleLower.includes("price") || titleLower.includes("rate") || titleLower.includes("🏷️");
-            return {
-              id: n.id,
-              title: n.title,
-              message: n.message,
-              link: n.link || (isOrder ? "/orders" : "/categories"),
-              timestamp: new Date(n.createdAt).getTime() || Date.now(),
-              read: Boolean(n.isRead) || readIds.has(n.id),
-              type: isOrder ? "order" : isPrice ? "price" : "offer",
-            };
-          });
-
-        // Load private customer local orders (Strictly customers only)
-        let localOrders = [];
-        if (!isStaff) {
-          try {
-            const orderKey = `buildcity_user_orders_${userIdent}`;
-            localOrders = (JSON.parse(localStorage.getItem(orderKey) || "[]"))
-              .filter((o) => !dismissedIds.has(o.id))
-              .map((o) => ({ ...o, read: readIds.has(o.id) || o.read }));
-          } catch {}
-        }
-
-        const combined = isStaff && !isAdmin ? [] : [...localOrders, ...formatted];
-        const unique = Array.from(new Map(combined.map((x) => [x.id || `${x.title}_${x.message}`, x])).values())
-          .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-
-        setNotifications((prev) => {
-          const prevIds = new Set(prev.map((p) => p.id));
-          const newItems = unique.filter((f) => !prevIds.has(f.id) && !f.read);
-
-          // Trigger one-time instant toast for customers
-          if (newItems.length > 0 && prev.length > 0 && !isStaff) {
-            showToast(newItems[0]);
-          }
-
-          if (storageKey) {
-            try { localStorage.setItem(storageKey, JSON.stringify(unique)); } catch {}
-          }
-          return unique;
+      const formattedDb = dbList
+        .filter((n) => !isDismissed(n, dismissedSet))
+        .map((n) => {
+          const titleLower = (n.title || "").toLowerCase();
+          const isOrder = titleLower.includes("order") || titleLower.includes("📦");
+          const isPrice = titleLower.includes("price") || titleLower.includes("rate") || titleLower.includes("🏷️");
+          return {
+            id: n.id,
+            title: n.title,
+            message: n.message,
+            link: n.link || (isOrder ? "/orders" : "/categories"),
+            timestamp: new Date(n.createdAt).getTime() || Date.now(),
+            read: Boolean(n.isRead) || readIds.has(n.id),
+            type: isOrder ? "order" : isPrice ? "price" : "offer",
+          };
         });
+
+      // Load user's private confirmed order notifications
+      let localOrders = [];
+      if (!isStaff) {
+        try {
+          const rawOrders = JSON.parse(localStorage.getItem(orderNotifsKey) || "[]");
+          if (Array.isArray(rawOrders)) {
+            localOrders = rawOrders
+              .filter((o) => !isDismissed(o, dismissedSet))
+              .map((o) => ({ ...o, read: readIds.has(o.id) || o.read }));
+          }
+        } catch {}
       }
+
+      // Filter active coupon offers that haven't been dismissed
+      const activeOffers = couponOffers.filter((o) => !isDismissed(o, dismissedSet));
+
+      // Combine user orders, DB notifications, and active broadcast offers
+      const combined = isStaff && !isAdmin ? [] : [...localOrders, ...formattedDb, ...activeOffers];
+      const unique = Array.from(new Map(combined.map((x) => [x.id || `${x.title}_${x.message}`, x])).values())
+        .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+      setNotifications((prev) => {
+        const prevIds = new Set(prev.map((p) => p.id));
+        const newItems = unique.filter((f) => !prevIds.has(f.id) && !f.read);
+
+        if (newItems.length > 0 && prev.length > 0 && !isStaff) {
+          showToast(newItems[0]);
+        }
+
+        if (storageKey) {
+          try { localStorage.setItem(storageKey, JSON.stringify(unique)); } catch {}
+        }
+        return unique;
+      });
     } catch (err) {
       console.warn("DB notification fetch note:", err.message);
     } finally {
@@ -147,14 +185,9 @@ export function NotificationProvider({ children }) {
         bc = new BroadcastChannel("buildcity_notifications_channel");
         bc.onmessage = (event) => {
           if (event.data && event.data.type === "NEW_NOTIFICATION") {
-            // ONLY customers should receive broadcast notifications in their bell & toast!
             if (!isStaff) {
               const incoming = event.data.notification;
-              let dismissedIds = new Set();
-              try {
-                dismissedIds = new Set(JSON.parse(localStorage.getItem(dismissedKey) || "[]"));
-              } catch {}
-              if (!dismissedIds.has(incoming.id)) {
+              if (!isDismissed(incoming)) {
                 setNotifications((prev) => [incoming, ...prev.filter((p) => p.id !== incoming.id)]);
                 showToast(incoming);
               }
@@ -169,12 +202,18 @@ export function NotificationProvider({ children }) {
     };
   }, [isStaff, dismissedKey]);
 
-  // Load from user storage on start and poll DB every 4s
+  // Load from user storage on start & auto-poll
   useEffect(() => {
+    const dismissedSet = getDismissedSet();
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
-        setNotifications(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setNotifications(parsed.filter((n) => !isDismissed(n, dismissedSet)));
+        } else {
+          setNotifications([]);
+        }
       } else {
         setNotifications([]);
       }
@@ -183,14 +222,15 @@ export function NotificationProvider({ children }) {
     }
 
     fetchDbNotifications();
-    const interval = setInterval(fetchDbNotifications, 4000);
+    const interval = setInterval(fetchDbNotifications, 5000);
     return () => clearInterval(interval);
   }, [storageKey, user]);
 
-  // Real-Time Customer Private Event Notification Addition (e.g. Order updates)
-  const addNotification = ({ title, message, type = "info", link = null }) => {
+  // Real-Time Individual Order Confirmation / Event Notification Addition
+  const addNotification = ({ id, title, message, type = "info", link = null }) => {
+    const notifId = id || "n-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6);
     const newNotif = {
-      id: "n-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6),
+      id: notifId,
       title,
       message,
       link,
@@ -199,27 +239,29 @@ export function NotificationProvider({ children }) {
       type,
     };
 
+    const dismissedSet = getDismissedSet();
+    if (isDismissed(newNotif, dismissedSet)) return newNotif;
+
     setNotifications((prev) => {
-      const updated = [newNotif, ...prev];
+      const updated = [newNotif, ...prev.filter((p) => p.id !== notifId)];
       if (storageKey) {
         try { localStorage.setItem(storageKey, JSON.stringify(updated)); } catch {}
       }
       return updated;
     });
 
-    // Save to private customer order history so polling does not overwrite it
+    // Save strictly to private customer order notifications
     if (type === "order" || (title || "").toLowerCase().includes("order")) {
       try {
-        const orderKey = `buildcity_user_orders_${userIdent}`;
-        const prevOrders = JSON.parse(localStorage.getItem(orderKey) || "[]");
-        localStorage.setItem(orderKey, JSON.stringify([newNotif, ...prevOrders.filter((o) => o.id !== newNotif.id)]));
+        const prevOrders = JSON.parse(localStorage.getItem(orderNotifsKey) || "[]");
+        localStorage.setItem(orderNotifsKey, JSON.stringify([newNotif, ...prevOrders.filter((o) => o.id !== notifId)]));
       } catch {}
     }
 
-    // Only show toast to this customer
+    // Show instant toast to the customer
     showToast(newNotif);
 
-    // If it's NOT an order (e.g. system broadcast), share across tabs. Orders remain strictly private.
+    // If it's a broadcast offer, push across active tabs
     if (type !== "order") {
       try {
         if (typeof window !== "undefined" && "BroadcastChannel" in window) {
@@ -233,52 +275,36 @@ export function NotificationProvider({ children }) {
     return newNotif;
   };
 
-  // Admin Broadcast Dispatcher (Saves directly to database and pushes to all customers)
+  // Broadcast Message Dispatcher (Sends to all users in Offers tab)
   const sendBroadcastNotification = async ({ title, message, type = "offer" }) => {
     if (!title || !message) return false;
     setIsSending(true);
 
     try {
       let createdNotif = null;
-
-      // 1. Send to Vercel Serverless Edge (Direct Supabase DB save in 50ms)
       try {
-        const vRes = await authFetch("/api/v1/notifications", {
+        const res = await authFetch(`${API_BASE_URL}/api/v1/notifications`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title, message, type }),
         });
-        if (vRes.ok) {
-          const vData = await vRes.json();
-          createdNotif = vData.notification;
+        if (res.ok) {
+          const rData = await res.json();
+          createdNotif = rData.notification;
         }
       } catch {}
 
-      // 2. Backup to Render DB if Vercel endpoint didn't respond
-      if (!createdNotif) {
-        try {
-          const res = await authFetch(`${API_BASE_URL}/api/v1/notifications`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title, message, type }),
-          });
-          if (res.ok) {
-            const rData = await res.json();
-            createdNotif = rData.notification;
-          }
-        } catch {}
-      }
-
       const createdObj = {
-        id: createdNotif?.id || "n-" + Date.now(),
+        id: createdNotif?.id || "broadcast-" + Date.now(),
         title: title.startsWith("📢") || title.startsWith("🎁") || title.startsWith("🏷️") ? title : `${type === "offer" ? "🎁" : type === "price" ? "🏷️" : "📢"} ${title}`,
         message,
         timestamp: Date.now(),
         read: false,
         type: type || "offer",
+        link: "/categories",
+        isBroadcast: true,
       };
 
-      // If on customer view, update local state, otherwise let customers receive via broadcast channel
       if (!isAdmin) {
         setNotifications((prev) => [createdObj, ...prev.filter((p) => p.id !== createdObj.id)]);
         showToast(createdObj);
@@ -320,7 +346,6 @@ export function NotificationProvider({ children }) {
 
     if (id && id.length > 20) {
       try {
-        await authFetch(`/api/v1/notifications?id=${encodeURIComponent(id)}`, { method: "PATCH" });
         await authFetch(`${API_BASE_URL}/api/v1/notifications/${encodeURIComponent(id)}/read`, { method: "PATCH" });
       } catch {}
     }
@@ -341,52 +366,41 @@ export function NotificationProvider({ children }) {
     });
   };
 
+  // PERMANENT CLEAR: Dismissed notifications NEVER re-appear
   const clearAllNotifications = async () => {
-    if (isAdmin) {
-      // Admin actually wipes all from Supabase Database
-      try {
-        await Promise.allSettled([
-          authFetch("/api/v1/notifications", { method: "DELETE" }),
-          authFetch(`${API_BASE_URL}/api/v1/notifications`, { method: "DELETE" }),
-          new Promise((r) => setTimeout(r, 450)),
-        ]);
-      } catch {}
-    } else {
-      // Customer clears their personal inbox
-      try {
-        const allIds = notifications.map((n) => n.id);
-        const prevDismissed = JSON.parse(localStorage.getItem(dismissedKey) || "[]");
-        const combined = Array.from(new Set([...prevDismissed, ...allIds]));
-        localStorage.setItem(dismissedKey, JSON.stringify(combined));
-      } catch {}
-    }
+    try {
+      const prevDismissed = JSON.parse(localStorage.getItem(dismissedKey) || "[]");
+      const currentIds = notifications.map((n) => n.id).filter(Boolean);
+      const currentSigs = notifications.map((n) => `${(n.title || "").trim()}_${(n.message || "").trim()}`);
+      const allToDismiss = Array.from(new Set([...prevDismissed, ...currentIds, ...currentSigs]));
+
+      localStorage.setItem(dismissedKey, JSON.stringify(allToDismiss));
+      localStorage.setItem(orderNotifsKey, JSON.stringify([]));
+      localStorage.setItem(storageKey, JSON.stringify([]));
+    } catch {}
 
     setNotifications([]);
-    if (storageKey) {
-      try { localStorage.setItem(storageKey, JSON.stringify([])); } catch {}
+
+    if (isAdmin) {
+      try {
+        await authFetch(`${API_BASE_URL}/api/v1/notifications`, { method: "DELETE" });
+      } catch {}
     }
   };
 
+  // PERMANENT REMOVE: Single notification dismissal
   const removeNotification = async (id) => {
-    if (isAdmin) {
-      // Admin deletes from Database
-      try {
-        await Promise.allSettled([
-          authFetch(`/api/v1/notifications?id=${encodeURIComponent(id)}`, { method: "DELETE" }),
-          authFetch(`${API_BASE_URL}/api/v1/notifications/${encodeURIComponent(id)}`, { method: "DELETE" }),
-          new Promise((r) => setTimeout(r, 450)),
-        ]);
-      } catch {}
-    } else {
-      // Customer dismisses from personal inbox
-      try {
-        const prevDismissed = JSON.parse(localStorage.getItem(dismissedKey) || "[]");
-        if (!prevDismissed.includes(id)) {
-          prevDismissed.push(id);
-          localStorage.setItem(dismissedKey, JSON.stringify(prevDismissed));
-        }
-      } catch {}
-    }
+    const target = notifications.find((n) => n.id === id);
+    try {
+      const prevDismissed = JSON.parse(localStorage.getItem(dismissedKey) || "[]");
+      const sig = target ? `${(target.title || "").trim()}_${(target.message || "").trim()}` : null;
+      const updatedDismissed = Array.from(new Set([...prevDismissed, id, sig].filter(Boolean)));
+      localStorage.setItem(dismissedKey, JSON.stringify(updatedDismissed));
+
+      // Remove from local order notifications if it was an order
+      const prevOrders = JSON.parse(localStorage.getItem(orderNotifsKey) || "[]");
+      localStorage.setItem(orderNotifsKey, JSON.stringify(prevOrders.filter((o) => o.id !== id)));
+    } catch {}
 
     setNotifications((prev) => {
       const updated = prev.filter((n) => n.id !== id);
@@ -395,6 +409,12 @@ export function NotificationProvider({ children }) {
       }
       return updated;
     });
+
+    if (isAdmin && id && id.length > 20) {
+      try {
+        await authFetch(`${API_BASE_URL}/api/v1/notifications/${encodeURIComponent(id)}`, { method: "DELETE" });
+      } catch {}
+    }
   };
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -417,19 +437,16 @@ export function NotificationProvider({ children }) {
     >
       {children}
 
-      {/* High-End Real-Time Floating Notification Toast Banner on Customer Screen */}
+      {/* Floating Real-Time Notification Toast */}
       {toastNotif && (
         <div className="fixed top-5 right-4 sm:right-6 z-[9999] max-w-sm w-[calc(100%-2rem)] sm:w-full animate-in slide-in-from-top-4 fade-in duration-300 pointer-events-auto">
           <div className="bg-slate-900/95 text-white border border-brand-500/40 rounded-2xl p-4 shadow-2xl backdrop-blur-xl flex items-start gap-3 relative overflow-hidden group">
-            {/* Top Accent Gradient Bar */}
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 via-brand-500 to-rose-500 animate-pulse" />
 
-            {/* Icon Avatar */}
             <span className="h-10 w-10 rounded-xl bg-brand-500/20 border border-brand-400/40 flex items-center justify-center text-xl shrink-0 mt-0.5 shadow-xs">
               {toastNotif.type === "offer" ? "🎁" : toastNotif.type === "price" ? "🏷️" : toastNotif.type === "order" ? "📦" : "📢"}
             </span>
 
-            {/* Content */}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 mb-1">
                 <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
@@ -441,7 +458,7 @@ export function NotificationProvider({ children }) {
                     ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
                     : "bg-purple-500/20 text-purple-300 border-purple-500/30"
                 }`}>
-                  {toastNotif.type === "offer" ? "Special Offer" : toastNotif.type === "price" ? "Price Alert" : toastNotif.type === "order" ? "Order Update" : "Announcement"}
+                  {toastNotif.type === "offer" ? "Special Offer" : toastNotif.type === "price" ? "Price Alert" : toastNotif.type === "order" ? "Order Confirmed" : "Announcement"}
                 </span>
                 <span className="text-[10px] text-slate-400 font-semibold">Just now</span>
               </div>
@@ -464,7 +481,6 @@ export function NotificationProvider({ children }) {
               )}
             </div>
 
-            {/* Close Button */}
             <button
               onClick={() => setToastNotif(null)}
               className="text-slate-400 hover:text-white text-sm font-bold leading-none p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"

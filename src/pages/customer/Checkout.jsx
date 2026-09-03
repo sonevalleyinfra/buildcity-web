@@ -227,12 +227,14 @@ export default function Checkout() {
       setPlacing(false);
       setSuccessOrder(order);
 
-      // Trigger interactive real-time notification
+      // Trigger interactive real-time individual order confirmation notification
       const verifiedTotal = Number(order.totalAmount || order.total || total);
       const formattedOrderId = formatShortId(order.id, "ORD");
+      const customerName = targetAddr?.fullName || user?.name || "Customer";
       addNotification({
-        title: "Order Placed Successfully! 📦",
-        message: `Order ${formattedOrderId} confirmed. Pay ₹${verifiedTotal.toLocaleString("en-IN")} on site arrival.`,
+        id: `order_confirmed_${order.id}`,
+        title: `Order ${formattedOrderId} Confirmed! 📦`,
+        message: `Thank you ${customerName}! Your order of ₹${verifiedTotal.toLocaleString("en-IN")} is confirmed and sent for dispatch.`,
         type: "order",
         link: `/orders/${order.id}`,
       });

@@ -42,16 +42,13 @@ export default function Navbar() {
             <Link
               key={link.label}
               to={link.to}
-              className={`text-sm font-semibold tracking-tight transition-colors duration-150 relative py-1 ${
+              className={`text-sm font-semibold tracking-tight transition-colors duration-150 py-1 ${
                 pathname === link.to
-                  ? "text-brand-600 font-bold"
+                  ? "text-brand-600 font-black"
                   : "text-slate-600 hover:text-navy-900"
               }`}
             >
               {link.label}
-              {pathname === link.to && (
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 rounded-full" />
-              )}
             </Link>
           ))}
         </nav>

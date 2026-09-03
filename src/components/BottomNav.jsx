@@ -44,9 +44,6 @@ export default function BottomNav() {
               >
                 {tab.label}
               </span>
-              {active && (
-                <span className="absolute top-0 w-8 h-0.5 bg-brand-600 rounded-full" />
-              )}
             </Link>
           );
         })}

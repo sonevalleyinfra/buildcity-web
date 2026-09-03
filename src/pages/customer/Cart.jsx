@@ -5,6 +5,7 @@ import { useCart } from "../../context/CartContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useAlert } from "../../context/AlertContext";
 import { useRegion } from "../../context/RegionContext";
+import { useAuth } from "../../context/AuthContext";
 import { API_BASE_URL } from "../../config/api";
 import { authFetch } from "../../config/authFetch";
 
@@ -15,6 +16,7 @@ const AVAILABLE_COUPONS = [
 ];
 
 export default function Cart() {
+  const { user } = useAuth();
   const { 
     items, 
     updateQty, 
@@ -80,6 +82,10 @@ export default function Cart() {
         type: "warning",
         buttonText: "Got It",
       });
+      return;
+    }
+    if (!user) {
+      navigate("/login?redirect=/checkout");
       return;
     }
     navigate("/checkout");

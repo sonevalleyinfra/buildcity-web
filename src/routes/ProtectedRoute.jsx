@@ -1,4 +1,4 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import BottomNav from "../components/BottomNav";
 
@@ -6,10 +6,14 @@ import BottomNav from "../components/BottomNav";
 // role omitted = just needs to be logged in (any role)
 export default function ProtectedRoute({ children, role }) {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) return null; // could render a spinner here
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    const redirectParam = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/login?redirect=${redirectParam}`} replace />;
+  }
 
   if (role && user.role !== role) {
     // logged in, but galat role pe  -> usko uske home par bhej doe access nahi 

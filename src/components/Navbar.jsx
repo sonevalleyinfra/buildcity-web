@@ -92,15 +92,32 @@ export default function Navbar() {
               </span>
             )}
           </Link>
-          <div className="hidden lg:flex items-center gap-3 pl-3 border-l border-slate-200">
-            <span className="text-xs font-semibold text-slate-700 tracking-tight">{user?.name}</span>
-            <button
-              onClick={handleLogout}
-              className="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200/80 px-3 py-1.2 rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer shadow-2xs"
-            >
-              Logout
-            </button>
-          </div>
+          {user ? (
+            <div className="hidden lg:flex items-center gap-3 pl-3 border-l border-slate-200">
+              <span className="text-xs font-semibold text-slate-700 tracking-tight flex items-center gap-1.5">
+                <span className="w-6 h-6 rounded-full bg-brand-100 text-brand-700 font-bold flex items-center justify-center text-[10px]">
+                  {(user.name || "U")[0].toUpperCase()}
+                </span>
+                <span className="max-w-[120px] truncate font-bold text-navy-900">{user.name || "Customer"}</span>
+              </span>
+              <button
+                onClick={handleLogout}
+                className="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200/80 px-3 py-1.5 rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer shadow-2xs"
+              >
+                Logout
+              </button>
+            </div>
+          ) : (
+            <div className="hidden lg:flex items-center gap-2 pl-3 border-l border-slate-200">
+              <Link
+                to="/login"
+                className="text-xs font-extrabold bg-brand-500 hover:bg-brand-600 text-white px-3.5 py-2 rounded-xl shadow-xs active:scale-[0.98] transition-all flex items-center gap-1.5"
+              >
+                <span>🔑</span>
+                <span>Login / Register</span>
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </header>

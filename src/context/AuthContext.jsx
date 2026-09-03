@@ -47,19 +47,22 @@ export function AuthProvider({ children }) {
 
   const [currentOtpToken, setCurrentOtpToken] = useState("");
 
-  const requestOtp = async (phone) => {
+  const requestOtp = async (phone, type = "login") => {
     const cleanPhone = phone.trim().replace(/\D/g, "").slice(-10);
     const endpoint = getOtpEndpoint("/api/v1/auth/otp/request");
 
     const response = await authFetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: cleanPhone }),
+      body: JSON.stringify({ phone: cleanPhone, type }),
     });
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data.success) {
-      throw new Error(data.error || "Failed to dispatch OTP");
+      const err = new Error(data.error || "Failed to dispatch OTP");
+      err.notRegistered = data.notRegistered;
+      err.alreadyRegistered = data.alreadyRegistered;
+      throw err;
     }
 
     if (data.otpToken) {

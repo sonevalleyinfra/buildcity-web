@@ -388,7 +388,7 @@ const { sendRealSMSOTP } = require("./smsService");
 
 // 1. AUTHENTICATION & USERS ENDPOINTS (INSTANT HIGH SPEED OPTIMIZED)
 app.post("/api/v1/auth/otp/request", otpRequestLimiter, async (req, res) => {
-  const { phone } = req.body;
+  const { phone, type = "login" } = req.body;
   if (!phone || !/^\d{10}$/.test(phone)) {
     return res.status(400).json({ error: "Valid 10-digit phone number required" });
   }
@@ -411,6 +411,32 @@ app.post("/api/v1/auth/otp/request", otpRequestLimiter, async (req, res) => {
     }
     if (cleanPhone.length !== 10) {
       return res.status(400).json({ error: "Please enter a valid 10-digit mobile number" });
+    }
+
+    // Check if user exists in database
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { phone: cleanPhone },
+          { phone: { contains: cleanPhone.slice(-10) } },
+        ],
+      },
+    }).catch(() => null);
+
+    // If logging in, user MUST be registered in database
+    if (type === "login" && !existingUser) {
+      return res.status(404).json({
+        notRegistered: true,
+        error: "This mobile number is not registered. Please create an account first.",
+      });
+    }
+
+    // If registering, check if already registered
+    if (type === "register" && existingUser) {
+      return res.status(409).json({
+        alreadyRegistered: true,
+        error: "This mobile number is already registered. Please log in directly.",
+      });
     }
 
     // 90-second per-phone cooldown check (safely handling server clock timezone differences)
@@ -449,6 +475,7 @@ app.post("/api/v1/auth/otp/request", otpRequestLimiter, async (req, res) => {
       message: `OTP dispatched to +91 ${cleanPhone.slice(-10)}`,
       gateway: smsResult.gateway || "AradhyaSMS",
       smsStatus: smsResult.success ? "dispatched" : "failed",
+      isRegistered: !!existingUser,
     });
   } catch (err) {
     console.error("OTP dispatch error:", err);
@@ -457,7 +484,7 @@ app.post("/api/v1/auth/otp/request", otpRequestLimiter, async (req, res) => {
 });
 
 app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
-  const { phone, otp } = req.body;
+  const { phone, otp, name } = req.body;
   if (!phone || !otp) return res.status(400).json({ error: "Phone and OTP required" });
 
   try {
@@ -499,44 +526,34 @@ app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
       return res.status(401).json({ error: "Invalid or expired OTP. Please enter the exact OTP code sent to your mobile." });
     }
 
-    const UNIQUE_ADMIN_ID = "ADMIN2026";
-    const inputUpper = (cleanPhone || phone || "").toUpperCase().trim();
+    let user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { phone: cleanPhone },
+          { phone: { contains: cleanPhone.slice(-10) } },
+        ],
+      },
+    }).catch(() => null);
 
-    let role = "CUSTOMER";
-    if (inputUpper === UNIQUE_ADMIN_ID) {
-      role = "ADMIN";
-    }
-
-    let user = null;
-    try {
-      user = await prisma.user.findUnique({ where: { phone: inputUpper } }).catch(() => null);
-      if (!user) {
-        user = await prisma.user.findUnique({ where: { phone } }).catch(() => null);
-      }
-    } catch {}
-
-    if (user && inputUpper === UNIQUE_ADMIN_ID && user.role !== "ADMIN") {
-      try {
+    if (user) {
+      // If customer provided a new/updated name during registration, save it
+      if (name && name.trim().length >= 2 && user.name !== name.trim()) {
         user = await prisma.user.update({
           where: { id: user.id },
-          data: { role: "ADMIN", name: "Super Admin" },
-        });
-      } catch {}
-    }
-
-    if (!user) {
-      try {
-        user = await prisma.user.create({
-          data: {
-            phone: cleanPhone,
-            name: role === "ADMIN" ? "Super Admin" : role === "DR" ? "District Rep" : role === "VENDOR" ? "Vendor Partner" : `Customer ${cleanPhone.slice(-4)}`,
-            role,
-            tokenVersion: 1,
-          },
-        });
-      } catch {
-        user = { id: "u-" + Date.now(), phone: cleanPhone, name: role === "ADMIN" ? "Super Admin" : "User " + cleanPhone.slice(-4), role, tokenVersion: 1 };
+          data: { name: name.trim() },
+        }).catch(() => user);
       }
+    } else {
+      // Create new user in DB with exact Name
+      const customerName = name && name.trim().length >= 2 ? name.trim() : `Customer ${cleanPhone.slice(-4)}`;
+      user = await prisma.user.create({
+        data: {
+          phone: cleanPhone,
+          name: customerName,
+          role: "CUSTOMER",
+          tokenVersion: 1,
+        },
+      });
     }
 
     const token = issueToken(user);

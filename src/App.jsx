@@ -36,9 +36,7 @@ function CatchAll() {
       ? "/dr/dashboard"
       : user?.role === "vendor"
       ? "/vendor/dashboard"
-      : user
-      ? "/"
-      : "/login";
+      : "/";
   return <Navigate to={target} replace />;
 }
 
@@ -70,54 +68,15 @@ export default function App() {
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
 
-                  <Route
-                    path="/"
-                    element={
-                      <ProtectedRoute role="customer">
-                        <Home />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/category/:slug"
-                    element={
-                      <ProtectedRoute role="customer">
-                        <CategoryListing />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/categories"
-                    element={
-                      <ProtectedRoute role="customer">
-                        <Categories />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/product/:id"
-                    element={
-                      <ProtectedRoute role="customer">
-                        <ProductDetail />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/search"
-                    element={
-                      <ProtectedRoute role="customer">
-                        <SearchResults />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/cart"
-                    element={
-                      <ProtectedRoute role="customer">
-                        <Cart />
-                      </ProtectedRoute>
-                    }
-                  />
+                  {/* Public Storefront Routes (Flipkart Style Open Browsing) */}
+                  <Route path="/" element={<Home />} />
+                  <Route path="/category/:slug" element={<CategoryListing />} />
+                  <Route path="/categories" element={<Categories />} />
+                  <Route path="/product/:id" element={<ProductDetail />} />
+                  <Route path="/search" element={<SearchResults />} />
+                  <Route path="/cart" element={<Cart />} />
+
+                  {/* Protected Customer Routes (Login Required) */}
                   <Route
                     path="/checkout"
                     element={

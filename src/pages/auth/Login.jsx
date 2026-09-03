@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import AuthLayout from "../../layouts/AuthLayout";
 import Button from "../../components/Button";
 import { useAuth } from "../../context/AuthContext";
@@ -7,6 +7,9 @@ import { useAuth } from "../../context/AuthContext";
 // Login Page component — User / Vendor / DR / Admin ka universal login screen
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get("redirect") || "/";
+
   const { requestOtp, verifyOtp, vendorLogin } = useAuth();
 
   // Mode: "standard" (OTP for Customer) vs "vendor" (Phone & Password for Vendor / DR / Admin Partners)
@@ -86,13 +89,27 @@ export default function Login() {
 
     setLoading(true);
     try {
-      await requestOtp(cleanedMobile);
+      await requestOtp(cleanedMobile, "login");
       setStep("otp");
       const expireTime = Date.now() + 90 * 1000;
       try { sessionStorage.setItem("buildcity_otp_expire", expireTime.toString()); } catch {}
       setCooldown(90);
     } catch (err) {
-      setError(err?.message || "Failed to send OTP. Please check mobile number.");
+      if (err.notRegistered) {
+        setError(
+          <span>
+            {err.message || "This mobile number is not registered."}{" "}
+            <Link
+              to={`/register?phone=${cleanedMobile}&redirect=${encodeURIComponent(redirectTo)}`}
+              className="underline font-bold text-brand-600 block mt-1.5"
+            >
+              👉 Click here to Create Account →
+            </Link>
+          </span>
+        );
+      } else {
+        setError(err?.message || "Failed to send OTP. Please check mobile number.");
+      }
     } finally {
       setLoading(false);
     }
@@ -119,7 +136,7 @@ export default function Login() {
           ? "/dr/dashboard"
           : user.role === "vendor"
           ? "/vendor/dashboard"
-          : "/";
+          : redirectTo;
           
       navigate(home, { replace: true });
     } catch (err) {

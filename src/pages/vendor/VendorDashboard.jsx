@@ -32,11 +32,13 @@ export default function VendorDashboard() {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("ALL");
   const [catalogSearch, setCatalogSearch] = useState("");
 
-  // Selling Price (₹) & Stock Qty State — Master Product dukan me add karte waqt vendor ka custom price
+  // Pricing, MRP & Discount % State — Vendor custom offer setting
+  const [vendorMrp, setVendorMrp] = useState("");
+  const [vendorDiscountPct, setVendorDiscountPct] = useState(10);
   const [vendorSellingPrice, setVendorSellingPrice] = useState("");
   const [vendorStockQty, setVendorStockQty] = useState(100);
 
-  // Edit Listing - Custom selling price aur stock modify karne ke liye
+  // Edit Listing - Custom selling price, MRP, discount and stock modify karne ke liye
   const [editingProduct, setEditingProduct] = useState(null);
 
   // Logged-in Vendor Info details extraction matching DB Vendors
@@ -98,8 +100,40 @@ export default function VendorDashboard() {
 
   const handleOpenMasterProductSelect = (mp) => {
     setSelectedMasterProd(mp);
-    setVendorSellingPrice(mp.suggestedPrice || 390);
+    const mrp = Number(mp.suggestedPrice) || 390;
+    const defaultDisc = 10;
+    const calcSelling = Math.round(mrp * (1 - defaultDisc / 100));
+    setVendorMrp(mrp);
+    setVendorDiscountPct(defaultDisc);
+    setVendorSellingPrice(calcSelling);
     setVendorStockQty(100);
+  };
+
+  const handleSellingPriceChange = (val) => {
+    setVendorSellingPrice(val);
+    const numPrice = Number(val) || 0;
+    const numMrp = Number(vendorMrp) || 0;
+    if (numMrp > 0 && numPrice > 0 && numPrice <= numMrp) {
+      setVendorDiscountPct(Math.round(((numMrp - numPrice) / numMrp) * 100));
+    }
+  };
+
+  const handleDiscountChange = (val) => {
+    setVendorDiscountPct(val);
+    const numDisc = Number(val) || 0;
+    const numMrp = Number(vendorMrp) || 0;
+    if (numMrp > 0) {
+      setVendorSellingPrice(Math.round(numMrp * (1 - numDisc / 100)));
+    }
+  };
+
+  const handleMrpChange = (val) => {
+    setVendorMrp(val);
+    const numMrp = Number(val) || 0;
+    const numDisc = Number(vendorDiscountPct) || 0;
+    if (numMrp > 0) {
+      setVendorSellingPrice(Math.round(numMrp * (1 - numDisc / 100)));
+    }
   };
 
   const handleAddMasterProductToStore = (e) => {
@@ -114,6 +148,7 @@ export default function VendorDashboard() {
       regionName: districtName || matchedVendorObj.regionName || "Mirzapur",
       districtName: districtName || matchedVendorObj.regionName || "Mirzapur",
       price: Number(vendorSellingPrice),
+      mrp: Number(vendorMrp) || Number(selectedMasterProd.suggestedPrice) || Number(vendorSellingPrice),
       stockQty: Number(vendorStockQty) || 0,
       addedBy: `Vendor (${shopName})`,
     });
@@ -122,10 +157,44 @@ export default function VendorDashboard() {
     setShowCatalogModal(false);
     showAlert({
       title: "Submitted for Review",
-      message: `"${selectedMasterProd.name}" has been submitted for review!\n\nStatus: ⏳ Under Admin & DR Review\nOnce approved by Admin or DR, this product will go live on the customer store.`,
+      message: `"${selectedMasterProd.name}" has been submitted for review!\n\nStatus: ⏳ Under Admin & DR Review\nOnce approved by Admin or DR, this product will go live on the customer store with ₹${vendorSellingPrice} (${vendorDiscountPct}% OFF).`,
       type: "info",
       buttonText: "Understood",
     });
+  };
+
+  const handleOpenEditProduct = (p) => {
+    const price = Number(p.price) || 100;
+    const mrp = Number(p.mrp || p.masterProduct?.suggestedPrice || Math.round(price * 1.2));
+    const disc = mrp > price ? Math.round(((mrp - price) / mrp) * 100) : 0;
+    setEditingProduct({
+      ...p,
+      mrp: mrp,
+      price: price,
+      discountPct: disc,
+      stockQty: p.stockQty !== undefined ? p.stockQty : 100,
+    });
+  };
+
+  const handleEditPriceChange = (val) => {
+    const numPrice = Number(val) || 0;
+    const numMrp = Number(editingProduct.mrp) || 0;
+    const disc = numMrp > numPrice && numPrice > 0 ? Math.round(((numMrp - numPrice) / numMrp) * 100) : 0;
+    setEditingProduct((prev) => ({ ...prev, price: val, discountPct: disc }));
+  };
+
+  const handleEditDiscountChange = (val) => {
+    const numDisc = Number(val) || 0;
+    const numMrp = Number(editingProduct.mrp) || 0;
+    const newPrice = numMrp > 0 ? Math.round(numMrp * (1 - numDisc / 100)) : editingProduct.price;
+    setEditingProduct((prev) => ({ ...prev, discountPct: val, price: newPrice }));
+  };
+
+  const handleEditMrpChange = (val) => {
+    const numMrp = Number(val) || 0;
+    const numDisc = Number(editingProduct.discountPct) || 0;
+    const newPrice = numMrp > 0 ? Math.round(numMrp * (1 - numDisc / 100)) : editingProduct.price;
+    setEditingProduct((prev) => ({ ...prev, mrp: val, price: newPrice }));
   };
 
   const handleUpdateListing = (e) => {
@@ -134,11 +203,12 @@ export default function VendorDashboard() {
 
     updateVendorProductListing(editingProduct.id, {
       price: Number(editingProduct.price),
+      mrp: Number(editingProduct.mrp),
       stockQty: Number(editingProduct.stockQty),
     });
 
     setEditingProduct(null);
-    showAlert({ title: "Listing Updated", message: "Product price and stock updated successfully!", type: "success" });
+    showAlert({ title: "Listing Updated", message: `Product offer updated to ₹${editingProduct.price} (${editingProduct.discountPct}% OFF)!`, type: "success" });
   };
 
   const handleRemoveListing = (id, name) => {
@@ -511,7 +581,18 @@ export default function VendorDashboard() {
                         )}
                       </td>
                       <td className="py-3.5 px-4 font-extrabold text-navy-900 text-sm">
-                        ₹{p.price} <span className="text-[10px] font-normal text-slate-400">/{p.unit}</span>
+                        <div className="flex items-baseline gap-1.5 flex-wrap">
+                          <span>₹{p.price}</span>
+                          {p.mrp > p.price && (
+                            <span className="text-xs text-slate-400 line-through font-medium">₹{p.mrp}</span>
+                          )}
+                          {p.mrp > p.price && (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.2 rounded">
+                              {Math.round(((p.mrp - p.price) / p.mrp) * 100)}% OFF
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] font-normal text-slate-400 block mt-0.5">/{p.unit}</span>
                       </td>
                       <td className="py-3.5 px-4">
                         <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${p.stockQty > 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80" : "bg-rose-50 text-rose-700 border border-rose-200/80"}`}>
@@ -521,10 +602,10 @@ export default function VendorDashboard() {
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
-                            onClick={() => setEditingProduct({ ...p })}
-                            className="text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer"
+                            onClick={() => handleOpenEditProduct(p)}
+                            className="text-[11px] font-bold bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer"
                           >
-                            ✏️ Edit Price/Stock
+                            🏷️ Edit Price & Offer
                           </button>
                         </div>
                       </td>
@@ -764,30 +845,68 @@ export default function VendorDashboard() {
               )}
             </div>
 
-            {/* Sub-M / Form for Price & Stock when Master Product selected */}
+            {/* Sub-Modal / Form for Price, MRP, Discount & Stock when Master Product selected */}
             {selectedMasterProd && (
               <form onSubmit={handleAddMasterProductToStore} className="bg-brand-50/50 border border-brand-200/80 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between border-b border-brand-200/60 pb-2">
-                  <p className="text-xs font-bold text-brand-900">Set Your Price & Stock for &quot;{selectedMasterProd.name}&quot;</p>
-                  <button type="button" onClick={() => setSelectedMasterProd(null)} className="text-xs font-semibold text-slate-500">Cancel selection</button>
+                  <div>
+                    <p className="text-xs font-bold text-brand-900">Set Live Offer, MRP & Stock for &quot;{selectedMasterProd.name}&quot;</p>
+                    <p className="text-[11px] text-slate-500">Set custom discount to attract customers in your district.</p>
+                  </div>
+                  <button type="button" onClick={() => setSelectedMasterProd(null)} className="text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer">Cancel</button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-navy-900 mb-1">
-                      Your Selling Price (₹) *
+                      MRP / Base Price (₹) *
                     </label>
                     <input
                       type="number"
                       required
                       min="1"
-                      placeholder="e.g. 390"
-                      value={vendorSellingPrice}
-                      onChange={(e) => setVendorSellingPrice(e.target.value)}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500"
+                      placeholder="e.g. 2500"
+                      value={vendorMrp}
+                      onChange={(e) => handleMrpChange(e.target.value)}
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-bold"
                     />
                   </div>
 
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">
+                      Discount (% OFF)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        max="90"
+                        placeholder="10"
+                        value={vendorDiscountPct}
+                        onChange={(e) => handleDiscountChange(e.target.value)}
+                        className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-bold pr-8"
+                      />
+                      <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">
+                      Final Selling Price (₹) *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      placeholder="e.g. 2250"
+                      value={vendorSellingPrice}
+                      onChange={(e) => handleSellingPriceChange(e.target.value)}
+                      className="w-full bg-emerald-50 text-emerald-900 text-xs border border-emerald-300 rounded-xl px-3 py-2 outline-none focus:border-emerald-500 font-extrabold"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <div>
                     <label className="block text-xs font-bold text-navy-900 mb-1">
                       Initial Stock Quantity *
@@ -799,15 +918,30 @@ export default function VendorDashboard() {
                       placeholder="100"
                       value={vendorStockQty}
                       onChange={(e) => setVendorStockQty(e.target.value)}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500"
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-bold"
                     />
+                  </div>
+
+                  <div className="flex flex-col justify-center">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Customer View Preview:</span>
+                    <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-2xs">
+                      <span className="text-sm font-extrabold text-navy-900">₹{vendorSellingPrice || 0}</span>
+                      {Number(vendorMrp) > Number(vendorSellingPrice) && (
+                        <span className="text-xs text-slate-400 line-through">₹{vendorMrp}</span>
+                      )}
+                      {Number(vendorDiscountPct) > 0 && (
+                        <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                          {vendorDiscountPct}% OFF
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 <div className="flex justify-end gap-2 pt-1">
                   <button
                     type="submit"
-                    className="bg-brand-500 hover:bg-brand-600 active:scale-[0.98] transition-all duration-200 text-white font-bold text-xs px-5 py-2 rounded-xl shadow-xs"
+                    className="bg-brand-500 hover:bg-brand-600 active:scale-[0.98] transition-all duration-200 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-xs cursor-pointer"
                   >
                     Confirm & Add to My Store Listing
                   </button>
@@ -818,13 +952,16 @@ export default function VendorDashboard() {
         </div>
       )}
 
-      {/* M 2: EDIT LISTING PRICE & STOCK */}
+      {/* MODAL 2: EDIT LISTING PRICE, MRP, DISCOUNT & STOCK */}
       {editingProduct && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-              <h3 className="font-bold text-navy-900 text-base">Edit Selling Price & Stock</h3>
-              <button onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none">✕</button>
+              <div>
+                <h3 className="font-bold text-navy-900 text-base">Edit Product Price & Live Offer</h3>
+                <p className="text-xs text-slate-400">Update your discount offer to display the % OFF badge for customers.</p>
+              </div>
+              <button onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none cursor-pointer">✕</button>
             </div>
 
             <form onSubmit={handleUpdateListing} className="space-y-4">
@@ -833,16 +970,62 @@ export default function VendorDashboard() {
                 <input type="text" disabled value={editingProduct.name} className="w-full bg-slate-100 text-slate-600 text-xs border border-slate-200 rounded-xl px-3 py-2.5 font-bold cursor-not-allowed" />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">My Selling Price (₹) *</label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  value={editingProduct.price}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, price: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-bold"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-navy-900 mb-1">MRP / Base (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={editingProduct.mrp}
+                    onChange={(e) => handleEditMrpChange(e.target.value)}
+                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-navy-900 mb-1">Discount (% OFF)</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      max="90"
+                      value={editingProduct.discountPct}
+                      onChange={(e) => handleEditDiscountChange(e.target.value)}
+                      className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-bold pr-8"
+                    />
+                    <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400">%</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-navy-900 mb-1">My Selling Price (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={editingProduct.price}
+                    onChange={(e) => handleEditPriceChange(e.target.value)}
+                    className="w-full bg-emerald-50 text-emerald-900 text-xs border border-emerald-300 rounded-xl px-3 py-2.5 outline-none focus:border-emerald-500 font-extrabold"
+                  />
+                </div>
+              </div>
+
+              {/* Live Preview Box */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Customer Store Preview:</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-base font-black text-navy-900">₹{Number(editingProduct.price || 0).toLocaleString("en-IN")}</span>
+                  {Number(editingProduct.mrp) > Number(editingProduct.price) && (
+                    <span className="text-xs text-slate-400 line-through">₹{Number(editingProduct.mrp).toLocaleString("en-IN")}</span>
+                  )}
+                  {Number(editingProduct.discountPct) > 0 && (
+                    <span className="text-[11px] font-black text-emerald-700 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-md">
+                      {editingProduct.discountPct}% OFF
+                    </span>
+                  )}
+                  <span className="text-[11px] text-slate-500 ml-auto">Packaging: <b>{editingProduct.unit || "Unit"}</b></span>
+                </div>
               </div>
 
               <div>
@@ -858,8 +1041,8 @@ export default function VendorDashboard() {
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                <button type="button" onClick={() => setEditingProduct(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
-                <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs">Update Listing</button>
+                <button type="button" onClick={() => setEditingProduct(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 cursor-pointer">Cancel</button>
+                <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs cursor-pointer active:scale-[0.98] transition-all">Save & Update Live Offer</button>
               </div>
             </form>
           </div>

@@ -131,7 +131,8 @@ export default function ProductDetail() {
       ) || directProduct;
 
     if (realProd) {
-      const mrp = Math.round(Number(realProd.price) * 1.15);
+      const price = Number(realProd.price) || 100;
+      const mrp = realProd.mrp ? Number(realProd.mrp) : realProd.masterProduct?.suggestedPrice ? Math.max(Number(realProd.masterProduct.suggestedPrice), price) : Math.round(price * 1.2);
       const extractedImages = getProductImages(realProd);
       const isSuspended =
         realProd.isVendorSuspended === true ||

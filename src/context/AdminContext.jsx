@@ -196,6 +196,7 @@ export function AdminProvider({ children }) {
             regionId: resolvedRegionId,
             regionName: resolvedRegionName,
             districtName: resolvedRegionName,
+            mrp: Number(l.mrp || l.masterProduct?.suggestedPrice || Math.round((Number(l.price) || 100) * 1.2)),
             price: Number(l.price) || 100,
             stockQty: Number(l.stockQty) || 100,
             imageUrl: l.imageUrl || l.masterProduct?.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80",

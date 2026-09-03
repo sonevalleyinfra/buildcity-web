@@ -1178,11 +1178,20 @@ export function AdminProvider({ children }) {
       if (res.ok) {
         const createdItem = await res.json().catch(() => null);
         if (createdItem && createdItem.id) {
-          setProducts((prev) =>
-            prev.map((p) => (p.id === tempId ? { ...optimisticListing, ...createdItem, id: createdItem.id } : p))
-          );
+          const resolvedItem = {
+            ...optimisticListing,
+            ...createdItem,
+            id: createdItem.id,
+            mrp: Number(createdItem.mrp || mrp || optimisticListing.mrp),
+            price: Number(createdItem.price || price),
+            stockQty: Number(createdItem.stockQty !== undefined ? createdItem.stockQty : stockQty),
+          };
+          setProducts((prev) => {
+            const updated = prev.map((p) => (p.id === tempId ? resolvedItem : p));
+            try { localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+            return updated;
+          });
         }
-        await fetchCloudData();
       }
     } catch (err) {
       console.warn("Assign master product error:", err.message);
@@ -1190,20 +1199,18 @@ export function AdminProvider({ children }) {
   };
 
   const updateVendorProductListing = async (id, updates) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, ...updates } : p))
-    );
+    setProducts((prev) => {
+      const updated = prev.map((p) => (p.id === id ? { ...p, ...updates } : p));
+      try { localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
 
     try {
-      const res = await authFetch(`${API_BASE_URL}/api/v1/vendor/listings/${id}`, {
+      await authFetch(`${API_BASE_URL}/api/v1/vendor/listings/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
       });
-
-      if (res.ok) {
-        await fetchCloudData();
-      }
     } catch (err) {
       console.warn("Live listing price update note:", err.message);
     }

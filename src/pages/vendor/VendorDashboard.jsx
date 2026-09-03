@@ -41,6 +41,7 @@ export default function VendorDashboard() {
   // Edit Listing - Custom selling price, MRP, discount and stock modify karne ke liye
   const [editingProduct, setEditingProduct] = useState(null);
   const [isUpdatingListing, setIsUpdatingListing] = useState(false);
+  const [isAddingToStore, setIsAddingToStore] = useState(false);
 
   // Logged-in Vendor Info details extraction matching DB Vendors
   const matchedVendorObj = (vendors || []).find((v) => {
@@ -137,31 +138,46 @@ export default function VendorDashboard() {
     }
   };
 
-  const handleAddMasterProductToStore = (e) => {
+  const handleAddMasterProductToStore = async (e) => {
     e.preventDefault();
     if (!selectedMasterProd || !vendorSellingPrice) return;
 
-    assignMasterProductToVendor({
-      masterProductId: selectedMasterProd.id,
-      vendorId: vendorId,
-      vendorName: shopName,
-      regionId: matchedVendorObj.regionId || user?.vendorInfo?.regionId,
-      regionName: districtName || matchedVendorObj.regionName || "Mirzapur",
-      districtName: districtName || matchedVendorObj.regionName || "Mirzapur",
-      price: Number(vendorSellingPrice),
-      mrp: Number(vendorMrp) || Number(selectedMasterProd.suggestedPrice) || Number(vendorSellingPrice),
-      stockQty: Number(vendorStockQty) || 0,
-      addedBy: `Vendor (${shopName})`,
-    });
+    setIsAddingToStore(true);
+    try {
+      const prodName = selectedMasterProd.name;
+      const targetPrice = vendorSellingPrice;
+      const targetDisc = vendorDiscountPct;
 
-    setSelectedMasterProd(null);
-    setShowCatalogModal(false);
-    showAlert({
-      title: "Submitted for Review",
-      message: `"${selectedMasterProd.name}" has been submitted for review!\n\nStatus: ⏳ Under Admin & DR Review\nOnce approved by Admin or DR, this product will go live on the customer store with ₹${vendorSellingPrice} (${vendorDiscountPct}% OFF).`,
-      type: "info",
-      buttonText: "Understood",
-    });
+      await assignMasterProductToVendor({
+        masterProductId: selectedMasterProd.id,
+        vendorId: vendorId,
+        vendorName: shopName,
+        regionId: matchedVendorObj.regionId || user?.vendorInfo?.regionId,
+        regionName: districtName || matchedVendorObj.regionName || "Mirzapur",
+        districtName: districtName || matchedVendorObj.regionName || "Mirzapur",
+        price: Number(vendorSellingPrice),
+        mrp: Number(vendorMrp) || Number(selectedMasterProd.suggestedPrice) || Number(vendorSellingPrice),
+        stockQty: Number(vendorStockQty) || 0,
+        addedBy: `Vendor (${shopName})`,
+      });
+
+      setSelectedMasterProd(null);
+      setShowCatalogModal(false);
+      showAlert({
+        title: "✅ Submitted for Review",
+        message: `"${prodName}" has been added to your store!\n\nStatus: ⏳ Under Admin & DR Review\nPrice: ₹${targetPrice} (${targetDisc}% OFF)\nOnce approved by Admin or DR, this product will go live on the customer store.`,
+        type: "success",
+        buttonText: "Understood",
+      });
+    } catch (err) {
+      showAlert({
+        title: "Submission Error",
+        message: err.message || "Failed to add product to store.",
+        type: "warning",
+      });
+    } finally {
+      setIsAddingToStore(false);
+    }
   };
 
   const handleOpenEditProduct = (p) => {
@@ -960,9 +976,17 @@ export default function VendorDashboard() {
                 <div className="flex justify-end gap-2 pt-1">
                   <button
                     type="submit"
-                    className="bg-brand-500 hover:bg-brand-600 active:scale-[0.98] transition-all duration-200 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-xs cursor-pointer"
+                    disabled={isAddingToStore}
+                    className="bg-brand-500 hover:bg-brand-600 active:scale-[0.98] transition-all duration-200 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
                   >
-                    Confirm & Add to My Store Listing
+                    {isAddingToStore ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        Adding to Store & Syncing...
+                      </>
+                    ) : (
+                      "Confirm & Add to My Store Listing"
+                    )}
                   </button>
                 </div>
               </form>

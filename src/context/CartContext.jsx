@@ -20,24 +20,79 @@ export function CartProvider({ children }) {
     ? `buildcity_cart_${user.id}`
     : "buildcity_cart_guest";
 
-  // Load cart items whenever user or cartStorageKey changes
+  // Load cart items & automatically merge guest cart into user account upon login/register
   useEffect(() => {
-    const saved = localStorage.getItem(cartStorageKey);
-    if (saved) {
+    if (user?.phone || user?.id) {
+      let guestItems = [];
       try {
-        setItems(JSON.parse(saved));
+        const guestSaved = localStorage.getItem("buildcity_cart_guest");
+        if (guestSaved) {
+          const parsed = JSON.parse(guestSaved);
+          if (Array.isArray(parsed)) guestItems = parsed;
+        }
+      } catch {}
+
+      let userSavedItems = [];
+      try {
+        const userSaved = localStorage.getItem(cartStorageKey);
+        if (userSaved) {
+          const parsed = JSON.parse(userSaved);
+          if (Array.isArray(parsed)) userSavedItems = parsed;
+        }
+      } catch {}
+
+      if (guestItems.length > 0) {
+        // Merge guest items into user account
+        const mergedMap = new Map();
+        userSavedItems.forEach((it) => {
+          if (it && it.id) mergedMap.set(it.id, it);
+        });
+
+        guestItems.forEach((it) => {
+          if (it && it.id) {
+            if (mergedMap.has(it.id)) {
+              const existing = mergedMap.get(it.id);
+              mergedMap.set(it.id, {
+                ...existing,
+                qty: Math.max(Number(existing.qty) || 1, Number(it.qty) || 1),
+              });
+            } else {
+              mergedMap.set(it.id, it);
+            }
+          }
+        });
+
+        const finalMerged = Array.from(mergedMap.values());
+        setItems(finalMerged);
+        try {
+          localStorage.setItem(cartStorageKey, JSON.stringify(finalMerged));
+          localStorage.removeItem("buildcity_cart_guest");
+        } catch {}
+      } else {
+        setItems(userSavedItems);
+      }
+    } else {
+      // Guest mode
+      try {
+        const guestSaved = localStorage.getItem("buildcity_cart_guest");
+        if (guestSaved) {
+          const parsed = JSON.parse(guestSaved);
+          setItems(Array.isArray(parsed) ? parsed : []);
+        } else {
+          setItems([]);
+        }
       } catch {
         setItems([]);
       }
-    } else {
-      setItems([]);
     }
-  }, [cartStorageKey]);
+  }, [cartStorageKey, user]);
 
-  // Persist cart items to user-specific storage key
+  // Persist cart items to storage
   useEffect(() => {
-    if (cartStorageKey) {
-      localStorage.setItem(cartStorageKey, JSON.stringify(items));
+    if (cartStorageKey && Array.isArray(items)) {
+      try {
+        localStorage.setItem(cartStorageKey, JSON.stringify(items));
+      } catch {}
     }
   }, [items, cartStorageKey]);
 

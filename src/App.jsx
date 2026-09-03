@@ -26,6 +26,8 @@ import VendorDashboard from "./pages/vendor/VendorDashboard";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import DrDashboard from "./pages/dr/DrDashboard";
 
+import BottomNav from "./components/BottomNav";
+
 function CatchAll() {
   const { user, loading } = useAuth();
   if (loading) return null;
@@ -50,6 +52,20 @@ function ScrollToTop() {
   return null;
 }
 
+function StorefrontMobileNav() {
+  const { pathname } = useLocation();
+  const isDashboardOrAuth =
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/vendor") ||
+    pathname.startsWith("/dr") ||
+    pathname === "/login" ||
+    pathname === "/register";
+
+  if (isDashboardOrAuth) return null;
+
+  return <BottomNav />;
+}
+
 import { AlertProvider } from "./context/AlertContext";
 
 export default function App() {
@@ -64,6 +80,7 @@ export default function App() {
                   <AdminProvider>
                     <BrowserRouter>
                       <ScrollToTop />
+                      <StorefrontMobileNav />
                       <Routes>
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />

@@ -28,17 +28,5 @@ export default function ProtectedRoute({ children, role }) {
     return <Navigate to={home} replace />;
   }
 
-  // mobile pe alag nav and destop pe alag .
-  // ek bar ender karu and har jagah ho jae 
-  // in destop ye upar dekhega header pe 
-  if (role === "customer" || !role) {
-    return (
-      <>
-        <BottomNav />
-        {children}
-      </>
-    );
-  }
-
   return children;
 }

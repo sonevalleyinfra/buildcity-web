@@ -837,13 +837,21 @@ export default function VendorDashboard() {
                   const alreadyInStore = vendorProducts.some(
                     (vp) => vp.masterProductId === mp.id || vp.name === mp.name
                   );
+                  const isSelected = selectedMasterProd?.id === mp.id;
 
                   return (
-                    <div key={mp.id} className="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/80 transition-colors duration-150">
-                      <div className="flex items-center gap-3">
+                    <div
+                      key={mp.id}
+                      className={`p-3.5 flex items-center justify-between gap-3 transition-colors duration-150 rounded-lg ${
+                        isSelected
+                          ? "bg-brand-50/80 ring-1 ring-brand-300"
+                          : "hover:bg-slate-50/80"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
                         <img src={mp.imageUrl} alt={mp.name} className="w-12 h-12 object-cover rounded-lg border border-slate-200 shrink-0" />
-                        <div>
-                          <p className="font-bold text-xs text-navy-900">{mp.name}</p>
+                        <div className="min-w-0">
+                          <p className="font-bold text-xs text-navy-900 truncate">{mp.name}</p>
                           <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                             <span className="bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded text-[10px]">
                               {mp.categoryName}
@@ -858,21 +866,28 @@ export default function VendorDashboard() {
                         </div>
                       </div>
 
-                      <div className="text-right shrink-0">
-                        <p className="text-xs font-semibold text-slate-500">Suggested Price</p>
-                        <p className="font-extrabold text-navy-900 text-sm">₹{mp.suggestedPrice}</p>
-                        {alreadyInStore ? (
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg inline-block mt-1">
-                            ✓ In Your Store
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => handleOpenMasterProductSelect(mp)}
-                            className="mt-1 bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-xs active:scale-[0.98] transition-all duration-200 cursor-pointer"
-                          >
-                            + Add to My Store
-                          </button>
-                        )}
+                      <div className="text-right shrink-0 flex flex-col items-end justify-center min-w-[120px]">
+                        <p className="text-[11px] font-semibold text-slate-400 leading-none mb-1">Suggested Price</p>
+                        <p className="font-black text-navy-900 text-sm leading-tight">₹{mp.suggestedPrice}</p>
+                        <div className="h-7 mt-1 flex items-center justify-end">
+                          {alreadyInStore ? (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 shadow-2xs">
+                              ✓ In Your Store
+                            </span>
+                          ) : isSelected ? (
+                            <span className="text-[10px] font-bold text-brand-700 bg-brand-100/80 border border-brand-300 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 animate-pulse">
+                              Configuring Offer ↓
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenMasterProductSelect(mp)}
+                              className="bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs px-3 py-1 rounded-lg shadow-xs active:scale-[0.98] transition-all duration-150 cursor-pointer"
+                            >
+                              + Add to My Store
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );

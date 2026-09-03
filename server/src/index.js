@@ -425,7 +425,8 @@ app.post("/api/v1/auth/otp/request", otpRequestLimiter, async (req, res) => {
 
     // If logging in, user MUST be registered in database
     if (type === "login" && !existingUser) {
-      return res.status(404).json({
+      return res.status(200).json({
+        success: false,
         notRegistered: true,
         error: "This mobile number is not registered. Please create an account first.",
       });
@@ -433,7 +434,8 @@ app.post("/api/v1/auth/otp/request", otpRequestLimiter, async (req, res) => {
 
     // If registering, check if already registered
     if (type === "register" && existingUser) {
-      return res.status(409).json({
+      return res.status(200).json({
+        success: false,
         alreadyRegistered: true,
         error: "This mobile number is already registered. Please log in directly.",
       });

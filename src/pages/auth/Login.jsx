@@ -233,7 +233,7 @@ export default function Login() {
 
       {error && (
         <div className={`mb-5 p-3.5 rounded-2xl border ${
-          error.includes("Partner") || error.includes("Vendor") || error.includes("DR") || error.includes("Admin")
+          typeof error === "string" && (error.includes("Partner") || error.includes("Vendor") || error.includes("DR") || error.includes("Admin"))
             ? "bg-amber-50 border-amber-200 text-amber-900"
             : "bg-rose-50 border-rose-200 text-rose-700"
         } text-xs font-bold leading-relaxed shadow-2xs animate-in fade-in`}>

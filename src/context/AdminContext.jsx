@@ -1135,26 +1135,15 @@ export function AdminProvider({ children }) {
     }
   };
 
-  const assignMasterProductToVendor = async ({ masterProductId, vendorId, vendorName, regionId, regionName, districtName, price, stockQty, addedBy }) => {
+  const assignMasterProductToVendor = async ({ masterProductId, vendorId, vendorName, regionId, regionName, districtName, price, mrp, stockQty, addedBy }) => {
     const matchedVendor = vendors.find((v) => v.id === vendorId || (vendorName && (v.shopName || "").toLowerCase() === vendorName.toLowerCase()));
     const regName = regionName || districtName || matchedVendor?.regionName || matchedVendor?.districtName || matchedVendor?.region?.name || "Mirzapur";
     const validUuidRegionId = (regionId && regionId.length > 10) ? regionId : (matchedVendor?.regionId && matchedVendor.regionId.length > 10) ? matchedVendor.regionId : undefined;
-
-    try {
-      const res = await authFetch(`${API_BASE_URL}/api/v1/vendor/listings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ masterProductId, vendorId, vendorName, regionId: validUuidRegionId, regionName: regName, districtName: regName, price, stockQty, addedBy }),
-      });
-      if (res.ok) {
-        await fetchCloudData();
-        return;
-      }
-    } catch {}
-
     const mp = masterProducts.find((m) => m.id === masterProductId);
-    const newListing = {
-      id: "p-" + Date.now(),
+
+    const tempId = "temp-" + Date.now();
+    const optimisticListing = {
+      id: tempId,
       masterProductId: masterProductId || mp?.id,
       name: mp ? mp.name : "Construction Material Product",
       categoryId: mp ? mp.categoryId : "c1",
@@ -1168,6 +1157,7 @@ export function AdminProvider({ children }) {
       regionId: regionId || "r1",
       regionName: regName,
       districtName: regName,
+      mrp: Number(mrp) || Number(mp?.suggestedPrice) || Math.round((Number(price) || 100) * 1.2),
       price: Number(price) || (mp ? mp.suggestedPrice : 100),
       stockQty: Number(stockQty) || 100,
       imageUrl: mp ? mp.imageUrl : "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
@@ -1175,8 +1165,28 @@ export function AdminProvider({ children }) {
       approvalStatus: (addedBy === "Admin" || addedBy === "DR") ? "APPROVED" : "PENDING_REVIEW",
       addedBy: addedBy || "Vendor",
     };
-    setProducts((prev) => [newListing, ...prev]);
-    return newListing;
+
+    // 1. Instant Optimistic UI update: Show in vendor dashboard immediately (0ms)
+    setProducts((prev) => [optimisticListing, ...prev]);
+
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/vendor/listings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ masterProductId, vendorId, vendorName, regionId: validUuidRegionId, regionName: regName, districtName: regName, price, mrp, stockQty, addedBy }),
+      });
+      if (res.ok) {
+        const createdItem = await res.json().catch(() => null);
+        if (createdItem && createdItem.id) {
+          setProducts((prev) =>
+            prev.map((p) => (p.id === tempId ? { ...optimisticListing, ...createdItem, id: createdItem.id } : p))
+          );
+        }
+        await fetchCloudData();
+      }
+    } catch (err) {
+      console.warn("Assign master product error:", err.message);
+    }
   };
 
   const updateVendorProductListing = async (id, updates) => {

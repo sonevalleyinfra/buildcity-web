@@ -1,6 +1,9 @@
 import https from "https";
 import http from "http";
 
+const httpAgent = new http.Agent({ keepAlive: true, timeout: 8000 });
+const httpsAgent = new https.Agent({ keepAlive: true, timeout: 8000, rejectUnauthorized: false });
+
 export default async function handler(req, res) {
   // CORS & Methods
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -19,18 +22,20 @@ export default async function handler(req, res) {
 
     const makeRequest = (isHttps) => {
       const client = isHttps ? https : http;
+      const agent = isHttps ? httpsAgent : httpAgent;
       const port = isHttps ? 443 : 80;
+
       return new Promise((resolve, reject) => {
         const options = {
           hostname: "sms.aradhyatechnologies.in",
           port,
           path,
           method: "GET",
-          rejectUnauthorized: false,
+          agent,
           headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "User-Agent": "BuildCity-Edge/2.0",
             "Accept": "*/*",
-            "Connection": "close",
+            "Connection": "keep-alive",
           },
         };
 
@@ -44,7 +49,7 @@ export default async function handler(req, res) {
           });
         });
 
-        r.setTimeout(6000, () => {
+        r.setTimeout(8000, () => {
           r.destroy(new Error("Request timeout"));
         });
 
@@ -55,9 +60,9 @@ export default async function handler(req, res) {
 
     let result;
     try {
-      result = await makeRequest(true);
-    } catch (e) {
       result = await makeRequest(false);
+    } catch (e) {
+      result = await makeRequest(true);
     }
 
     return res.status(result.status || 200).json(result.data);

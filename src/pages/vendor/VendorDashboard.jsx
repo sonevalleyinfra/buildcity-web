@@ -40,6 +40,7 @@ export default function VendorDashboard() {
 
   // Edit Listing - Custom selling price, MRP, discount and stock modify karne ke liye
   const [editingProduct, setEditingProduct] = useState(null);
+  const [isUpdatingListing, setIsUpdatingListing] = useState(false);
 
   // Logged-in Vendor Info details extraction matching DB Vendors
   const matchedVendorObj = (vendors || []).find((v) => {
@@ -197,18 +198,36 @@ export default function VendorDashboard() {
     setEditingProduct((prev) => ({ ...prev, mrp: val, price: newPrice }));
   };
 
-  const handleUpdateListing = (e) => {
+  const handleUpdateListing = async (e) => {
     e.preventDefault();
     if (!editingProduct) return;
 
-    updateVendorProductListing(editingProduct.id, {
-      price: Number(editingProduct.price),
-      mrp: Number(editingProduct.mrp),
-      stockQty: Number(editingProduct.stockQty),
-    });
+    setIsUpdatingListing(true);
+    try {
+      await updateVendorProductListing(editingProduct.id, {
+        price: Number(editingProduct.price),
+        mrp: Number(editingProduct.mrp),
+        stockQty: Number(editingProduct.stockQty),
+      });
 
-    setEditingProduct(null);
-    showAlert({ title: "Listing Updated", message: `Product offer updated to ₹${editingProduct.price} (${editingProduct.discountPct}% OFF)!`, type: "success" });
+      const updatedPrice = editingProduct.price;
+      const updatedDisc = editingProduct.discountPct;
+      setEditingProduct(null);
+      showAlert({
+        title: "✅ Offer Live on Store!",
+        message: `Your product price has been updated to ₹${updatedPrice} (${updatedDisc}% OFF).\n\nCustomers across your district will now see this discounted price and % OFF badge immediately!`,
+        type: "success",
+        buttonText: "Awesome",
+      });
+    } catch (err) {
+      showAlert({
+        title: "Update Error",
+        message: err.message || "Failed to update listing.",
+        type: "warning",
+      });
+    } finally {
+      setIsUpdatingListing(false);
+    }
   };
 
   const handleRemoveListing = (id, name) => {
@@ -1041,8 +1060,21 @@ export default function VendorDashboard() {
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                <button type="button" onClick={() => setEditingProduct(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 cursor-pointer">Cancel</button>
-                <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs cursor-pointer active:scale-[0.98] transition-all">Save & Update Live Offer</button>
+                <button type="button" disabled={isUpdatingListing} onClick={() => setEditingProduct(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 cursor-pointer disabled:opacity-50">Cancel</button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingListing}
+                  className="px-5 py-2.5 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs cursor-pointer active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isUpdatingListing ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      Saving & Syncing Live Offer...
+                    </>
+                  ) : (
+                    "Save & Update Live Offer"
+                  )}
+                </button>
               </div>
             </form>
           </div>

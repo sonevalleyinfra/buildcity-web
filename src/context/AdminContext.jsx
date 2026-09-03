@@ -161,11 +161,12 @@ export function AdminProvider({ children }) {
   // Fetch Public Catalog for standard customers and visitors (without triggering 403)
   const fetchPublicCatalog = async () => {
     try {
-      const [catsRes, regsRes, listingsRes, couponsRes] = await Promise.all([
+      const [catsRes, regsRes, listingsRes, couponsRes, masterRes] = await Promise.all([
         authFetch(`${API_BASE_URL}/api/v1/categories`).then((r) => r.json()).catch(() => []),
         authFetch(`${API_BASE_URL}/api/v1/regions`).then((r) => r.json()).catch(() => []),
         authFetch(`${API_BASE_URL}/api/v1/vendor/listings`).then((r) => r.json()).catch(() => []),
         authFetch(`${API_BASE_URL}/api/v1/coupons`).then((r) => r.json()).catch(() => []),
+        authFetch(`${API_BASE_URL}/api/v1/master-products`).then((r) => r.json()).catch(() => []),
       ]);
 
       if (Array.isArray(catsRes) && catsRes.length > 0) {
@@ -173,6 +174,16 @@ export function AdminProvider({ children }) {
       }
       if (Array.isArray(regsRes) && regsRes.length > 0) {
         setRegions(regsRes);
+      }
+      if (Array.isArray(masterRes) && masterRes.length > 0) {
+        const formattedMaster = masterRes.map((mp) => ({
+          ...mp,
+          categoryName: mp.category?.name || mp.categoryName || "General",
+        }));
+        setMasterProducts(formattedMaster);
+        try {
+          localStorage.setItem(MASTER_PRODUCTS_STORAGE_KEY, JSON.stringify(formattedMaster));
+        } catch {}
       }
       if (Array.isArray(listingsRes)) {
         const formattedListings = listingsRes.map((l) => {
@@ -221,7 +232,7 @@ export function AdminProvider({ children }) {
     }
   };
 
-  // Single Source of Truth: Supabase Cloud DB se live data sync karne ke liye (Admin / DR only)
+  // Single Source of Truth: Supabase Cloud DB se live data sync karne ke liye (Admin / DR / Vendor)
   const fetchCloudData = async () => {
     let currentUser = user;
     if (!currentUser && typeof window !== "undefined") {
@@ -232,7 +243,7 @@ export function AdminProvider({ children }) {
     }
     const currentToken = typeof window !== "undefined" ? localStorage.getItem("buildcity_token") : null;
     const currentRole = (currentUser?.role || "").toLowerCase();
-    const isStaff = (currentRole === "admin" || currentRole === "dr") && Boolean(currentToken);
+    const isStaff = (currentRole === "admin" || currentRole === "dr" || currentRole === "vendor") && Boolean(currentToken);
 
     if (!isStaff) {
       return fetchPublicCatalog();

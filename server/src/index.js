@@ -49,7 +49,7 @@ let couponsList = [
 ];
 
 // Single Unified Cloud Sync Endpoint (Replaces 7 separate HTTP requests with 1 request to free browser TCP sockets)
-app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
+app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"), async (req, res) => {
   try {
     const [drs, vendors, masterProducts, categories, regions, orders, listings, coupons] = await Promise.all([
       prisma.dR.findMany({

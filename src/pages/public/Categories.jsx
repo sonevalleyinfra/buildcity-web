@@ -13,6 +13,10 @@ const topPills = [
   { name: "Paints", img: "/categories/paints.png" },
   { name: "Steel", img: "/categories/steel.png" },
   { name: "Plumbing", img: "/categories/plumbing.png" },
+  { name: "Electrical", img: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=300&q=80" },
+  { name: "Sanitary", img: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80" },
+  { name: "Hardware", img: "/categories/rebars.png" },
+  { name: "Tiles", img: "/categories/tiles.png" },
   { name: "More", isDots: true },
 ];
 
@@ -233,37 +237,28 @@ export default function Categories() {
 
         {/* Mobile Search Bar */}
         <form onSubmit={handleSearch} className="max-w-6xl mx-auto px-4 pb-3">
-          <div className="flex items-center gap-2">
-            <div className="flex-1 flex items-center gap-2 bg-slate-100 rounded-xl px-3 py-2 border border-slate-200 focus-within:border-brand-500 focus-within:bg-white transition-all shadow-2xs">
-              <SearchIcon />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search cement, steel, paints, pipes..."
-                className="w-full bg-transparent text-xs text-navy-900 font-medium outline-none placeholder:text-slate-400"
-              />
-              {searchQuery && (
-                <button type="button" onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600 text-xs">
-                  ✕
-                </button>
-              )}
-            </div>
-            <button
-              type="submit"
-              className="p-2.5 rounded-xl bg-slate-100 border border-slate-200 text-navy-900 hover:bg-brand-500 hover:text-white transition-colors cursor-pointer shadow-2xs active:scale-95"
-              title="Search"
-            >
-              <ScanIcon />
-            </button>
+          <div className="w-full flex items-center gap-2 bg-slate-100 rounded-xl px-3 py-2 border border-slate-200 focus-within:border-brand-500 focus-within:bg-white transition-all shadow-2xs">
+            <SearchIcon />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search cement, steel, paints, pipes..."
+              className="w-full bg-transparent text-xs text-navy-900 font-medium outline-none placeholder:text-slate-400"
+            />
+            {searchQuery && (
+              <button type="button" onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600 text-xs">
+                ✕
+              </button>
+            )}
           </div>
         </form>
       </div>
 
       <main className="max-w-6xl mx-auto px-4 pt-4 sm:pt-6 space-y-6">
         {/* 🔘 1. TOP CIRCLE CATEGORY PILLS (CENTERED & POLISHED ON DESKTOP & MOBILE) */}
-        <section className="bg-white/70 backdrop-blur-md rounded-2xl p-3 sm:p-4 border border-slate-200/70 shadow-2xs">
-          <div className="flex items-center justify-between sm:justify-center sm:gap-8 overflow-x-auto pb-0.5 no-scrollbar select-none">
+        <section className="bg-white rounded-2xl p-3.5 sm:p-4.5 border border-slate-200/80 shadow-2xs">
+          <div className="flex items-center justify-between sm:justify-center sm:gap-8 overflow-x-auto py-1.5 px-1 no-scrollbar select-none">
             {topPills.map((pill) => {
               const isSelected = activePill.toLowerCase() === pill.name.toLowerCase();
               return (
@@ -271,21 +266,21 @@ export default function Categories() {
                   key={pill.name}
                   type="button"
                   onClick={() => setActivePill(pill.name === "More" ? "All" : pill.name)}
-                  className="flex flex-col items-center gap-1.5 shrink-0 group active:scale-95 transition-all cursor-pointer px-1.5"
+                  className="flex flex-col items-center gap-1.5 shrink-0 group active:scale-95 transition-all cursor-pointer px-1"
                 >
                   <div
-                    className={`w-13 h-13 sm:w-16 sm:h-16 rounded-full flex items-center justify-center p-2.5 transition-all duration-300 ${
+                    className={`w-12 h-12 sm:w-15 sm:h-15 rounded-full flex items-center justify-center p-2.5 transition-all duration-200 ${
                       pill.isGrid
                         ? isSelected
-                          ? "bg-[#0284C7] text-white shadow-lg shadow-sky-500/30 ring-3 ring-sky-300 scale-105"
-                          : "bg-[#0284C7] text-white shadow-xs hover:scale-105"
+                          ? "bg-[#0284C7] text-white shadow-md shadow-sky-500/25 ring-2 ring-[#0284C7] ring-offset-2"
+                          : "bg-[#0284C7] text-white shadow-xs hover:opacity-95"
                         : isSelected
-                        ? "bg-sky-50 border-2 border-[#0284C7] ring-3 ring-sky-200 shadow-md scale-105"
-                        : "bg-white border border-slate-200/90 shadow-2xs hover:border-slate-300 hover:shadow-xs hover:scale-105"
+                        ? "bg-sky-50 border-2 border-[#0284C7] ring-2 ring-[#0284C7]/25 shadow-xs"
+                        : "bg-white border border-slate-200/90 shadow-2xs hover:border-slate-300"
                     }`}
                   >
                     {pill.isGrid ? (
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                         <rect x="3" y="3" width="7" height="7" rx="1.5" />
                         <rect x="14" y="3" width="7" height="7" rx="1.5" />
                         <rect x="14" y="14" width="7" height="7" rx="1.5" />
@@ -294,7 +289,7 @@ export default function Categories() {
                     ) : pill.isDots ? (
                       <span className="font-black text-2xl text-slate-500 leading-none">•••</span>
                     ) : pill.img ? (
-                      <img src={pill.img} alt={pill.name} className="w-8 h-8 sm:w-10 sm:h-10 object-contain drop-shadow-xs" />
+                      <img src={pill.img} alt={pill.name} className="w-7.5 h-7.5 sm:w-9 sm:h-9 object-contain drop-shadow-xs" />
                     ) : (
                       <span className="text-xl sm:text-2xl">{pill.iconSvg || "🚰"}</span>
                     )}
@@ -312,67 +307,7 @@ export default function Categories() {
           </div>
         </section>
 
-        {/* 🌟 2. HERO CAROUSEL BANNER (MATCHING HOME PAGE BANNER DESIGN EXACTLY) */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#07132B] via-[#0A1A3A] to-[#0D224D] shadow-lg border border-slate-800/40 flex flex-col">
-          {/* Banner Main Carousel Area */}
-          <div className="relative min-h-[175px] sm:min-h-[220px] flex items-stretch">
-            {bannerSlides.map((b, i) => (
-              <div
-                key={i}
-                className="absolute inset-0 transition-opacity duration-700 flex items-stretch"
-                style={{ opacity: slide === i ? 1 : 0, pointerEvents: slide === i ? "auto" : "none" }}
-              >
-                {/* Left Content Area */}
-                <div className="w-7/12 sm:w-1/2 flex flex-col justify-center px-4 sm:px-7 py-4 z-10">
-                  <span className="text-[9px] sm:text-[10px] font-black text-[#FBBF24] tracking-wider uppercase mb-1">
-                    {b.tag}
-                  </span>
-                  <h2 className="text-white text-sm sm:text-xl font-extrabold leading-snug tracking-tight mb-3">
-                    {b.line1} <br />
-                    {b.line2} <br />
-                    {b.line3}
-                  </h2>
-                  <button
-                    type="button"
-                    onClick={() => setActivePill(b.targetCat || "All")}
-                    className="bg-white hover:bg-slate-100 text-navy-950 font-extrabold text-[10px] sm:text-xs px-3.5 py-1.5 rounded-full shadow-md active:scale-95 transition-all w-fit flex items-center gap-1 cursor-pointer"
-                  >
-                    Shop Now →
-                  </button>
-                </div>
-
-                {/* Right Image Area */}
-                <div className="w-5/12 sm:w-1/2 h-full relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-r from-[#07132B] via-[#07132B]/30 to-transparent z-10 pointer-events-none" />
-                  <img
-                    src={b.img}
-                    alt="Hero Banner"
-                    className="w-full h-full object-cover object-center transform scale-105"
-                    onError={(e) => {
-                      e.target.src = "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1200&q=80";
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-
-            {/* Dots Indicator */}
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 sm:left-7 sm:translate-x-0 flex items-center gap-1.5 z-20">
-              {bannerSlides.map((_, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => setSlide(i)}
-                  className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
-                    slide === i ? "w-5 bg-[#38BDF8]" : "w-2 bg-white/40"
-                  }`}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* 🛍️ 3. SHOP BY CATEGORY (8-CARD 4-COLUMN COMPACT GRID) */}
+        {/* 🛍️ 2. SHOP BY CATEGORY (8-CARD 4-COLUMN COMPACT GRID) */}
         <section className="space-y-2.5">
           <div className="flex items-center justify-between">
             <h3 className="text-sm sm:text-base font-extrabold text-navy-900 tracking-tight">Shop by Category</h3>

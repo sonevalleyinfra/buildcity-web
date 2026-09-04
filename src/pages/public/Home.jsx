@@ -251,61 +251,48 @@ export default function Home() {
         <Navbar />
       </div>
 
-      {/* 📱 Mobile Top Curved Dark Header (Modern App Bar) */}
-      <div className="lg:hidden">
-        <div className="bg-gradient-to-b from-[#061224] via-[#0A192F] to-[#0E223D] pt-3.5 pb-6 px-4 rounded-b-[30px] shadow-xl border-b border-slate-800/50">
-          {/* Top Row: Brand, Delivery Location & Action Pods */}
+      {/* 📱 Mobile Top Header (Brand New Modern Quick-Commerce App Bar) */}
+      <div className="lg:hidden bg-white border-b border-slate-200/80 sticky top-0 z-30 shadow-xs">
+        <div className="px-4 pt-3 pb-2.5">
+          {/* Top Row: Location First, Brand Badge & Action Pods */}
           <div className="flex items-center justify-between gap-2">
-            {/* Brand Logo */}
-            <Link to="/" className="flex items-center gap-2 shrink-0 active:scale-95 transition-transform">
-              <div className="w-8.5 h-8.5 rounded-xl bg-gradient-to-tr from-[#0284C7] to-[#38BDF8] flex items-center justify-center text-white shadow-md shadow-sky-500/20 border border-white/20">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                  <polyline points="9 22 9 12 15 12 15 22" />
-                </svg>
-              </div>
-              <div className="flex flex-col">
-                <span className="font-black text-white text-base leading-none tracking-tight">
-                  Build<span className="text-[#38BDF8]">City</span>
-                </span>
-                <span className="text-[9px] font-bold text-sky-400/90 tracking-wide uppercase mt-0.5">
-                  Direct Wholesale
+            {/* Left: Location & Delivery Time */}
+            <div className="flex flex-col">
+              <div className="flex items-center gap-1.5">
+                <span className="bg-sky-50 text-[#0284C7] font-black text-[9px] px-1.5 py-0.2 rounded border border-sky-200/60 uppercase tracking-tight">
+                  ⚡ 24H Site Delivery
                 </span>
               </div>
-            </Link>
-
-            {/* Delivery Location Pill & Actions */}
-            <div className="flex items-center gap-2">
-              {/* Region Pill */}
               <RegionPicker
                 trigger={(r) => (
-                  <button
-                    type="button"
-                    className="flex items-center gap-1.5 bg-slate-800/90 hover:bg-slate-700/90 backdrop-blur-md px-2.5 py-1.5 rounded-full text-slate-200 border border-slate-700/80 shadow-2xs active:scale-95 transition-all cursor-pointer"
-                  >
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-400" />
+                  <div className="flex items-center gap-1 mt-0.5 cursor-pointer group">
+                    <span className="text-[#0284C7] text-xs">📍</span>
+                    <span className="font-extrabold text-navy-950 text-sm tracking-tight truncate max-w-[130px] group-hover:text-[#0284C7] transition-colors">
+                      {r?.name || "Varanasi"}, UP
                     </span>
-                    <span className="truncate max-w-[80px] text-[11.5px] font-extrabold text-white">
-                      {r?.name || "Varanasi"}
-                    </span>
-                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-slate-400">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-slate-400 group-hover:text-navy-900 transition-transform group-hover:translate-y-0.5">
                       <path d="m6 9 6 6 6-6" />
                     </svg>
-                  </button>
+                  </div>
                 )}
               />
+            </div>
+
+            {/* Right: Brand Mini Logo, Notification Bell & Cart Badge */}
+            <div className="flex items-center gap-2">
+              <Link to="/" className="flex items-center gap-1 pr-1 border-r border-slate-200">
+                <span className="font-black text-navy-950 text-xs tracking-tight">
+                  Build<span className="text-[#0284C7]">City</span>
+                </span>
+              </Link>
 
               {/* Notification Bell */}
-              <div className="w-8.5 h-8.5 rounded-full bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700/80 flex items-center justify-center text-white backdrop-blur-md shadow-2xs active:scale-95 transition-all">
-                <NotificationPanel className="relative text-white" />
-              </div>
+              <NotificationPanel className="relative text-slate-700 hover:text-navy-950" />
 
               {/* Cart Icon */}
               <Link
                 to="/cart"
-                className="relative w-8.5 h-8.5 rounded-full bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700/80 flex items-center justify-center text-white backdrop-blur-md shadow-2xs active:scale-95 transition-all"
+                className="relative w-8.5 h-8.5 rounded-xl bg-slate-100 hover:bg-slate-200/80 flex items-center justify-center text-navy-950 border border-slate-200/80 active:scale-95 transition-all"
               >
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="8" cy="21" r="1" />
@@ -313,7 +300,7 @@ export default function Home() {
                   <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
                 </svg>
                 {count > 0 && (
-                  <span className="absolute -top-1 -right-1 h-4.5 w-4.5 rounded-full bg-[#0284C7] text-white text-[9.5px] font-black flex items-center justify-center shadow-xs border border-[#0A192F]">
+                  <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-[#0284C7] text-white text-[9px] font-black flex items-center justify-center shadow-xs">
                     {count}
                   </span>
                 )}
@@ -321,10 +308,10 @@ export default function Home() {
             </div>
           </div>
 
-          {/* 🔍 Search Input Bar */}
-          <form onSubmit={handleSearch} className="mt-3.5">
-            <div className="flex items-center gap-2.5 bg-white rounded-2xl px-3.5 py-2.5 shadow-lg shadow-black/15 border border-slate-100 focus-within:ring-2 focus-within:ring-[#38BDF8] transition-all">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#0284C7" strokeWidth="2.2">
+          {/* Middle Row: Modern Search Bar */}
+          <form onSubmit={handleSearch} className="mt-2.5">
+            <div className="flex items-center gap-2.5 bg-slate-50 hover:bg-white focus-within:bg-white rounded-2xl px-3.5 py-2 border border-slate-200/90 focus-within:border-[#0284C7] focus-within:ring-3 focus-within:ring-sky-500/15 transition-all shadow-2xs">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0284C7" strokeWidth="2.5">
                 <circle cx="11" cy="11" r="8" />
                 <path d="m21 21-4.3-4.3" />
               </svg>
@@ -332,33 +319,42 @@ export default function Home() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search Cement, TMT Steel, Asian Paints..."
+                placeholder='Search "Cement", "Asian Paints", "Tata Steel"...'
                 className="w-full bg-transparent text-xs text-navy-950 font-medium outline-none placeholder:text-slate-400"
               />
-              <button type="submit" className="text-slate-400 hover:text-navy-900 transition-colors">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <path d="M3 7V5a2 2 0 0 1 2-2h2" />
-                  <path d="M17 3h2a2 2 0 0 1 2 2v2" />
-                  <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
-                  <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
-                </svg>
-              </button>
+              {searchQuery ? (
+                <button type="button" onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600 text-xs">
+                  ✕
+                </button>
+              ) : (
+                <button type="submit" className="text-slate-400 hover:text-navy-900 transition-colors">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M5 12h14" />
+                    <path d="m12 5 7 7-7 7" />
+                  </svg>
+                </button>
+              )}
             </div>
           </form>
 
-          {/* ⚡ Quick Trust Highlights */}
-          <div className="flex items-center justify-between gap-1.5 mt-2.5 px-1 text-[10px] font-bold text-slate-300 select-none overflow-x-auto no-scrollbar">
-            <span className="flex items-center gap-1 shrink-0">
-              <span className="text-[#38BDF8]">⚡</span> Same-Day Delivery
-            </span>
-            <span className="text-slate-600">•</span>
-            <span className="flex items-center gap-1 shrink-0">
-              <span className="text-amber-400">🏷️</span> Direct Mill Rates
-            </span>
-            <span className="text-slate-600">•</span>
-            <span className="flex items-center gap-1 shrink-0">
-              <span className="text-emerald-400">✓</span> 100% Certified
-            </span>
+          {/* Bottom Row: Quick Category Tap Chips */}
+          <div className="flex items-center gap-1.5 mt-2.5 overflow-x-auto no-scrollbar pb-0.5 select-none">
+            {[
+              { label: "🔥 All Deals", path: "/categories?cat=All" },
+              { label: "🧱 Cement", path: "/categories?cat=Cement" },
+              { label: "🎨 Paints", path: "/categories?cat=Paints" },
+              { label: "🏗️ Steel", path: "/categories?cat=Steel" },
+              { label: "🚰 Plumbing", path: "/categories?cat=Plumbing" },
+              { label: "✨ Tiles", path: "/categories?cat=Tiles" },
+            ].map((chip) => (
+              <Link
+                key={chip.label}
+                to={chip.path}
+                className="shrink-0 text-[10.5px] font-bold text-slate-600 hover:text-navy-950 bg-slate-100/90 hover:bg-slate-200/80 px-2.5 py-1 rounded-full border border-slate-200/60 active:scale-95 transition-all flex items-center gap-1"
+              >
+                {chip.label}
+              </Link>
+            ))}
           </div>
         </div>
       </div>

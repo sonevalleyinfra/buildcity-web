@@ -251,51 +251,80 @@ export default function Home() {
         <Navbar />
       </div>
 
-      {/* 📱 Mobile Top Curved Dark Header */}
+      {/* 📱 Mobile Top Curved Dark Header (Modern App Bar) */}
       <div className="lg:hidden">
-        <div className="bg-[#0A192F] pt-3 pb-8 px-4 rounded-b-[28px] shadow-lg">
-          <div className="flex items-center justify-between">
-            {/* Brand Logo & Region Trigger */}
-            <div className="flex items-center gap-3">
-              <Link to="/" className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-brand-500 flex items-center justify-center text-white shadow-xs">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                    <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                    <polyline points="9 22 9 12 15 12 15 22" />
-                  </svg>
-                </div>
-                <span className="font-extrabold text-white text-lg tracking-tight">
-                  Build <span className="text-[#38BDF8]">City</span>
+        <div className="bg-gradient-to-b from-[#061224] via-[#0A192F] to-[#0E223D] pt-3.5 pb-6 px-4 rounded-b-[30px] shadow-xl border-b border-slate-800/50">
+          {/* Top Row: Brand, Delivery Location & Action Pods */}
+          <div className="flex items-center justify-between gap-2">
+            {/* Brand Logo */}
+            <Link to="/" className="flex items-center gap-2 shrink-0 active:scale-95 transition-transform">
+              <div className="w-8.5 h-8.5 rounded-xl bg-gradient-to-tr from-[#0284C7] to-[#38BDF8] flex items-center justify-center text-white shadow-md shadow-sky-500/20 border border-white/20">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                  <polyline points="9 22 9 12 15 12 15 22" />
+                </svg>
+              </div>
+              <div className="flex flex-col">
+                <span className="font-black text-white text-base leading-none tracking-tight">
+                  Build<span className="text-[#38BDF8]">City</span>
                 </span>
-              </Link>
+                <span className="text-[9px] font-bold text-sky-400/90 tracking-wide uppercase mt-0.5">
+                  Direct Wholesale
+                </span>
+              </div>
+            </Link>
 
+            {/* Delivery Location Pill & Actions */}
+            <div className="flex items-center gap-2">
               {/* Region Pill */}
               <RegionPicker
                 trigger={(r) => (
                   <button
                     type="button"
-                    className="flex items-center gap-1 bg-white/10 hover:bg-white/15 backdrop-blur-md px-2.5 py-1 rounded-full text-slate-200 text-xs font-semibold border border-white/15 active:scale-95 transition-all"
+                    className="flex items-center gap-1.5 bg-slate-800/90 hover:bg-slate-700/90 backdrop-blur-md px-2.5 py-1.5 rounded-full text-slate-200 border border-slate-700/80 shadow-2xs active:scale-95 transition-all cursor-pointer"
                   >
-                    <span className="text-[#38BDF8] text-xs">📍</span>
-                    <span className="truncate max-w-[90px]">{r.name || "Varanasi"}</span>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-slate-300">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-400" />
+                    </span>
+                    <span className="truncate max-w-[80px] text-[11.5px] font-extrabold text-white">
+                      {r?.name || "Varanasi"}
+                    </span>
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-slate-400">
                       <path d="m6 9 6 6 6-6" />
                     </svg>
                   </button>
                 )}
               />
-            </div>
 
-            {/* Notification Bell with Badge */}
-            <div className="flex items-center gap-3">
-              <NotificationPanel className="relative text-white hover:text-[#38BDF8] transition-colors" />
+              {/* Notification Bell */}
+              <div className="w-8.5 h-8.5 rounded-full bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700/80 flex items-center justify-center text-white backdrop-blur-md shadow-2xs active:scale-95 transition-all">
+                <NotificationPanel className="relative text-white" />
+              </div>
+
+              {/* Cart Icon */}
+              <Link
+                to="/cart"
+                className="relative w-8.5 h-8.5 rounded-full bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700/80 flex items-center justify-center text-white backdrop-blur-md shadow-2xs active:scale-95 transition-all"
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="8" cy="21" r="1" />
+                  <circle cx="19" cy="21" r="1" />
+                  <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
+                </svg>
+                {count > 0 && (
+                  <span className="absolute -top-1 -right-1 h-4.5 w-4.5 rounded-full bg-[#0284C7] text-white text-[9.5px] font-black flex items-center justify-center shadow-xs border border-[#0A192F]">
+                    {count}
+                  </span>
+                )}
+              </Link>
             </div>
           </div>
 
-          {/* 🔍 Search Input Pill */}
-          <form onSubmit={handleSearch} className="mt-4">
-            <div className="flex items-center gap-2.5 bg-white rounded-2xl px-4 py-3 shadow-md border border-slate-100 focus-within:ring-2 focus-within:ring-[#38BDF8] transition-all">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2">
+          {/* 🔍 Search Input Bar */}
+          <form onSubmit={handleSearch} className="mt-3.5">
+            <div className="flex items-center gap-2.5 bg-white rounded-2xl px-3.5 py-2.5 shadow-lg shadow-black/15 border border-slate-100 focus-within:ring-2 focus-within:ring-[#38BDF8] transition-all">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#0284C7" strokeWidth="2.2">
                 <circle cx="11" cy="11" r="8" />
                 <path d="m21 21-4.3-4.3" />
               </svg>
@@ -303,11 +332,34 @@ export default function Home() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search for products, brands, services..."
-                className="w-full bg-transparent text-xs sm:text-sm text-navy-950 font-medium outline-none placeholder:text-slate-400"
+                placeholder="Search Cement, TMT Steel, Asian Paints..."
+                className="w-full bg-transparent text-xs text-navy-950 font-medium outline-none placeholder:text-slate-400"
               />
+              <button type="submit" className="text-slate-400 hover:text-navy-900 transition-colors">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+                  <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+                  <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+                  <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+                </svg>
+              </button>
             </div>
           </form>
+
+          {/* ⚡ Quick Trust Highlights */}
+          <div className="flex items-center justify-between gap-1.5 mt-2.5 px-1 text-[10px] font-bold text-slate-300 select-none overflow-x-auto no-scrollbar">
+            <span className="flex items-center gap-1 shrink-0">
+              <span className="text-[#38BDF8]">⚡</span> Same-Day Delivery
+            </span>
+            <span className="text-slate-600">•</span>
+            <span className="flex items-center gap-1 shrink-0">
+              <span className="text-amber-400">🏷️</span> Direct Mill Rates
+            </span>
+            <span className="text-slate-600">•</span>
+            <span className="flex items-center gap-1 shrink-0">
+              <span className="text-emerald-400">✓</span> 100% Certified
+            </span>
+          </div>
         </div>
       </div>
 

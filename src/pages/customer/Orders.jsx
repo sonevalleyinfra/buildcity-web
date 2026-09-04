@@ -32,8 +32,10 @@ function PinIcon() {
 
 function CartIcon() {
   return (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="21" r="1" />
+      <circle cx="19" cy="21" r="1" />
+      <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
     </svg>
   );
 }
@@ -81,32 +83,28 @@ export default function Orders() {
         <Navbar />
       </div>
 
-      {/* Mobile header */}
+      {/* Mobile header (Clean Orders Header without Logo/Region) */}
       <div className="lg:hidden bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">🏗️</span>
-            <div>
-              <div className="font-black text-navy-900 text-base leading-none">
-                Build <span className="text-brand-500">City</span>
-              </div>
-              <RegionPicker
-                trigger={(r) => (
-                  <span className="flex items-center gap-1 text-[11px] text-slate-500 mt-0.5">
-                    <PinIcon />
-                    {r.name}, {r.state === "Uttar Pradesh" ? "UP" : r.state}
-                  </span>
-                )}
-              />
-            </div>
+          <div className="flex items-center gap-2.5">
+            <Link
+              to="/"
+              className="p-1.5 -ml-1.5 rounded-xl hover:bg-slate-100 text-navy-900 active:scale-95 transition-all flex items-center justify-center"
+              title="Back to Home"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </Link>
+            <h1 className="font-extrabold text-navy-900 text-base tracking-tight">My Orders</h1>
           </div>
 
           <div className="flex items-center gap-3">
-            <NotificationPanel className="relative text-navy-900" />
-            <Link to="/cart" className="relative text-navy-900">
+            <NotificationPanel className="relative text-navy-900 hover:text-brand-600 transition-colors cursor-pointer" />
+            <Link to="/cart" className="relative text-navy-900 hover:text-brand-600 transition-colors p-1" title="Cart">
               <CartIcon />
               {count > 0 && (
-                <span className="absolute -top-1.5 -right-2 h-4.5 w-4.5 rounded-full bg-brand-500 text-white text-[10px] font-bold flex items-center justify-center">
+                <span className="absolute -top-1 -right-1.5 h-4.5 w-4.5 rounded-full bg-brand-500 text-white text-[10px] font-black flex items-center justify-center shadow-xs">
                   {count}
                 </span>
               )}

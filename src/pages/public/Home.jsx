@@ -251,48 +251,29 @@ export default function Home() {
         <Navbar />
       </div>
 
-      {/* 📱 Mobile Top Header (Exact Match to Reference Mockup) */}
-      <div className="lg:hidden bg-[#07142A] sticky top-0 z-30 shadow-md">
-        {/* Top Dark Bar with Center White Tab */}
-        <div className="flex items-end justify-between px-3 pt-2">
-          {/* Left: Hamburger Menu */}
-          <button
-            type="button"
-            onClick={() => navigate("/categories")}
-            className="p-2 text-white hover:text-sky-300 transition-colors pb-2 cursor-pointer active:scale-90"
-            title="Menu"
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <line x1="3" y1="12" x2="21" y2="12" />
-              <line x1="3" y1="18" x2="21" y2="18" />
-            </svg>
-          </button>
-
-          {/* Center: White Notch / Tab with Logo & Location */}
-          <div className="bg-white rounded-t-[26px] px-6 pt-2 pb-1.5 flex flex-col items-center justify-center shadow-xs min-w-[170px] relative z-10 -mb-[1px]">
-            {/* Logo */}
+      {/* 📱 Mobile Top Header (Clean Simple Standard White Header) */}
+      <div className="lg:hidden bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+        {/* Top Action Row (Logo & Location on Left, Notification & Cart on Right) */}
+        <div className="px-4 py-3 flex items-center justify-between">
+          {/* Left: Brand Logo & Live Location */}
+          <div className="flex items-center gap-2">
             <Link to="/" className="flex items-center gap-1.5 active:scale-95 transition-transform">
-              {/* Blue Roof/Building Emblem */}
-              <svg width="24" height="20" viewBox="0 0 28 22" fill="none" className="shrink-0 text-[#0284C7]">
-                <path d="M2 12L13 3L18 7.2V5H22V10.5L25 13" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M5 11.5V19H22V11.5" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" />
-                <path d="M10 19V14H17V19" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round" />
-              </svg>
-              <span className="font-extrabold text-[#0A2540] text-base leading-none tracking-tight">
-                Build <span className="text-[#0284C7]">City</span>
-              </span>
+              <span className="text-2xl leading-none">🏗️</span>
+              <div className="font-black text-navy-950 text-base leading-none tracking-tight">
+                Build <span className="text-brand-500">City</span>
+              </div>
             </Link>
 
-            {/* Location Selector */}
+            <div className="h-3.5 w-px bg-slate-200 mx-0.5" />
+
             <RegionPicker
               trigger={(r) => (
-                <div className="flex items-center gap-1 mt-1 cursor-pointer group">
-                  <span className="text-navy-950 text-xs">📍</span>
-                  <span className="font-bold text-navy-950 text-[11px] leading-none tracking-tight truncate max-w-[110px] group-hover:text-[#0284C7] transition-colors">
+                <div className="flex items-center gap-1 cursor-pointer group">
+                  <span className="text-slate-600 text-[11px] leading-none">📍</span>
+                  <span className="font-bold text-slate-700 text-xs leading-none tracking-tight truncate max-w-[110px] group-hover:text-brand-600 transition-colors">
                     {r?.name || "Varanasi"}
                   </span>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-slate-600 group-hover:text-navy-950 transition-transform">
+                  <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="text-slate-500 group-hover:text-black transition-transform">
                     <path d="m6 9 6 6 6-6" />
                   </svg>
                 </div>
@@ -300,17 +281,21 @@ export default function Home() {
             />
           </div>
 
-          {/* Right: Notification Bell with Red Dot & Cart */}
-          <div className="flex items-center gap-1 pb-2">
-            <NotificationPanel className="relative text-white" />
-            <Link to="/cart" className="relative p-1.5 text-white active:scale-90 transition-transform">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          {/* Right: Notification & Cart */}
+          <div className="flex items-center gap-3">
+            <NotificationPanel className="relative text-navy-900 hover:text-brand-600 transition-colors cursor-pointer" />
+            <Link
+              to="/cart"
+              className="relative text-navy-900 hover:text-brand-600 transition-colors p-1"
+              title="Cart"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="8" cy="21" r="1" />
                 <circle cx="19" cy="21" r="1" />
                 <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
               </svg>
               {count > 0 && (
-                <span className="absolute 0 -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-[#0284C7] text-white text-[9px] font-black flex items-center justify-center shadow-xs">
+                <span className="absolute -top-1 -right-1.5 h-4.5 w-4.5 rounded-full bg-brand-500 text-white text-[10px] font-black flex items-center justify-center shadow-xs">
                   {count}
                 </span>
               )}
@@ -318,12 +303,11 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Lower White Search Container */}
-        <div className="bg-white rounded-t-[24px] px-3.5 pt-2.5 pb-3 border-b border-slate-100 shadow-xs relative z-0">
-          <form onSubmit={handleSearch} className="flex items-center gap-2">
-            {/* Search Input Box */}
-            <div className="flex-1 flex items-center gap-2 bg-[#F8FAFC] hover:bg-white focus-within:bg-white rounded-2xl px-3.5 py-2.5 border border-slate-200/90 focus-within:border-[#0284C7] focus-within:ring-3 focus-within:ring-sky-500/15 transition-all shadow-2xs">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.2">
+        {/* Search Bar */}
+        <form onSubmit={handleSearch} className="px-4 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="flex-1 flex items-center gap-2.5 bg-slate-100 rounded-xl px-3.5 py-2.5 border border-slate-200 focus-within:border-brand-500 focus-within:bg-white transition-all shadow-2xs h-10.5">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.2">
                 <circle cx="11" cy="11" r="8" />
                 <path d="m21 21-4.3-4.3" />
               </svg>
@@ -331,32 +315,30 @@ export default function Home() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search for products, brands, services..."
-                className="w-full bg-transparent text-xs text-navy-950 font-medium outline-none placeholder:text-slate-400"
+                placeholder="Search cement, steel, paints, pipes..."
+                className="w-full bg-transparent text-xs text-navy-900 font-medium outline-none placeholder:text-slate-400"
               />
               {searchQuery && (
-                <button type="button" onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600 text-xs">
+                <button type="button" onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600 text-xs p-0.5">
                   ✕
                 </button>
               )}
             </div>
 
-            {/* Scanner Button [ ⛶ ] */}
             <button
               type="submit"
-              className="w-10 h-10 rounded-2xl bg-white border border-slate-200/90 hover:border-slate-300 text-slate-700 flex items-center justify-center shadow-2xs active:scale-95 transition-all cursor-pointer shrink-0"
-              title="Scan or Search"
+              className="w-10.5 h-10.5 rounded-xl bg-slate-100 border border-slate-200 text-navy-900 hover:bg-brand-500 hover:text-white transition-colors cursor-pointer shadow-2xs active:scale-95 flex items-center justify-center shrink-0"
+              title="Search"
             >
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 7V5a2 2 0 0 1 2-2h2" />
                 <path d="M17 3h2a2 2 0 0 1 2 2v2" />
                 <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
                 <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
-                <rect x="7" y="7" width="10" height="10" rx="1.5" />
               </svg>
             </button>
-          </form>
-        </div>
+          </div>
+        </form>
       </div>
 
       <main className="max-w-6xl mx-auto px-4 pt-4 sm:pt-6 space-y-6">

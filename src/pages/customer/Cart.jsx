@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../../components/Navbar";
+import NotificationPanel from "../../components/NotificationPanel";
 import { useCart } from "../../context/CartContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useAlert } from "../../context/AlertContext";
@@ -165,7 +166,30 @@ export default function Cart() {
   if (items.length === 0) {
     return (
       <div className="min-h-screen bg-slate-50 text-navy-900 pb-20">
-        <Navbar />
+        {/* Desktop Navbar */}
+        <div className="hidden lg:block">
+          <Navbar />
+        </div>
+
+        {/* Mobile Header (Clean Back Navigation) */}
+        <div className="lg:hidden bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+          <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <Link
+                to="/"
+                className="p-1.5 -ml-1.5 rounded-xl hover:bg-slate-100 text-navy-900 active:scale-95 transition-all flex items-center justify-center"
+                title="Back to Home"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m15 18-6-6 6-6" />
+                </svg>
+              </Link>
+              <h1 className="font-extrabold text-navy-900 text-base tracking-tight">Shopping Cart</h1>
+            </div>
+            <NotificationPanel className="relative text-navy-900 hover:text-brand-600 transition-colors cursor-pointer" />
+          </div>
+        </div>
+
         <main className="max-w-lg mx-auto px-4 py-20 text-center">
           <span className="text-5xl mb-3 inline-block">🛒</span>
           <h1 className="text-xl font-extrabold text-navy-900 mb-2">Your Cart is Empty</h1>
@@ -185,7 +209,31 @@ export default function Cart() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-navy-900 pb-24 font-sans">
-      <Navbar />
+      {/* Desktop Navbar */}
+      <div className="hidden lg:block">
+        <Navbar />
+      </div>
+
+      {/* Mobile Header (Clean Back Navigation without Logo/Region) */}
+      <div className="lg:hidden bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <Link
+              to="/"
+              className="p-1.5 -ml-1.5 rounded-xl hover:bg-slate-100 text-navy-900 active:scale-95 transition-all flex items-center justify-center"
+              title="Back to Home"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </Link>
+            <h1 className="font-extrabold text-navy-900 text-base tracking-tight">
+              My Cart ({items.length})
+            </h1>
+          </div>
+          <NotificationPanel className="relative text-navy-900 hover:text-brand-600 transition-colors cursor-pointer" />
+        </div>
+      </div>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
         <div className="flex items-center justify-between mb-5">

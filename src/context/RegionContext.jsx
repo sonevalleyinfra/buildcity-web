@@ -5,8 +5,24 @@ import { API_BASE_URL } from "../config/api";
 const RegionContext = createContext(null);
 const STORAGE_KEY = "buildcity_region";
 
+const DEFAULT_REGIONS = [
+  { id: "2ab0f187-d170-4432-8eef-e0ac31ed21c3", name: "Varanasi", state: "Uttar Pradesh", baseDeliveryCharge: 49, priceFactor: 1 },
+  { id: "aca42de5-60cd-4dbe-9580-b3d10df6d6ff", name: "Jaunpur", state: "Uttar Pradesh", baseDeliveryCharge: 78, priceFactor: 1 },
+  { id: "af4bf0c4-389a-4f89-aea2-35b2700bf1e6", name: "Mirzapur", state: "Uttar Pradesh", baseDeliveryCharge: 95, priceFactor: 1 },
+  { id: "dc928ebc-b243-4246-989b-c45fd9a27eaf", name: "FRRRRR", state: "Uttar Pradesh", baseDeliveryCharge: 49, priceFactor: 1 },
+];
+
 export function RegionProvider({ children }) {
-  const [regions, setRegions] = useState([]);
+  const [regions, setRegions] = useState(() => {
+    try {
+      const saved = localStorage.getItem("buildcity_all_regions");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return DEFAULT_REGIONS;
+  });
   const [region, setRegionState] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -21,19 +37,19 @@ export function RegionProvider({ children }) {
         }
       }
     } catch {}
-    return { id: "varanasi", name: "Varanasi", state: "Uttar Pradesh", baseDeliveryCharge: 49, priceFactor: 1 };
+    return DEFAULT_REGIONS[0];
   });
 
-  // Fetch live active regions directly from Supabase Database
+  // Fetch live active regions directly from Database
   const loadDbRegions = async () => {
     try {
       const res = await authFetch(`${API_BASE_URL}/api/v1/regions`);
       if (res.ok) {
         const dbRegs = await res.json();
         if (Array.isArray(dbRegs) && dbRegs.length > 0) {
-          // Filter only ACTIVE regions from DB
+          // All active regions from DB
           const activeRegs = dbRegs
-            .filter((r) => r.isActive !== false)
+            .filter((r) => r.isActive !== false && r.name)
             .map((r) => ({
               id: r.id,
               name: r.name,
@@ -44,6 +60,9 @@ export function RegionProvider({ children }) {
 
           if (activeRegs.length > 0) {
             setRegions(activeRegs);
+            try {
+              localStorage.setItem("buildcity_all_regions", JSON.stringify(activeRegs));
+            } catch {}
 
             // Update current selected region if saved in localStorage
             const savedRaw = localStorage.getItem(STORAGE_KEY);
@@ -57,25 +76,21 @@ export function RegionProvider({ children }) {
               }
             }
 
+            let activeFound = null;
             if (savedSearch) {
-              const found = activeRegs.find(
+              activeFound = activeRegs.find(
                 (r) =>
                   r.id.toLowerCase() === savedSearch.toLowerCase() ||
                   r.name.toLowerCase().trim() === savedSearch.toLowerCase().trim()
               );
-
-              if (found) {
-                setRegionState(found);
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(found));
-                return;
-              }
             }
 
-            // Fallback to first region only if nothing saved in localStorage
-            if (!savedSearch) {
-              setRegionState(activeRegs[0]);
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(activeRegs[0]));
-            }
+            // If found in valid DB regions, select it. If not found (e.g. invalid old Prayagraj), reset to default DB region (Varanasi)
+            const chosen = activeFound || activeRegs[0];
+            setRegionState(chosen);
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(chosen));
+            } catch {}
           }
         }
       }

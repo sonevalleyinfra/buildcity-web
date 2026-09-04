@@ -67,21 +67,23 @@ function StorefrontMobileNav() {
 }
 
 import { AlertProvider } from "./context/AlertContext";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 export default function App() {
   return (
-    <AlertProvider>
-      <AuthProvider>
-        <RegionProvider>
-          <CartProvider>
-            <OrderProvider>
-              <AddressProvider>
-                <NotificationProvider>
-                  <AdminProvider>
-                    <BrowserRouter>
-                      <ScrollToTop />
-                      <StorefrontMobileNav />
-                      <Routes>
+    <ErrorBoundary>
+      <AlertProvider>
+        <AuthProvider>
+          <RegionProvider>
+            <CartProvider>
+              <OrderProvider>
+                <AddressProvider>
+                  <NotificationProvider>
+                    <AdminProvider>
+                      <BrowserRouter>
+                        <ScrollToTop />
+                        <StorefrontMobileNav />
+                        <Routes>
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
 
@@ -171,5 +173,6 @@ export default function App() {
         </RegionProvider>
       </AuthProvider>
     </AlertProvider>
+    </ErrorBoundary>
   );
 }

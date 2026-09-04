@@ -10,7 +10,7 @@ export default function BottomNav() {
     { label: "Categories", path: "/categories", icon: GridIcon },
     { label: "Cart", path: "/cart", icon: CartIcon, badge: count },
     { label: "Orders", path: "/orders", icon: OrdersIcon },
-    { label: "Account", path: "/profile", icon: ProfileIcon },
+    { label: "Profile", path: "/profile", icon: ProfileIcon },
   ];
 
   return (

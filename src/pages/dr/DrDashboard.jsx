@@ -929,6 +929,7 @@ export default function DrDashboard() {
                       return st === listingFilter;
                     })
                     .map((p) => {
+                      const st = p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW");
                       const stBadge =
                         st === "APPROVED"
                           ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-bold"

@@ -12,16 +12,38 @@ export default function RegionPicker({ trigger }) {
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)}>
-        {trigger ? trigger(region) : region.name}
-      </button>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen(true);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            e.stopPropagation();
+            setOpen(true);
+          }
+        }}
+        className="inline-flex cursor-pointer"
+      >
+        {trigger ? trigger(region || { name: "Varanasi" }) : <span>{region?.name || "Varanasi"}</span>}
+      </div>
 
       {open &&
         createPortal(
-          <div className="fixed inset-0 z-[999] flex items-end sm:items-center justify-center">
+          <div
+            className="fixed inset-0 z-[999] flex items-end sm:items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-200"
-              onClick={() => setOpen(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+              }}
             />
             {/* Delivery selection modal */}
             <div className="relative z-10 bg-white rounded-t-2xl sm:rounded-2xl w-full sm:w-96 max-h-[70vh] overflow-y-auto p-5 shadow-2xl border border-slate-100/80">
@@ -38,10 +60,10 @@ export default function RegionPicker({ trigger }) {
                 </button>
               </div>
               <div className="space-y-2.5">
-                {regions.map((r) => (
+                {(regions || []).map((r) => (
                   <button
                     type="button"
-                    key={r.id}
+                    key={r?.id}
                     onClick={async () => {
                       const newRegionId = r.id;
                       setRegion(newRegionId);
@@ -52,7 +74,7 @@ export default function RegionPicker({ trigger }) {
                           if (res && res.removedItems && res.removedItems.length > 0) {
                             showAlert({
                               title: "📍 Delivery Region Changed",
-                              message: `Changing your delivery region has removed items from your previous location.\n\nYou can now browse and add products available for delivery in ${r.name}!`,
+                              message: `Changing your delivery region has removed items from your previous location.\n\nYou can now browse and add products available for delivery in ${r?.name || "your region"}!`,
                               type: "warning",
                               buttonText: "Got It",
                             });
@@ -61,20 +83,20 @@ export default function RegionPicker({ trigger }) {
                       }
                     }}
                     className={`w-full text-left flex items-center justify-between rounded-xl border p-3.5 active:scale-[0.98] transition-all duration-200 cursor-pointer ${
-                      region.id === r.id
+                      region?.id === r?.id
                         ? "border-brand-500 bg-brand-50/70 shadow-xs ring-1 ring-brand-500/20"
                         : "border-slate-200/90 bg-white hover:bg-slate-50 hover:border-slate-300"
                     }`}
                   >
                     <div>
                       <div className="text-xs font-bold text-navy-900">
-                        {r.name}
+                        {r?.name}
                       </div>
                       <div className="text-[11px] font-medium text-slate-500 mt-0.5">
-                        {r.state} {r.baseDeliveryCharge ? `• Delivery Fee: ₹${r.baseDeliveryCharge}` : ""}
+                        {r?.state || "UP"} {r?.baseDeliveryCharge ? `• Delivery Fee: ₹${r.baseDeliveryCharge}` : ""}
                       </div>
                     </div>
-                    {region.id === r.id && (
+                    {region?.id === r?.id && (
                       <span className="text-brand-600 text-xs font-extrabold bg-brand-100/80 px-2 py-0.5 rounded-full">✓ Active</span>
                     )}
                   </button>

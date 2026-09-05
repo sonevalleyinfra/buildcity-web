@@ -35,9 +35,21 @@ const categoryTiles = [
   },
   {
     name: "Crushed Stone",
-    tag: "Gitti & Aggregate",
-    bg: "#F8FAFC",
+    tag: "Aggregates & Gitti",
+    bg: "#F5F3EF",
     img: "/categories/crushed_stone.png",
+  },
+  {
+    name: "Tiles",
+    tag: "Floor & Wall",
+    bg: "#EFF6FF",
+    img: "/categories/tiles.png",
+  },
+  {
+    name: "Plumbing",
+    tag: "Pipes & Fittings",
+    bg: "#ECFEFF",
+    img: "/categories/plumbing.png",
   },
 ];
 
@@ -192,6 +204,11 @@ export default function Home() {
   const [justAddedId, setJustAddedId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
 
+  const touchStartX = useRef(null);
+  const touchEndX = useRef(null);
+  const isMouseDown = useRef(false);
+  const mouseStartX = useRef(null);
+
   const liveVendorApproved = products
     .filter((p) => {
       if (p.approvalStatus !== "APPROVED" && p.approvalStatus !== undefined) return false;
@@ -215,10 +232,63 @@ export default function Home() {
     return [...liveVendorApproved];
   }, [liveVendorApproved]);
 
+  const nextSlide = () => {
+    setSlide((s) => (s + 1) % bannerSlides.length);
+  };
+
+  const prevSlide = () => {
+    setSlide((s) => (s - 1 + bannerSlides.length) % bannerSlides.length);
+  };
+
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e) => {
+    touchEndX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStartX.current || !touchEndX.current) return;
+    const distance = touchStartX.current - touchEndX.current;
+    if (distance > 40) {
+      nextSlide();
+    } else if (distance < -40) {
+      prevSlide();
+    }
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
+
+  const handleMouseDown = (e) => {
+    isMouseDown.current = true;
+    mouseStartX.current = e.clientX;
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isMouseDown.current) return;
+    touchEndX.current = e.clientX;
+  };
+
+  const handleMouseUp = () => {
+    if (!isMouseDown.current) return;
+    isMouseDown.current = false;
+    if (mouseStartX.current !== null && touchEndX.current !== null) {
+      const distance = mouseStartX.current - touchEndX.current;
+      if (distance > 40) {
+        nextSlide();
+      } else if (distance < -40) {
+        prevSlide();
+      }
+    }
+    mouseStartX.current = null;
+    touchEndX.current = null;
+  };
+
   useEffect(() => {
     const timer = setInterval(() => {
       setSlide((s) => (s + 1) % bannerSlides.length);
-    }, 4500);
+    }, 5000);
     return () => clearInterval(timer);
   }, []);
 
@@ -327,37 +397,52 @@ export default function Home() {
       </div>
 
       <main className="max-w-6xl mx-auto px-4 pt-4 sm:pt-6 space-y-6">
-        {/* 🌟 1. HERO CAROUSEL BANNER WITH INTEGRATED TRUST BAR */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#07132B] via-[#0A1A3A] to-[#0D224D] shadow-lg border border-slate-800/40 flex flex-col">
+        {/* 🌟 1. HERO CAROUSEL BANNER (SWIPEABLE) */}
+        <div
+          className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#07132B] via-[#0A1A3A] to-[#0D224D] shadow-lg border border-slate-800/40 select-none group touch-pan-y flex flex-col"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+        >
           {/* Banner Main Carousel Area */}
-          <div className="relative min-h-[175px] sm:min-h-[220px] flex items-stretch">
+          <div className="relative min-h-[175px] sm:min-h-[220px] flex items-stretch cursor-grab active:cursor-grabbing">
             {bannerSlides.map((b, i) => (
               <div
                 key={i}
-                className="absolute inset-0 transition-opacity duration-700 flex items-stretch"
-                style={{ opacity: slide === i ? 1 : 0, pointerEvents: slide === i ? "auto" : "none" }}
+                className="absolute inset-0 transition-all duration-700 ease-out flex items-stretch"
+                style={{
+                  opacity: slide === i ? 1 : 0,
+                  transform: slide === i ? "translateX(0%) scale(1)" : i < slide ? "translateX(-6%) scale(0.97)" : "translateX(6%) scale(0.97)",
+                  pointerEvents: slide === i ? "auto" : "none",
+                }}
               >
                 {/* Left Content Area */}
                 <div className="w-7/12 sm:w-1/2 flex flex-col justify-center px-4 sm:px-7 py-4 z-10">
-                  <span className="text-[9px] sm:text-[10px] font-black text-[#FBBF24] tracking-wider uppercase mb-1">
+                  <span className="text-[9px] sm:text-[10px] font-black text-[#38BDF8] tracking-wider uppercase mb-1">
                     {b.tag}
                   </span>
-                  <h2 className="text-white text-sm sm:text-xl font-extrabold leading-snug tracking-tight mb-3">
+                  <h2 className="text-white text-sm sm:text-xl font-extrabold leading-snug tracking-tight mb-3 sm:mb-4">
                     {b.line1} <br />
                     {b.line2} <br />
                     {b.line3}
                   </h2>
+
                   <Link
                     to="/categories"
-                    className="bg-white hover:bg-slate-100 text-navy-950 font-extrabold text-[10px] sm:text-xs px-3.5 py-1.5 rounded-full shadow-md active:scale-95 transition-all w-fit flex items-center gap-1"
+                    className="inline-flex items-center gap-1 bg-white hover:bg-slate-100 text-navy-950 font-extrabold text-[10px] sm:text-xs px-3.5 sm:px-4 py-1.5 rounded-full shadow-md active:scale-95 transition-all w-fit"
                   >
-                    Shop Now →
+                    <span>Shop Now</span>
+                    <span>→</span>
                   </Link>
                 </div>
 
                 {/* Right Image Area */}
                 <div className="w-5/12 sm:w-1/2 h-full relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-r from-[#07132B] via-[#07132B]/30 to-transparent z-10 pointer-events-none" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#07132B] via-[#07132B]/40 to-transparent z-10 pointer-events-none" />
                   <img
                     src={b.img}
                     alt="Hero Banner"
@@ -370,16 +455,45 @@ export default function Home() {
               </div>
             ))}
 
-            {/* Dots Indicator */}
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 sm:left-7 sm:translate-x-0 flex items-center gap-1.5 z-20">
+            {/* Desktop Navigation Arrow Controls */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                prevSlide();
+              }}
+              aria-label="Previous slide"
+              className="hidden sm:flex absolute left-2.5 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white items-center justify-center backdrop-blur-xs transition-all opacity-0 group-hover:opacity-100 active:scale-90 shadow-md"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                nextSlide();
+              }}
+              aria-label="Next slide"
+              className="hidden sm:flex absolute right-2.5 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white items-center justify-center backdrop-blur-xs transition-all opacity-0 group-hover:opacity-100 active:scale-90 shadow-md"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </button>
+
+            {/* Interactive Dots Indicator */}
+            <div className="absolute bottom-2.5 left-4 sm:left-8 flex items-center gap-1.5 z-20">
               {bannerSlides.map((_, i) => (
                 <button
                   key={i}
                   type="button"
                   onClick={() => setSlide(i)}
-                  className={`h-2 rounded-full transition-all duration-300 ${
-                    slide === i ? "w-5 bg-[#38BDF8]" : "w-2 bg-white/40"
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                    slide === i ? "w-6 bg-white shadow-xs" : "w-2 bg-white/40 hover:bg-white/75"
                   }`}
+                  aria-label={`Go to slide ${i + 1}`}
                 />
               ))}
             </div>
@@ -416,7 +530,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* 🛍️ 4. SHOP BY CATEGORY */}
+        {/* 🛍️ 4. SHOP BY CATEGORY (SCROLLABLE ON MOBILE, GRID ON DESKTOP) */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-base sm:text-lg font-extrabold text-navy-900 tracking-tight">Shop by Category</h3>
@@ -425,22 +539,25 @@ export default function Home() {
             </Link>
           </div>
 
-          <div className="flex sm:grid sm:grid-cols-5 gap-2.5 sm:gap-3.5 overflow-x-auto no-scrollbar pb-1.5 pt-0.5">
+          <div className="flex overflow-x-auto lg:grid lg:grid-cols-7 gap-2.5 sm:gap-3.5 pb-2 no-scrollbar scroll-smooth">
             {categoryTiles.map((c) => (
               <Link
                 key={c.name}
                 to={`/categories?cat=${encodeURIComponent(c.name)}`}
-                className="w-[92px] sm:w-auto shrink-0 sm:shrink rounded-[22px] p-2 sm:p-2.5 flex flex-col items-center justify-between shadow-2xs hover:shadow-md border border-slate-200/60 hover:border-slate-300 active:scale-95 transition-all duration-200 group aspect-[3/4.4] min-h-[145px] sm:min-h-[175px] overflow-hidden"
+                className="w-[88px] sm:w-28 lg:w-auto shrink-0 lg:shrink rounded-2xl p-2 sm:p-2.5 flex flex-col items-center justify-between shadow-2xs hover:shadow-md border border-slate-200/70 hover:border-slate-300 active:scale-95 transition-all duration-200 group min-h-[110px] sm:min-h-[130px]"
                 style={{ backgroundColor: c.bg }}
               >
-                <div className="w-full flex-1 flex items-center justify-center overflow-hidden rounded-xl">
+                <div className="w-full flex-1 flex items-center justify-center py-1">
                   <img
                     src={c.img}
                     alt={c.name}
-                    className="w-full h-full object-contain group-hover:scale-108 transition-transform duration-300"
+                    className="max-h-14 sm:max-h-16 w-auto object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-xs"
+                    onError={(e) => {
+                      e.target.src = "/categories/cement.png";
+                    }}
                   />
                 </div>
-                <span className="text-[11px] sm:text-xs font-bold text-navy-900 group-hover:text-brand-600 transition-colors text-center truncate max-w-full leading-tight pt-1">
+                <span className="text-[11px] sm:text-xs font-black text-navy-950 group-hover:text-brand-600 transition-colors text-center truncate max-w-full leading-tight pt-1 pb-0.5">
                   {c.name}
                 </span>
               </Link>
@@ -448,11 +565,11 @@ export default function Home() {
           </div>
         </section>
 
-        {/* 🏗️ 5. BEST OFFERS (3 PER ROW ON MOBILE, 4 PER ROW ON DESKTOP) */}
+        {/* 🏗️ 5. BEST OFFERS (3 PER ROW, EXACTLY 9 PRODUCTS) */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h3 className="text-base font-extrabold text-navy-900 tracking-tight">Best Offers in {region?.name || "Jaunpur"}</h3>
+              <h3 className="text-base font-extrabold text-navy-900 tracking-tight">Best Offers in {region?.name || "Varanasi"}</h3>
               <span className="bg-emerald-50 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-200">
                 {liveDisplayProducts.length} Live
               </span>
@@ -463,18 +580,18 @@ export default function Home() {
           </div>
 
           {productsLoading ? (
-            <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3.5 animate-pulse">
-              {[1, 2, 3, 4].map((n) => (
+            <div className="grid grid-cols-3 gap-2.5 sm:gap-3.5 animate-pulse">
+              {[1, 2, 3, 4, 5, 6].map((n) => (
                 <div key={n} className="bg-white rounded-2xl p-3 border border-slate-200 h-48" />
               ))}
             </div>
           ) : liveDisplayProducts.length === 0 ? (
             <div className="bg-white rounded-2xl p-6 text-center text-xs font-bold text-slate-500 border border-slate-200">
-              📦 No products listed in {region?.name || "your area"} right now.
+              📦 No products listed in {region?.name || "Varanasi"} right now.
             </div>
           ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
-              {liveDisplayProducts.slice(0, 8).map((p) => {
+            <div className="grid grid-cols-3 gap-2 sm:gap-3.5">
+              {liveDisplayProducts.slice(0, 9).map((p) => {
                 const price = Number(p.price || 100);
                 let mrp = Number(p.mrp || p.masterProduct?.suggestedPrice || 0);
                 if (mrp <= price) {

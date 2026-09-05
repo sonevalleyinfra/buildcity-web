@@ -203,6 +203,48 @@ export default function Home() {
   const [slide, setSlide] = useState(0);
   const [justAddedId, setJustAddedId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchHidden, setIsSearchHidden] = useState(false);
+
+  const lastScrollY = useRef(0);
+  const ticking = useRef(false);
+
+  useEffect(() => {
+    const updateScrollDir = () => {
+      const scrollY = window.scrollY;
+
+      // Always show when near the top of the page
+      if (scrollY < 40) {
+        setIsSearchHidden(false);
+        lastScrollY.current = scrollY;
+        ticking.current = false;
+        return;
+      }
+
+      const diff = scrollY - lastScrollY.current;
+
+      // User is scrolling DOWN by more than 20px -> collapse search bar
+      if (diff > 20 && scrollY > 70) {
+        setIsSearchHidden(true);
+      }
+      // User is scrolling UP by more than 15px -> expand search bar
+      else if (diff < -15) {
+        setIsSearchHidden(false);
+      }
+
+      lastScrollY.current = scrollY;
+      ticking.current = false;
+    };
+
+    const onScroll = () => {
+      if (!ticking.current) {
+        window.requestAnimationFrame(updateScrollDir);
+        ticking.current = true;
+      }
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   const touchStartX = useRef(null);
   const touchEndX = useRef(null);
@@ -321,9 +363,10 @@ export default function Home() {
         <Navbar />
       </div>
 
-      {/* 📱 Mobile Sticky Top Header (Clean Sticky Header with Logo, Region, Bell, Cart) */}
+      {/* 📱 Mobile Top Header (Single Clean Solid Sticky Header) */}
       <div className="lg:hidden bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-        <div className="px-4 py-3 flex items-center justify-between">
+        {/* Top Action Row (Logo & Location on Left, Notification & Cart on Right) */}
+        <div className="px-4 pt-3 pb-2 flex items-center justify-between">
           {/* Left: Brand Logo & Live Location */}
           <div className="flex items-center gap-2">
             <Link to="/" className="flex items-center gap-1.5 active:scale-95 transition-transform">
@@ -371,30 +414,36 @@ export default function Home() {
             </Link>
           </div>
         </div>
-      </div>
 
-      {/* 📱 Mobile Search Bar (Scrolls naturally under the sticky top header with 0 jitter/bounce) */}
-      <div className="lg:hidden bg-white px-4 pt-1.5 pb-3 border-b border-slate-100 shadow-2xs">
-        <form onSubmit={handleSearch}>
-          <div className="w-full flex items-center gap-2.5 bg-slate-100 rounded-xl px-3.5 py-2.5 border border-slate-200 focus-within:border-brand-500 focus-within:bg-white transition-all shadow-2xs h-10.5">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.2">
-              <circle cx="11" cy="11" r="8" />
-              <path d="m21 21-4.3-4.3" />
-            </svg>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search cement, steel, paints, pipes..."
-              className="w-full bg-transparent text-xs text-navy-900 font-medium outline-none placeholder:text-slate-400"
-            />
-            {searchQuery && (
-              <button type="button" onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600 text-xs p-0.5">
-                ✕
-              </button>
-            )}
-          </div>
-        </form>
+        {/* Search Bar (Smoothly collapses when scrolling down, expands on scrolling up) */}
+        <div
+          className={`transition-all duration-300 ease-out overflow-hidden ${
+            isSearchHidden
+              ? "max-h-0 opacity-0 -translate-y-2 pointer-events-none pb-0"
+              : "max-h-16 opacity-100 translate-y-0 pb-3 pt-1"
+          }`}
+        >
+          <form onSubmit={handleSearch} className="px-4">
+            <div className="w-full flex items-center gap-2.5 bg-slate-100 rounded-xl px-3.5 py-2 border border-slate-200 focus-within:border-brand-500 focus-within:bg-white transition-all shadow-2xs h-10.5">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.2">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search cement, steel, paints, pipes..."
+                className="w-full bg-transparent text-xs text-navy-900 font-medium outline-none placeholder:text-slate-400"
+              />
+              {searchQuery && (
+                <button type="button" onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600 text-xs p-0.5">
+                  ✕
+                </button>
+              )}
+            </div>
+          </form>
+        </div>
       </div>
 
       <main className="max-w-6xl mx-auto px-4 pt-4 sm:pt-6 space-y-6">

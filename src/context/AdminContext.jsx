@@ -77,18 +77,14 @@ const loadInitialVendors = () => {
 
 const COUPONS_STORAGE_KEY = "buildcity_admin_coupons";
 
-const seedCoupons = [
-  { id: "cp-1", code: "BUILDCITY100", title: "Flat ₹100 OFF", minOrder: 1000, discountAmount: 100, expiryDate: "2026-12-31", isActive: true, desc: "Valid on orders above ₹1,000" },
-  { id: "cp-2", code: "SUPER500", title: "Flat ₹500 OFF", minOrder: 5000, discountAmount: 500, expiryDate: "2026-12-31", isActive: true, desc: "Bulk order discount above ₹5,000" },
-  { id: "cp-3", code: "WELCOME200", title: "Flat ₹200 OFF", minOrder: 1500, discountAmount: 200, expiryDate: "2026-12-31", isActive: true, desc: "Special welcome coupon for new site orders" },
-];
+const seedCoupons = [];
 
 const loadInitialCoupons = () => {
   try {
     const saved = localStorage.getItem(COUPONS_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch {}
   return seedCoupons;
@@ -222,8 +218,11 @@ export function AdminProvider({ children }) {
           localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(formattedListings));
         } catch {}
       }
-      if (Array.isArray(couponsRes) && couponsRes.length > 0) {
+      if (Array.isArray(couponsRes)) {
         setCoupons(couponsRes);
+        try {
+          localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(couponsRes));
+        } catch {}
       }
     } catch (e) {
       console.warn("Public catalog sync note:", e.message);

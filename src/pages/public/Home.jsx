@@ -203,6 +203,19 @@ export default function Home() {
   const [slide, setSlide] = useState(0);
   const [justAddedId, setJustAddedId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isScrolledDown, setIsScrolledDown] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 30) {
+        setIsScrolledDown(true);
+      } else {
+        setIsScrolledDown(false);
+      }
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const touchStartX = useRef(null);
   const touchEndX = useRef(null);
@@ -373,27 +386,33 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Search Bar */}
-        <form onSubmit={handleSearch} className="px-4 pb-3">
-          <div className="w-full flex items-center gap-2.5 bg-slate-100 rounded-xl px-3.5 py-2.5 border border-slate-200 focus-within:border-brand-500 focus-within:bg-white transition-all shadow-2xs h-10.5">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.2">
-              <circle cx="11" cy="11" r="8" />
-              <path d="m21 21-4.3-4.3" />
-            </svg>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search cement, steel, paints, pipes..."
-              className="w-full bg-transparent text-xs text-navy-900 font-medium outline-none placeholder:text-slate-400"
-            />
-            {searchQuery && (
-              <button type="button" onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600 text-xs p-0.5">
-                ✕
-              </button>
-            )}
-          </div>
-        </form>
+        {/* Search Bar (Smoothly collapses when scrolled down) */}
+        <div
+          className={`transition-all duration-300 ease-in-out overflow-hidden ${
+            isScrolledDown ? "max-h-0 opacity-0 pb-0 pointer-events-none" : "max-h-16 opacity-100 pb-3"
+          }`}
+        >
+          <form onSubmit={handleSearch} className="px-4">
+            <div className="w-full flex items-center gap-2.5 bg-slate-100 rounded-xl px-3.5 py-2.5 border border-slate-200 focus-within:border-brand-500 focus-within:bg-white transition-all shadow-2xs h-10.5">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.2">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search cement, steel, paints, pipes..."
+                className="w-full bg-transparent text-xs text-navy-900 font-medium outline-none placeholder:text-slate-400"
+              />
+              {searchQuery && (
+                <button type="button" onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600 text-xs p-0.5">
+                  ✕
+                </button>
+              )}
+            </div>
+          </form>
+        </div>
       </div>
 
       <main className="max-w-6xl mx-auto px-4 pt-4 sm:pt-6 space-y-6">

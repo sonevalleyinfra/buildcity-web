@@ -2326,21 +2326,31 @@ app.post("/api/v1/reviews", requireAuth, async (req, res) => {
 app.get("/api/v1/notifications/me", requireAuth, async (req, res) => {
   try {
     const targetUserId = req.auth?.userId;
-    const rawList = await prisma.notification.findMany({
-      where: {
+    const userRole = (req.auth?.role || "").toUpperCase();
+
+    let whereClause = {};
+    if (userRole === "ADMIN") {
+      whereClause = {};
+    } else if (targetUserId) {
+      whereClause = {
         OR: [
-          ...(targetUserId ? [{ userId: targetUserId }] : []),
-          { user: { role: "CUSTOMER" } },
+          { userId: targetUserId },
           { user: { role: "ADMIN" } },
         ],
-      },
+      };
+    } else {
+      whereClause = { user: { role: "ADMIN" } };
+    }
+
+    const rawList = await prisma.notification.findMany({
+      where: whereClause,
       include: { user: true },
       orderBy: { createdAt: "desc" },
       take: 60,
     }).catch(() => []);
 
     const uniqueList = Array.from(
-      new Map(rawList.map((n) => [`${n.title.trim().toLowerCase()}_${n.message.trim().toLowerCase()}`, n])).values()
+      new Map(rawList.map((n) => [n.id, n])).values()
     );
     res.json(uniqueList);
   } catch (err) {
@@ -2353,11 +2363,7 @@ app.get("/api/v1/notifications", requireAuth, async (req, res) => {
     const { userId } = req.query;
     const whereClause = {};
     if (userId && userId.length > 20) {
-      whereClause.OR = [
-        { userId },
-        { user: { role: "CUSTOMER" } },
-        { user: { role: "ADMIN" } },
-      ];
+      whereClause.userId = userId;
     }
 
     const rawList = await prisma.notification.findMany({
@@ -2367,9 +2373,8 @@ app.get("/api/v1/notifications", requireAuth, async (req, res) => {
       take: 60,
     }).catch(() => []);
 
-    // Clean deduplicate by title & message so customers see clean unique cards
     const uniqueList = Array.from(
-      new Map(rawList.map((n) => [`${n.title.trim().toLowerCase()}_${n.message.trim().toLowerCase()}`, n])).values()
+      new Map(rawList.map((n) => [n.id, n])).values()
     );
 
     res.json(uniqueList);
@@ -2430,6 +2435,21 @@ app.patch("/api/v1/notifications/:id/read", requireAuth, async (req, res) => {
       data: { isRead: true },
     }).catch(() => null);
     res.json(notif || { success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/v1/notifications", requireAuth, async (req, res) => {
+  try {
+    const userRole = (req.auth?.role || "").toUpperCase();
+    const targetUserId = req.auth?.userId;
+    if (userRole === "ADMIN") {
+      await prisma.notification.deleteMany({});
+    } else if (targetUserId) {
+      await prisma.notification.deleteMany({ where: { userId: targetUserId } });
+    }
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

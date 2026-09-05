@@ -74,13 +74,13 @@ export function NotificationProvider({ children }) {
     }, 6000);
   };
 
-  // Fetch real database notifications & active offers
+  // Fetch real database notifications (orders & admin broadcasts)
   const fetchDbNotifications = async (showLoading = false) => {
     if (showLoading) setIsLoadingNotifs(true);
     try {
       let dbList = [];
 
-      // 1. Fetch from Render DB notifications
+      // 1. Fetch from server DB notifications
       if (user) {
         try {
           const res = await authFetch(`${API_BASE_URL}/api/v1/notifications/me`);
@@ -90,28 +90,6 @@ export function NotificationProvider({ children }) {
           }
         } catch {}
       }
-
-      // 2. Fetch live coupons to broadcast as offers in Offers tab
-      let couponOffers = [];
-      try {
-        const cRes = await authFetch(`${API_BASE_URL}/api/v1/coupons`);
-        if (cRes.ok) {
-          const coupons = await cRes.json();
-          if (Array.isArray(coupons)) {
-            couponOffers = coupons
-              .filter((c) => c.isActive !== false)
-              .map((c) => ({
-                id: `offer_coupon_${c.code}`,
-                title: `🎁 ${c.title || `Special Offer: ${c.code}`}`,
-                message: `Use code ${c.code} to get ₹${c.discountAmount} OFF on orders above ₹${c.minOrder || 1000}!`,
-                link: "/cart",
-                timestamp: new Date(c.createdAt || Date.now()).getTime(),
-                type: "offer",
-                isBroadcast: true,
-              }));
-          }
-        }
-      } catch {}
 
       const dismissedSet = getDismissedSet();
       let readIds = new Set();
@@ -149,11 +127,8 @@ export function NotificationProvider({ children }) {
         } catch {}
       }
 
-      // Filter active coupon offers that haven't been dismissed
-      const activeOffers = couponOffers.filter((o) => !isDismissed(o, dismissedSet));
-
-      // Combine user orders, DB notifications, and active broadcast offers
-      const combined = isStaff && !isAdmin ? [] : [...localOrders, ...formattedDb, ...activeOffers];
+      // Combine user orders and DB notifications
+      const combined = isStaff && !isAdmin ? [] : [...localOrders, ...formattedDb];
       const unique = Array.from(new Map(combined.map((x) => [x.id || `${x.title}_${x.message}`, x])).values())
         .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
@@ -381,11 +356,9 @@ export function NotificationProvider({ children }) {
 
     setNotifications([]);
 
-    if (isAdmin) {
-      try {
-        await authFetch(`${API_BASE_URL}/api/v1/notifications`, { method: "DELETE" });
-      } catch {}
-    }
+    try {
+      await authFetch(`${API_BASE_URL}/api/v1/notifications`, { method: "DELETE" });
+    } catch {}
   };
 
   // PERMANENT REMOVE: Single notification dismissal

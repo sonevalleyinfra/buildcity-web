@@ -39,6 +39,12 @@ export default function Profile() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (coupons && coupons.length > 0) {
+      setDbCoupons(coupons);
+    }
+  }, [coupons]);
+
   const activeSource = dbCoupons.length > 0 ? dbCoupons : coupons;
   const todayStr = new Date().toISOString().split("T")[0];
   const activeCouponsCount = (activeSource || []).filter((c) => {

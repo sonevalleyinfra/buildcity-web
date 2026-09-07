@@ -308,7 +308,7 @@ export default function VendorDashboard() {
             className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-3.5 border border-white/10 hover:border-emerald-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group"
           >
             <p className="text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">Total Store Revenue</p>
-            <p className="text-lg font-black text-white mt-0.5 tracking-tight">₹{totalRevenue.toLocaleString()}</p>
+            <p className="text-lg font-black text-white mt-0.5 tracking-tight">₹{Number(totalRevenue || 0).toLocaleString("en-IN")}</p>
             <span className="text-[10px] text-emerald-400 font-extrabold flex items-center gap-1 mt-0.5">
               <span>Real-time DB Sales</span>
               <span className="group-hover:translate-x-0.5 transition-transform">→</span>

@@ -293,6 +293,12 @@ export function CartProvider({ children }) {
 
   const count = items.reduce((sum, item) => sum + (Number(item.qty) || 1), 0);
   const total = items.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.qty) || 1), 0);
+  const subtotal = total;
+  const mrpTotal = items.reduce((sum, item) => {
+    const itemPrice = Number(item.price) || 0;
+    const itemMrp = Number(item.mrp) > itemPrice ? Number(item.mrp) : Math.round(itemPrice * 1.2);
+    return sum + itemMrp * (Number(item.qty) || 1);
+  }, 0);
 
   return (
     <CartContext.Provider
@@ -304,6 +310,8 @@ export function CartProvider({ children }) {
         clearCart,
         count,
         total,
+        subtotal,
+        mrpTotal,
         cartRegionId,
         cartRegionName,
         hasRegionMismatch,

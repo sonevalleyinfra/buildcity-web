@@ -141,8 +141,8 @@ export default function Cart() {
       return;
     }
 
-    if (subtotal < matched.minOrder) {
-      setCouponError(`Minimum order value ₹${matched.minOrder.toLocaleString()} required for ${matched.code}.`);
+    if (subtotal < (matched.minOrder || 0)) {
+      setCouponError(`Minimum order value ₹${Number(matched.minOrder || 0).toLocaleString("en-IN")} required for ${matched.code}.`);
       return;
     }
 
@@ -374,13 +374,13 @@ export default function Cart() {
               <div className="space-y-2.5 text-xs">
                 <div className="flex justify-between text-slate-600 font-medium">
                   <span>Total MRP</span>
-                  <span className="font-bold tabular-nums">₹{mrpTotal.toLocaleString("en-IN")}</span>
+                  <span className="font-bold tabular-nums">₹{Number(mrpTotal || 0).toLocaleString("en-IN")}</span>
                 </div>
 
                 {mrpDiscount > 0 && (
                   <div className="flex justify-between text-emerald-700 font-bold">
                     <span>Discount on MRP</span>
-                    <span className="tabular-nums">- ₹{mrpDiscount.toLocaleString("en-IN")}</span>
+                    <span className="tabular-nums">- ₹{Number(mrpDiscount || 0).toLocaleString("en-IN")}</span>
                   </div>
                 )}
 
@@ -400,13 +400,13 @@ export default function Cart() {
 
                 <div className="border-t border-slate-200/80 pt-3 flex justify-between text-base font-black text-navy-900 tracking-tight">
                   <span>Total Amount</span>
-                  <span className="tabular-nums">₹{total.toLocaleString("en-IN")}</span>
+                  <span className="tabular-nums">₹{Number(total || 0).toLocaleString("en-IN")}</span>
                 </div>
               </div>
 
               {appliedCoupon && (
                 <div className="bg-emerald-50/80 text-emerald-800 text-[11px] font-black p-2.5 rounded-xl text-center border border-emerald-200/80 shadow-2xs">
-                  🎉 Total Savings: ₹{(mrpDiscount + appliedCoupon.discountAmount).toLocaleString("en-IN")}
+                  🎉 Total Savings: ₹{Number(mrpDiscount + (appliedCoupon.discountAmount || 0)).toLocaleString("en-IN")}
                 </div>
               )}
 

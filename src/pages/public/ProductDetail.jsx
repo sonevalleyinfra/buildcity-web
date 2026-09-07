@@ -412,11 +412,11 @@ export default function ProductDetail() {
 
             <div className="flex items-baseline gap-2.5 mb-1">
               <span className="text-2xl font-black text-navy-900 tracking-tight">
-                ₹{product.price.toLocaleString("en-IN")}
+                ₹{Number(product.price || 0).toLocaleString("en-IN")}
               </span>
               {discountPct > 0 && (
                 <span className="text-xs text-slate-400 line-through font-medium">
-                  ₹{product.mrp.toLocaleString("en-IN")}
+                  ₹{Number(product.mrp || 0).toLocaleString("en-IN")}
                 </span>
               )}
               {discountPct > 0 && (

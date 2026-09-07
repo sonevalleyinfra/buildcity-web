@@ -663,7 +663,7 @@ export default function AdminDashboard() {
               <div className="bg-white border border-slate-200/90 rounded-2xl p-4.5 shadow-2xs hover:shadow-md hover:border-brand-300 transition-all duration-200 relative overflow-hidden group">
                 <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brand-500 to-brand-600" />
                 <p className="text-xs font-semibold text-slate-500 tracking-tight">Total Revenue</p>
-                <p className="text-2xl font-black text-navy-900 tracking-tight mt-1">₹{stats.totalRevenue.toLocaleString("en-IN")}</p>
+                <p className="text-2xl font-black text-navy-900 tracking-tight mt-1">₹{Number(stats?.totalRevenue || 0).toLocaleString("en-IN")}</p>
                 <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold inline-block mt-1">From completed orders</span>
               </div>
               <div className="bg-white border border-slate-200/90 rounded-2xl p-4.5 shadow-2xs hover:shadow-md hover:border-brand-300 transition-all duration-200 relative overflow-hidden group">

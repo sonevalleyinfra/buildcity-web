@@ -6,6 +6,7 @@ import { useRegion } from "../../context/RegionContext";
 import Navbar from "../../components/Navbar";
 import RegionPicker from "../../components/RegionPicker";
 import NotificationPanel from "../../components/NotificationPanel";
+import ProductCard from "../../components/ProductCard";
 
 const topPills = [
   { name: "All", isGrid: true },
@@ -395,63 +396,9 @@ export default function Categories() {
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 sm:gap-3.5">
-              {filteredCategoryProducts.map((p) => {
-                const price = Number(p.price || 100);
-                let mrp = Number(p.mrp || p.masterProduct?.suggestedPrice || 0);
-                if (mrp <= price) mrp = Math.round(price * 1.2);
-                const discountPct = Math.max(8, Math.round(((mrp - price) / mrp) * 100));
-
-                return (
-                  <div
-                    key={p.id}
-                    className="bg-white rounded-xl sm:rounded-2xl border border-slate-200/80 p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs hover:shadow-md hover:border-slate-300 active:scale-[0.98] transition-all group relative"
-                  >
-                    <Link to={`/product/${p.id}`} className="block">
-                      <div className="relative aspect-square rounded-lg sm:rounded-xl overflow-hidden bg-slate-50 mb-1.5 border border-slate-100 flex items-center justify-center p-1.5">
-                        <span className="absolute top-1.5 left-1.5 z-10 bg-amber-100 text-amber-800 font-black text-[8px] sm:text-[8.5px] px-1.5 py-0.5 rounded border border-amber-200/60 shadow-2xs">
-                          {discountPct}% OFF
-                        </span>
-                        <img
-                          src={p.imageUrl || p.img || "/categories/cement.png"}
-                          alt={p.name}
-                          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
-                          loading="lazy"
-                        />
-                      </div>
-
-                      <p className="text-[8.5px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-tight truncate">
-                        {p.brand || "Standard"}
-                      </p>
-                      <h4 className="text-[11px] sm:text-xs font-extrabold text-navy-950 leading-snug line-clamp-1 group-hover:text-[#0284C7] transition-colors">
-                        {p.name}
-                      </h4>
-                    </Link>
-
-                    <div className="mt-1 pt-1.5 border-t border-slate-100 flex flex-col sm:flex-row sm:items-end justify-between gap-1">
-                      <div>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-xs sm:text-sm font-black text-navy-950">₹{price.toLocaleString("en-IN")}</span>
-                          {mrp > price && (
-                            <span className="text-[8.5px] sm:text-[9px] text-slate-400 line-through">₹{mrp.toLocaleString("en-IN")}</span>
-                          )}
-                        </div>
-                        <span className="text-[7.5px] sm:text-[8.5px] text-slate-400 leading-none block">per {p.unit || "unit"}</span>
-                      </div>
-
-                      <button
-                        onClick={() => handleAddToCart(p)}
-                        className={`text-[10px] sm:text-[11px] font-bold px-2 py-1 rounded-lg transition-all shadow-2xs active:scale-95 cursor-pointer mt-1 sm:mt-0 ${
-                          justAddedId === p.id
-                            ? "bg-emerald-600 text-white"
-                            : "bg-[#0A192F] text-white hover:bg-navy-900"
-                        }`}
-                      >
-                        {justAddedId === p.id ? "✓" : "+ Add"}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+              {filteredCategoryProducts.map((p) => (
+                <ProductCard key={p.id} product={p} />
+              ))}
             </div>
           )}
         </section>

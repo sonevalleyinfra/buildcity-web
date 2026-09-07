@@ -7,6 +7,7 @@ import { useRegion } from "../../context/RegionContext";
 import Navbar from "../../components/Navbar";
 import RegionPicker from "../../components/RegionPicker";
 import NotificationPanel from "../../components/NotificationPanel";
+import ProductCard from "../../components/ProductCard";
 
 const categoryTiles = [
   {
@@ -641,65 +642,9 @@ export default function Home() {
             </div>
           ) : (
             <div className="grid grid-cols-3 gap-2 sm:gap-3.5">
-              {liveDisplayProducts.slice(0, 9).map((p) => {
-                const price = Number(p.price || 100);
-                let mrp = Number(p.mrp || p.masterProduct?.suggestedPrice || 0);
-                if (mrp <= price) {
-                  mrp = Math.round(price * 1.2);
-                }
-                const discountPct = Math.max(5, Math.round(((mrp - price) / mrp) * 100));
-
-                return (
-                  <div
-                    key={p.id}
-                    className="bg-white rounded-2xl border border-slate-200/80 p-2 sm:p-2.5 lg:p-3 flex flex-col justify-between shadow-2xs hover:shadow-md hover:border-slate-300 active:scale-[0.98] transition-all group"
-                  >
-                    <Link to={`/product/${p.id}`} className="block">
-                      <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-50 mb-1.5 border border-slate-100 flex items-center justify-center p-1">
-                        <span className="absolute top-1.5 left-1.5 z-10 bg-amber-100 text-amber-800 font-black text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded border border-amber-200/60 shadow-2xs">
-                          {discountPct}% OFF
-                        </span>
-                        <img
-                          src={p.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80"}
-                          alt={p.name}
-                          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
-                          loading="lazy"
-                        />
-                      </div>
-
-                      <p className="text-[8.5px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-tight truncate">
-                        {p.brand || "Standard"}
-                      </p>
-                      <h4 className="text-[11px] sm:text-xs font-extrabold text-navy-950 leading-snug line-clamp-1 group-hover:text-brand-600 transition-colors">
-                        {p.name}
-                      </h4>
-                    </Link>
-
-                    <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex flex-col sm:flex-row sm:items-end justify-between gap-1">
-                      <div>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-xs sm:text-sm font-black text-navy-950">₹{price.toLocaleString("en-IN")}</span>
-                          {mrp > price && (
-                            <span className="text-[8.5px] sm:text-[9px] text-slate-400 line-through">₹{mrp.toLocaleString("en-IN")}</span>
-                          )}
-                        </div>
-                        <span className="text-[8px] sm:text-[8.5px] text-slate-400 leading-none block">per {p.unit || "unit"}</span>
-                      </div>
-
-                      <button
-                        onClick={() => handleAddToCart(p)}
-                        className={`text-[10px] sm:text-xs font-bold px-2 py-1 rounded-lg transition-all shadow-2xs active:scale-95 cursor-pointer mt-1 sm:mt-0 ${
-                          justAddedId === p.id
-                            ? "bg-emerald-600 text-white"
-                            : "bg-[#0A192F] text-white hover:bg-navy-900"
-                        }`}
-                      >
-                        {justAddedId === p.id ? "✓" : "+ Add"}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+              {liveDisplayProducts.slice(0, 9).map((p) => (
+                <ProductCard key={p.id} product={p} />
+              ))}
             </div>
           )}
         </section>
@@ -806,16 +751,16 @@ export default function Home() {
       </main>
 
       {/* 🟢 8. FLOATING WHATSAPP & PHONE CALL ACTION BUTTONS */}
-      <div className="fixed bottom-20 right-4 z-40 flex flex-col gap-2.5">
+      <div className="fixed bottom-20 right-3.5 sm:right-5 z-40 flex flex-col gap-2">
         {/* WhatsApp Button */}
         <a
           href="https://wa.me/919161660447?text=Hello%20BuildCity%20Team,%20I%20have%20an%20inquiry%20regarding%20construction%20materials"
           target="_blank"
           rel="noopener noreferrer"
-          className="w-12 h-12 rounded-full bg-[#25D366] hover:bg-[#20bd5a] text-white flex items-center justify-center shadow-lg active:scale-90 transition-all"
+          className="w-10.5 h-10.5 sm:w-11.5 sm:h-11.5 rounded-full bg-[#25D366] hover:bg-[#20bd5a] text-white flex items-center justify-center shadow-lg hover:shadow-xl ring-2 ring-white/90 active:scale-90 transition-all"
           title="Chat on WhatsApp"
         >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.312.045-.634.055-.992-.061-.59-.191-1.353-.615-2.227-1.488-.874-.873-1.297-1.637-1.488-2.227-.116-.358-.106-.68-.061-.992.05-.333.419-1.026.824-1.17.135-.048.281-.03.394.045.114.075.764 1.846.764 1.846.06.146.028.314-.077.419l-.382.382c.285.503.744.962 1.247 1.247l.382-.382c.105-.105.273-.137.419-.077 0 0 1.771.65 1.846.764.075.113.093.259.046.394z" />
           </svg>
         </a>
@@ -823,10 +768,10 @@ export default function Home() {
         {/* Call Button */}
         <a
           href="tel:+919161660447"
-          className="w-12 h-12 rounded-full bg-[#0284C7] hover:bg-[#0369A1] text-white flex items-center justify-center shadow-lg active:scale-90 transition-all"
+          className="w-10.5 h-10.5 sm:w-11.5 sm:h-11.5 rounded-full bg-[#0284C7] hover:bg-[#0369A1] text-white flex items-center justify-center shadow-lg hover:shadow-xl ring-2 ring-white/90 active:scale-90 transition-all"
           title="Call BuildCity Support"
         >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
             <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
           </svg>
         </a>

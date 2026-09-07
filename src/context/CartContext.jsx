@@ -1,10 +1,11 @@
 import { authFetch } from "../config/authFetch";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useRef } from "react";
 import { useRegion } from "./RegionContext";
 import { useAuth } from "./AuthContext";
 import { useAlert } from "./AlertContext";
+import { API_BASE_URL } from "../config/api";
 
-// Cart context - user isolated cart storage & regional pricing
+// Cart context - User isolated cart storage, Cloud DB Sync, and regional pricing
 const CartContext = createContext(null);
 
 export function CartProvider({ children }) {
@@ -12,6 +13,7 @@ export function CartProvider({ children }) {
   const { region } = useRegion();
   const { showAlert } = useAlert();
   const [items, setItems] = useState([]);
+  const isInitialCloudSyncDone = useRef(false);
 
   // Compute unique storage key for logged-in user or guest
   const cartStorageKey = user?.phone
@@ -20,34 +22,69 @@ export function CartProvider({ children }) {
     ? `buildcity_cart_${user.id}`
     : "buildcity_cart_guest";
 
-  // Load cart items & automatically merge guest cart into user account upon login/register
+  // Load cart items & automatically merge Cloud DB cart + Guest cart upon login
   useEffect(() => {
-    if (user?.phone || user?.id) {
-      let guestItems = [];
-      try {
-        const guestSaved = localStorage.getItem("buildcity_cart_guest");
-        if (guestSaved) {
-          const parsed = JSON.parse(guestSaved);
-          if (Array.isArray(parsed)) guestItems = parsed;
-        }
-      } catch {}
+    let isCancelled = false;
 
-      let userSavedItems = [];
-      try {
-        const userSaved = localStorage.getItem(cartStorageKey);
-        if (userSaved) {
-          const parsed = JSON.parse(userSaved);
-          if (Array.isArray(parsed)) userSavedItems = parsed;
-        }
-      } catch {}
+    const syncCart = async () => {
+      if (user?.phone || user?.id) {
+        // 1. Check local guest items
+        let guestItems = [];
+        try {
+          const guestSaved = localStorage.getItem("buildcity_cart_guest");
+          if (guestSaved) {
+            const parsed = JSON.parse(guestSaved);
+            if (Array.isArray(parsed)) guestItems = parsed;
+          }
+        } catch {}
 
-      if (guestItems.length > 0) {
-        // Merge guest items into user account
+        // 2. Check local user saved items
+        let localUserItems = [];
+        try {
+          const userSaved = localStorage.getItem(cartStorageKey);
+          if (userSaved) {
+            const parsed = JSON.parse(userSaved);
+            if (Array.isArray(parsed)) localUserItems = parsed;
+          }
+        } catch {}
+
+        // 3. Fetch Cloud DB Cart for logged-in account (e.g. from phone or another device)
+        let dbCartItems = [];
+        try {
+          const res = await authFetch(`${API_BASE_URL}/api/v1/cart`).then((r) => r.json()).catch(() => null);
+          if (res && Array.isArray(res.cartItems)) {
+            dbCartItems = res.cartItems;
+          }
+        } catch (err) {
+          console.warn("Fetch cloud cart note:", err.message);
+        }
+
+        if (isCancelled) return;
+
+        // 4. Merge all sources: DB items + Local User items + Guest items
         const mergedMap = new Map();
-        userSavedItems.forEach((it) => {
+
+        // Priority 1: DB items (from phone / cross-device)
+        dbCartItems.forEach((it) => {
           if (it && it.id) mergedMap.set(it.id, it);
         });
 
+        // Priority 2: Local user items
+        localUserItems.forEach((it) => {
+          if (it && it.id) {
+            if (mergedMap.has(it.id)) {
+              const existing = mergedMap.get(it.id);
+              mergedMap.set(it.id, {
+                ...existing,
+                qty: Math.max(Number(existing.qty) || 1, Number(it.qty) || 1),
+              });
+            } else {
+              mergedMap.set(it.id, it);
+            }
+          }
+        });
+
+        // Priority 3: Guest items
         guestItems.forEach((it) => {
           if (it && it.id) {
             if (mergedMap.has(it.id)) {
@@ -64,39 +101,74 @@ export function CartProvider({ children }) {
 
         const finalMerged = Array.from(mergedMap.values());
         setItems(finalMerged);
+        isInitialCloudSyncDone.current = true;
+
         try {
           localStorage.setItem(cartStorageKey, JSON.stringify(finalMerged));
-          localStorage.removeItem("buildcity_cart_guest");
+          if (guestItems.length > 0) {
+            localStorage.removeItem("buildcity_cart_guest");
+          }
+        } catch {}
+
+        // Sync merged result back to Cloud Database
+        try {
+          authFetch(`${API_BASE_URL}/api/v1/cart`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ items: finalMerged }),
+          }).catch(() => {});
         } catch {}
       } else {
-        setItems(userSavedItems);
-      }
-    } else {
-      // Guest mode
-      try {
-        const guestSaved = localStorage.getItem("buildcity_cart_guest");
-        if (guestSaved) {
-          const parsed = JSON.parse(guestSaved);
-          setItems(Array.isArray(parsed) ? parsed : []);
-        } else {
+        // Guest mode
+        isInitialCloudSyncDone.current = true;
+        try {
+          const guestSaved = localStorage.getItem("buildcity_cart_guest");
+          if (guestSaved) {
+            const parsed = JSON.parse(guestSaved);
+            setItems(Array.isArray(parsed) ? parsed : []);
+          } else {
+            setItems([]);
+          }
+        } catch {
           setItems([]);
         }
-      } catch {
-        setItems([]);
       }
-    }
+    };
+
+    syncCart();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [cartStorageKey, user]);
 
-  // Persist cart items to storage
+  // Persist cart items to localStorage and Cloud DB in background
   useEffect(() => {
+    if (!isInitialCloudSyncDone.current) return;
+
     if (cartStorageKey && Array.isArray(items)) {
       try {
         localStorage.setItem(cartStorageKey, JSON.stringify(items));
       } catch {}
-    }
-  }, [items, cartStorageKey]);
 
-  // product price add karte waqt base price and regional price set karein
+      // If logged in, sync to Cloud Database
+      if (user?.phone || user?.id) {
+        const token = localStorage.getItem("buildcity_token");
+        if (token) {
+          const timer = setTimeout(() => {
+            authFetch(`${API_BASE_URL}/api/v1/cart`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ items }),
+            }).catch(() => {});
+          }, 300);
+          return () => clearTimeout(timer);
+        }
+      }
+    }
+  }, [items, cartStorageKey, user]);
+
+  // Product add karte waqt base price and regional price set karein
   const addItem = (product, qty = 1) => {
     setItems((prev) => {
       const existing = prev.find((i) => i.id === product.id);
@@ -135,7 +207,18 @@ export function CartProvider({ children }) {
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, qty } : i)));
   };
 
-  const clearCart = () => setItems([]);
+  const clearCart = () => {
+    setItems([]);
+    if (user?.phone || user?.id) {
+      try {
+        authFetch(`${API_BASE_URL}/api/v1/cart`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: [] }),
+        }).catch(() => {});
+      } catch {}
+    }
+  };
 
   // Detect if current selected region differs from cart items' added region
   const firstItemWithRegion = items.find((i) => i.addedRegionId);
@@ -178,90 +261,38 @@ export function CartProvider({ children }) {
             const listingRegionName = l.vendor?.region?.name || l.regionName || "";
             const listingRegionId = l.vendor?.region?.id || l.regionId || "";
 
-            const matchRegion =
-              (listingRegionName && listingRegionName.toLowerCase().trim() === region.name.toLowerCase().trim()) ||
-              (listingRegionId && listingRegionId.toLowerCase().trim() === region.id.toLowerCase().trim());
+            const matchesRegion =
+              (listingRegionId && region.id && listingRegionId.toLowerCase() === region.id.toLowerCase()) ||
+              (listingRegionName && region.name && listingRegionName.toLowerCase().trim() === region.name.toLowerCase().trim());
 
-            return isApproved && matchProduct && matchRegion;
+            return isApproved && matchProduct && matchesRegion;
           })
         : null;
 
       if (matchingListing) {
-        // Case 1: Product IS sold by a vendor in the new region -> update price to that region's vendor price
-        const realPrice = Number(matchingListing.price) || i.price;
-        const realVendorId = matchingListing.vendorId || i.vendorId;
-        const realVendorName = matchingListing.vendor?.shopName || matchingListing.vendorName || i.vendorName;
-
+        const newPrice = Number(matchingListing.price) || i.price;
         updatedItems.push({
           ...i,
-          price: realPrice,
-          vendorId: realVendorId,
-          vendorName: realVendorName,
+          price: newPrice,
+          vendorId: matchingListing.vendorId || i.vendorId,
+          vendorName: matchingListing.vendor?.shopName || matchingListing.vendorName || i.vendorName,
           addedRegionId: region.id,
           addedRegionName: region.name,
         });
       } else {
-        // Check if this product is listed by vendors in OTHER regions but NOT in the new region
-        const isVendorListedElsewhere = Array.isArray(listings) && listings.some((l) => {
-          return (l.masterProductId && i.masterProductId && l.masterProductId === i.masterProductId) ||
-                 (l.id && i.id && l.id === i.id) ||
-                 (l.name && i.name && l.name.toLowerCase().trim() === i.name.toLowerCase().trim());
-        });
-
-        if (isVendorListedElsewhere || !i.isMasterProduct) {
-          // Product is NOT sold by any supplier in the new region -> REMOVE FROM CART
-          removedItems.push(i.name);
-        } else {
-          // General master product available everywhere -> recalculate price using the new region's price factor
-          const base = Number(i.basePrice || i.suggestedPrice || i.price);
-          const calculatedPrice = Math.round(base * Number(region.priceFactor || 1.0));
-          updatedItems.push({
-            ...i,
-            price: calculatedPrice,
-            addedRegionId: region.id,
-            addedRegionName: region.name,
-          });
-        }
+        removedItems.push(i);
       }
     });
 
     setItems(updatedItems);
-    return { updatedCount: updatedItems.length, removedItems };
+    return {
+      updatedCount: updatedItems.length,
+      removedItems,
+    };
   };
 
-  // Automatic Cart Region Change Handler: Remove products from cart when region changes & show centered modal notice
-  useEffect(() => {
-    if (items.length > 0 && region?.id) {
-      const itemsFromOtherRegion = items.filter(
-        (i) =>
-          i.addedRegionId &&
-          i.addedRegionId.toLowerCase() !== region.id.toLowerCase()
-      );
-
-      if (itemsFromOtherRegion.length > 0) {
-        const removedNames = itemsFromOtherRegion.map((i) => i.name);
-        // Keep only items that belong to the new region
-        setItems((prev) =>
-          prev.filter(
-            (i) =>
-              !i.addedRegionId ||
-              i.addedRegionId.toLowerCase() === region.id.toLowerCase()
-          )
-        );
-
-        showAlert({
-          title: "📍 Delivery Region Changed",
-          message: `Changing your delivery region has removed items from your previous location.\n\nYou can now browse and add products available for delivery in ${region.name}!`,
-          type: "warning",
-          buttonText: "Got It",
-        });
-      }
-    }
-  }, [region?.id, region?.name]);
-
-  const count = items.reduce((sum, i) => sum + i.qty, 0);
-  const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);
-  const mrpTotal = items.reduce((sum, i) => sum + (i.mrp || i.price) * i.qty, 0);
+  const count = items.reduce((sum, item) => sum + (Number(item.qty) || 1), 0);
+  const total = items.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.qty) || 1), 0);
 
   return (
     <CartContext.Provider
@@ -272,11 +303,10 @@ export function CartProvider({ children }) {
         updateQty,
         clearCart,
         count,
-        subtotal,
-        mrpTotal,
-        hasRegionMismatch,
+        total,
+        cartRegionId,
         cartRegionName,
-        currentRegionName: region?.name || "Varanasi",
+        hasRegionMismatch,
         updateCartToCurrentRegion,
       }}
     >
@@ -286,7 +316,9 @@ export function CartProvider({ children }) {
 }
 
 export function useCart() {
-  const ctx = useContext(CartContext);
-  if (!ctx) throw new Error("useCart must be used inside CartProvider");
-  return ctx;
+  const context = useContext(CartContext);
+  if (!context) {
+    throw new Error("useCart must be used within a CartProvider");
+  }
+  return context;
 }

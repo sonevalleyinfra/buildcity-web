@@ -7,24 +7,50 @@ const AuthContext = createContext(null);
 const STORAGE_KEY = "buildcity_auth";
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && (parsed.id || parsed.phone)) return parsed;
+      }
+    } catch {}
+    return null;
+  });
+  const [loading, setLoading] = useState(false);
 
-  // App startup initialization — LocalStorage se logged-in user load karke Supabase Cloud DB se profile sync karein
+  // App startup initialization — Sync latest user profile from Supabase Cloud DB in background
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        setUser(parsed);
         // Background me Supabase Cloud DB se latest user profile sync karein (Zero PII in URL)
         authFetch(`/api/v1/users/me`)
           .then((r) => r.json())
           .then((dbUser) => {
             if (dbUser && dbUser.name) {
-              const refreshed = { ...parsed, name: dbUser.name, email: dbUser.email || parsed.email };
+              const refreshed = {
+                ...parsed,
+                name: dbUser.name,
+                email: dbUser.email || parsed.email,
+                preferredRegionId: dbUser.preferredRegionId || parsed.preferredRegionId,
+                preferredRegionName: dbUser.preferredRegionName || parsed.preferredRegionName,
+              };
               setUser(refreshed);
               localStorage.setItem(STORAGE_KEY, JSON.stringify(refreshed));
+
+              // If user has a saved preferred region in DB, switch to it automatically!
+              if (dbUser.preferredRegionId || dbUser.preferredRegionName) {
+                window.dispatchEvent(
+                  new CustomEvent("buildcity_user_preferred_region", {
+                    detail: {
+                      regionId: dbUser.preferredRegionId,
+                      regionName: dbUser.preferredRegionName,
+                    },
+                  })
+                );
+              }
             }
           })
           .catch(() => {});
@@ -164,12 +190,45 @@ export function AuthProvider({ children }) {
       saveToken(apiData.token);
     }
 
+    // Check if user has preferred region in DB or if guest has selected region locally
+    let guestRegion = null;
+    try {
+      const savedReg = localStorage.getItem("buildcity_region");
+      if (savedReg) guestRegion = JSON.parse(savedReg);
+    } catch {}
+
+    if (fetchedDbUser?.preferredRegionId || fetchedDbUser?.preferredRegionName) {
+      // User has saved region in DB -> switch to it
+      window.dispatchEvent(
+        new CustomEvent("buildcity_user_preferred_region", {
+          detail: {
+            regionId: fetchedDbUser.preferredRegionId,
+            regionName: fetchedDbUser.preferredRegionName,
+          },
+        })
+      );
+    } else if (guestRegion && (guestRegion.id || guestRegion.name)) {
+      // Save current chosen guest region to DB for this user
+      if (apiData.token) {
+        authFetch("/api/v1/users/preferred-region", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            regionId: guestRegion.id,
+            regionName: guestRegion.name,
+          }),
+        }).catch(() => {});
+      }
+    }
+
     const userObj = {
       id: fetchedDbUser?.id || drMatch?.id || vendorMatch?.id || "user-" + Date.now(),
       name: resolvedName,
       email: fetchedDbUser?.email || "",
       phone: cleanPhone,
       role: assignedRole,
+      preferredRegionId: fetchedDbUser?.preferredRegionId || guestRegion?.id || null,
+      preferredRegionName: fetchedDbUser?.preferredRegionName || guestRegion?.name || null,
       drInfo: drMatch || null,
       vendorInfo: vendorMatch || null,
       token: apiData.token || undefined,

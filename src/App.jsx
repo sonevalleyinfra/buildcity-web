@@ -69,6 +69,8 @@ function StorefrontMobileNav() {
 import { AlertProvider } from "./context/AlertContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 
+import FirstTimeLocationModal from "./components/FirstTimeLocationModal";
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -82,6 +84,7 @@ export default function App() {
                     <AdminProvider>
                       <BrowserRouter>
                         <ScrollToTop />
+                        <FirstTimeLocationModal />
                         <StorefrontMobileNav />
                         <Routes>
                   <Route path="/login" element={<Login />} />

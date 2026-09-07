@@ -544,17 +544,25 @@ app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
       if (name && name.trim().length >= 2 && user.name !== name.trim()) {
         user = await prisma.user.update({
           where: { id: user.id },
-          data: { name: name.trim() },
+          data: {
+            name: name && name.trim() ? name.trim() : user.name,
+            ...(req.body.preferredRegionId && !user.preferredRegionId ? {
+              preferredRegionId: req.body.preferredRegionId,
+              preferredRegionName: req.body.preferredRegionName || "Varanasi",
+            } : {}),
+          },
         }).catch(() => user);
       }
     } else {
-      // Create new user in DB with exact Name
+      // Create new user in DB with exact Name and preferred region
       const customerName = name && name.trim().length >= 2 ? name.trim() : `Customer ${cleanPhone.slice(-4)}`;
       user = await prisma.user.create({
         data: {
           phone: cleanPhone,
           name: customerName,
           role: "CUSTOMER",
+          preferredRegionId: req.body.preferredRegionId || null,
+          preferredRegionName: req.body.preferredRegionName || null,
           tokenVersion: 1,
         },
       });
@@ -585,6 +593,59 @@ app.get("/api/v1/users/me", requireAuth, async (req, res) => {
   }
 });
 
+// Fetch Cloud Cart from Database for Logged-In User
+app.get("/api/v1/cart", requireAuth, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.auth.userId } });
+    if (!user) return res.status(404).json({ error: "User not found" });
+    const cartItems = Array.isArray(user.cartItems) ? user.cartItems : [];
+    res.json({ success: true, cartItems });
+  } catch (err) {
+    console.error("Fetch cart error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Sync and Save Cart to Database for Logged-In User
+app.put("/api/v1/cart", requireAuth, async (req, res) => {
+  try {
+    const { items } = req.body;
+    const safeItems = Array.isArray(items) ? items : [];
+    const updated = await prisma.user.update({
+      where: { id: req.auth.userId },
+      data: { cartItems: safeItems },
+    });
+    res.json({ success: true, cartItems: updated.cartItems });
+  } catch (err) {
+    console.error("Save cart error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update Preferred Delivery Region in Supabase PostgreSQL
+app.patch("/api/v1/users/preferred-region", requireAuth, async (req, res) => {
+  try {
+    const { regionId, regionName } = req.body;
+    if (!regionId && !regionName) {
+      return res.status(400).json({ error: "Region ID or Name is required" });
+    }
+
+    const user = await prisma.user.update({
+      where: { id: req.auth.userId },
+      data: {
+        preferredRegionId: regionId || undefined,
+        preferredRegionName: regionName || undefined,
+      },
+    });
+
+    const { password, ...safeUser } = user;
+    res.json({ success: true, user: safeUser });
+  } catch (err) {
+    console.error("Update preferred region error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Fetch User Profile by Phone Number from Supabase PostgreSQL
 app.get("/api/v1/users/by-phone/:phone", requireAuth, requireSelfOrAdmin((req) => req.params.phone), async (req, res) => {
   try {
@@ -597,16 +658,24 @@ app.get("/api/v1/users/by-phone/:phone", requireAuth, requireSelfOrAdmin((req) =
   }
 });
 
-// Update Profile (Name, Email) in Supabase PostgreSQL
+// Update Profile (Name, Email, Preferred Region) in Supabase PostgreSQL
 app.put("/api/v1/users/profile", requireAuth, async (req, res) => {
   try {
-    const { phone, name, email } = req.body;
+    const { phone, name, email, preferredRegionId, preferredRegionName } = req.body;
     if (!phone) return res.status(400).json({ error: "Phone number is required" });
 
     let user = await prisma.user.findUnique({ where: { phone } });
     if (!user) {
       user = await prisma.user.create({
-        data: { phone, name: name || "User", email, role: "CUSTOMER", tokenVersion: 1 },
+        data: {
+          phone,
+          name: name || "User",
+          email,
+          preferredRegionId: preferredRegionId || null,
+          preferredRegionName: preferredRegionName || null,
+          role: "CUSTOMER",
+          tokenVersion: 1,
+        },
       });
     } else {
       user = await prisma.user.update({
@@ -614,6 +683,8 @@ app.put("/api/v1/users/profile", requireAuth, async (req, res) => {
         data: {
           name: name !== undefined ? name : user.name,
           email: email !== undefined ? email : user.email,
+          ...(preferredRegionId ? { preferredRegionId } : {}),
+          ...(preferredRegionName ? { preferredRegionName } : {}),
         },
       });
     }

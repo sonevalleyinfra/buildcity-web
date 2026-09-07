@@ -4,6 +4,7 @@ import { API_BASE_URL } from "../config/api";
 
 const RegionContext = createContext(null);
 const STORAGE_KEY = "buildcity_region";
+const LOCATION_CHOSEN_KEY = "buildcity_location_selected";
 
 const DEFAULT_REGIONS = [
   { id: "2ab0f187-d170-4432-8eef-e0ac31ed21c3", name: "Varanasi", state: "Uttar Pradesh", baseDeliveryCharge: 49, priceFactor: 1 },
@@ -13,6 +14,16 @@ const DEFAULT_REGIONS = [
 ];
 
 export function RegionProvider({ children }) {
+  const [hasExplicitlySelectedLocation, setHasExplicitlySelectedLocation] = useState(() => {
+    try {
+      return localStorage.getItem(LOCATION_CHOSEN_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+
   const [regions, setRegions] = useState(() => {
     try {
       const saved = localStorage.getItem("buildcity_all_regions");
@@ -23,6 +34,7 @@ export function RegionProvider({ children }) {
     } catch {}
     return DEFAULT_REGIONS;
   });
+
   const [region, setRegionState] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -85,7 +97,6 @@ export function RegionProvider({ children }) {
               );
             }
 
-            // If found in valid DB regions, select it. If not found (e.g. invalid old Prayagraj), reset to default DB region (Varanasi)
             const chosen = activeFound || activeRegs[0];
             setRegionState(chosen);
             try {
@@ -106,9 +117,19 @@ export function RegionProvider({ children }) {
     window.addEventListener("buildcity_regions_updated", handleUpdate);
     window.addEventListener("storage", handleUpdate);
 
+    // Listen for logged-in user's preferred region from DB
+    const handleUserPreferredRegion = (e) => {
+      const detail = e.detail;
+      if (detail && (detail.regionId || detail.regionName)) {
+        setRegion(detail.regionId || detail.regionName);
+      }
+    };
+    window.addEventListener("buildcity_user_preferred_region", handleUserPreferredRegion);
+
     return () => {
       window.removeEventListener("buildcity_regions_updated", handleUpdate);
       window.removeEventListener("storage", handleUpdate);
+      window.removeEventListener("buildcity_user_preferred_region", handleUserPreferredRegion);
     };
   }, []);
 
@@ -125,12 +146,37 @@ export function RegionProvider({ children }) {
     }
     if (found) {
       setRegionState(found);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(found));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(found));
+        localStorage.setItem(LOCATION_CHOSEN_KEY, "true");
+        setHasExplicitlySelectedLocation(true);
+      } catch {}
+
+      // Save preferred region to DB in background if user is logged in
+      try {
+        const token = localStorage.getItem("buildcity_token");
+        if (token) {
+          authFetch(`${API_BASE_URL}/api/v1/users/preferred-region`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ regionId: found.id, regionName: found.name }),
+          }).catch(() => {});
+        }
+      } catch {}
     }
   };
 
   return (
-    <RegionContext.Provider value={{ region, setRegion, regions }}>
+    <RegionContext.Provider
+      value={{
+        region,
+        setRegion,
+        regions,
+        hasExplicitlySelectedLocation,
+        isLocationModalOpen,
+        setIsLocationModalOpen,
+      }}
+    >
       {children}
     </RegionContext.Provider>
   );

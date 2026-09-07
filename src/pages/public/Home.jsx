@@ -369,10 +369,10 @@ export default function Home() {
         {/* Top Action Row (Logo & Location on Left, Notification & Cart on Right) */}
         <div className="px-4 pt-3 pb-2 flex items-center justify-between">
           {/* Left: Brand Logo & Live Location */}
-          <div className="flex items-center gap-2">
-            <Link to="/" className="flex items-center gap-1.5 active:scale-95 transition-transform">
-              <span className="text-2xl leading-none">🏗️</span>
-              <div className="font-black text-navy-950 text-base leading-none tracking-tight">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Link to="/" className="flex items-center gap-1 active:scale-95 transition-transform shrink-0">
+              <span className="text-xl sm:text-2xl leading-none">🏗️</span>
+              <div className="font-black text-navy-950 text-sm sm:text-base leading-none tracking-tight">
                 Build <span className="text-brand-500">City</span>
               </div>
             </Link>
@@ -381,12 +381,12 @@ export default function Home() {
 
             <RegionPicker
               trigger={(r) => (
-                <div className="flex items-center gap-1 cursor-pointer group">
-                  <span className="text-slate-600 text-[11px] leading-none">📍</span>
-                  <span className="font-bold text-slate-700 text-xs leading-none tracking-tight truncate max-w-[110px] group-hover:text-brand-600 transition-colors">
+                <div className="flex items-center gap-0.5 cursor-pointer group">
+                  <span className="text-slate-600 text-[10px] sm:text-[11px] leading-none">📍</span>
+                  <span className="font-bold text-slate-700 text-[11px] sm:text-xs leading-none tracking-tight truncate max-w-[85px] sm:max-w-[110px] group-hover:text-brand-600 transition-colors">
                     {r?.name || "Varanasi"}
                   </span>
-                  <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="text-slate-500 group-hover:text-black transition-transform">
+                  <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="text-slate-500 group-hover:text-black transition-transform">
                     <path d="m6 9 6 6 6-6" />
                   </svg>
                 </div>

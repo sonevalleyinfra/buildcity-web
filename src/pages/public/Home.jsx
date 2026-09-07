@@ -399,13 +399,10 @@ export default function Home() {
             {user ? (
               <Link
                 to="/profile"
-                className="flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-navy-950 px-2 py-1 rounded-xl border border-slate-200/90 active:scale-95 transition-all text-xs font-black shadow-2xs"
-                title="My Profile"
+                className="w-6.5 h-6.5 rounded-full bg-gradient-to-tr from-brand-600 to-brand-400 text-white font-black text-[10.5px] flex items-center justify-center shadow-xs border border-brand-500/30 active:scale-95 transition-all"
+                title={`${user.name || "User"} (Profile)`}
               >
-                <span className="w-5 h-5 rounded-full bg-brand-500 text-white flex items-center justify-center text-[10px] font-bold">
-                  {(user.name || "U")[0].toUpperCase()}
-                </span>
-                <span className="max-w-[60px] truncate text-[11px] font-extrabold">{user.name?.split(" ")[0] || "Account"}</span>
+                {(user.name || user.phone || "U")[0].toUpperCase()}
               </Link>
             ) : (
               <Link

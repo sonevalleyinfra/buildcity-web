@@ -394,15 +394,37 @@ export default function Home() {
             />
           </div>
 
-          {/* Right: Notification & Cart */}
-          <div className="flex items-center gap-3">
+          {/* Right: Login/Profile + Notification + Cart */}
+          <div className="flex items-center gap-2">
+            {user ? (
+              <Link
+                to="/profile"
+                className="flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-navy-950 px-2 py-1 rounded-xl border border-slate-200/90 active:scale-95 transition-all text-xs font-black shadow-2xs"
+                title="My Profile"
+              >
+                <span className="w-5 h-5 rounded-full bg-brand-500 text-white flex items-center justify-center text-[10px] font-bold">
+                  {(user.name || "U")[0].toUpperCase()}
+                </span>
+                <span className="max-w-[60px] truncate text-[11px] font-extrabold">{user.name?.split(" ")[0] || "Account"}</span>
+              </Link>
+            ) : (
+              <Link
+                to="/login"
+                className="bg-[#0A192F] hover:bg-brand-600 text-white font-extrabold text-[11px] px-2.5 py-1.5 rounded-xl shadow-2xs active:scale-95 transition-all flex items-center gap-1"
+                title="Login / Register"
+              >
+                <span>🔑</span>
+                <span>Login</span>
+              </Link>
+            )}
+
             <NotificationPanel className="relative text-navy-900 hover:text-brand-600 transition-colors cursor-pointer" />
             <Link
               to="/cart"
               className="relative text-navy-900 hover:text-brand-600 transition-colors p-1"
               title="Cart"
             >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="8" cy="21" r="1" />
                 <circle cx="19" cy="21" r="1" />
                 <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
@@ -633,8 +655,8 @@ export default function Home() {
           </div>
 
           {productsLoading ? (
-            <div className="grid grid-cols-3 gap-2.5 sm:gap-3.5 animate-pulse">
-              {[1, 2, 3, 4, 5, 6].map((n) => (
+            <div className="grid grid-cols-3 md:grid-cols-4 gap-2.5 sm:gap-3.5 animate-pulse">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
                 <div key={n} className="bg-white rounded-2xl p-3 border border-slate-200 h-48" />
               ))}
             </div>
@@ -643,8 +665,8 @@ export default function Home() {
               📦 No products listed in {region?.name || "Varanasi"} right now.
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-2 sm:gap-3.5">
-              {liveDisplayProducts.slice(0, 9).map((p) => (
+            <div className="grid grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3.5 lg:gap-4">
+              {liveDisplayProducts.slice(0, 12).map((p) => (
                 <ProductCard key={p.id} product={p} />
               ))}
             </div>

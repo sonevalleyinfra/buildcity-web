@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useCart } from "../../context/CartContext";
+import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useRegion } from "../../context/RegionContext";
 import Navbar from "../../components/Navbar";
@@ -74,6 +75,7 @@ export default function Categories() {
   const [searchParams] = useSearchParams();
   const initialCat = searchParams.get("cat") || "All";
 
+  const { user } = useAuth();
   const { count, addItem } = useCart();
   const { products = [], productsLoading, categories = [] } = useAdmin();
   const { region } = useRegion();

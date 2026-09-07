@@ -337,12 +337,14 @@ export default function Categories() {
                       : "bg-white border border-slate-200/70 hover:border-slate-300"
                   }`}
                 >
-                  <div className="w-full flex-1 flex items-center justify-center p-0.5 mb-1 overflow-hidden">
-                    <img
-                      src={c.img}
-                      alt={c.name}
-                      className="w-full h-full max-h-[46px] sm:max-h-[62px] object-contain group-hover:scale-105 transition-transform duration-300"
-                    />
+                  <div className="w-full flex-1 flex items-center justify-center p-0.5 mb-1.5">
+                    <div className="w-12 h-12 sm:w-15 sm:h-15 rounded-full bg-slate-50 shadow-2xs border border-slate-100 flex items-center justify-center p-1 overflow-hidden group-hover:scale-110 group-hover:shadow-xs transition-all duration-300">
+                      <img
+                        src={c.img}
+                        alt={c.name}
+                        className="w-full h-full object-cover rounded-full group-hover:scale-105 transition-transform duration-300"
+                      />
+                    </div>
                   </div>
                   <div>
                     <h4 className="text-[11px] sm:text-xs font-extrabold text-navy-950 leading-tight group-hover:text-[#0284C7] transition-colors truncate max-w-full">

@@ -599,14 +599,16 @@ export default function Home() {
                 style={{ backgroundColor: c.bg }}
               >
                 <div className="w-full flex-1 flex items-center justify-center py-1">
-                  <img
-                    src={c.img}
-                    alt={c.name}
-                    className="max-h-14 sm:max-h-16 w-auto object-contain group-hover:scale-105 transition-transform duration-300 drop-shadow-xs"
-                    onError={(e) => {
-                      e.target.src = "/categories/cement.png";
-                    }}
-                  />
+                  <div className="w-13 h-13 sm:w-16 sm:h-16 rounded-full bg-white shadow-xs border border-white/80 flex items-center justify-center p-1.5 overflow-hidden group-hover:scale-110 group-hover:shadow-sm transition-all duration-300">
+                    <img
+                      src={c.img}
+                      alt={c.name}
+                      className="w-full h-full object-cover rounded-full group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        e.target.src = "/categories/cement.png";
+                      }}
+                    />
+                  </div>
                 </div>
                 <span className="text-[11px] sm:text-xs font-black text-navy-950 group-hover:text-brand-600 transition-colors text-center truncate max-w-full leading-tight pt-1 pb-0.5">
                   {c.name}
@@ -754,7 +756,7 @@ export default function Home() {
       <div className="fixed bottom-20 right-3.5 sm:right-5 z-40 flex flex-col gap-2">
         {/* WhatsApp Button */}
         <a
-          href="https://wa.me/919161660447?text=Hello%20BuildCity%20Team,%20I%20have%20an%20inquiry%20regarding%20construction%20materials"
+          href="https://wa.me/919956886527?text=Hello%20BuildCity%20Team,%20I%20have%20an%20inquiry%20regarding%20construction%20materials"
           target="_blank"
           rel="noopener noreferrer"
           className="w-10.5 h-10.5 sm:w-11.5 sm:h-11.5 rounded-full bg-[#25D366] hover:bg-[#20bd5a] text-white flex items-center justify-center shadow-lg hover:shadow-xl ring-2 ring-white/90 active:scale-90 transition-all"
@@ -767,7 +769,7 @@ export default function Home() {
 
         {/* Call Button */}
         <a
-          href="tel:+919161660447"
+          href="tel:+919956886527"
           className="w-10.5 h-10.5 sm:w-11.5 sm:h-11.5 rounded-full bg-[#0284C7] hover:bg-[#0369A1] text-white flex items-center justify-center shadow-lg hover:shadow-xl ring-2 ring-white/90 active:scale-90 transition-all"
           title="Call BuildCity Support"
         >

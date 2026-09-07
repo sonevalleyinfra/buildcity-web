@@ -1,10 +1,9 @@
-import React, { useState } from "react";
+import React from "react";
 import { Link } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 
 export default function ProductCard({ product, className = "" }) {
   const { items, addItem, updateQty, removeItem } = useCart();
-  const [isHovered, setIsHovered] = useState(false);
 
   if (!product) return null;
 
@@ -57,29 +56,22 @@ export default function ProductCard({ product, className = "" }) {
 
   return (
     <div
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className={`bg-white rounded-2xl border border-slate-200/80 p-2 sm:p-2.5 flex flex-col justify-between shadow-[0_2px_8px_-2px_rgba(15,23,42,0.05)] hover:shadow-[0_10px_25px_-5px_rgba(15,23,42,0.12)] hover:border-slate-300 active:scale-[0.99] transition-all duration-200 group relative ${className}`}
+      className={`bg-white rounded-xl sm:rounded-2xl border border-slate-200/90 p-2 flex flex-col justify-between shadow-2xs hover:shadow-md hover:border-slate-300 active:scale-[0.99] transition-all duration-200 group relative ${className}`}
     >
-      {/* 🖼️ Product Link & Image */}
+      {/* 🖼️ Product Link & Image (Big, clear, unblocked image) */}
       <Link to={`/product/${product.id}`} className="block">
-        <div className="relative aspect-square rounded-xl overflow-hidden bg-gradient-to-b from-slate-50 to-slate-100/50 mb-1.5 border border-slate-100 flex items-center justify-center p-1.5 group-hover:bg-slate-50/80 transition-colors">
+        <div className="relative aspect-square w-full rounded-lg sm:rounded-xl overflow-hidden bg-gradient-to-b from-slate-50 to-slate-100/50 mb-1 border border-slate-100/90 flex items-center justify-center p-1 group-hover:bg-slate-50/90 transition-colors">
           {/* Discount Badge */}
           {discountPct > 0 && (
-            <span className="absolute top-1.5 left-1.5 z-10 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded-md shadow-2xs tracking-tight">
+            <span className="absolute top-1 left-1 z-10 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-[8px] sm:text-[8.5px] px-1.5 py-0.5 rounded shadow-2xs tracking-tight">
               {discountPct}% OFF
             </span>
           )}
 
-          {/* Micro Trust Badge (In Stock / Fast Delivery) */}
-          <span className="absolute bottom-1.5 right-1.5 z-10 bg-white/90 backdrop-blur-xs text-slate-700 font-extrabold text-[7.5px] sm:text-[8px] px-1.5 py-0.5 rounded-full shadow-2xs border border-slate-200/80 flex items-center gap-0.5">
-            <span className="text-amber-500 text-[9px] leading-none">⚡</span> Fast
-          </span>
-
           <img
             src={product.imageUrl || product.img || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80"}
             alt={product.name}
-            className="w-full h-full object-contain group-hover:scale-108 transition-transform duration-300 ease-out drop-shadow-2xs"
+            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300 ease-out drop-shadow-2xs"
             loading="lazy"
             onError={(e) => {
               e.target.src = "/categories/cement.png";
@@ -87,20 +79,20 @@ export default function ProductCard({ product, className = "" }) {
           />
         </div>
 
-        {/* Brand & Name */}
-        <p className="text-[8.5px] sm:text-[9px] font-extrabold text-slate-400 uppercase tracking-wider truncate mb-0.5">
+        {/* Brand & Full Product Title */}
+        <p className="text-[8.5px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-wider truncate">
           {product.brand || "Standard"}
         </p>
-        <h4 className="text-[11px] sm:text-xs font-extrabold text-navy-950 leading-snug line-clamp-2 h-[2.2rem] group-hover:text-brand-600 transition-colors">
+        <h4 className="text-[11px] sm:text-xs font-black text-navy-950 leading-snug line-clamp-2 min-h-[2.4rem] group-hover:text-brand-600 transition-colors">
           {product.name}
         </h4>
       </Link>
 
-      {/* 💰 Price, Savings & Interactive Cart CTA */}
-      <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex flex-col justify-between gap-1.5">
-        <div className="flex items-baseline justify-between gap-1 flex-wrap">
-          <div className="min-w-0">
-            <div className="flex items-baseline gap-1 flex-wrap">
+      {/* 💰 Price, Savings & Compact Stepper */}
+      <div className="mt-1 pt-1 border-t border-slate-100 flex flex-col justify-between gap-1">
+        <div>
+          <div className="flex items-center justify-between gap-1 flex-wrap">
+            <div className="flex items-baseline gap-1">
               <span className="text-xs sm:text-sm font-black text-navy-950 tracking-tight">
                 ₹{price.toLocaleString("en-IN")}
               </span>
@@ -110,27 +102,27 @@ export default function ProductCard({ product, className = "" }) {
                 </span>
               )}
             </div>
-            <span className="text-[8px] sm:text-[8.5px] text-slate-400 font-medium leading-none block truncate mt-0.5">
-              per {product.unit || "unit"}
-            </span>
+
+            {savings > 0 && (
+              <span className="bg-emerald-50 text-emerald-700 font-black text-[8px] px-1 py-0.5 rounded border border-emerald-200/60 leading-none">
+                Save ₹{savings}
+              </span>
+            )}
           </div>
 
-          {/* Green Savings Pill */}
-          {savings > 0 && (
-            <span className="bg-emerald-50 text-emerald-700 font-black text-[8px] sm:text-[8.5px] px-1.5 py-0.5 rounded border border-emerald-200/60 leading-none">
-              Save ₹{savings}
-            </span>
-          )}
+          <span className="text-[8px] sm:text-[8.5px] text-slate-400 font-medium leading-none block truncate mt-0.5">
+            per {product.unit || "unit"}
+          </span>
         </div>
 
-        {/* 🛒 Dynamic Action Button (Add to Cart OR Interactive - / + Stepper) */}
-        <div className="w-full">
+        {/* 🛒 Compact Action Button / Stepper */}
+        <div className="w-full mt-0.5">
           {qty > 0 ? (
-            <div className="w-full bg-[#0A192F] text-white rounded-xl flex items-center justify-between px-1 py-0.5 shadow-xs font-black text-xs">
+            <div className="w-full bg-[#0A192F] text-white rounded-lg flex items-center justify-between px-1 h-7 shadow-xs font-black text-xs">
               <button
                 type="button"
                 onClick={handleDecrement}
-                className="w-7 h-6 flex items-center justify-center rounded-lg hover:bg-white/20 active:scale-90 transition-all cursor-pointer text-sm leading-none"
+                className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/20 active:scale-90 transition-all cursor-pointer text-sm leading-none"
                 title="Decrease quantity"
               >
                 −
@@ -141,7 +133,7 @@ export default function ProductCard({ product, className = "" }) {
               <button
                 type="button"
                 onClick={handleIncrement}
-                className="w-7 h-6 flex items-center justify-center rounded-lg hover:bg-white/20 active:scale-90 transition-all cursor-pointer text-sm leading-none"
+                className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/20 active:scale-90 transition-all cursor-pointer text-sm leading-none"
                 title="Increase quantity"
               >
                 +
@@ -151,7 +143,7 @@ export default function ProductCard({ product, className = "" }) {
             <button
               type="button"
               onClick={handleAdd}
-              className="w-full bg-[#0A192F] hover:bg-brand-600 text-white text-[10px] sm:text-[11px] font-bold py-1.5 px-2 rounded-xl transition-all shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+              className="w-full bg-[#0A192F] hover:bg-brand-600 text-white text-[11px] font-bold h-7 rounded-lg transition-all shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer flex items-center justify-center gap-1"
             >
               <span>+ Add</span>
             </button>

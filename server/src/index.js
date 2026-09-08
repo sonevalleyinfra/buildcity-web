@@ -584,8 +584,8 @@ app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
 // Fetch Current Authenticated User Profile (Zero PII in URL)
 app.get("/api/v1/users/me", requireAuth, async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({ where: { id: req.auth.userId } });
-    if (!user) return res.status(404).json({ error: "User not found" });
+    const user = await prisma.user.findUnique({ where: { id: req.auth.userId } }).catch(() => null);
+    if (!user) return res.status(404).json({ error: "User not found", invalidSession: true });
     const { password, ...safeUser } = user;
     res.json(safeUser);
   } catch (err) {
@@ -596,13 +596,13 @@ app.get("/api/v1/users/me", requireAuth, async (req, res) => {
 // Fetch Cloud Cart from Database for Logged-In User
 app.get("/api/v1/cart", requireAuth, async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({ where: { id: req.auth.userId } });
-    if (!user) return res.status(404).json({ error: "User not found" });
+    const user = await prisma.user.findUnique({ where: { id: req.auth.userId } }).catch(() => null);
+    if (!user) return res.status(404).json({ error: "User not found", invalidSession: true, cartItems: [] });
     const cartItems = Array.isArray(user.cartItems) ? user.cartItems : [];
     res.json({ success: true, cartItems });
   } catch (err) {
-    console.error("Fetch cart error:", err);
-    res.status(500).json({ error: err.message });
+    console.warn("Fetch cart error (handled):", err.message);
+    res.json({ success: true, cartItems: [] });
   }
 });
 
@@ -614,11 +614,15 @@ app.put("/api/v1/cart", requireAuth, async (req, res) => {
     const updated = await prisma.user.update({
       where: { id: req.auth.userId },
       data: { cartItems: safeItems },
+      select: { cartItems: true },
     });
     res.json({ success: true, cartItems: updated.cartItems });
   } catch (err) {
-    console.error("Save cart error:", err);
-    res.status(500).json({ error: err.message });
+    if (err.code === "P2025") {
+      return res.status(404).json({ error: "User not found", invalidSession: true, success: false });
+    }
+    console.warn("Save cart warning (handled):", err.message);
+    res.json({ success: false, error: "Cart sync delayed" });
   }
 });
 

@@ -151,7 +151,7 @@ export function CartProvider({ children }) {
         localStorage.setItem(cartStorageKey, JSON.stringify(items));
       } catch {}
 
-      // If logged in, sync to Cloud Database
+      // If logged in, sync to Cloud Database with 1.2s debounce to avoid exhausting connection pool
       if (user?.phone || user?.id) {
         const token = localStorage.getItem("buildcity_token");
         if (token) {
@@ -160,8 +160,14 @@ export function CartProvider({ children }) {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ items }),
+            }).then(r => r.json()).then(data => {
+              if (data && data.invalidSession) {
+                // Stale token detected; remove it to prevent looping
+                localStorage.removeItem("buildcity_token");
+                localStorage.removeItem("buildcity_user");
+              }
             }).catch(() => {});
-          }, 300);
+          }, 1200);
           return () => clearTimeout(timer);
         }
       }

@@ -88,20 +88,19 @@ export function RegionProvider({ children }) {
               }
             }
 
-            let activeFound = null;
             if (savedSearch) {
-              activeFound = activeRegs.find(
+              const activeFound = activeRegs.find(
                 (r) =>
                   r.id.toLowerCase() === savedSearch.toLowerCase() ||
                   r.name.toLowerCase().trim() === savedSearch.toLowerCase().trim()
               );
+              if (activeFound) {
+                setRegionState(activeFound);
+                try {
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(activeFound));
+                } catch {}
+              }
             }
-
-            const chosen = activeFound || activeRegs[0];
-            setRegionState(chosen);
-            try {
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(chosen));
-            } catch {}
           }
         }
       }

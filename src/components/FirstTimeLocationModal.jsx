@@ -14,16 +14,12 @@ export default function FirstTimeLocationModal() {
 
   // Auto open on first visit if user hasn't selected location yet
   useEffect(() => {
-    // If not selected yet and regions are loaded, open modal after a brief 500ms delay for smooth entrance
     if (!hasExplicitlySelectedLocation && !isLocationModalOpen) {
-      const timer = setTimeout(() => {
-        setIsOpen(true);
-      }, 500);
-      return () => clearTimeout(timer);
+      setIsOpen(true);
     }
   }, [hasExplicitlySelectedLocation, isLocationModalOpen]);
 
-  // Sync external open trigger (e.g. from RegionContext)
+  // Sync external open trigger (e.g. from RegionPicker or RegionContext)
   useEffect(() => {
     if (isLocationModalOpen) {
       setIsOpen(true);
@@ -37,9 +33,17 @@ export default function FirstTimeLocationModal() {
   }, [region]);
 
   const filteredRegions = useMemo(() => {
-    if (!search || !search.trim()) return regions || [];
+    const list = [...(regions || [])];
+    // Stable sort: Varanasi always stays on top as premier hub, then other cities alphabetically
+    list.sort((a, b) => {
+      if ((a.name || "").toLowerCase() === "varanasi") return -1;
+      if ((b.name || "").toLowerCase() === "varanasi") return 1;
+      return (a.name || "").localeCompare(b.name || "");
+    });
+
+    if (!search || !search.trim()) return list;
     const q = search.toLowerCase().trim();
-    return (regions || []).filter(
+    return list.filter(
       (r) =>
         (r.name || "").toLowerCase().includes(q) ||
         (r.state || "").toLowerCase().includes(q)
@@ -65,10 +69,10 @@ export default function FirstTimeLocationModal() {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3.5 sm:p-4 animate-in fade-in duration-200">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-slate-950/70 backdrop-blur-md transition-opacity duration-300"
+        className="absolute inset-0 bg-slate-950/75 backdrop-blur-sm transition-opacity duration-200"
         onClick={() => {
           // If user already has a location, allow closing on backdrop click
           if (hasExplicitlySelectedLocation) {
@@ -78,21 +82,21 @@ export default function FirstTimeLocationModal() {
         }}
       />
 
-      {/* Modal Container */}
-      <div className="relative z-10 bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md max-h-[85vh] sm:max-h-[80vh] flex flex-col shadow-2xl border border-slate-100 overflow-hidden animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-2 duration-300">
+      {/* Modal Container - Centered on Mobile & Desktop */}
+      <div className="relative z-10 bg-white rounded-3xl w-full max-w-sm sm:max-w-md max-h-[85vh] sm:max-h-[80vh] flex flex-col shadow-2xl border border-slate-100 overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Top Gradient Header */}
-        <div className="bg-gradient-to-r from-[#07132B] via-[#0A1A3A] to-[#0D224D] text-white p-5 sm:p-6 relative">
+        <div className="bg-gradient-to-r from-[#07132B] via-[#0A1A3A] to-[#0D224D] text-white p-4 sm:p-5 relative">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-xl shadow-xs">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-lg sm:text-xl shadow-xs shrink-0">
                 📍
               </div>
               <div>
-                <h3 className="font-black text-base sm:text-lg text-white tracking-tight leading-tight">
+                <h3 className="font-black text-sm sm:text-base text-white tracking-tight leading-tight">
                   Choose Delivery Location
                 </h3>
-                <p className="text-[11px] sm:text-xs text-slate-300 font-medium mt-0.5">
-                  Live pricing & same-day delivery
+                <p className="text-[10.5px] sm:text-xs text-slate-300 font-medium mt-0.5">
+                  Live local pricing & fast delivery
                 </p>
               </div>
             </div>
@@ -143,7 +147,7 @@ export default function FirstTimeLocationModal() {
           <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 shrink-0 mr-1">
             Popular:
           </span>
-          {(regions || []).slice(0, 4).map((r) => (
+          {filteredRegions.slice(0, 4).map((r) => (
             <button
               key={r.id}
               type="button"

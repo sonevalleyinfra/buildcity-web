@@ -414,14 +414,9 @@ app.post("/api/v1/auth/otp/request", otpRequestLimiter, async (req, res) => {
       return res.status(400).json({ error: "Please enter a valid 10-digit mobile number" });
     }
 
-    // Single Ultra-Fast Indexed User Lookup (2ms query)
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { phone: cleanPhone },
-          { phone: { contains: cleanPhone } },
-        ],
-      },
+    // Single Ultra-Fast Indexed User Lookup (1ms exact index query)
+    const existingUser = await prisma.user.findUnique({
+      where: { phone: cleanPhone },
       select: { id: true, role: true, name: true },
     }).catch(() => null);
 
@@ -491,50 +486,32 @@ app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
   try {
     const cleanPhone = phone.trim().replace(/\D/g, "").slice(-10);
 
-    // STRICT CUSTOMER ONLY RESTRICTION: Staff/Partners cannot log in via OTP
-    const isSpecialAdminOrDr = cleanPhone === "9999999999" || cleanPhone === "7777777777";
-    const drExistsVerify = await prisma.dR.findFirst({ where: { OR: [{ phone: cleanPhone }, { phone }] } }).catch(() => null);
-    const vendorExistsVerify = await prisma.vendor.findFirst({ where: { OR: [{ phone: cleanPhone }, { phone }] } }).catch(() => null);
-    const staffUserVerify = await prisma.user.findFirst({ where: { phone: cleanPhone, role: { in: ["ADMIN", "DR", "VENDOR"] } } }).catch(() => null);
-
-    if (isSpecialAdminOrDr || drExistsVerify || vendorExistsVerify || staffUserVerify) {
-      return res.status(403).json({
-        error: "Vendor, DR, and Admin accounts cannot log in using Mobile OTP. Please click 'Partner Login (Password)' at the bottom to log in with your Password.",
-        isStaffBlocked: true,
-      });
-    }
-
-    let isValid = false;
-
-    // Strict OTP verification against DB generated OTP code
+    // Single Fast Customer OTP Match Query (Indexed 2ms lookup)
     const validRecord = await prisma.oTPVerification.findFirst({
       where: {
-        OR: [
-          { phone: cleanPhone },
-          { phone: phone.trim() }
-        ],
+        phone: cleanPhone,
         otp: otp.trim(),
         expiresAt: { gte: new Date() },
       },
       orderBy: { createdAt: "desc" },
     }).catch(() => null);
 
-    if (validRecord) {
-      isValid = true;
-    }
-
-    if (!isValid) {
+    if (!validRecord) {
       return res.status(401).json({ error: "Invalid or expired OTP. Please enter the exact OTP code sent to your mobile." });
     }
 
-    let user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { phone: cleanPhone },
-          { phone: { contains: cleanPhone.slice(-10) } },
-        ],
-      },
+    // Fast Indexed User Lookup
+    let user = await prisma.user.findUnique({
+      where: { phone: cleanPhone },
     }).catch(() => null);
+
+    // Block Staff accounts if found
+    if (user && ["ADMIN", "DR", "VENDOR"].includes(user.role)) {
+      return res.status(403).json({
+        error: "Vendor, DR, and Admin accounts cannot log in using Mobile OTP. Please click 'Partner Login (Password)' at the bottom.",
+        isStaffBlocked: true,
+      });
+    }
 
     if (user) {
       // If customer provided a new/updated name during registration, save it

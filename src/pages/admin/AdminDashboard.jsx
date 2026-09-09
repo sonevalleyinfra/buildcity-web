@@ -268,6 +268,8 @@ export default function AdminDashboard() {
   const [deletingVendorId, setDeletingVendorId] = useState(null);
   const [deletingCatId, setDeletingCatId] = useState(null);
   const [deletingRegionId, setDeletingRegionId] = useState(null);
+  const [togglingDrId, setTogglingDrId] = useState(null);
+  const [busyListingAction, setBusyListingAction] = useState(null); // { id, action: 'APPROVED' | 'REJECTED' }
   const [busyListingId, setBusyListingId] = useState(null);
 
   // Vendor Delete Handler — Live spinner animation aur double-click protection ke sath vendor remove karein
@@ -1031,14 +1033,34 @@ export default function AdminDashboard() {
                               ✏️ Edit
                             </button>
                             <button
-                              onClick={() => toggleDrActive(d.id)}
-                              className={`text-xs font-semibold px-3 py-1.5 rounded-lg border active:scale-[0.98] transition-all duration-200 cursor-pointer ${
-                                d.status === "ACTIVE"
-                                  ? "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100"
-                                  : "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 shadow-2xs"
+                              disabled={togglingDrId === d.id}
+                              onClick={async () => {
+                                if (togglingDrId) return;
+                                setTogglingDrId(d.id);
+                                try {
+                                  await toggleDrActive(d.id);
+                                } finally {
+                                  setTogglingDrId(null);
+                                }
+                              }}
+                              className={`min-w-[90px] text-xs font-semibold px-3 py-1.5 rounded-lg border active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-1.5 ${
+                                togglingDrId === d.id
+                                  ? "bg-slate-100 text-slate-500 border-slate-300 cursor-wait pointer-events-none"
+                                  : d.status === "ACTIVE"
+                                  ? "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100 cursor-pointer"
+                                  : "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 shadow-2xs cursor-pointer"
                               }`}
                             >
-                              {d.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                              {togglingDrId === d.id ? (
+                                <>
+                                  <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                  <span>Saving...</span>
+                                </>
+                              ) : d.status === "ACTIVE" ? (
+                                "Deactivate"
+                              ) : (
+                                "Activate"
+                              )}
                             </button>
                             <button
                               disabled={deletingDrId === d.id}
@@ -1581,29 +1603,31 @@ export default function AdminDashboard() {
                           <td className="py-3.5 px-4 text-right">
                             <div className="flex items-center justify-end gap-2">
                               <button
-                                disabled={busyListingId === p.id || st === "APPROVED"}
+                                disabled={Boolean(busyListingAction?.id === p.id) || st === "APPROVED"}
                                 onClick={async (e) => {
                                   e.preventDefault();
-                                  if (busyListingId) return;
-                                  setBusyListingId(p.id);
+                                  if (busyListingAction) return;
+                                  setBusyListingAction({ id: p.id, action: "APPROVED" });
                                   try {
                                     await updateListingApprovalStatus(p.id, "APPROVED");
                                   } finally {
-                                    setTimeout(() => setBusyListingId(null), 300);
+                                    setBusyListingAction(null);
                                   }
                                 }}
-                                className={`min-w-[95px] text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 select-none ${
+                                className={`min-w-[100px] text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 select-none ${
                                   st === "APPROVED"
                                     ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default opacity-90 pointer-events-none"
-                                    : busyListingId === p.id
-                                    ? "bg-emerald-600/90 text-white cursor-wait pointer-events-none"
+                                    : busyListingAction?.id === p.id && busyListingAction?.action === "APPROVED"
+                                    ? "bg-emerald-600 text-white cursor-wait pointer-events-none"
+                                    : busyListingAction?.id === p.id
+                                    ? "opacity-40 cursor-not-allowed bg-emerald-600 text-white"
                                     : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs active:scale-[0.98] cursor-pointer"
                                 }`}
                               >
-                                {busyListingId === p.id ? (
+                                {busyListingAction?.id === p.id && busyListingAction?.action === "APPROVED" ? (
                                   <>
                                     <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                    <span>...</span>
+                                    <span>Approving...</span>
                                   </>
                                 ) : st === "APPROVED" ? (
                                   "✓ Approved"
@@ -1613,29 +1637,31 @@ export default function AdminDashboard() {
                               </button>
 
                               <button
-                                disabled={busyListingId === p.id || st === "REJECTED"}
+                                disabled={Boolean(busyListingAction?.id === p.id) || st === "REJECTED"}
                                 onClick={async (e) => {
                                   e.preventDefault();
-                                  if (busyListingId) return;
-                                  setBusyListingId(p.id);
+                                  if (busyListingAction) return;
+                                  setBusyListingAction({ id: p.id, action: "REJECTED" });
                                   try {
                                     await updateListingApprovalStatus(p.id, "REJECTED");
                                   } finally {
-                                    setTimeout(() => setBusyListingId(null), 300);
+                                    setBusyListingAction(null);
                                   }
                                 }}
-                                className={`min-w-[90px] text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 select-none ${
+                                className={`min-w-[95px] text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 select-none ${
                                   st === "REJECTED"
                                     ? "bg-rose-50 text-rose-600 border border-rose-200 cursor-default opacity-90 pointer-events-none"
-                                    : busyListingId === p.id
-                                    ? "bg-rose-100 text-rose-700 cursor-wait pointer-events-none"
+                                    : busyListingAction?.id === p.id && busyListingAction?.action === "REJECTED"
+                                    ? "bg-rose-100 text-rose-700 border border-rose-300 cursor-wait pointer-events-none"
+                                    : busyListingAction?.id === p.id
+                                    ? "opacity-40 cursor-not-allowed bg-white text-rose-600 border border-rose-200"
                                     : "bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 active:scale-[0.98] cursor-pointer"
                                 }`}
                               >
-                                {busyListingId === p.id ? (
+                                {busyListingAction?.id === p.id && busyListingAction?.action === "REJECTED" ? (
                                   <>
                                     <span className="w-3 h-3 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
-                                    <span>...</span>
+                                    <span>Rejecting...</span>
                                   </>
                                 ) : st === "REJECTED" ? (
                                   "✕ Rejected"

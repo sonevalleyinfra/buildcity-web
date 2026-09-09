@@ -472,10 +472,10 @@ export function AdminProvider({ children }) {
     }
   };
 
-  // Continuous Live Auto Polling (5s) & Tab Storage Sync from Supabase Cloud DB
+  // Live Auto Polling (30s background refresh) & Tab Storage Sync from Supabase Cloud DB
   useEffect(() => {
     fetchCloudData();
-    const interval = setInterval(fetchCloudData, 5000);
+    const interval = setInterval(fetchCloudData, 30000);
 
     const handleStorage = () => fetchCloudData();
     window.addEventListener("storage", handleStorage);

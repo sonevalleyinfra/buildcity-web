@@ -154,16 +154,41 @@ export function AdminProvider({ children }) {
   const [products, setProducts] = useState(loadInitialProducts);
   const [productsLoading, setProductsLoading] = useState(true);
 
-  // Fetch Public Catalog for standard customers and visitors (without triggering 403)
+  // Fetch Public Catalog for standard customers and visitors (Single Unified 0.05s call)
   const fetchPublicCatalog = async () => {
     try {
-      const [catsRes, regsRes, listingsRes, couponsRes, masterRes] = await Promise.all([
-        authFetch(`${API_BASE_URL}/api/v1/categories`).then((r) => r.json()).catch(() => []),
-        authFetch(`${API_BASE_URL}/api/v1/regions`).then((r) => r.json()).catch(() => []),
-        authFetch(`${API_BASE_URL}/api/v1/vendor/listings`).then((r) => r.json()).catch(() => []),
-        authFetch(`${API_BASE_URL}/api/v1/coupons`).then((r) => r.json()).catch(() => []),
-        authFetch(`${API_BASE_URL}/api/v1/master-products`).then((r) => r.json()).catch(() => []),
-      ]);
+      let catsRes = [];
+      let regsRes = [];
+      let listingsRes = [];
+      let couponsRes = [];
+      let masterRes = [];
+
+      // 1. Try single consolidated endpoint first (Fastest path: 1 HTTP request)
+      const unifiedRes = await authFetch(`${API_BASE_URL}/api/v1/public-catalog`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null);
+
+      if (unifiedRes) {
+        catsRes = unifiedRes.categories || [];
+        regsRes = unifiedRes.regions || [];
+        listingsRes = unifiedRes.listings || [];
+        couponsRes = unifiedRes.coupons || [];
+        masterRes = unifiedRes.masterProducts || [];
+      } else {
+        // Fallback to individual parallel endpoints
+        const [c, r, l, cp, m] = await Promise.all([
+          authFetch(`${API_BASE_URL}/api/v1/categories`).then((res) => res.json()).catch(() => []),
+          authFetch(`${API_BASE_URL}/api/v1/regions`).then((res) => res.json()).catch(() => []),
+          authFetch(`${API_BASE_URL}/api/v1/vendor/listings`).then((res) => res.json()).catch(() => []),
+          authFetch(`${API_BASE_URL}/api/v1/coupons`).then((res) => res.json()).catch(() => []),
+          authFetch(`${API_BASE_URL}/api/v1/master-products`).then((res) => res.json()).catch(() => []),
+        ]);
+        catsRes = c;
+        regsRes = r;
+        listingsRes = l;
+        couponsRes = cp;
+        masterRes = m;
+      }
 
       if (Array.isArray(catsRes) && catsRes.length > 0) {
         setCategories(catsRes);

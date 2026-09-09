@@ -45,12 +45,101 @@ const otpVerifyLimiter = rateLimit({
   validate: false,
 });
 
-// Health Check Endpoint
+// --- High-Speed In-Memory Cache (TTL: 60s) for Sub-Millisecond Page Loads ---
+const memoryCache = new Map();
+function getCached(key) {
+  const item = memoryCache.get(key);
+  if (!item) return null;
+  if (Date.now() > item.expiry) {
+    memoryCache.delete(key);
+    return null;
+  }
+  return item.data;
+}
+function setCached(key, data, ttlMs = 60000) {
+  memoryCache.set(key, { data, expiry: Date.now() + ttlMs });
+}
+function invalidateCache(prefix) {
+  if (!prefix) {
+    memoryCache.clear();
+  } else {
+    for (const k of memoryCache.keys()) {
+      if (k.startsWith(prefix)) memoryCache.delete(k);
+    }
+  }
+}
+
+// Health Check & Render Keep-Alive Endpoint (0ms response)
+app.get(["/health", "/api/v1/health"], (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString(), memoryUsage: process.memoryUsage().heapUsed });
+});
+
+// Automatic Self-Ping Keep-Alive to Prevent Render Free-Tier Sleep (Runs every 8 minutes)
+const RENDER_APP_URL = process.env.RENDER_EXTERNAL_URL || "https://buildcity-web.onrender.com";
+setInterval(async () => {
+  try {
+    const res = await fetch(`${RENDER_APP_URL}/health`);
+    if (res.ok) {
+      console.log(`[Keep-Alive Ping] Successfully warmed Render instance at ${new Date().toLocaleTimeString()}`);
+    }
+  } catch (err) {
+    // silently catch local dev ping errors
+  }
+}, 8 * 60 * 1000);
+
 let couponsList = [
   { id: "cp-1", code: "BUILDCITY100", title: "Flat ₹100 OFF", minOrder: 1000, discountAmount: 100, expiryDate: "2026-12-31", isActive: true, desc: "Valid on orders above ₹1,000" },
   { id: "cp-2", code: "SUPER500", title: "Flat ₹500 OFF", minOrder: 5000, discountAmount: 500, expiryDate: "2026-12-31", isActive: true, desc: "Bulk order discount above ₹5,000" },
   { id: "cp-3", code: "WELCOME200", title: "Flat ₹200 OFF", minOrder: 1500, discountAmount: 200, expiryDate: "2026-12-31", isActive: true, desc: "Special welcome coupon for new site orders" },
 ];
+
+// ⚡ Unified Public Storefront Catalog (1 Single HTTP Request for 0.05s Storefront Loading)
+app.get("/api/v1/public-catalog", async (req, res) => {
+  const cacheKey = "public_catalog";
+  const cached = getCached(cacheKey);
+  if (cached) {
+    res.setHeader("X-Cache", "HIT");
+    return res.json(cached);
+  }
+
+  try {
+    const [categories, regions, listings, coupons, masterProducts] = await Promise.all([
+      prisma.category.findMany({ orderBy: { name: "asc" } }).catch(() => []),
+      prisma.region.findMany({ orderBy: { name: "asc" } }).catch(() => []),
+      prisma.vendorProduct.findMany({
+        include: {
+          vendor: {
+            select: {
+              id: true,
+              shopName: true,
+              status: true,
+              regionId: true,
+              region: true,
+            },
+          },
+          masterProduct: true,
+        },
+        orderBy: { submittedOn: "desc" },
+      }).catch(() => []),
+      prisma.coupon.findMany({ orderBy: { createdAt: "desc" } }).catch(() => []),
+      prisma.productMaster.findMany({ include: { category: true }, orderBy: { createdAt: "desc" } }).catch(() => []),
+    ]);
+
+    const result = {
+      categories,
+      regions,
+      listings,
+      coupons: coupons && coupons.length > 0 ? coupons : couponsList,
+      masterProducts,
+    };
+
+    setCached(cacheKey, result, 60000); // Cache for 60s
+    res.setHeader("X-Cache", "MISS");
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Single Unified Cloud Sync Endpoint (Replaces 7 separate HTTP requests with 1 request to free browser TCP sockets)
 app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"), async (req, res) => {

@@ -24,6 +24,14 @@ app.disable("x-powered-by");
 app.use(cors());
 app.use(express.json());
 
+// Auto-Invalidate Cache on Mutations (POST, PUT, PATCH, DELETE)
+app.use((req, res, next) => {
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
+    invalidateCache();
+  }
+  next();
+});
+
 // Dedicated Customer OTP Rate Limiters (DO NOT apply to Partner password login)
 const otpRequestLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
@@ -143,8 +151,16 @@ app.get("/api/v1/public-catalog", async (req, res) => {
 
 // Single Unified Cloud Sync Endpoint (Replaces 7 separate HTTP requests with 1 request to free browser TCP sockets)
 app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"), async (req, res) => {
+  const role = req.auth.role;
+  const cacheKey = `cloud_sync_${role}`;
+  const cached = getCached(cacheKey);
+  if (cached) {
+    res.setHeader("X-Cache", "HIT");
+    return res.json(cached);
+  }
+
   try {
-    const [drs, vendors, masterProducts, categories, regions, orders, listings, coupons] = await Promise.all([
+    const fetchPromises = [
       prisma.dR.findMany({
         include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
         orderBy: { joinedOn: "desc" },
@@ -173,9 +189,21 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
         orderBy: { submittedOn: "desc" },
       }).catch(() => []),
       prisma.coupon.findMany({ orderBy: { createdAt: "desc" } }).catch(() => []),
-    ]);
+    ];
 
-    res.json({
+    if (role === "ADMIN") {
+      fetchPromises.push(
+        prisma.user.findMany({
+          orderBy: { createdAt: "desc" },
+          select: { id: true, name: true, phone: true, email: true, role: true, status: true, productCount: true, createdAt: true },
+        }).catch(() => [])
+      );
+    }
+
+    const results = await Promise.all(fetchPromises);
+    const [drs, vendors, masterProducts, categories, regions, orders, listings, coupons, users] = results;
+
+    const data = {
       drs,
       vendors,
       masterProducts,
@@ -184,7 +212,12 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       orders,
       listings,
       coupons: coupons || [],
-    });
+      users: users || [],
+    };
+
+    setCached(cacheKey, data, 30000); // 30s cache
+    res.setHeader("X-Cache", "MISS");
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

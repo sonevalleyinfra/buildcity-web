@@ -853,6 +853,7 @@ export function AdminProvider({ children }) {
           const filtered = prev.filter((r) => r.name.toLowerCase().trim() !== payload.name.toLowerCase().trim());
           const updated = [savedDbReg, ...filtered];
           localStorage.setItem(REGS_STORAGE_KEY, JSON.stringify(updated));
+          localStorage.setItem("buildcity_all_regions", JSON.stringify(updated));
           window.dispatchEvent(new Event("buildcity_regions_updated"));
           return updated;
         });
@@ -871,6 +872,7 @@ export function AdminProvider({ children }) {
       const filtered = prev.filter((r) => r.name.toLowerCase().trim() !== payload.name.toLowerCase().trim());
       const updated = [fallbackReg, ...filtered];
       localStorage.setItem(REGS_STORAGE_KEY, JSON.stringify(updated));
+      localStorage.setItem("buildcity_all_regions", JSON.stringify(updated));
       window.dispatchEvent(new Event("buildcity_regions_updated"));
       return updated;
     });
@@ -882,6 +884,7 @@ export function AdminProvider({ children }) {
     setRegions((prev) => {
       const updated = prev.map((r) => (r.id === id ? { ...r, ...updates } : r));
       localStorage.setItem(REGS_STORAGE_KEY, JSON.stringify(updated));
+      localStorage.setItem("buildcity_all_regions", JSON.stringify(updated));
       window.dispatchEvent(new Event("buildcity_regions_updated"));
       return updated;
     });

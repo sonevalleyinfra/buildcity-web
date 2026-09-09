@@ -10,7 +10,7 @@ const DEFAULT_REGIONS = [
   { id: "2ab0f187-d170-4432-8eef-e0ac31ed21c3", name: "Varanasi", state: "Uttar Pradesh", baseDeliveryCharge: 49, priceFactor: 1 },
   { id: "aca42de5-60cd-4dbe-9580-b3d10df6d6ff", name: "Jaunpur", state: "Uttar Pradesh", baseDeliveryCharge: 78, priceFactor: 1 },
   { id: "af4bf0c4-389a-4f89-aea2-35b2700bf1e6", name: "Mirzapur", state: "Uttar Pradesh", baseDeliveryCharge: 95, priceFactor: 1 },
-  { id: "dc928ebc-b243-4246-989b-c45fd9a27eaf", name: "FRRRRR", state: "Uttar Pradesh", baseDeliveryCharge: 49, priceFactor: 1 },
+  { id: "dc928ebc-b243-4246-989b-c45fd9a27eaf", name: "Prayagraj", state: "Uttar Pradesh", baseDeliveryCharge: 49, priceFactor: 1 },
 ];
 
 export function RegionProvider({ children }) {

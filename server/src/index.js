@@ -1635,6 +1635,25 @@ app.patch("/api/v1/regions/:id", requireAuth, requireRole("ADMIN"), async (req, 
         ...(isActive !== undefined ? { isActive: Boolean(isActive) } : {}),
       },
     });
+
+    // If region name was updated, cascade new regionName to all existing vendor products in this region
+    if (name && name.trim() && name.trim() !== reg.name) {
+      const newName = name.trim();
+      await prisma.vendorProduct.updateMany({
+        where: {
+          OR: [
+            { regionId: reg.id },
+            { regionName: reg.name },
+            { vendor: { regionId: reg.id } },
+          ],
+        },
+        data: {
+          regionName: newName,
+          regionId: reg.id,
+        },
+      }).catch((err) => console.warn("Cascade region rename warning:", err.message));
+    }
+
     res.json(updated);
   } catch (err) {
     console.error("Patch region error:", err.message);

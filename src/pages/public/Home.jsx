@@ -176,14 +176,14 @@ const bannerSlides = [
     line1: "Quality Products.",
     line2: "Best Prices.",
     line3: "Reliable Service.",
-    img: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1200&q=80",
+    img: "https://res.cloudinary.com/lbwxvqmg/image/upload/v1788936739/buildcitybanner.jpg",
   },
   {
     tag: "DIRECT FROM SUPPLIERS",
     line1: "Wholesale Rates.",
     line2: "Zero Middlemen.",
     line3: "Direct Delivery.",
-    img: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80",
+    img: "https://res.cloudinary.com/lbwxvqmg/image/upload/v1788938503/banner3.png",
   },
   {
     tag: "100% CERTIFIED MATERIALS",
@@ -256,8 +256,15 @@ export default function Home() {
     .filter((p) => {
       if (p.approvalStatus !== "APPROVED" && p.approvalStatus !== undefined) return false;
       const activeRegName = (region?.name || "Varanasi").toLowerCase().trim();
+      const activeRegId = (region?.id || "").toLowerCase().trim();
+      
       const pRegName = (p.regionName || p.districtName || p.vendor?.region?.name || "varanasi").toLowerCase().trim();
-      return pRegName === activeRegName || pRegName.includes(activeRegName) || activeRegName.includes(pRegName);
+      const pRegId = (p.regionId || p.vendor?.regionId || "").toLowerCase().trim();
+
+      const matchesById = activeRegId && pRegId && activeRegId === pRegId;
+      const matchesByName = pRegName === activeRegName || pRegName.includes(activeRegName) || activeRegName.includes(pRegName);
+
+      return matchesById || matchesByName;
     })
     .map((p) => {
       const isSusp = p.isVendorSuspended || p.vendor?.status === "SUSPENDED" || p.isActive === false;

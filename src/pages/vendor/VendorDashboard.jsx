@@ -24,7 +24,7 @@ export default function VendorDashboard() {
 
   // Tabs navigation state: "products" -> My Shop Items, "orders" -> Customer Orders, "overview" -> Store Info & Sales
   const [activeTab, setActiveTab] = useState("products");
-  const [vendorOrders, setVendorOrders] = useState([]);
+  const [fetchedVendorOrders, setFetchedVendorOrders] = useState([]);
 
   // Master Catalog — Admin/DR dwara banaye gaye Master Products select karne ke liye
   const [showCatalogModal, setShowCatalogModal] = useState(false);
@@ -61,20 +61,63 @@ export default function VendorDashboard() {
   const districtName = matchedVendorObj.region?.name || matchedVendorObj.regionName || matchedVendorObj.districtName || user?.vendorInfo?.region?.name || user?.vendorInfo?.regionName || "Mirzapur";
   const vendorId = matchedVendorObj.id || user?.vendorInfo?.id || user?.vendorId || user?.id || (user?.phone ? `v-${user.phone}` : `v-${Date.now()}`);
 
-  // vendor isolated orders fetch - no flash on refresh
+  // Continuous background polling (every 3.5s) for vendor orders + instant event triggers
   useEffect(() => {
     let isMounted = true;
-    fetchVendorOrders(vendorId).then((vOrds) => {
-      if (!isMounted) return;
-      const sourceOrds = Array.isArray(vOrds) && vOrds.length > 0 ? vOrds : orders;
-      const filtered = (sourceOrds || []).filter((o) => {
-        const matchesVendor = o.items && o.items.some((it) => it.vendorId === vendorId || (it.vendorName || "").toLowerCase().trim() === shopName.toLowerCase().trim());
-        return matchesVendor;
-      });
-      setVendorOrders(filtered);
-    }).catch(() => {});
-    return () => { isMounted = false; };
+    const syncVendorOrders = async () => {
+      try {
+        const vOrds = await fetchVendorOrders(vendorId);
+        if (isMounted && Array.isArray(vOrds)) {
+          setFetchedVendorOrders(vOrds);
+        }
+      } catch {}
+    };
+
+    syncVendorOrders();
+    const interval = setInterval(syncVendorOrders, 3500);
+
+    const handleOrderEvent = () => syncVendorOrders();
+    window.addEventListener("buildcity_orders_updated", handleOrderEvent);
+    window.addEventListener("buildcity_order_placed", handleOrderEvent);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener("buildcity_orders_updated", handleOrderEvent);
+      window.removeEventListener("buildcity_order_placed", handleOrderEvent);
+    };
   }, [vendorId, shopName]);
+
+  // Combine and deduplicate orders from both fetchVendorOrders and reactive OrderContext.orders
+  const allVendorCandidateOrders = [...fetchedVendorOrders, ...orders];
+  const vendorOrderMap = new Map();
+  allVendorCandidateOrders.forEach((o) => {
+    if (o && o.id && !vendorOrderMap.has(o.id)) {
+      vendorOrderMap.set(o.id, o);
+    }
+  });
+
+  const vendorOrders = Array.from(vendorOrderMap.values()).filter((o) => {
+    if (!o || !Array.isArray(o.items) || o.items.length === 0) return false;
+    return o.items.some((it) => {
+      const itVendorId = it.vendorId;
+      const itVendorName = (it.vendorName || "").toLowerCase().trim();
+      const curShop = shopName.toLowerCase().trim();
+      const curOwner = ownerName.toLowerCase().trim();
+
+      const matchesId = itVendorId && (
+        itVendorId === vendorId ||
+        itVendorId === matchedVendorObj.id ||
+        itVendorId === user?.id ||
+        itVendorId === user?.vendorInfo?.id ||
+        itVendorId === matchedVendorObj.userId
+      );
+      const matchesShop = curShop && itVendorName && (itVendorName.includes(curShop) || curShop.includes(itVendorName));
+      const matchesOwner = curOwner && itVendorName && itVendorName.includes(curOwner);
+
+      return matchesId || matchesShop || matchesOwner;
+    });
+  });
 
   // Current vendor ki dukan par list huye products filter karo (Flexible DB Match)
   const vendorProducts = products.filter((p) => {

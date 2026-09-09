@@ -28,6 +28,9 @@ app.use(express.json());
 app.use((req, res, next) => {
   if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
     invalidateCache();
+    res.on("finish", () => {
+      invalidateCache();
+    });
   }
   next();
 });
@@ -1873,18 +1876,24 @@ app.get("/api/v1/orders/user/:userId", requireAuth, requireSelfOrAdmin("userId")
 app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
     const { vendorId } = req.params;
+    const cleanPhone = vendorId.replace(/^v-/, "").replace(/\D/g, "");
     const vendor = await prisma.vendor.findFirst({
       where: {
         OR: [
           { id: vendorId },
-          { phone: vendorId.replace(/^v-/, "") },
+          ...(vendorId.length > 20 ? [{ userId: vendorId }] : []),
+          ...(cleanPhone.length >= 8 ? [{ phone: { contains: cleanPhone.slice(-10) } }] : []),
           { shopName: { equals: vendorId, mode: "insensitive" } },
         ],
       },
     }).catch(() => null);
 
     const allOrders = await prisma.order.findMany({
-      include: { items: true, customer: true, address: true },
+      include: {
+        items: true,
+        customer: { select: { id: true, name: true, phone: true, email: true, role: true } },
+        address: { include: { region: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
 
@@ -1893,11 +1902,16 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
     }
 
     const vId = vendor?.id || vendorId;
+    const vUserId = vendor?.userId;
     const vShop = (vendor?.shopName || vendorId).toLowerCase().trim();
 
     const filtered = allOrders.filter((o) =>
       o.items && o.items.some((it) => {
-        const matchesId = it.vendorId && (it.vendorId === vId || it.vendorId === vendorId);
+        const matchesId = it.vendorId && (
+          it.vendorId === vId ||
+          it.vendorId === vendorId ||
+          (vUserId && it.vendorId === vUserId)
+        );
         const itShop = (it.vendorName || "").toLowerCase().trim();
         const matchesShop = vShop && itShop && (vShop.includes(itShop) || itShop.includes(vShop));
         return matchesId || matchesShop;
@@ -2403,7 +2417,7 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
         priceAtPurchase: verifiedPrice,
         quantity: itemQty,
         totalPrice: itemTotal,
-        vendorId: targetVendor ? targetVendor.id : (defaultVendor ? defaultVendor.id : item.vendorId),
+        vendorId: targetVendor ? targetVendor.id : (liveVp.vendorId || item.vendorId || (defaultVendor ? defaultVendor.id : "v1")),
       });
     }
 
@@ -2462,7 +2476,11 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
 
     const fullOrder = await prisma.order.findUnique({
       where: { id: newOrder.id },
-      include: { items: true, customer: true, address: true },
+      include: {
+        items: true,
+        customer: { select: { id: true, name: true, phone: true, email: true, role: true } },
+        address: { include: { region: true } },
+      },
     });
 
     console.log(`✅ Order ${newOrder.id} created successfully for customer ${targetCustomerId}`);

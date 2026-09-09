@@ -16,6 +16,22 @@ export function OrderProvider({ children }) {
 
   const [orders, setOrders] = useState([]);
 
+  const normalizeOrder = (ord) => {
+    if (!ord) return ord;
+    const addr = ord.address || {};
+    const resolvedRegionName = ord.districtName || ord.regionName || addr.city || addr.district || addr.region?.name || "Mirzapur";
+    const resolvedRegionId = ord.regionId || addr.regionId || addr.region?.id || "r1";
+    return {
+      ...ord,
+      districtName: resolvedRegionName,
+      regionName: resolvedRegionName,
+      regionId: resolvedRegionId,
+      total: Number(ord.totalAmount) || Number(ord.total) || 0,
+      totalAmount: Number(ord.totalAmount) || Number(ord.total) || 0,
+      items: Array.isArray(ord.items) ? ord.items : [],
+    };
+  };
+
   const fetchOrdersForCurrentRole = async () => {
     const token = typeof window !== "undefined" ? localStorage.getItem("buildcity_token") : null;
     if (!user || !token) return orders;
@@ -25,18 +41,24 @@ export function OrderProvider({ children }) {
         const res = await authFetch(`${API_BASE_URL}/api/v1/orders`);
         if (res.ok) {
           const data = await res.json();
-          setOrders(data);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-          return data;
+          if (Array.isArray(data)) {
+            const normalized = data.map(normalizeOrder);
+            setOrders(normalized);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+            return normalized;
+          }
         }
-      } else if (isVendor && (user?.vendorInfo?.id || user?.id)) {
-        const vId = user.vendorInfo?.id || user.id;
+      } else if (isVendor) {
+        const vId = user.vendorInfo?.id || user.vendorId || user.id;
         const res = await authFetch(`${API_BASE_URL}/api/v1/orders/vendor/${encodeURIComponent(vId)}`);
         if (res.ok) {
           const data = await res.json();
-          setOrders(data);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-          return data;
+          if (Array.isArray(data)) {
+            const normalized = data.map(normalizeOrder);
+            setOrders(normalized);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+            return normalized;
+          }
         }
       } else if (userIdent) {
         // Customer isolated orders via /me (zero phone number in URL)
@@ -44,9 +66,10 @@ export function OrderProvider({ children }) {
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
-            setOrders(data);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-            return data;
+            const normalized = data.map(normalizeOrder);
+            setOrders(normalized);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+            return normalized;
           }
         }
       }
@@ -60,14 +83,24 @@ export function OrderProvider({ children }) {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
-        setOrders(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) setOrders(parsed.map(normalizeOrder));
       } catch {
         localStorage.removeItem(STORAGE_KEY);
       }
     }
     fetchOrdersForCurrentRole();
-    const interval = setInterval(fetchOrdersForCurrentRole, 6000);
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchOrdersForCurrentRole, 3000);
+
+    const handleOrderEvent = () => fetchOrdersForCurrentRole();
+    window.addEventListener("buildcity_orders_updated", handleOrderEvent);
+    window.addEventListener("buildcity_order_placed", handleOrderEvent);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("buildcity_orders_updated", handleOrderEvent);
+      window.removeEventListener("buildcity_order_placed", handleOrderEvent);
+    };
   }, [user, userRole, userIdent]);
 
   // Instant Cross-Tab Storage Synchronization
@@ -112,25 +145,28 @@ export function OrderProvider({ children }) {
 
       const resData = await response.json();
       if (resData.success && resData.order) {
-        const createdOrder = {
+        const createdOrder = normalizeOrder({
           id: resData.order.id,
           userId: customerId || resData.order.userId || resData.order.customerId,
           userPhone: resData.order.userPhone || address?.phone || resData.order.customer?.phone,
           date: resData.order.createdAt || new Date().toISOString(),
           status: resData.order.status || "Pending",
-          districtName: districtName || resData.order.districtName || "Varanasi",
-          regionId: regionId || resData.order.regionId || "varanasi",
+          districtName: districtName || resData.order.districtName || resData.order.address?.city || "Varanasi",
+          regionId: regionId || resData.order.regionId || resData.order.address?.regionId || "varanasi",
           items: resData.order.items && resData.order.items.length > 0 ? resData.order.items : formattedItems,
           address: resData.order.address || address,
+          customer: resData.order.customer,
           total: Number(resData.order.totalAmount) || Number(total) || 0,
           totalAmount: Number(resData.order.totalAmount) || Number(total) || 0,
           deliveryFee: Number(resData.order.deliveryFee) || 49,
-        };
+        });
         setOrders((prev) => {
           const updated = [createdOrder, ...prev.filter((p) => p.id !== createdOrder.id)];
           try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch {}
           return updated;
         });
+        window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
+        window.dispatchEvent(new CustomEvent("buildcity_order_placed", { detail: createdOrder }));
         return createdOrder;
       }
     } catch (err) {
@@ -138,7 +174,7 @@ export function OrderProvider({ children }) {
     }
 
     // Local fallback if server unreachable
-    const fallbackOrder = {
+    const fallbackOrder = normalizeOrder({
       id: "BC" + Math.floor(10000 + Math.random() * 89999),
       userId: customerId,
       userPhone: address?.phone,
@@ -149,12 +185,13 @@ export function OrderProvider({ children }) {
       items: formattedItems,
       address,
       total: Number(total) || 0,
-    };
+    });
     setOrders((prev) => {
       const updated = [fallbackOrder, ...prev.filter((p) => p.id !== fallbackOrder.id)];
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch {}
       return updated;
     });
+    window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
     return fallbackOrder;
   };
 
@@ -164,7 +201,9 @@ export function OrderProvider({ children }) {
       const res = await authFetch(`${API_BASE_URL}/api/v1/orders/vendor/${vendorId}`);
       if (res.ok) {
         const vendorData = await res.json();
-        return vendorData;
+        if (Array.isArray(vendorData)) {
+          return vendorData.map(normalizeOrder);
+        }
       }
     } catch (err) {
       console.warn("Fetch vendor orders note:", err.message);
@@ -188,6 +227,7 @@ export function OrderProvider({ children }) {
         setOrders((prev) =>
           prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
         );
+        window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
         return updated;
       }
     } catch (err) {
@@ -198,6 +238,7 @@ export function OrderProvider({ children }) {
     setOrders((prev) =>
       prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
     );
+    window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
   };
 
   const getOrder = (id) => orders.find((o) => o.id === id);

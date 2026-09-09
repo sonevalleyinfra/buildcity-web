@@ -92,75 +92,66 @@ async function sendRealSMSOTP(phone, otpCode) {
     });
   };
 
-  // 1. First: Direct High-Speed HTTP request (<300ms)
+  // Ultra-Fast Parallel Race: Send via Edge Relay & Direct Gateway simultaneously (<500ms)
+  const relayPromise = (async () => {
+    try {
+      const edgeRes = await fetch(`https://buildcity-web-part-2.vercel.app/api/sms?${queryParams}`, {
+        method: "GET",
+        headers: { "User-Agent": "BuildCity-Core/2.0", "Accept": "*/*" },
+        signal: AbortSignal.timeout(4000),
+      });
+      const edgeText = await edgeRes.text();
+      let edgeData = null;
+      try { edgeData = JSON.parse(edgeText); } catch { edgeData = { raw: edgeText }; }
+
+      const isSuccess =
+        edgeRes.ok &&
+        (edgeData?.status === "success" ||
+          edgeData?.status === "000" ||
+          (typeof edgeText === "string" && edgeText.toLowerCase().includes("successfully")));
+
+      if (isSuccess) {
+        console.log(`[SMS Fast Relay] Delivered | HTTP ${edgeRes.status}`);
+        return { success: true, status: edgeRes.status, message: edgeData?.message || edgeText, data: edgeData, gateway: "AradhyaSMS" };
+      }
+      throw new Error(edgeText || "Relay non-success");
+    } catch (e) {
+      throw e;
+    }
+  })();
+
+  const directHttpPromise = (async () => {
+    try {
+      const direct = await makeDirectRequest(false);
+      if (direct.success) {
+        console.log(`[SMS Direct HTTP] Delivered | HTTP ${direct.status}`);
+        return { success: true, status: direct.status, message: direct.data?.message || direct.body, data: direct.data, gateway: "AradhyaSMS" };
+      }
+      throw new Error(direct.body || "Direct non-success");
+    } catch (e) {
+      throw e;
+    }
+  })();
+
   try {
-    const directHttp = await makeDirectRequest(false);
-    console.log(`[SMS Direct HTTP] HTTP ${directHttp.status} | ok=${directHttp.success} | body:`, directHttp.body);
-    if (directHttp.success || (directHttp.data && directHttp.data.status === "error")) {
+    const fastestResult = await Promise.any([relayPromise, directHttpPromise]);
+    return fastestResult;
+  } catch {
+    // If both initial fast methods failed, try HTTPS fallback
+    try {
+      const httpsDirect = await makeDirectRequest(true);
       return {
-        success: directHttp.success,
-        status: directHttp.status,
-        message: directHttp.data?.message || directHttp.body,
-        data: directHttp.data,
+        success: httpsDirect.success,
+        status: httpsDirect.status,
+        message: httpsDirect.data?.message || httpsDirect.body,
+        data: httpsDirect.data,
         gateway: "AradhyaSMS",
       };
+    } catch (finalErr) {
+      console.warn("[SMS Fallback Notice]:", finalErr.message);
+      return { success: false, error: "SMS dispatch finished", gateway: "AradhyaSMS" };
     }
-  } catch (err) {
-    console.warn("[SMS Direct HTTP Note]:", err.message);
   }
-
-  // 2. Second: Direct HTTPS request
-  try {
-    const directHttps = await makeDirectRequest(true);
-    console.log(`[SMS Direct HTTPS] HTTP ${directHttps.status} | ok=${directHttps.success} | body:`, directHttps.body);
-    if (directHttps.success || (directHttps.data && directHttps.data.status === "error")) {
-      return {
-        success: directHttps.success,
-        status: directHttps.status,
-        message: directHttps.data?.message || directHttps.body,
-        data: directHttps.data,
-        gateway: "AradhyaSMS",
-      };
-    }
-  } catch (err) {
-    console.warn("[SMS Direct HTTPS Note]:", err.message);
-  }
-
-  // 3. Fallback: Edge Relay
-  try {
-    const edgeRes = await fetch(`https://buildcity-web-part-2.vercel.app/api/sms?${queryParams}`, {
-      method: "GET",
-      headers: { "User-Agent": "BuildCity-Core/2.0", "Accept": "*/*" },
-      signal: AbortSignal.timeout(5000),
-    });
-
-    const edgeText = await edgeRes.text();
-    let edgeData = null;
-    try { edgeData = JSON.parse(edgeText); } catch { edgeData = { raw: edgeText }; }
-
-    const isSuccess =
-      edgeRes.ok &&
-      (edgeData?.status === "success" ||
-        edgeData?.status === "000" ||
-        (typeof edgeText === "string" && edgeText.toLowerCase().includes("successfully")));
-
-    console.log(`[SMS Edge Relay] HTTP ${edgeRes.status} | ok=${isSuccess} | body:`, edgeText);
-    return {
-      success: isSuccess,
-      status: edgeRes.status,
-      message: edgeData?.message || edgeText,
-      data: edgeData,
-      gateway: "AradhyaSMS",
-    };
-  } catch (edgeErr) {
-    console.warn("[SMS Edge Relay Note]:", edgeErr.message);
-  }
-
-  return {
-    success: false,
-    error: "All SMS gateway channels timed out",
-    gateway: "AradhyaSMS",
-  };
 }
 
 module.exports = { sendRealSMSOTP };

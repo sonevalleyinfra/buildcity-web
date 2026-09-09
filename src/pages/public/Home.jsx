@@ -486,49 +486,30 @@ export default function Home() {
           onMouseLeave={handleMouseUp}
         >
           {/* Banner Main Carousel Area */}
-          <div className="relative min-h-[175px] sm:min-h-[220px] flex items-stretch cursor-grab active:cursor-grabbing">
+          <div className="relative aspect-[21/9] sm:aspect-[24/8] min-h-[145px] sm:min-h-[220px] flex items-stretch cursor-grab active:cursor-grabbing">
             {bannerSlides.map((b, i) => (
               <div
                 key={i}
-                className="absolute inset-0 transition-all duration-700 ease-out flex items-stretch"
+                className="absolute inset-0 transition-all duration-700 ease-out overflow-hidden"
                 style={{
                   opacity: slide === i ? 1 : 0,
                   transform: slide === i ? "translateX(0%) scale(1)" : i < slide ? "translateX(-6%) scale(0.97)" : "translateX(6%) scale(0.97)",
                   pointerEvents: slide === i ? "auto" : "none",
                 }}
               >
-                {/* Left Content Area */}
-                <div className="w-7/12 sm:w-1/2 flex flex-col justify-center px-4 sm:px-7 py-4 z-10">
-                  <span className="text-[9px] sm:text-[10px] font-black text-[#38BDF8] tracking-wider uppercase mb-1">
-                    {b.tag}
-                  </span>
-                  <h2 className="text-white text-sm sm:text-xl font-extrabold leading-snug tracking-tight mb-3 sm:mb-4">
-                    {b.line1} <br />
-                    {b.line2} <br />
-                    {b.line3}
-                  </h2>
-
-                  <Link
-                    to="/categories"
-                    className="inline-flex items-center gap-1 bg-white hover:bg-slate-100 text-navy-950 font-extrabold text-[10px] sm:text-xs px-3.5 sm:px-4 py-1.5 rounded-full shadow-md active:scale-95 transition-all w-fit"
-                  >
-                    <span>Shop Now</span>
-                    <span>→</span>
-                  </Link>
-                </div>
-
-                {/* Right Image Area */}
-                <div className="w-5/12 sm:w-1/2 h-full relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-r from-[#07132B] via-[#07132B]/40 to-transparent z-10 pointer-events-none" />
+                {/* Full Banner Graphic Image */}
+                <Link to="/categories" className="block w-full h-full relative group">
                   <img
                     src={b.img}
-                    alt="Hero Banner"
-                    className="w-full h-full object-cover object-center transform scale-105"
+                    alt={b.tag || "Hero Banner"}
+                    className="w-full h-full object-cover object-center"
                     onError={(e) => {
                       e.target.src = "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1200&q=80";
                     }}
                   />
-                </div>
+                  {/* Subtle hover brightness */}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors" />
+                </Link>
               </div>
             ))}
 

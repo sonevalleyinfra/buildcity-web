@@ -2530,6 +2530,53 @@ app.post("/api/v1/reviews", requireAuth, async (req, res) => {
   }
 });
 
+// 12.5 CART CLOUD SYNC ENDPOINTS
+const userCartMap = new Map();
+
+app.get("/api/v1/cart", requireAuth, async (req, res) => {
+  try {
+    const userId = req.auth?.userId || req.auth?.phone;
+    const items = userCartMap.get(userId) || [];
+    res.json({ success: true, cartItems: items });
+  } catch (err) {
+    res.json({ success: true, cartItems: [] });
+  }
+});
+
+app.put("/api/v1/cart", requireAuth, async (req, res) => {
+  try {
+    const userId = req.auth?.userId || req.auth?.phone;
+    const { items } = req.body;
+    userCartMap.set(userId, Array.isArray(items) ? items : []);
+    res.json({ success: true, cartItems: userCartMap.get(userId) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/v1/cart", requireAuth, async (req, res) => {
+  try {
+    const userId = req.auth?.userId || req.auth?.phone;
+    const { item } = req.body;
+    const current = userCartMap.get(userId) || [];
+    const updated = item ? [...current.filter(i => i.id !== item.id), item] : current;
+    userCartMap.set(userId, updated);
+    res.json({ success: true, cartItems: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/v1/cart", requireAuth, async (req, res) => {
+  try {
+    const userId = req.auth?.userId || req.auth?.phone;
+    userCartMap.delete(userId);
+    res.json({ success: true, cartItems: [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 13. NOTIFICATIONS ENDPOINTS (Admin Broadcast & Real-Time Customer Alerts)
 app.get("/api/v1/notifications/me", requireAuth, async (req, res) => {
   try {

@@ -486,7 +486,7 @@ export default function Home() {
           onMouseLeave={handleMouseUp}
         >
           {/* Banner Main Carousel Area */}
-          <div className="relative aspect-[21/9] sm:aspect-[24/8] min-h-[145px] sm:min-h-[220px] flex items-stretch cursor-grab active:cursor-grabbing">
+          <div className="relative aspect-[16/8.2] sm:aspect-[24/8] w-full flex items-stretch cursor-grab active:cursor-grabbing">
             {bannerSlides.map((b, i) => (
               <div
                 key={i}
@@ -502,7 +502,7 @@ export default function Home() {
                   <img
                     src={b.img}
                     alt={b.tag || "Hero Banner"}
-                    className="w-full h-full object-cover object-center"
+                    className="w-full h-full object-fill sm:object-cover object-center"
                     onError={(e) => {
                       e.target.src = "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1200&q=80";
                     }}
@@ -542,14 +542,14 @@ export default function Home() {
             </button>
 
             {/* Interactive Dots Indicator */}
-            <div className="absolute bottom-2.5 left-4 sm:left-8 flex items-center gap-1.5 z-20">
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 sm:left-8 sm:translate-x-0 flex items-center gap-1.5 z-20 bg-black/25 backdrop-blur-xs px-2.5 py-1 rounded-full">
               {bannerSlides.map((_, i) => (
                 <button
                   key={i}
                   type="button"
                   onClick={() => setSlide(i)}
                   className={`h-1.5 rounded-full transition-all duration-300 ${
-                    slide === i ? "w-6 bg-white shadow-xs" : "w-2 bg-white/40 hover:bg-white/75"
+                    slide === i ? "w-5 bg-white shadow-xs" : "w-1.5 bg-white/50 hover:bg-white/80"
                   }`}
                   aria-label={`Go to slide ${i + 1}`}
                 />

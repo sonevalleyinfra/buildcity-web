@@ -152,15 +152,12 @@ app.get("/api/v1/public-catalog", async (req, res) => {
   }
 });
 
-// Single Unified Cloud Sync Endpoint (Replaces 7 separate HTTP requests with 1 request to free browser TCP sockets)
+// Single Unified Cloud Sync Endpoint (Real-time DB query for Staff and Partners)
 app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"), async (req, res) => {
   const role = req.auth.role;
-  const cacheKey = `cloud_sync_${role}`;
-  const cached = getCached(cacheKey);
-  if (cached) {
-    res.setHeader("X-Cache", "HIT");
-    return res.json(cached);
-  }
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
 
   try {
     const fetchPromises = [
@@ -2350,9 +2347,10 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
         return res.status(400).json({ error: `Invalid quantity for product: ${prodName || "Item"}` });
       }
 
-      // Fetch live vendor product from Supabase DB
+      // Fetch live vendor product from Supabase DB (Strict Vendor Matching First)
       let liveVp = null;
 
+      // 1. Check by direct vendorProduct ID
       if (item.id || item.productId) {
         liveVp = await prisma.vendorProduct.findFirst({
           where: {
@@ -2364,6 +2362,30 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
         }).catch(() => null);
       }
 
+      // 2. Match by Name AND exact Vendor ID / Shop Name (CRITICAL for multi-vendor catalog)
+      if (!liveVp && prodName && (item.vendorId || item.vendorName)) {
+        liveVp = await prisma.vendorProduct.findFirst({
+          where: {
+            name: { equals: prodName, mode: "insensitive" },
+            approvalStatus: "APPROVED",
+            isActive: true,
+            OR: [
+              ...(item.vendorId ? [
+                { vendorId: item.vendorId },
+                { vendor: { id: item.vendorId } },
+                { vendor: { userId: item.vendorId } },
+                { vendor: { phone: item.vendorId.replace(/^v-/, "") } },
+              ] : []),
+              ...(item.vendorName ? [
+                { vendor: { shopName: { equals: item.vendorName, mode: "insensitive" } } },
+              ] : []),
+            ],
+          },
+          include: { vendor: { include: { region: true } } },
+        }).catch(() => null);
+      }
+
+      // 3. Match by Name AND target Region
       if (!liveVp && prodName) {
         liveVp = await prisma.vendorProduct.findFirst({
           where: {
@@ -2379,6 +2401,7 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
         }).catch(() => null);
       }
 
+      // 4. Fallback match by Name
       if (!liveVp && prodName) {
         liveVp = await prisma.vendorProduct.findFirst({
           where: {
@@ -2411,13 +2434,14 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       }
 
       let targetVendor = liveVp.vendor || null;
+      const finalVendorId = targetVendor?.id || liveVp.vendorId || item.vendorId || (defaultVendor ? defaultVendor.id : "v1");
 
       validatedItems.push({
         productName: liveVp.name || prodName,
         priceAtPurchase: verifiedPrice,
         quantity: itemQty,
         totalPrice: itemTotal,
-        vendorId: targetVendor ? targetVendor.id : (liveVp.vendorId || item.vendorId || (defaultVendor ? defaultVendor.id : "v1")),
+        vendorId: finalVendorId,
       });
     }
 

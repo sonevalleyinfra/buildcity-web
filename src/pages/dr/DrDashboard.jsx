@@ -119,13 +119,22 @@ export default function DrDashboard() {
   });
 
   // Find current logged-in DR info dynamically from live DB drs list or user.drInfo
-  const currentDr = drs.find((d) => (d.phone || "").trim() === (user?.phone || "").trim() || d.userId === user?.id) || user?.drInfo || {};
+  const currentDr = (drs || []).find((d) => {
+    const userPhoneClean = user?.phone ? user.phone.replace(/\D/g, "") : "";
+    const dPhoneClean = d.phone ? d.phone.replace(/\D/g, "") : "";
+    return (userPhoneClean && dPhoneClean === userPhoneClean) || d.userId === user?.id || d.id === user?.id;
+  }) || user?.drInfo || {};
   
   // Find region object matching DR's assigned regionId or regionName
-  const drRegion = (regions || []).find((r) => r.id === currentDr.regionId || r.id === currentDr.region?.id || r.name?.toLowerCase().trim() === (currentDr.regionName || currentDr.region?.name || "").toLowerCase().trim());
+  const drRegion = (regions || []).find((r) =>
+    r.id === currentDr.regionId ||
+    r.id === currentDr.region?.id ||
+    r.id === user?.preferredRegionId ||
+    r.name?.toLowerCase().trim() === (currentDr.regionName || currentDr.region?.name || user?.preferredRegionName || "").toLowerCase().trim()
+  );
 
-  const districtName = drRegion ? drRegion.name : (currentDr.regionName || currentDr.region?.name || user?.drInfo?.regionName || "Varanasi");
-  const drRegionId = drRegion ? drRegion.id : (currentDr.regionId || currentDr.region?.id || "r1");
+  const districtName = drRegion ? drRegion.name : (currentDr.regionName || currentDr.region?.name || user?.drInfo?.regionName || user?.preferredRegionName || "Varanasi");
+  const drRegionId = drRegion ? drRegion.id : (currentDr.regionId || currentDr.region?.id || user?.preferredRegionId || "r1");
 
   // DR Assigned Region Vendors Filter
   const districtVendors = vendors.filter((v) => {

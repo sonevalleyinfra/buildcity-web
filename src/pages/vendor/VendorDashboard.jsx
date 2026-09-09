@@ -50,7 +50,10 @@ export default function VendorDashboard() {
     const vUserPhoneClean = v.user?.phone ? v.user.phone.replace(/\D/g, "") : "";
 
     const phoneMatches = userPhoneClean && (vPhoneClean === userPhoneClean || vUserPhoneClean === userPhoneClean);
-    const idMatches = (user?.vendorInfo?.id && v.id === user.vendorInfo.id) || (user?.vendorId && v.id === user.vendorId);
+    const idMatches =
+      (user?.vendorInfo?.id && (v.id === user.vendorInfo.id || v.userId === user.vendorInfo.id)) ||
+      (user?.vendorId && (v.id === user.vendorId || v.userId === user.vendorId)) ||
+      (user?.id && (v.id === user.id || v.userId === user.id));
 
     return phoneMatches || idMatches;
   }) || user?.vendorInfo || {};

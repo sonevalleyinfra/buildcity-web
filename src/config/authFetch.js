@@ -67,12 +67,16 @@ export const authFetch = async (path, options = {}) => {
     headers,
   });
 
-  // If 401 Unauthorized occurs on an expired/invalid token, clear the invalid token
-  if (response.status === 401 && token) {
+  // If 401 Unauthorized occurs on an expired/invalid token or missing auth, clear the invalid session
+  if (response.status === 401) {
     clearToken();
     try {
       localStorage.removeItem(AUTH_KEY);
     } catch {}
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("buildcity_session_expired"));
+    }
 
     // Only redirect if actively inside a protected dashboard route
     if (

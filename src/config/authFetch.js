@@ -19,7 +19,14 @@ export const saveToken = (token) => {
  */
 export const getToken = () => {
   try {
-    return localStorage.getItem(TOKEN_KEY) || "";
+    const direct = localStorage.getItem(TOKEN_KEY);
+    if (direct && direct.trim()) return direct.trim();
+    const auth = localStorage.getItem(AUTH_KEY);
+    if (auth) {
+      const parsed = JSON.parse(auth);
+      if (parsed?.token) return parsed.token.trim();
+    }
+    return "";
   } catch {
     return "";
   }

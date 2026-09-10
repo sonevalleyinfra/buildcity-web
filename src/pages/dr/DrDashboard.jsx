@@ -56,6 +56,7 @@ export default function DrDashboard() {
     productsLoading,
     categories = [],
     regions = [],
+    orders: adminOrders = [],
     fetchCloudData,
     addVendor,
     updateVendor,
@@ -69,7 +70,33 @@ export default function DrDashboard() {
     setVendorStatus,
     updateListingApprovalStatus,
   } = useAdmin();
-  const { orders = [], fetchAllOrders, updateOrderStatus } = useOrders() || {};
+  const { orders: contextOrders = [], fetchAllOrders, updateOrderStatus } = useOrders() || {};
+
+  // Direct dedicated live orders fetch from backend (every 2.5s)
+  const [directOrders, setDirectOrders] = useState([]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    const fetchDirectOrders = async () => {
+      try {
+        const res = await authFetch(`${API_BASE_URL}/api/v1/orders`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && !isCancelled) {
+            setDirectOrders(data);
+          }
+        }
+      } catch {}
+    };
+
+    fetchDirectOrders();
+    const orderInterval = setInterval(fetchDirectOrders, 2500);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(orderInterval);
+    };
+  }, []);
 
   // Continuous background polling (every 2.5s) synced directly with Supabase DB
   useEffect(() => {
@@ -103,6 +130,16 @@ export default function DrDashboard() {
       window.removeEventListener("storage", handleSync);
     };
   }, []);
+
+  // Combined and deduplicated live orders list (Direct Backend DB + Cloud-Sync + OrderContext)
+  const rawOrdersList = [...(directOrders || []), ...(adminOrders || []), ...(contextOrders || [])];
+  const orderDedupeMap = new Map();
+  rawOrdersList.forEach((o) => {
+    if (o && o.id && !orderDedupeMap.has(o.id)) {
+      orderDedupeMap.set(o.id, o);
+    }
+  });
+  const orders = Array.from(orderDedupeMap.values());
 
   const [activeTab, setActiveTab] = useState("products");
   const [searchTerm, setSearchTerm] = useState("");
@@ -213,13 +250,15 @@ export default function DrDashboard() {
   // Resolve single definitive district for each order
   const getOrderDistrict = (o) => {
     if (!o) return "Varanasi";
-    // 1. Direct Delivery Address Region
+
+    // 1. Direct Delivery Address Region Object
     if (o.address?.region?.name) return o.address.region.name;
     if (o.address?.regionId) {
       const matched = (regions || []).find((r) => r.id === o.address.regionId);
       if (matched?.name) return matched.name;
     }
-    // 2. Address City
+
+    // 2. Address City matching
     if (o.address?.city) {
       const c = String(o.address.city).toLowerCase().trim();
       if (["varanasi", "varnasi", "banaras", "kashi", "vns"].some((a) => c.includes(a))) return "Varanasi";
@@ -227,15 +266,34 @@ export default function DrDashboard() {
       if (["prayagraj", "allahabad"].some((a) => c.includes(a))) return "Prayagraj";
       if (["jaunpur"].some((a) => c.includes(a))) return "Jaunpur";
     }
-    // 3. Order direct region fields
+
+    // 3. Address Full String / Street / Line matching
+    const addrFull = typeof o.address === "string"
+      ? o.address
+      : [o.address?.street, o.address?.line, o.address?.address, o.customer?.address].filter(Boolean).join(" ");
+    if (addrFull) {
+      const s = addrFull.toLowerCase();
+      if (["mirzapur", "mzp"].some((a) => s.includes(a))) return "Mirzapur";
+      if (["prayagraj", "allahabad"].some((a) => s.includes(a))) return "Prayagraj";
+      if (["jaunpur"].some((a) => s.includes(a))) return "Jaunpur";
+      if (["varanasi", "varnasi", "banaras", "kashi", "vns"].some((a) => s.includes(a))) return "Varanasi";
+    }
+
+    // 4. Order direct region fields
     if (o.region?.name) return o.region.name;
     if (o.districtName) return o.districtName;
     if (o.regionName) return o.regionName;
-    // 4. Fallback for legacy test orders without address: item vendor's region
+    if (o.customer?.preferredRegionName) return o.customer.preferredRegionName;
+
+    // 5. Vendor's region from ordered items
     if (Array.isArray(o.items) && o.items.length > 0) {
       for (const it of o.items) {
-        if (it?.vendor?.region?.name) return it.vendor.region.name;
-        if (it?.vendorRegion) return it.vendorRegion;
+        const vReg = it?.vendor?.region?.name || it?.vendorRegion || it?.regionName;
+        if (vReg) return vReg;
+        if (it?.vendor?.regionId || it?.regionId) {
+          const matched = (regions || []).find((r) => r.id === (it.vendor?.regionId || it.regionId));
+          if (matched?.name) return matched.name;
+        }
       }
     }
     return "Varanasi";

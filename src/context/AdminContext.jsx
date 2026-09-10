@@ -283,6 +283,29 @@ export function AdminProvider({ children }) {
 
       const { drs: drsRes, vendors: vendorsRes, masterProducts: masterRes, categories: categoriesRes, regions: regionsRes, orders: ordersRes, listings: listingsRes, coupons: couponsRes, users: usersRes } = syncRes;
 
+      if (ordersRes && Array.isArray(ordersRes)) {
+        const formattedOrders = ordersRes.map((ord) => {
+          const addr = ord.address || {};
+          const resolvedRegionName = addr.region?.name || ord.region?.name || addr.city || ord.districtName || ord.regionName || addr.district || "Varanasi";
+          const resolvedRegionId = addr.region?.id || addr.regionId || ord.region?.id || ord.regionId || "2ab0f187-d170-4432-8eef-e0ac31ed21c3";
+          return {
+            ...ord,
+            districtName: resolvedRegionName,
+            regionName: resolvedRegionName,
+            regionId: resolvedRegionId,
+            total: Number(ord.totalAmount) || Number(ord.total) || 0,
+            totalAmount: Number(ord.totalAmount) || Number(ord.total) || 0,
+            items: Array.isArray(ord.items) ? ord.items : [],
+          };
+        });
+        localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(formattedOrders));
+        try {
+          localStorage.setItem("buildcity_orders", JSON.stringify(formattedOrders));
+        } catch {}
+        setOrders(formattedOrders);
+        window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
+      }
+
       if (usersRes && Array.isArray(usersRes) && usersRes.length > 0) {
         localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(usersRes));
         setUsers((prev) => (JSON.stringify(prev) === JSON.stringify(usersRes) ? prev : usersRes));

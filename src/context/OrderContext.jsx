@@ -1,4 +1,4 @@
-import { authFetch } from "../config/authFetch";
+import { authFetch, getToken } from "../config/authFetch";
 import { createContext, useContext, useEffect, useState } from "react";
 import { useAuth } from "./AuthContext";
 import { API_BASE_URL } from "../config/api";
@@ -11,7 +11,8 @@ export function OrderProvider({ children }) {
   const { user } = useAuth() || {};
   const userRole = (user?.role || "").toLowerCase();
   const isAdmin = userRole === "admin";
-  const isVendor = userRole === "vendor";
+  const isDr = userRole === "dr" || userRole === "district_rep" || Boolean(user?.drInfo) || String(user?.role || "").toUpperCase() === "DR";
+  const isVendor = userRole === "vendor" || Boolean(user?.vendorInfo);
   const userIdent = user?.id || user?.phone;
 
   const [orders, setOrders] = useState([]);
@@ -33,11 +34,11 @@ export function OrderProvider({ children }) {
   };
 
   const fetchOrdersForCurrentRole = async () => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("buildcity_token") : null;
+    const token = getToken() || user?.token || (typeof window !== "undefined" ? localStorage.getItem("buildcity_token") : null);
     if (!user || !token) return orders;
 
     try {
-      if (isAdmin || userRole === "dr") {
+      if (isAdmin || isDr) {
         const res = await authFetch(`${API_BASE_URL}/api/v1/orders`);
         if (res.ok) {
           const data = await res.json();

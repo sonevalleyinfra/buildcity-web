@@ -230,6 +230,7 @@ export function CartProvider({ children }) {
   const firstItemWithRegion = items.find((i) => i.addedRegionId);
   const cartRegionId = firstItemWithRegion?.addedRegionId;
   const cartRegionName = firstItemWithRegion?.addedRegionName || "Varanasi";
+  const currentRegionName = region?.name || "Varanasi";
 
   const hasRegionMismatch =
     items.length > 0 &&
@@ -238,8 +239,9 @@ export function CartProvider({ children }) {
     cartRegionId.toLowerCase() !== region.id.toLowerCase();
 
   // Function to update cart prices directly from live database listings in current region
-  const updateCartToCurrentRegion = async (passedListings = []) => {
-    if (!region) return { updatedCount: 0, removedItems: [] };
+  const updateCartToCurrentRegion = async (passedListings = [], targetRegion = null) => {
+    const activeRegion = targetRegion || region;
+    if (!activeRegion) return { updatedCount: 0, removedItems: [] };
 
     let listings = passedListings;
     try {
@@ -255,7 +257,7 @@ export function CartProvider({ children }) {
     const updatedItems = [];
 
     items.forEach((i) => {
-      // Find matching approved vendor listing in new region
+      // Find matching approved vendor listing in active region
       const matchingListing = Array.isArray(listings)
         ? listings.find((l) => {
             const isApproved = (l.approvalStatus || "APPROVED") === "APPROVED";
@@ -268,8 +270,8 @@ export function CartProvider({ children }) {
             const listingRegionId = l.vendor?.region?.id || l.regionId || "";
 
             const matchesRegion =
-              (listingRegionId && region.id && listingRegionId.toLowerCase() === region.id.toLowerCase()) ||
-              (listingRegionName && region.name && listingRegionName.toLowerCase().trim() === region.name.toLowerCase().trim());
+              (listingRegionId && activeRegion.id && listingRegionId.toLowerCase() === activeRegion.id.toLowerCase()) ||
+              (listingRegionName && activeRegion.name && listingRegionName.toLowerCase().trim() === activeRegion.name.toLowerCase().trim());
 
             return isApproved && matchProduct && matchesRegion;
           })
@@ -282,11 +284,11 @@ export function CartProvider({ children }) {
           price: newPrice,
           vendorId: matchingListing.vendorId || i.vendorId,
           vendorName: matchingListing.vendor?.shopName || matchingListing.vendorName || i.vendorName,
-          addedRegionId: region.id,
-          addedRegionName: region.name,
+          addedRegionId: activeRegion.id,
+          addedRegionName: activeRegion.name,
         });
       } else {
-        removedItems.push(i);
+        removedItems.push(i.name || i.title || "Product");
       }
     });
 
@@ -320,6 +322,7 @@ export function CartProvider({ children }) {
         mrpTotal,
         cartRegionId,
         cartRegionName,
+        currentRegionName,
         hasRegionMismatch,
         updateCartToCurrentRegion,
       }}

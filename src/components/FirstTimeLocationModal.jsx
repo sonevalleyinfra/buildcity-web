@@ -2,11 +2,13 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useRegion } from "../context/RegionContext";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
+import { useAlert } from "../context/AlertContext";
 
 export default function FirstTimeLocationModal() {
   const { region, setRegion, regions, hasExplicitlySelectedLocation, isLocationModalOpen, setIsLocationModalOpen } = useRegion();
   const { items, updateCartToCurrentRegion } = useCart();
   const { user } = useAuth();
+  const { showAlert } = useAlert();
 
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -54,15 +56,37 @@ export default function FirstTimeLocationModal() {
     const target = rToSelect || regions.find((r) => r.id === selectedRegionId) || regions[0];
     if (!target) return;
 
+    const isDifferentRegion = region && target && (
+      (target.id && region.id && target.id.toLowerCase() !== region.id.toLowerCase()) ||
+      (target.name && region.name && target.name.toLowerCase().trim() !== region.name.toLowerCase().trim())
+    );
+
     setRegion(target);
     setIsOpen(false);
     if (setIsLocationModalOpen) setIsLocationModalOpen(false);
 
-    // Sync cart items if any
-    if (items && items.length > 0) {
+    // Sync cart items if changing region with active items
+    if (items && items.length > 0 && isDifferentRegion) {
       try {
-        await updateCartToCurrentRegion();
-      } catch {}
+        const { updatedCount, removedItems } = await updateCartToCurrentRegion([], target);
+        if (removedItems && removedItems.length > 0) {
+          showAlert({
+            title: "📍 Region Availability Notice",
+            message: `The following product(s) are not supplied in ${target.name} and have been removed from your cart:\n\n• ${removedItems.join("\n• ")}`,
+            type: "warning",
+            buttonText: "Understood",
+          });
+        } else if (updatedCount > 0) {
+          showAlert({
+            title: "✅ Region Changed",
+            message: `Your cart items and rates have been updated for ${target.name}.`,
+            type: "success",
+            buttonText: "Great",
+          });
+        }
+      } catch (err) {
+        console.warn("Cart region update warning:", err);
+      }
     }
   };
 

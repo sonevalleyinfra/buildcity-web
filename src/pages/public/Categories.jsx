@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useCart } from "../../context/CartContext";
 import { useAuth } from "../../context/AuthContext";
@@ -83,6 +83,37 @@ export default function Categories() {
   const [searchQuery, setSearchQuery] = useState("");
   const [justAddedId, setJustAddedId] = useState(null);
   const [slide, setSlide] = useState(0);
+  const productsSectionRef = useRef(null);
+
+  const scrollToProducts = () => {
+    if (productsSectionRef.current) {
+      // Calculate smooth scroll offset so the category title is clearly visible below fixed/sticky navigation
+      const yOffset = -70;
+      const element = productsSectionRef.current;
+      const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
+      window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+    }
+  };
+
+  const handleSelectCategory = (catName, shouldScroll = true) => {
+    setActivePill(catName);
+    if (shouldScroll) {
+      setTimeout(() => {
+        scrollToProducts();
+      }, 50);
+    }
+  };
+
+  // If page loads with a specific category query parameter like ?cat=Cement, auto-scroll to products
+  useEffect(() => {
+    const catFromUrl = searchParams.get("cat");
+    if (catFromUrl) {
+      setActivePill(catFromUrl);
+      setTimeout(() => {
+        scrollToProducts();
+      }, 250);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -270,18 +301,18 @@ export default function Categories() {
                 <button
                   key={pill.name}
                   type="button"
-                  onClick={() => setActivePill(pill.name === "More" ? "All" : pill.name)}
+                  onClick={() => handleSelectCategory(pill.name === "More" ? "All" : pill.name)}
                   className="flex flex-col items-center gap-1.5 shrink-0 group active:scale-95 transition-all cursor-pointer px-1"
                 >
                   <div
                     className={`w-12 h-12 sm:w-15 sm:h-15 rounded-full flex items-center justify-center p-2.5 transition-all duration-200 ${
                       pill.isGrid
                         ? isSelected
-                          ? "bg-[#0284C7] text-white shadow-md shadow-sky-500/25 ring-2 ring-[#0284C7] ring-offset-2"
-                          : "bg-[#0284C7] text-white shadow-xs hover:opacity-95"
-                        : isSelected
-                        ? "bg-sky-50 border-2 border-[#0284C7] ring-2 ring-[#0284C7]/25 shadow-xs"
-                        : "bg-white border border-slate-200/90 shadow-2xs hover:border-slate-300"
+                        ? "bg-[#0284C7] text-white shadow-md shadow-sky-500/25 ring-2 ring-[#0284C7] ring-offset-2"
+                        : "bg-[#0284C7] text-white shadow-xs hover:opacity-95"
+                      : isSelected
+                      ? "bg-sky-50 border-2 border-[#0284C7] ring-2 ring-[#0284C7]/25 shadow-xs"
+                      : "bg-white border border-slate-200/90 shadow-2xs hover:border-slate-300"
                     }`}
                   >
                     {pill.isGrid ? (
@@ -318,7 +349,7 @@ export default function Categories() {
             <h3 className="text-sm sm:text-base font-extrabold text-navy-900 tracking-tight">Shop by Category</h3>
             <button
               type="button"
-              onClick={() => setActivePill("All")}
+              onClick={() => handleSelectCategory("All")}
               className="text-xs font-bold text-[#0284C7] hover:underline cursor-pointer"
             >
               View all
@@ -332,7 +363,7 @@ export default function Categories() {
                 <button
                   key={c.name}
                   type="button"
-                  onClick={() => setActivePill(c.name)}
+                  onClick={() => handleSelectCategory(c.name)}
                   className={`rounded-xl sm:rounded-2xl p-2 sm:p-2.5 flex flex-col items-center justify-between text-center transition-all duration-200 group active:scale-95 shadow-2xs hover:shadow-xs cursor-pointer min-h-[100px] sm:min-h-[125px] ${
                     isSelected
                       ? "bg-blue-50/90 border-2 border-[#0284C7] ring-2 ring-blue-200 shadow-xs"
@@ -361,7 +392,7 @@ export default function Categories() {
         </section>
 
         {/* 🌟 4. PRODUCTS GRID (4 PRODUCTS PER ROW - COMPACT & CLEAN) */}
-        <section className="space-y-3">
+        <section ref={productsSectionRef} id="products-section" className="space-y-3 scroll-mt-20">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h3 className="text-sm sm:text-base font-extrabold text-navy-900 tracking-tight">
@@ -374,7 +405,7 @@ export default function Categories() {
             {activePill !== "All" && (
               <button
                 type="button"
-                onClick={() => setActivePill("All")}
+                onClick={() => handleSelectCategory("All", false)}
                 className="text-xs font-bold text-[#0284C7] hover:underline cursor-pointer"
               >
                 Clear Filter (View All)
@@ -392,7 +423,7 @@ export default function Categories() {
             <div className="bg-white rounded-2xl p-8 text-center text-xs font-bold text-slate-500 border border-slate-200">
               📦 No {activePill === "All" ? "" : activePill} products currently listed in {region?.name || "your area"}.
               <button
-                onClick={() => setActivePill("All")}
+                onClick={() => handleSelectCategory("All", false)}
                 className="block mx-auto mt-2 text-[#0284C7] underline font-bold"
               >
                 View all available products

@@ -44,6 +44,22 @@ const isSameDistrict = (nameA, nameB) => {
   return getCanonicalDistrict(nameA) === getCanonicalDistrict(nameB);
 };
 
+// Deep equality comparator for live orders to prevent unnecessary re-renders & flickering
+const areOrdersEqual = (listA, listB) => {
+  if (listA === listB) return true;
+  if (!Array.isArray(listA) || !Array.isArray(listB)) return false;
+  if (listA.length !== listB.length) return false;
+  for (let i = 0; i < listA.length; i++) {
+    const a = listA[i];
+    const b = listB[i];
+    if (!a || !b) return false;
+    if (a.id !== b.id || a.status !== b.status || a.totalAmount !== b.totalAmount || a.total !== b.total) {
+      return false;
+    }
+  }
+  return true;
+};
+
 // District Representative (DR) Dashboard component — Ground Agent Portal
 export default function DrDashboard() {
   const { user, logout } = useAuth();
@@ -72,21 +88,59 @@ export default function DrDashboard() {
   } = useAdmin();
   const { orders: contextOrders = [], fetchAllOrders, updateOrderStatus } = useOrders() || {};
 
-  // Continuous background polling (every 3s) synced directly with Supabase DB
+  // Direct live orders state from DB with zero-flicker protection
+  const [directOrders, setDirectOrders] = useState([]);
+
+  // Fetch live orders directly from DB endpoint (/api/v1/orders) with deep equality guard
+  const fetchLiveOrdersDirect = async () => {
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/orders`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setDirectOrders((prev) => (areOrdersEqual(prev, data) ? prev : data));
+        }
+      }
+    } catch (err) {
+      console.warn("Live direct orders sync note:", err.message);
+    }
+  };
+
+  // Continuous background polling (every 2.5s) synced directly with Supabase DB
   useEffect(() => {
     if (fetchCloudData) fetchCloudData();
     if (fetchAllOrders) fetchAllOrders();
+    fetchLiveOrdersDirect();
 
     const interval = setInterval(() => {
       if (fetchCloudData) fetchCloudData();
-    }, 3000);
+      if (fetchAllOrders) fetchAllOrders();
+      fetchLiveOrdersDirect();
+    }, 2500);
 
-    return () => clearInterval(interval);
+    const handleOrdersUpdated = () => {
+      fetchLiveOrdersDirect();
+      if (fetchCloudData) fetchCloudData();
+      if (fetchAllOrders) fetchAllOrders();
+    };
+
+    window.addEventListener("buildcity_orders_updated", handleOrdersUpdated);
+    window.addEventListener("buildcity_order_placed", handleOrdersUpdated);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("buildcity_orders_updated", handleOrdersUpdated);
+      window.removeEventListener("buildcity_order_placed", handleOrdersUpdated);
+    };
   }, []);
 
   // Stable, combined and deduplicated live orders list (Zero Flickering)
   const orders = useMemo(() => {
-    const rawList = (adminOrders && adminOrders.length > 0) ? adminOrders : (contextOrders || []);
+    const rawList = [
+      ...(Array.isArray(directOrders) ? directOrders : []),
+      ...(Array.isArray(adminOrders) ? adminOrders : []),
+      ...(Array.isArray(contextOrders) ? contextOrders : []),
+    ];
     const orderDedupeMap = new Map();
     rawList.forEach((o) => {
       if (o && o.id && !orderDedupeMap.has(o.id)) {
@@ -94,7 +148,7 @@ export default function DrDashboard() {
       }
     });
     return Array.from(orderDedupeMap.values());
-  }, [adminOrders, contextOrders]);
+  }, [directOrders, adminOrders, contextOrders]);
 
   const [activeTab, setActiveTab] = useState("products");
   const [searchTerm, setSearchTerm] = useState("");

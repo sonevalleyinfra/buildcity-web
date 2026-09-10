@@ -4,6 +4,8 @@ import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useOrders } from "../../context/OrderContext";
 import { useAlert } from "../../context/AlertContext";
+import { API_BASE_URL } from "../../config/api";
+import { authFetch } from "../../config/authFetch";
 import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
 
 const PRESET_IMAGES = [
@@ -53,19 +55,29 @@ export default function DrDashboard() {
   } = useAdmin();
   const { orders: contextOrders = [], fetchAllOrders, updateOrderStatus } = useOrders() || {};
 
-  // Auto real-time background sync every 3.5s for DR Portal
-  useEffect(() => {
-    if (fetchCloudData) fetchCloudData();
-    if (fetchAllOrders) fetchAllOrders();
-    const interval = setInterval(() => {
-      if (fetchCloudData) fetchCloudData();
-      if (fetchAllOrders) fetchAllOrders();
-    }, 3500);
+  const [directOrders, setDirectOrders] = useState([]);
 
-    const handleSync = () => {
+  // Auto real-time background sync every 2.5s for DR Portal
+  useEffect(() => {
+    let isMounted = true;
+    const fetchDirectOrders = async () => {
+      try {
+        const res = await authFetch(`${API_BASE_URL}/api/v1/orders`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && Array.isArray(data)) {
+            setDirectOrders(data);
+          }
+        }
+      } catch {}
       if (fetchCloudData) fetchCloudData();
       if (fetchAllOrders) fetchAllOrders();
     };
+
+    fetchDirectOrders();
+    const interval = setInterval(fetchDirectOrders, 2500);
+
+    const handleSync = () => fetchDirectOrders();
     window.addEventListener("buildcity_orders_updated", handleSync);
     window.addEventListener("buildcity_order_placed", handleSync);
     window.addEventListener("buildcity_vendors_updated", handleSync);
@@ -74,6 +86,7 @@ export default function DrDashboard() {
     window.addEventListener("storage", handleSync);
 
     return () => {
+      isMounted = false;
       clearInterval(interval);
       window.removeEventListener("buildcity_orders_updated", handleSync);
       window.removeEventListener("buildcity_order_placed", handleSync);
@@ -84,8 +97,8 @@ export default function DrDashboard() {
     };
   }, []);
 
-  // Unified deduplicated live orders list
-  const allRawOrders = [...(contextOrders || []), ...(adminOrders || [])];
+  // Unified deduplicated live orders list across all sources
+  const allRawOrders = [...directOrders, ...(contextOrders || []), ...(adminOrders || [])];
   const orderMap = new Map();
   allRawOrders.forEach((o) => {
     if (o && o.id && !orderMap.has(o.id)) {
@@ -251,25 +264,48 @@ export default function DrDashboard() {
       return true;
     }
 
-    // 2. Direct city / district / street name matching
+    // 2. Direct city / district / street / address name matching with aliases
     const orderCity = o.districtName || o.regionName || o.address?.city || o.address?.district || o.address?.region?.name || "";
-    const orderStreet = o.address?.street || o.address?.address || "";
+    const orderStreet = o.address?.street || o.address?.address || o.address?.line || "";
     if (districtName) {
       if (orderCity && matchRegionName(districtName, orderCity)) return true;
       if (orderStreet && matchRegionName(districtName, orderStreet)) return true;
     }
 
-    // 3. District Vendor Item Matching: If any item in the order is from a vendor in this DR's district
-    if (Array.isArray(o.items) && districtVendors.length > 0) {
+    // 3. Customer Preferred Region matching
+    const custRegionName = o.customer?.preferredRegionName || "";
+    const custRegionId = o.customer?.preferredRegionId || "";
+    if (drRegionId && custRegionId && String(custRegionId).toLowerCase() === String(drRegionId).toLowerCase()) {
+      return true;
+    }
+    if (districtName && custRegionName && matchRegionName(districtName, custRegionName)) {
+      return true;
+    }
+
+    // 4. District Vendor Item Matching: If any item in the order is from a vendor in this DR's district
+    if (Array.isArray(o.items) && o.items.length > 0) {
       const hasDistrictVendorItem = o.items.some((it) => {
-        const itemVendorId = it.vendorId;
-        const itemVendorName = (it.vendorName || "").toLowerCase().trim();
+        const itemVendorId = it.vendorId || it.vendor?.id;
+        const itemVendorName = (it.vendorName || it.vendor?.shopName || "").toLowerCase().trim();
+        const itemVendorRegId = it.vendor?.regionId || it.vendor?.region?.id;
+        const itemVendorRegName = it.vendor?.region?.name || it.vendor?.regionName || it.vendor?.districtName || "";
+
+        // A. Match item vendor's region directly to DR's region
+        if (drRegionId && itemVendorRegId && String(itemVendorRegId).toLowerCase() === String(drRegionId).toLowerCase()) {
+          return true;
+        }
+        if (districtName && itemVendorRegName && matchRegionName(districtName, itemVendorRegName)) {
+          return true;
+        }
+
+        // B. Match item vendor to any of this DR's onboarded vendors
         return districtVendors.some(
           (dv) =>
             (itemVendorId &&
               (String(dv.id).toLowerCase() === String(itemVendorId).toLowerCase() ||
                 String(dv.userId).toLowerCase() === String(itemVendorId).toLowerCase())) ||
-            (itemVendorName && (dv.shopName || "").toLowerCase().trim() === itemVendorName)
+            (itemVendorName && (dv.shopName || "").toLowerCase().trim() === itemVendorName) ||
+            (dv.phone && it.vendor?.phone && dv.phone.replace(/\D/g, "") === it.vendor.phone.replace(/\D/g, ""))
         );
       });
       if (hasDistrictVendorItem) return true;

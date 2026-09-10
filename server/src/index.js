@@ -182,7 +182,7 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
             },
           },
           customer: { select: { id: true, name: true, phone: true, email: true, role: true } },
-          address: true,
+          address: { include: { region: true } },
         },
         orderBy: { createdAt: "desc" },
       }).then((list) =>

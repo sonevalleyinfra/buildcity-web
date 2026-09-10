@@ -251,14 +251,14 @@ export default function DrDashboard() {
     if (user.role === "admin") return true;
 
     // 1. Direct Delivery Address Region ID matching
-    const orderRegionId = o.regionId || o.address?.regionId || o.address?.region?.id;
+    const orderRegionId = o.address?.regionId || o.address?.region?.id || o.regionId || o.region?.id;
     if (drRegionId && orderRegionId && String(orderRegionId).toLowerCase() === String(drRegionId).toLowerCase()) {
       return true;
     }
 
-    // 2. Direct Delivery Address City / District / Region name matching
-    const orderCity = o.districtName || o.regionName || o.address?.city || o.address?.district || o.address?.region?.name || "";
-    if (districtName && orderCity && isSameDistrict(districtName, orderCity)) {
+    // 2. Direct Delivery Address Region Name matching (prioritizing true region name over typed city string)
+    const orderRegionName = o.address?.region?.name || o.region?.name || o.districtName || o.regionName || o.address?.district || o.address?.city || "";
+    if (districtName && orderRegionName && isSameDistrict(districtName, orderRegionName)) {
       return true;
     }
 

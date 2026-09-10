@@ -56,28 +56,40 @@ export default function DrDashboard() {
   const { orders: contextOrders = [], fetchAllOrders, updateOrderStatus } = useOrders() || {};
 
   const [directOrders, setDirectOrders] = useState([]);
+  const [directVendors, setDirectVendors] = useState([]);
+  const [directProducts, setDirectProducts] = useState([]);
+  const [directDrs, setDirectDrs] = useState([]);
+  const [directRegions, setDirectRegions] = useState([]);
 
-  // Auto real-time background sync every 2.5s for DR Portal
+  // Auto real-time background sync every 2.5s for DR Portal (Polls DB directly)
   useEffect(() => {
     let isMounted = true;
-    const fetchDirectOrders = async () => {
+    const syncAllDrData = async () => {
       try {
-        const res = await authFetch(`${API_BASE_URL}/api/v1/orders`);
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted && Array.isArray(data)) {
-            setDirectOrders(data);
-          }
+        const [ordsRes, vendsRes, prodsRes, drsRes, regsRes] = await Promise.all([
+          authFetch(`${API_BASE_URL}/api/v1/orders`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          authFetch(`${API_BASE_URL}/api/v1/vendors`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          authFetch(`${API_BASE_URL}/api/v1/vendor/listings`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          authFetch(`${API_BASE_URL}/api/v1/drs`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          authFetch(`${API_BASE_URL}/api/v1/regions`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        ]);
+
+        if (isMounted) {
+          if (Array.isArray(ordsRes)) setDirectOrders(ordsRes);
+          if (Array.isArray(vendsRes)) setDirectVendors(vendsRes);
+          if (Array.isArray(prodsRes)) setDirectProducts(prodsRes);
+          if (Array.isArray(drsRes)) setDirectDrs(drsRes);
+          if (Array.isArray(regsRes)) setDirectRegions(regsRes);
         }
       } catch {}
       if (fetchCloudData) fetchCloudData();
       if (fetchAllOrders) fetchAllOrders();
     };
 
-    fetchDirectOrders();
-    const interval = setInterval(fetchDirectOrders, 2500);
+    syncAllDrData();
+    const interval = setInterval(syncAllDrData, 2500);
 
-    const handleSync = () => fetchDirectOrders();
+    const handleSync = () => syncAllDrData();
     window.addEventListener("buildcity_orders_updated", handleSync);
     window.addEventListener("buildcity_order_placed", handleSync);
     window.addEventListener("buildcity_vendors_updated", handleSync);
@@ -96,6 +108,11 @@ export default function DrDashboard() {
       window.removeEventListener("storage", handleSync);
     };
   }, []);
+
+  const allDrs = directDrs.length > 0 ? directDrs : drs;
+  const allVendors = directVendors.length > 0 ? directVendors : vendors;
+  const allRegions = directRegions.length > 0 ? directRegions : (regions || []);
+  const allRawProducts = directProducts.length > 0 ? directProducts : products;
 
   // Unified deduplicated live orders list across all sources
   const allRawOrders = [...directOrders, ...(contextOrders || []), ...(adminOrders || [])];
@@ -162,7 +179,7 @@ export default function DrDashboard() {
   };
 
   // Find current logged-in DR info dynamically from live DB drs list or user.drInfo
-  const currentDr = (drs || []).find((d) => {
+  const currentDr = (allDrs || []).find((d) => {
     const userPhoneClean = user?.phone ? user.phone.replace(/\D/g, "") : "";
     const dPhoneClean = d.phone ? d.phone.replace(/\D/g, "") : "";
     return (
@@ -178,16 +195,16 @@ export default function DrDashboard() {
   const rawDrRegionName = currentDr.region?.name || currentDr.regionName || user?.drInfo?.region?.name || user?.drInfo?.regionName || user?.regionName || "";
 
   // Match region object from database regions list
-  const drRegion = (regions || []).find((r) =>
+  const drRegion = (allRegions || []).find((r) =>
     (rawDrRegionId && (r.id === rawDrRegionId || String(r.id).toLowerCase() === String(rawDrRegionId).toLowerCase())) ||
     (rawDrRegionName && isSameDistrict(r.name, rawDrRegionName))
   );
 
-  const districtName = drRegion?.name || rawDrRegionName || "Mirzapur";
+  const districtName = drRegion?.name || rawDrRegionName || "Varanasi";
   const drRegionId = drRegion?.id || rawDrRegionId || "";
 
   // DR Assigned Region Vendors Filter
-  const districtVendors = vendors.filter((v) => {
+  const districtVendors = allVendors.filter((v) => {
     if (!user) return true;
     if (user.role === "admin") return true;
 
@@ -204,15 +221,16 @@ export default function DrDashboard() {
       return true;
     }
 
-    // 3. Match Added By DR (name or phone)
+    // 3. Match Added By DR (name or phone or district)
     const matchesAddedBy = v.addedByDr && user?.name && v.addedByDr.toLowerCase().includes(user.name.toLowerCase());
     const matchesDrPhone = v.addedByDr && user?.phone && v.addedByDr.includes(user.phone.replace(/\D/g, ""));
+    const matchesDistrictTag = v.addedByDr && districtName && isSameDistrict(districtName, v.addedByDr);
 
-    return matchesAddedBy || matchesDrPhone;
+    return matchesAddedBy || matchesDrPhone || matchesDistrictTag;
   });
 
   // DR Assigned Region Products Filter
-  const districtProducts = products.filter((p) => {
+  const districtProducts = allRawProducts.filter((p) => {
     if (!user) return true;
     if (user.role === "admin") return true;
 
@@ -260,6 +278,14 @@ export default function DrDashboard() {
     const orderRegionName = o.address?.region?.name || o.region?.name || o.districtName || o.regionName || o.address?.district || o.address?.city || "";
     if (districtName && orderRegionName && isSameDistrict(districtName, orderRegionName)) {
       return true;
+    }
+
+    // 3. Fallback for legacy test orders without address relation: match by item vendor's region
+    if (!o.address || (!o.address.regionId && !o.address.city && !o.address.street)) {
+      const firstItemVendorRegion = o.items?.[0]?.vendor?.region?.name || o.items?.[0]?.vendorRegion || "";
+      if (districtName && firstItemVendorRegion && isSameDistrict(districtName, firstItemVendorRegion)) {
+        return true;
+      }
     }
 
     return false;

@@ -64,6 +64,48 @@ const areOrdersEqual = (listA, listB) => {
   return true;
 };
 
+// Deep equality comparator for live vendors to prevent unnecessary re-renders & flickering
+const areVendorsEqual = (listA, listB) => {
+  if (listA === listB) return true;
+  if (!listA && !listB) return true;
+  if (!listA || !listB) return false;
+  if (!Array.isArray(listA) || !Array.isArray(listB)) return false;
+  if (listA.length !== listB.length) return false;
+  for (let i = 0; i < listA.length; i++) {
+    const a = listA[i];
+    const b = listB[i];
+    if (!a || !b) return false;
+    if (a.id !== b.id || a.status !== b.status || a.shopName !== b.shopName || a.phone !== b.phone || a.regionId !== b.regionId) {
+      return false;
+    }
+  }
+  return true;
+};
+
+// Deep equality comparator for live products to prevent unnecessary re-renders & flickering
+const areProductsEqual = (listA, listB) => {
+  if (listA === listB) return true;
+  if (!listA && !listB) return true;
+  if (!listA || !listB) return false;
+  if (!Array.isArray(listA) || !Array.isArray(listB)) return false;
+  if (listA.length !== listB.length) return false;
+  for (let i = 0; i < listA.length; i++) {
+    const a = listA[i];
+    const b = listB[i];
+    if (!a || !b) return false;
+    if (
+      a.id !== b.id ||
+      a.approvalStatus !== b.approvalStatus ||
+      a.isActive !== b.isActive ||
+      Number(a.price) !== Number(b.price) ||
+      Number(a.stockQty) !== Number(b.stockQty)
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
+
 // District Representative (DR) Dashboard component — Ground Agent Portal
 export default function DrDashboard() {
   const { user, logout } = useAuth();
@@ -104,6 +146,30 @@ export default function DrDashboard() {
     return [];
   });
 
+  // Direct live vendors state from DB with zero-flicker persistent cache
+  const [directVendors, setDirectVendors] = useState(() => {
+    try {
+      const saved = localStorage.getItem("buildcity_dr_live_vendors");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+
+  // Direct live products/listings state from DB with zero-flicker persistent cache
+  const [directProducts, setDirectProducts] = useState(() => {
+    try {
+      const saved = localStorage.getItem("buildcity_dr_live_products");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+
   // Fetch live orders directly from DB endpoint (/api/v1/orders) with deep equality guard
   const fetchLiveOrdersDirect = async () => {
     try {
@@ -125,26 +191,108 @@ export default function DrDashboard() {
     }
   };
 
+  // Fetch live vendors directly from DB endpoint (/api/v1/vendors) with deep equality guard
+  const fetchLiveVendorsDirect = async () => {
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/vendors`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setDirectVendors((prev) => {
+            if (areVendorsEqual(prev, data)) return prev;
+            try {
+              localStorage.setItem("buildcity_dr_live_vendors", JSON.stringify(data));
+            } catch {}
+            return data;
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Live direct vendors sync note:", err.message);
+    }
+  };
+
+  // Fetch live vendor products/listings directly from DB endpoint (/api/v1/vendor/listings) with deep equality guard
+  const fetchLiveProductsDirect = async () => {
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/vendor/listings`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          const formatted = data.map((l) => {
+            const isVendorSuspended = l.vendor?.status === "SUSPENDED";
+            const resolvedRegionName = l.regionName || l.districtName || l.vendor?.region?.name || "Mirzapur";
+            const resolvedRegionId = l.regionId || l.vendor?.regionId || l.vendor?.region?.id || "mirzapur";
+            const isListingApproved = l.approvalStatus === "APPROVED" || !l.approvalStatus || l.approvalStatus === "";
+
+            return {
+              id: l.id,
+              masterProductId: l.masterProductId,
+              name: l.name || l.masterProduct?.name || "Product",
+              categoryId: l.categoryId || l.masterProduct?.categoryId,
+              categoryName: l.categoryName || l.masterProduct?.category?.name || "Material",
+              brand: l.brand || l.masterProduct?.brand || "Generic",
+              type: l.type || l.masterProduct?.type || "Standard",
+              grade: l.grade || l.masterProduct?.grade || "Standard Grade",
+              unit: l.unit || l.masterProduct?.unit || "Unit",
+              vendorId: l.vendorId,
+              vendorName: l.vendor?.shopName || l.vendorName || "District Vendor",
+              regionId: resolvedRegionId,
+              regionName: resolvedRegionName,
+              districtName: resolvedRegionName,
+              mrp: Number(l.mrp || l.masterProduct?.suggestedPrice || Math.round((Number(l.price) || 100) * 1.2)),
+              price: Number(l.price) || 100,
+              stockQty: Number(l.stockQty) || 100,
+              imageUrl: l.imageUrl || l.masterProduct?.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80",
+              approvalStatus: l.approvalStatus || "APPROVED",
+              isActive: isListingApproved && l.isActive !== false && !isVendorSuspended,
+              isVendorSuspended: Boolean(isVendorSuspended),
+              addedBy: l.addedBy || "Vendor",
+            };
+          });
+
+          setDirectProducts((prev) => {
+            if (areProductsEqual(prev, formatted)) return prev;
+            try {
+              localStorage.setItem("buildcity_dr_live_products", JSON.stringify(formatted));
+            } catch {}
+            return formatted;
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Live direct products sync note:", err.message);
+    }
+  };
+
   // Continuous background polling (every 3s) synced directly with Supabase DB
   useEffect(() => {
     if (fetchCloudData) fetchCloudData();
     fetchLiveOrdersDirect();
+    fetchLiveVendorsDirect();
+    fetchLiveProductsDirect();
 
     const interval = setInterval(() => {
       fetchLiveOrdersDirect();
+      fetchLiveVendorsDirect();
+      fetchLiveProductsDirect();
     }, 3000);
 
-    const handleOrdersUpdated = () => {
-      fetchLiveOrdersDirect();
-    };
+    const handleOrdersUpdated = () => fetchLiveOrdersDirect();
+    const handleVendorsUpdated = () => fetchLiveVendorsDirect();
+    const handleProductsUpdated = () => fetchLiveProductsDirect();
 
     window.addEventListener("buildcity_orders_updated", handleOrdersUpdated);
     window.addEventListener("buildcity_order_placed", handleOrdersUpdated);
+    window.addEventListener("buildcity_vendors_updated", handleVendorsUpdated);
+    window.addEventListener("buildcity_products_updated", handleProductsUpdated);
 
     return () => {
       clearInterval(interval);
       window.removeEventListener("buildcity_orders_updated", handleOrdersUpdated);
       window.removeEventListener("buildcity_order_placed", handleOrdersUpdated);
+      window.removeEventListener("buildcity_vendors_updated", handleVendorsUpdated);
+      window.removeEventListener("buildcity_products_updated", handleProductsUpdated);
     };
   }, []);
 
@@ -165,6 +313,22 @@ export default function DrDashboard() {
     }
     return [];
   }, [directOrders, contextOrders]);
+
+  // Live vendors list (Direct DB stream priority)
+  const allVendors = useMemo(() => {
+    if (Array.isArray(directVendors) && directVendors.length > 0) {
+      return directVendors;
+    }
+    return vendors || [];
+  }, [directVendors, vendors]);
+
+  // Live products list (Direct DB stream priority)
+  const allProducts = useMemo(() => {
+    if (Array.isArray(directProducts) && directProducts.length > 0) {
+      return directProducts;
+    }
+    return products || [];
+  }, [directProducts, products]);
 
   const [activeTab, setActiveTab] = useState("products");
   const [searchTerm, setSearchTerm] = useState("");
@@ -229,7 +393,7 @@ export default function DrDashboard() {
   const drRegionId = drRegion?.id || rawDrRegionId || (regions.find((r) => isSameDistrict(r.name, districtName)))?.id || "";
 
   // DR Assigned Region Vendors Filter (STRICT JURISDICTION LOCK)
-  const districtVendors = (vendors || []).filter((v) => {
+  const districtVendors = (allVendors || []).filter((v) => {
     if (!v) return false;
     const vRegId = v.regionId || v.region?.id;
     const vRegName = v.region?.name || v.regionName || v.districtName || "";
@@ -248,7 +412,7 @@ export default function DrDashboard() {
   });
 
   // DR Assigned Region Products Filter (STRICT JURISDICTION LOCK)
-  const districtProducts = (products || []).filter((p) => {
+  const districtProducts = (allProducts || []).filter((p) => {
     if (!p) return false;
     const pRegId = p.regionId || p.vendor?.regionId || p.vendor?.region?.id;
     const pRegName = p.vendor?.region?.name || p.regionName || p.districtName || "";
@@ -406,7 +570,12 @@ export default function DrDashboard() {
     if (updatingVendorStatus) return;
     setUpdatingVendorStatus({ id: vendorId, action: nextStatus });
     try {
+      setDirectVendors((prev) =>
+        prev.map((v) => (v.id === vendorId ? { ...v, status: nextStatus } : v))
+      );
       await setVendorStatus(vendorId, nextStatus);
+      await fetchLiveVendorsDirect();
+      window.dispatchEvent(new CustomEvent("buildcity_vendors_updated"));
     } finally {
       setUpdatingVendorStatus(null);
     }
@@ -421,7 +590,10 @@ export default function DrDashboard() {
       onConfirm: async () => {
         setDeletingVendorId(v.id);
         try {
+          setDirectVendors((prev) => prev.filter((item) => item.id !== v.id));
           await removeVendor(v.id);
+          await fetchLiveVendorsDirect();
+          window.dispatchEvent(new CustomEvent("buildcity_vendors_updated"));
           showAlert({ title: "Vendor Deleted", message: `Vendor "${v.shopName}" removed successfully.`, type: "success" });
         } finally {
           setDeletingVendorId(null);
@@ -444,7 +616,7 @@ export default function DrDashboard() {
       const targetRegionId = matchedReg ? matchedReg.id : (drRegionId || "r2");
       const targetRegionName = matchedReg ? matchedReg.name : (districtName || "Mirzapur");
 
-      await addVendor({
+      const created = await addVendor({
         shopName: vendorForm.shopName.trim(),
         ownerName: vendorForm.ownerName.trim(),
         phone: vendorForm.phone.trim(),
@@ -457,6 +629,12 @@ export default function DrDashboard() {
         addedByDr: `${user?.name || "DR"} (${targetRegionName})`,
         drId: currentDr.id,
       });
+
+      if (created) {
+        setDirectVendors((prev) => [created, ...prev.filter((v) => v.id !== created.id)]);
+      }
+      await fetchLiveVendorsDirect();
+      window.dispatchEvent(new CustomEvent("buildcity_vendors_updated"));
 
       setVendorForm({ shopName: "", ownerName: "", phone: "", password: "", status: "APPROVED", commissionRate: 10 });
       setShowVendorModal(false);
@@ -473,7 +651,12 @@ export default function DrDashboard() {
     if (!editingVendor) return;
     setIsSubmittingEditVendor(true);
     try {
+      setDirectVendors((prev) =>
+        prev.map((v) => (v.id === editingVendor.id ? { ...v, ...editingVendor } : v))
+      );
       await updateVendor(editingVendor.id, editingVendor);
+      await fetchLiveVendorsDirect();
+      window.dispatchEvent(new CustomEvent("buildcity_vendors_updated"));
       setEditingVendor(null);
       showAlert({ title: "Vendor Updated", message: `Vendor "${editingVendor.shopName}" details & password updated in Database!`, type: "success" });
     } catch (err) {
@@ -532,6 +715,8 @@ export default function DrDashboard() {
         vendorId: "",
         imageUrl: PRESET_IMAGES[0].url,
       });
+      await fetchLiveProductsDirect();
+      window.dispatchEvent(new CustomEvent("buildcity_products_updated"));
       setShowProductModal(false);
       showAlert({ title: "Product Added", message: `Product "${productForm.name.trim()}" added to Master Catalog & District Listings!`, type: "success" });
     } catch (err) {
@@ -1238,7 +1423,12 @@ export default function DrDashboard() {
                                   if (busyListingAction) return;
                                   setBusyListingAction({ id: p.id, action: "APPROVED" });
                                   try {
+                                    setDirectProducts((prev) =>
+                                      prev.map((item) => (item.id === p.id ? { ...item, approvalStatus: "APPROVED", isActive: true } : item))
+                                    );
                                     await updateListingApprovalStatus(p.id, "APPROVED");
+                                    await fetchLiveProductsDirect();
+                                    window.dispatchEvent(new CustomEvent("buildcity_products_updated"));
                                   } finally {
                                     setBusyListingAction(null);
                                   }
@@ -1272,7 +1462,12 @@ export default function DrDashboard() {
                                   if (busyListingAction) return;
                                   setBusyListingAction({ id: p.id, action: "REJECTED" });
                                   try {
+                                    setDirectProducts((prev) =>
+                                      prev.map((item) => (item.id === p.id ? { ...item, approvalStatus: "REJECTED", isActive: false } : item))
+                                    );
                                     await updateListingApprovalStatus(p.id, "REJECTED");
+                                    await fetchLiveProductsDirect();
+                                    window.dispatchEvent(new CustomEvent("buildcity_products_updated"));
                                   } finally {
                                     setBusyListingAction(null);
                                   }

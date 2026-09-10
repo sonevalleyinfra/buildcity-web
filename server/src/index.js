@@ -1845,7 +1845,7 @@ app.get("/api/v1/orders", requireAuth, requireRole("ADMIN", "DR"), async (req, r
         items: {
           include: {
             vendor: {
-              select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
+              select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true, region: true },
             },
           },
         },

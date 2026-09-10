@@ -19,8 +19,8 @@ export function OrderProvider({ children }) {
   const normalizeOrder = (ord) => {
     if (!ord) return ord;
     const addr = ord.address || {};
-    const resolvedRegionName = ord.region?.name || addr.region?.name || ord.districtName || ord.regionName || addr.district || addr.city || "Mirzapur";
-    const resolvedRegionId = ord.regionId || addr.regionId || addr.region?.id || ord.region?.id || "r1";
+    const resolvedRegionName = addr.region?.name || ord.region?.name || addr.city || ord.districtName || ord.regionName || addr.district || "Varanasi";
+    const resolvedRegionId = addr.region?.id || addr.regionId || ord.region?.id || ord.regionId || "2ab0f187-d170-4432-8eef-e0ac31ed21c3";
     return {
       ...ord,
       districtName: resolvedRegionName,

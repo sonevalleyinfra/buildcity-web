@@ -1828,15 +1828,34 @@ export default function AdminDashboard() {
                               <p className="text-[11px] text-slate-600 font-medium mt-0.5">🏙️ {cityAddr} {pincodeAddr ? `- ${pincodeAddr}` : ""}</p>
                             </div>
                           </td>
-                          <td className="py-3.5 px-4">
+                          <td className="py-3.5 px-4 min-w-[220px]">
                             {Array.isArray(o.items) && o.items.length > 0 ? (
-                              <div className="space-y-1">
-                                {o.items.map((it, idx) => (
-                                  <div key={idx} className="text-[11px]">
-                                    <span className="font-bold text-slate-800">• {it.productName || it.name}</span>
-                                    <span className="text-slate-500 font-medium ml-1">x{it.quantity} (₹{it.priceAtPurchase || it.price})</span>
-                                  </div>
-                                ))}
+                              <div className="space-y-2">
+                                {o.items.map((it, idx) => {
+                                  const vendorShopName =
+                                    it.vendorName ||
+                                    it.vendor?.shopName ||
+                                    it.vendor?.ownerName ||
+                                    (Array.isArray(vendors) && vendors.find((v) => v.id === it.vendorId || v.id === it.vendor?.id)?.shopName) ||
+                                    (Array.isArray(vendors) && vendors.find((v) => v.id === it.vendorId || v.id === it.vendor?.id)?.ownerName) ||
+                                    o.vendorName ||
+                                    o.vendor?.shopName ||
+                                    "District Vendor";
+
+                                  return (
+                                    <div key={idx} className="text-[11px] pb-1.5 border-b border-slate-100 last:border-0 last:pb-0">
+                                      <div className="flex items-baseline gap-1">
+                                        <span className="font-bold text-slate-800">• {it.productName || it.name}</span>
+                                        <span className="text-slate-500 font-medium whitespace-nowrap">x{it.quantity || it.qty || 1} (₹{it.priceAtPurchase || it.price || 0})</span>
+                                      </div>
+                                      <div className="mt-1 ml-2.5 flex items-center gap-1.5">
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs">
+                                          🏬 {vendorShopName}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             ) : (
                               <span className="text-slate-500 font-medium">Construction Materials Order</span>

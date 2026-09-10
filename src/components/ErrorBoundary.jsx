@@ -1,4 +1,4 @@
-﻿import { Component } from "react";
+import { Component } from "react";
 
 export default class ErrorBoundary extends Component {
   constructor(props) {
@@ -31,12 +31,28 @@ export default class ErrorBoundary extends Component {
             <p className="text-xs text-slate-500">
               A temporary interface issue occurred. Click reload to refresh the page.
             </p>
-            <button
-              onClick={this.handleReload}
-              className="w-full bg-[#0A192F] hover:bg-navy-900 text-white font-bold text-xs py-2.5 rounded-xl transition-all shadow-md active:scale-95 cursor-pointer"
-            >
-              Reload Page
-            </button>
+            {this.state.error?.message && (
+              <p className="text-[11px] font-mono bg-rose-50 text-rose-700 p-2.5 rounded-lg border border-rose-200 text-left overflow-x-auto">
+                {this.state.error.message}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={this.handleReload}
+                className="flex-1 bg-[#0A192F] hover:bg-navy-900 text-white font-bold text-xs py-2.5 rounded-xl transition-all shadow-md active:scale-95 cursor-pointer"
+              >
+                Reload Page
+              </button>
+              <button
+                onClick={() => {
+                  this.setState({ hasError: false, error: null });
+                  window.location.href = "/";
+                }}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs px-4 py-2.5 rounded-xl transition-all active:scale-95 cursor-pointer"
+              >
+                Home
+              </button>
+            </div>
           </div>
         </div>
       );

@@ -27,6 +27,23 @@ const ORDER_STATUS_STYLE = {
   CANCELLED: "bg-rose-50 text-rose-700 border-rose-200/80 font-bold",
 };
 
+// Canonical district name resolver
+const getCanonicalDistrict = (name) => {
+  if (!name || typeof name !== "string") return "";
+  const clean = name.toLowerCase().trim();
+  if (["varanasi", "varnasi", "banaras", "kashi", "vns"].some((alias) => clean.includes(alias))) return "varanasi";
+  if (["mirzapur", "mzp"].some((alias) => clean.includes(alias))) return "mirzapur";
+  if (["prayagraj", "allahabad"].some((alias) => clean.includes(alias))) return "prayagraj";
+  if (["jaunpur"].some((alias) => clean.includes(alias))) return "jaunpur";
+  return clean;
+};
+
+// Helper to match region names with canonical alias support
+const isSameDistrict = (nameA, nameB) => {
+  if (!nameA || !nameB) return false;
+  return getCanonicalDistrict(nameA) === getCanonicalDistrict(nameB);
+};
+
 // District Representative (DR) Dashboard component — Ground Agent Portal
 export default function DrDashboard() {
   const { user, logout } = useAuth();
@@ -123,28 +140,11 @@ export default function DrDashboard() {
     imageUrl: PRESET_IMAGES[0].url,
   });
 
-  // Helper to match region names with canonical alias support
-  const isSameDistrict = (nameA, nameB) => {
-    if (!nameA || !nameB) return false;
-    const a = nameA.toLowerCase().trim();
-    const b = nameB.toLowerCase().trim();
-    if (a === b) return true;
-
-    const getCanonical = (name) => {
-      if (["varanasi", "varnasi", "banaras", "kashi", "vns"].some((alias) => name.includes(alias))) return "varanasi";
-      if (["mirzapur", "mzp"].some((alias) => name.includes(alias))) return "mirzapur";
-      if (["prayagraj", "allahabad"].some((alias) => name.includes(alias))) return "prayagraj";
-      if (["jaunpur"].some((alias) => name.includes(alias))) return "jaunpur";
-      return name;
-    };
-
-    return getCanonical(a) === getCanonical(b);
-  };
-
   // Find current logged-in DR info dynamically from live DB drs list or user.drInfo
   const currentDr = (drs || []).find((d) => {
-    const userPhoneClean = user?.phone ? user.phone.replace(/\D/g, "") : "";
-    const dPhoneClean = d.phone ? d.phone.replace(/\D/g, "") : "";
+    if (!d) return false;
+    const userPhoneClean = user?.phone ? String(user.phone).replace(/\D/g, "") : "";
+    const dPhoneClean = d.phone ? String(d.phone).replace(/\D/g, "") : "";
     return (
       (userPhoneClean && dPhoneClean && dPhoneClean.slice(-10) === userPhoneClean.slice(-10)) ||
       d.userId === user?.id ||
@@ -154,8 +154,8 @@ export default function DrDashboard() {
     );
   }) || user?.drInfo || {};
   
-  const rawDrRegionId = currentDr.regionId || currentDr.region?.id || user?.drInfo?.regionId || user?.drInfo?.region?.id || user?.regionId || user?.preferredRegionId || "";
-  const rawDrRegionName = currentDr.region?.name || currentDr.regionName || user?.drInfo?.region?.name || user?.drInfo?.regionName || user?.regionName || user?.preferredRegionName || "";
+  const rawDrRegionId = currentDr?.regionId || currentDr?.region?.id || user?.drInfo?.regionId || user?.drInfo?.region?.id || user?.regionId || user?.preferredRegionId || "";
+  const rawDrRegionName = currentDr?.region?.name || currentDr?.regionName || user?.drInfo?.region?.name || user?.drInfo?.regionName || user?.regionName || user?.preferredRegionName || "";
 
   // Match region object from database regions list
   const drRegion = (regions || []).find((r) =>
@@ -168,6 +168,7 @@ export default function DrDashboard() {
 
   // DR Assigned Region Vendors Filter (STRICT JURISDICTION LOCK)
   const districtVendors = (vendors || []).filter((v) => {
+    if (!v) return false;
     const vRegId = v.regionId || v.region?.id;
     const vRegName = v.region?.name || v.regionName || v.districtName || "";
 
@@ -186,6 +187,7 @@ export default function DrDashboard() {
 
   // DR Assigned Region Products Filter (STRICT JURISDICTION LOCK)
   const districtProducts = (products || []).filter((p) => {
+    if (!p) return false;
     const pRegId = p.regionId || p.vendor?.regionId || p.vendor?.region?.id;
     const pRegName = p.vendor?.region?.name || p.regionName || p.districtName || "";
 
@@ -202,14 +204,15 @@ export default function DrDashboard() {
     // 3. Belongs to a vendor in this DR's district
     const belongsToDistrictVendor = districtVendors.some(
       (v) =>
-        (v.id && p.vendorId && String(v.id).toLowerCase() === String(p.vendorId).toLowerCase()) ||
-        (v.shopName && p.vendorName && v.shopName.toLowerCase().trim() === p.vendorName.toLowerCase().trim())
+        (v?.id && p.vendorId && String(v.id).toLowerCase() === String(p.vendorId).toLowerCase()) ||
+        (v?.shopName && p.vendorName && v.shopName.toLowerCase().trim() === p.vendorName.toLowerCase().trim())
     );
     return belongsToDistrictVendor;
   });
 
   // Resolve single definitive district for each order
   const getOrderDistrict = (o) => {
+    if (!o) return "Varanasi";
     // 1. Direct Delivery Address Region
     if (o.address?.region?.name) return o.address.region.name;
     if (o.address?.regionId) {
@@ -218,7 +221,7 @@ export default function DrDashboard() {
     }
     // 2. Address City
     if (o.address?.city) {
-      const c = o.address.city.toLowerCase().trim();
+      const c = String(o.address.city).toLowerCase().trim();
       if (["varanasi", "varnasi", "banaras", "kashi", "vns"].some((a) => c.includes(a))) return "Varanasi";
       if (["mirzapur", "mzp"].some((a) => c.includes(a))) return "Mirzapur";
       if (["prayagraj", "allahabad"].some((a) => c.includes(a))) return "Prayagraj";
@@ -231,8 +234,8 @@ export default function DrDashboard() {
     // 4. Fallback for legacy test orders without address: item vendor's region
     if (Array.isArray(o.items) && o.items.length > 0) {
       for (const it of o.items) {
-        if (it.vendor?.region?.name) return it.vendor.region.name;
-        if (it.vendorRegion) return it.vendorRegion;
+        if (it?.vendor?.region?.name) return it.vendor.region.name;
+        if (it?.vendorRegion) return it.vendorRegion;
       }
     }
     return "Varanasi";
@@ -242,19 +245,21 @@ export default function DrDashboard() {
   const currentDrCanonical = getCanonicalDistrict(districtName);
 
   const districtOrders = (orders || []).filter((o) => {
+    if (!o) return false;
     const ordDist = getOrderDistrict(o);
     return getCanonicalDistrict(ordDist) === currentDrCanonical;
   });
 
   // Filtered district orders by search and status filter
   const filteredDistrictOrders = districtOrders.filter((ord) => {
+    if (!ord) return false;
     const matchesSearch =
       !searchTerm ||
-      (ord.id && ord.id.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (ord.orderNumber && ord.orderNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (ord.customer?.name && ord.customer.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (ord.customer?.phone && ord.customer.phone.includes(searchTerm)) ||
-      (Array.isArray(ord.items) && ord.items.some((i) => (i.productName || i.name || "").toLowerCase().includes(searchTerm.toLowerCase())));
+      (ord.id && String(ord.id).toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (ord.orderNumber && String(ord.orderNumber).toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (ord.customer?.name && String(ord.customer.name).toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (ord.customer?.phone && String(ord.customer.phone).includes(searchTerm)) ||
+      (Array.isArray(ord.items) && ord.items.some((i) => (i?.productName || i?.name || "").toLowerCase().includes(searchTerm.toLowerCase())));
 
     const ordStatus = (ord.status || "PENDING").toUpperCase();
     const matchesStatus = orderStatusFilter === "ALL" || ordStatus === orderStatusFilter;
@@ -266,18 +271,19 @@ export default function DrDashboard() {
   const filteredVendors = districtVendors.filter(
     (v) =>
       !searchTerm ||
-      v.shopName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      v.ownerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      v.phone.includes(searchTerm)
+      (v?.shopName && v.shopName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (v?.ownerName && v.ownerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (v?.phone && String(v.phone).includes(searchTerm))
   );
 
   const filteredProducts = districtProducts.filter((p) => {
+    if (!p) return false;
     const matchesSearch =
       !searchTerm ||
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.categoryName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.vendorName?.toLowerCase().includes(searchTerm.toLowerCase());
+      (p?.name && p.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (p?.brand && p.brand.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (p?.categoryName && p.categoryName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (p?.vendorName && p.vendorName.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const st = p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW");
     const matchesStatus = listingFilter === "ALL" ? true : st === listingFilter;

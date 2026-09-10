@@ -44,6 +44,10 @@ export default function DrDashboard() {
     removeVendor,
     addMasterProduct,
     updateMasterProduct,
+    removeMasterProduct,
+    assignMasterProductToVendor,
+    updateVendorProductListing,
+    removeVendorProductListing,
     setVendorStatus,
     updateListingApprovalStatus,
   } = useAdmin();
@@ -58,17 +62,25 @@ export default function DrDashboard() {
       if (fetchAllOrders) fetchAllOrders();
     }, 3500);
 
-    const handleOrderSync = () => {
+    const handleSync = () => {
       if (fetchCloudData) fetchCloudData();
       if (fetchAllOrders) fetchAllOrders();
     };
-    window.addEventListener("buildcity_orders_updated", handleOrderSync);
-    window.addEventListener("buildcity_order_placed", handleOrderSync);
+    window.addEventListener("buildcity_orders_updated", handleSync);
+    window.addEventListener("buildcity_order_placed", handleSync);
+    window.addEventListener("buildcity_vendors_updated", handleSync);
+    window.addEventListener("buildcity_categories_updated", handleSync);
+    window.addEventListener("buildcity_regions_updated", handleSync);
+    window.addEventListener("storage", handleSync);
 
     return () => {
       clearInterval(interval);
-      window.removeEventListener("buildcity_orders_updated", handleOrderSync);
-      window.removeEventListener("buildcity_order_placed", handleOrderSync);
+      window.removeEventListener("buildcity_orders_updated", handleSync);
+      window.removeEventListener("buildcity_order_placed", handleSync);
+      window.removeEventListener("buildcity_vendors_updated", handleSync);
+      window.removeEventListener("buildcity_categories_updated", handleSync);
+      window.removeEventListener("buildcity_regions_updated", handleSync);
+      window.removeEventListener("storage", handleSync);
     };
   }, []);
 
@@ -122,40 +134,110 @@ export default function DrDashboard() {
   const currentDr = (drs || []).find((d) => {
     const userPhoneClean = user?.phone ? user.phone.replace(/\D/g, "") : "";
     const dPhoneClean = d.phone ? d.phone.replace(/\D/g, "") : "";
-    return (userPhoneClean && dPhoneClean === userPhoneClean) || d.userId === user?.id || d.id === user?.id;
+    return (
+      (userPhoneClean && dPhoneClean === userPhoneClean) ||
+      d.userId === user?.id ||
+      d.id === user?.id ||
+      d.id === user?.drInfo?.id ||
+      (d.userId && user?.drInfo?.userId && d.userId === user.drInfo.userId)
+    );
   }) || user?.drInfo || {};
   
   // Find region object matching DR's assigned regionId or regionName
   const drRegion = (regions || []).find((r) =>
-    r.id === currentDr.regionId ||
-    r.id === currentDr.region?.id ||
-    r.id === user?.preferredRegionId ||
-    r.name?.toLowerCase().trim() === (currentDr.regionName || currentDr.region?.name || user?.preferredRegionName || "").toLowerCase().trim()
+    (currentDr.regionId && (r.id === currentDr.regionId || String(r.id).toLowerCase() === String(currentDr.regionId).toLowerCase())) ||
+    (currentDr.region?.id && (r.id === currentDr.region.id || String(r.id).toLowerCase() === String(currentDr.region.id).toLowerCase())) ||
+    (user?.preferredRegionId && (r.id === user.preferredRegionId || String(r.id).toLowerCase() === String(user.preferredRegionId).toLowerCase())) ||
+    (currentDr.regionName && r.name?.toLowerCase().trim() === currentDr.regionName.toLowerCase().trim()) ||
+    (currentDr.region?.name && r.name?.toLowerCase().trim() === currentDr.region.name.toLowerCase().trim()) ||
+    (user?.preferredRegionName && r.name?.toLowerCase().trim() === user.preferredRegionName.toLowerCase().trim())
   );
 
-  const districtName = drRegion ? drRegion.name : (currentDr.regionName || currentDr.region?.name || user?.drInfo?.regionName || user?.preferredRegionName || "Varanasi");
-  const drRegionId = drRegion ? drRegion.id : (currentDr.regionId || currentDr.region?.id || user?.preferredRegionId || "r1");
+  const districtName = drRegion?.name || currentDr.region?.name || currentDr.regionName || user?.drInfo?.region?.name || user?.drInfo?.regionName || user?.preferredRegionName || "Varanasi";
+  const drRegionId = drRegion?.id || currentDr.regionId || currentDr.region?.id || user?.drInfo?.regionId || user?.drInfo?.region?.id || user?.preferredRegionId || "";
+
+  // Helper to match region names with full alias support
+  const matchRegionName = (nameA, nameB) => {
+    if (!nameA || !nameB) return false;
+    const a = nameA.toLowerCase().trim();
+    const b = nameB.toLowerCase().trim();
+    if (a === b || a.includes(b) || b.includes(a)) return true;
+
+    // Varanasi aliases
+    const varanasiAliases = ["varanasi", "varnasi", "banaras", "kashi"];
+    if (varanasiAliases.some((alias) => a.includes(alias)) && varanasiAliases.some((alias) => b.includes(alias))) return true;
+
+    // Mirzapur aliases
+    const mirzapurAliases = ["mirzapur", "mzp"];
+    if (mirzapurAliases.some((alias) => a.includes(alias)) && mirzapurAliases.some((alias) => b.includes(alias))) return true;
+
+    // Prayagraj aliases
+    const prayagrajAliases = ["prayagraj", "allahabad"];
+    if (prayagrajAliases.some((alias) => a.includes(alias)) && prayagrajAliases.some((alias) => b.includes(alias))) return true;
+
+    // Jaunpur aliases
+    if (a.includes("jaunpur") && b.includes("jaunpur")) return true;
+
+    return false;
+  };
 
   // DR Assigned Region Vendors Filter
   const districtVendors = vendors.filter((v) => {
     if (!user) return true;
     if (user.role === "admin") return true;
 
-    const matchesRegionId = v.regionId && drRegionId && (v.regionId === drRegionId || String(v.regionId).toLowerCase() === String(drRegionId).toLowerCase());
-    const matchesRegionName = v.regionName && districtName && v.regionName.toLowerCase().trim() === districtName.toLowerCase().trim();
-    const matchesDistrictName = v.districtName && districtName && v.districtName.toLowerCase().trim() === districtName.toLowerCase().trim();
-    const matchesAddedBy = v.addedByDr && user?.name && v.addedByDr.toLowerCase().includes(user.name.toLowerCase());
+    const vRegId = v.regionId || v.region?.id;
+    const vRegName = v.regionName || v.districtName || v.region?.name || "";
 
-    return matchesRegionId || matchesRegionName || matchesDistrictName || matchesAddedBy;
+    // 1. Match Region ID
+    if (drRegionId && vRegId && String(vRegId).toLowerCase() === String(drRegionId).toLowerCase()) {
+      return true;
+    }
+
+    // 2. Match Region Name with aliases
+    if (districtName && vRegName && matchRegionName(districtName, vRegName)) {
+      return true;
+    }
+
+    // 3. Match Added By DR (name or phone)
+    const matchesAddedBy = v.addedByDr && user?.name && v.addedByDr.toLowerCase().includes(user.name.toLowerCase());
+    const matchesDrPhone = v.addedByDr && user?.phone && v.addedByDr.includes(user.phone.replace(/\D/g, ""));
+
+    return matchesAddedBy || matchesDrPhone;
   });
 
   // DR Assigned Region Products Filter
   const districtProducts = products.filter((p) => {
     if (!user) return true;
     if (user.role === "admin") return true;
-    const belongsToDistrictVendor = districtVendors.some((v) => v.id === p.vendorId);
-    const addedByDr = p.addedBy?.toLowerCase().includes("dr") || (user?.name && p.addedBy?.toLowerCase().includes(user.name.toLowerCase()));
-    return belongsToDistrictVendor || addedByDr;
+
+    const pRegId = p.regionId;
+    const pRegName = p.regionName || p.districtName || "";
+
+    // 1. Belongs to a vendor in this DR's district
+    const belongsToDistrictVendor = districtVendors.some(
+      (v) =>
+        (v.id && p.vendorId && String(v.id).toLowerCase() === String(p.vendorId).toLowerCase()) ||
+        (v.shopName && p.vendorName && v.shopName.toLowerCase().trim() === p.vendorName.toLowerCase().trim())
+    );
+    if (belongsToDistrictVendor) return true;
+
+    // 2. Direct region ID match
+    if (drRegionId && pRegId && String(pRegId).toLowerCase() === String(drRegionId).toLowerCase()) {
+      return true;
+    }
+
+    // 3. Direct region Name match with aliases
+    if (districtName && pRegName && matchRegionName(districtName, pRegName)) {
+      return true;
+    }
+
+    // 4. Added by DR
+    const addedByDr =
+      p.addedBy &&
+      ((user?.name && p.addedBy.toLowerCase().includes(user.name.toLowerCase())) ||
+        p.addedBy.toLowerCase().includes("dr"));
+    return addedByDr;
   });
 
   // DR Assigned Region Orders Filter (Strictly filter orders belonging to DR's jurisdiction)
@@ -163,35 +245,18 @@ export default function DrDashboard() {
     if (!user) return true;
     if (user.role === "admin") return true;
 
-    const targetDistrict = (districtName || "").toLowerCase().trim();
-    const targetRegionId = drRegionId;
-
     // 1. Direct Region ID matching
     const orderRegionId = o.regionId || o.address?.regionId || o.address?.region?.id;
-    if (targetRegionId && orderRegionId && (orderRegionId === targetRegionId || String(orderRegionId).toLowerCase() === String(targetRegionId).toLowerCase())) {
+    if (drRegionId && orderRegionId && String(orderRegionId).toLowerCase() === String(drRegionId).toLowerCase()) {
       return true;
     }
 
-    // 2. Direct city / district name matching
-    const orderCity = (o.districtName || o.regionName || o.address?.city || o.address?.district || o.address?.region?.name || "").toLowerCase().trim();
-    const orderStreet = (o.address?.street || "").toLowerCase().trim();
-    if (targetDistrict) {
-      if (orderCity && (orderCity === targetDistrict || orderCity.includes(targetDistrict) || targetDistrict.includes(orderCity))) {
-        return true;
-      }
-      // Common nicknames/typos for Varanasi (varnasi, banaras, kashi)
-      if (targetDistrict.includes("varanasi") || targetDistrict.includes("varnasi")) {
-        if (orderCity.includes("varanasi") || orderCity.includes("varnasi") || orderCity.includes("banaras") || orderCity.includes("kashi") ||
-            orderStreet.includes("varanasi") || orderStreet.includes("varnasi") || orderStreet.includes("banaras") || orderStreet.includes("kashi")) {
-          return true;
-        }
-      }
-      // Common for Mirzapur (mirzapur, mzp)
-      if (targetDistrict.includes("mirzapur") || targetDistrict.includes("mzp")) {
-        if (orderCity.includes("mirzapur") || orderCity.includes("mzp") || orderStreet.includes("mirzapur")) {
-          return true;
-        }
-      }
+    // 2. Direct city / district / street name matching
+    const orderCity = o.districtName || o.regionName || o.address?.city || o.address?.district || o.address?.region?.name || "";
+    const orderStreet = o.address?.street || o.address?.address || "";
+    if (districtName) {
+      if (orderCity && matchRegionName(districtName, orderCity)) return true;
+      if (orderStreet && matchRegionName(districtName, orderStreet)) return true;
     }
 
     // 3. District Vendor Item Matching: If any item in the order is from a vendor in this DR's district
@@ -199,9 +264,12 @@ export default function DrDashboard() {
       const hasDistrictVendorItem = o.items.some((it) => {
         const itemVendorId = it.vendorId;
         const itemVendorName = (it.vendorName || "").toLowerCase().trim();
-        return districtVendors.some((dv) =>
-          (itemVendorId && (dv.id === itemVendorId || dv.userId === itemVendorId)) ||
-          (itemVendorName && (dv.shopName || "").toLowerCase().trim() === itemVendorName)
+        return districtVendors.some(
+          (dv) =>
+            (itemVendorId &&
+              (String(dv.id).toLowerCase() === String(itemVendorId).toLowerCase() ||
+                String(dv.userId).toLowerCase() === String(itemVendorId).toLowerCase())) ||
+            (itemVendorName && (dv.shopName || "").toLowerCase().trim() === itemVendorName)
         );
       });
       if (hasDistrictVendorItem) return true;
@@ -229,6 +297,7 @@ export default function DrDashboard() {
   // Filtered by search
   const filteredVendors = districtVendors.filter(
     (v) =>
+      !searchTerm ||
       v.shopName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       v.ownerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       v.phone.includes(searchTerm)
@@ -236,6 +305,7 @@ export default function DrDashboard() {
 
   const filteredProducts = districtProducts.filter((p) => {
     const matchesSearch =
+      !searchTerm ||
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.categoryName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -516,10 +586,10 @@ export default function DrDashboard() {
                   : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
               }`}
             >
-              <span>📋 Listings & Approvals ({products.length})</span>
-              {products.filter((p) => (p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW")) === "PENDING_REVIEW").length > 0 && (
+              <span>📋 Listings & Approvals ({districtProducts.length})</span>
+              {districtProducts.filter((p) => (p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW")) === "PENDING_REVIEW").length > 0 && (
                 <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full animate-pulse">
-                  {products.filter((p) => (p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW")) === "PENDING_REVIEW").length}
+                  {districtProducts.filter((p) => (p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW")) === "PENDING_REVIEW").length}
                 </span>
               )}
             </button>
@@ -1016,7 +1086,7 @@ export default function DrDashboard() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div>
               <h3 className="font-extrabold text-navy-900 text-sm flex items-center gap-2">
-                District Vendor Product Listings & Approvals ({products.length})
+                District Vendor Product Listings & Approvals ({districtProducts.length})
               </h3>
               <p className="text-xs text-slate-500">Review vendor product requests, custom price & stock settings for {districtName}.</p>
             </div>
@@ -1054,13 +1124,7 @@ export default function DrDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {products
-                    .filter((p) => {
-                      const st = p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW");
-                      if (listingFilter === "ALL") return true;
-                      return st === listingFilter;
-                    })
-                    .map((p) => {
+                  {filteredProducts.map((p) => {
                       const st = p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW");
                       const stBadge =
                         st === "APPROVED"

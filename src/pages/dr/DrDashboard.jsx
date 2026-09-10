@@ -174,9 +174,23 @@ export default function DrDashboard() {
 
     // 2. Direct city / district name matching
     const orderCity = (o.districtName || o.regionName || o.address?.city || o.address?.district || o.address?.region?.name || "").toLowerCase().trim();
-    if (orderCity && targetDistrict) {
-      if (orderCity === targetDistrict || orderCity.includes(targetDistrict) || targetDistrict.includes(orderCity)) {
+    const orderStreet = (o.address?.street || "").toLowerCase().trim();
+    if (targetDistrict) {
+      if (orderCity && (orderCity === targetDistrict || orderCity.includes(targetDistrict) || targetDistrict.includes(orderCity))) {
         return true;
+      }
+      // Common nicknames/typos for Varanasi (varnasi, banaras, kashi)
+      if (targetDistrict.includes("varanasi") || targetDistrict.includes("varnasi")) {
+        if (orderCity.includes("varanasi") || orderCity.includes("varnasi") || orderCity.includes("banaras") || orderCity.includes("kashi") ||
+            orderStreet.includes("varanasi") || orderStreet.includes("varnasi") || orderStreet.includes("banaras") || orderStreet.includes("kashi")) {
+          return true;
+        }
+      }
+      // Common for Mirzapur (mirzapur, mzp)
+      if (targetDistrict.includes("mirzapur") || targetDistrict.includes("mzp")) {
+        if (orderCity.includes("mirzapur") || orderCity.includes("mzp") || orderStreet.includes("mirzapur")) {
+          return true;
+        }
       }
     }
 

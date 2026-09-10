@@ -87,13 +87,41 @@ export default function AdminDashboard() {
   } = useAdmin();
 
   const { orders: contextOrders = [], fetchAllOrders } = useOrders() || {};
-  const displayOrders = Array.isArray(orders) && orders.length > 0 ? orders : contextOrders;
 
-  // Always force cloud sync on AdminDashboard mount
+  // Always force cloud sync on AdminDashboard mount and poll every 3.5s
   useEffect(() => {
     if (fetchCloudData) fetchCloudData();
     if (fetchAllOrders) fetchAllOrders();
+    const interval = setInterval(() => {
+      if (fetchAllOrders) fetchAllOrders();
+      if (fetchCloudData) fetchCloudData();
+    }, 3500);
+
+    const handleOrderSync = () => {
+      if (fetchAllOrders) fetchAllOrders();
+      if (fetchCloudData) fetchCloudData();
+    };
+    window.addEventListener("buildcity_orders_updated", handleOrderSync);
+    window.addEventListener("buildcity_order_placed", handleOrderSync);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("buildcity_orders_updated", handleOrderSync);
+      window.removeEventListener("buildcity_order_placed", handleOrderSync);
+    };
   }, []);
+
+  // Unified deduplicated live orders list for Super Admin
+  const allAdminRawOrders = [...(contextOrders || []), ...(orders || [])];
+  const adminOrderMap = new Map();
+  allAdminRawOrders.forEach((o) => {
+    if (o && o.id && !adminOrderMap.has(o.id)) {
+      adminOrderMap.set(o.id, o);
+    }
+  });
+  const displayOrders = Array.from(adminOrderMap.values()).sort(
+    (a, b) => new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0)
+  );
 
   // Tab State: Overview, District Reps, Vendors, Products, Listings, Orders, Categories, Regions
   const [tab, setTab] = useState("Overview");

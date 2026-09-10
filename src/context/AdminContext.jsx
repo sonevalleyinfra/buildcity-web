@@ -472,17 +472,21 @@ export function AdminProvider({ children }) {
     }
   };
 
-  // Live Auto Polling (30s background refresh) & Tab Storage Sync from Supabase Cloud DB
+  // Live Auto Polling (3.5s background refresh) & Instant Event Sync from Supabase Cloud DB
   useEffect(() => {
     fetchCloudData();
-    const interval = setInterval(fetchCloudData, 30000);
+    const interval = setInterval(fetchCloudData, 3500);
 
     const handleStorage = () => fetchCloudData();
     window.addEventListener("storage", handleStorage);
+    window.addEventListener("buildcity_orders_updated", handleStorage);
+    window.addEventListener("buildcity_order_placed", handleStorage);
 
     return () => {
       clearInterval(interval);
       window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("buildcity_orders_updated", handleStorage);
+      window.removeEventListener("buildcity_order_placed", handleStorage);
     };
   }, [user, userRole]);
 

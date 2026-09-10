@@ -208,36 +208,42 @@ export default function DrDashboard() {
     return belongsToDistrictVendor;
   });
 
-  // DR Assigned Region Orders Filter (Strictly filter orders belonging to this DR's district destination)
-  const districtOrders = orders.filter((o) => {
-    // 1. Direct Delivery Address Region ID matching
-    const orderRegionId = o.address?.regionId || o.address?.region?.id || o.regionId || o.region?.id;
-    if (drRegionId && orderRegionId && String(orderRegionId).toLowerCase() === String(drRegionId).toLowerCase()) {
-      return true;
+  // Resolve single definitive district for each order
+  const getOrderDistrict = (o) => {
+    // 1. Direct Delivery Address Region
+    if (o.address?.region?.name) return o.address.region.name;
+    if (o.address?.regionId) {
+      const matched = (regions || []).find((r) => r.id === o.address.regionId);
+      if (matched?.name) return matched.name;
     }
-
-    // 2. Direct Delivery Address Region Name matching (prioritizing true address region name over city)
-    const orderRegionName = o.address?.region?.name || o.region?.name || o.address?.city || o.districtName || o.regionName || o.address?.district || "";
-    if (districtName && orderRegionName && isSameDistrict(districtName, orderRegionName)) {
-      return true;
+    // 2. Address City
+    if (o.address?.city) {
+      const c = o.address.city.toLowerCase().trim();
+      if (["varanasi", "varnasi", "banaras", "kashi", "vns"].some((a) => c.includes(a))) return "Varanasi";
+      if (["mirzapur", "mzp"].some((a) => c.includes(a))) return "Mirzapur";
+      if (["prayagraj", "allahabad"].some((a) => c.includes(a))) return "Prayagraj";
+      if (["jaunpur"].some((a) => c.includes(a))) return "Jaunpur";
     }
-
-    // 3. Match by items' vendor belonging to this district
+    // 3. Order direct region fields
+    if (o.region?.name) return o.region.name;
+    if (o.districtName) return o.districtName;
+    if (o.regionName) return o.regionName;
+    // 4. Fallback for legacy test orders without address: item vendor's region
     if (Array.isArray(o.items) && o.items.length > 0) {
-      const hasItemInDistrict = o.items.some((it) => {
-        const itVendorId = it.vendorId;
-        const itVendorRegId = it.vendor?.regionId || it.vendor?.region?.id || it.regionId;
-        const itVendorRegName = it.vendor?.region?.name || it.vendorRegion || it.regionName || "";
-        
-        if (districtVendors.some(v => v.id === itVendorId)) return true;
-        if (drRegionId && itVendorRegId && String(itVendorRegId).toLowerCase() === String(drRegionId).toLowerCase()) return true;
-        if (districtName && itVendorRegName && isSameDistrict(districtName, itVendorRegName)) return true;
-        return false;
-      });
-      if (hasItemInDistrict) return true;
+      for (const it of o.items) {
+        if (it.vendor?.region?.name) return it.vendor.region.name;
+        if (it.vendorRegion) return it.vendorRegion;
+      }
     }
+    return "Varanasi";
+  };
 
-    return false;
+  // DR Assigned Region Orders Filter (Strict 1-to-1 region matching: only orders in DR's region)
+  const currentDrCanonical = getCanonicalDistrict(districtName);
+
+  const districtOrders = (orders || []).filter((o) => {
+    const ordDist = getOrderDistrict(o);
+    return getCanonicalDistrict(ordDist) === currentDrCanonical;
   });
 
   // Filtered district orders by search and status filter

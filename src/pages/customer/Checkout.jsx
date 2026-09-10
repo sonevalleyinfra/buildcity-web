@@ -185,6 +185,8 @@ export default function Checkout() {
     const activeRegionName = region?.name || "Varanasi";
     const activeRegionId = region?.id || "2ab0f187-d170-4432-8eef-e0ac31ed21c3";
 
+    let targetAddr = activeAddress ? { ...activeAddress } : null;
+
     // If no saved address selected, check inline form fields
     if (!targetAddr || !targetAddr.street) {
       if (!newStreet || !newStreet.trim()) {
@@ -200,7 +202,7 @@ export default function Checkout() {
       targetAddr = {
         fullName: newFullName || user?.name || "Customer",
         phone: newPhone || user?.phone || "7607650875",
-        street: newStreet,
+        street: newStreet.trim(),
         city: activeRegionName,
         state: "Uttar Pradesh",
         pincode: newPincode || "221001",
@@ -219,6 +221,8 @@ export default function Checkout() {
     setPlacing(true);
 
     const orderItems = items.map((i) => ({
+      id: i.id || i.productId,
+      productId: i.productId || i.id,
       name: i.name || i.productName || "Material Item",
       quantity: i.qty || i.quantity || 1,
       price: i.price || 100,
@@ -241,15 +245,15 @@ export default function Checkout() {
       setSuccessOrder(order);
 
       // Trigger interactive real-time individual order confirmation notification
-      const verifiedTotal = Number(order.totalAmount || order.total || total);
-      const formattedOrderId = formatShortId(order.id, "ORD");
+      const verifiedTotal = Number(order?.totalAmount || order?.total || total);
+      const formattedOrderId = formatShortId(order?.id || "ORD", "ORD");
       const customerName = targetAddr?.fullName || user?.name || "Customer";
       addNotification({
-        id: `order_confirmed_${order.id}`,
+        id: `order_confirmed_${order?.id || Date.now()}`,
         title: `Order ${formattedOrderId} Confirmed! 📦`,
         message: `Thank you ${customerName}! Your order of ₹${verifiedTotal.toLocaleString("en-IN")} is confirmed and sent for dispatch.`,
         type: "order",
-        link: `/orders/${order.id}`,
+        link: `/orders/${order?.id || ""}`,
       });
     } catch (err) {
       setPlacing(false);

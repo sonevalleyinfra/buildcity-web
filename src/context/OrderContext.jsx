@@ -121,6 +121,8 @@ export function OrderProvider({ children }) {
 
     // Format items with vendorId
     const formattedItems = (items || []).map((it) => ({
+      id: it.id || it.productId,
+      productId: it.productId || it.id,
       name: it.name || it.productName || "Material Item",
       quantity: Number(it.quantity) || 1,
       price: Number(it.price) || 100,

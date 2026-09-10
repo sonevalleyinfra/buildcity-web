@@ -171,8 +171,28 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       }).then(list => list.map(v => { const { password, ...safe } = v; return safe; })).catch(() => []),
       prisma.productMaster.findMany({ include: { category: true }, orderBy: { createdAt: "desc" } }).catch(() => []),
       prisma.category.findMany().catch(() => []),
-      prisma.region.findMany().catch(() => []),
-      prisma.order.findMany({ include: { items: true, customer: { select: { id: true, name: true, phone: true, email: true, role: true } }, address: true }, orderBy: { createdAt: "desc" } }).catch(() => []),
+      prisma.order.findMany({
+        include: {
+          items: {
+            include: {
+              vendor: {
+                select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
+              },
+            },
+          },
+          customer: { select: { id: true, name: true, phone: true, email: true, role: true } },
+          address: true,
+        },
+        orderBy: { createdAt: "desc" },
+      }).then((list) =>
+        (list || []).map((o) => ({
+          ...o,
+          items: (o.items || []).map((it) => ({
+            ...it,
+            vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
+          })),
+        }))
+      ).catch(() => []),
       prisma.vendorProduct.findMany({
         include: {
           vendor: {
@@ -1818,13 +1838,26 @@ app.get("/api/v1/orders", requireAuth, requireRole("ADMIN", "DR"), async (req, r
   try {
     const orders = await prisma.order.findMany({
       include: {
-        items: true,
-        customer: true,
+        items: {
+          include: {
+            vendor: {
+              select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
+            },
+          },
+        },
+        customer: { select: { id: true, name: true, phone: true, email: true, role: true } },
         address: { include: { region: true } },
       },
       orderBy: { createdAt: "desc" },
     });
-    res.json(orders);
+    const formatted = (orders || []).map((o) => ({
+      ...o,
+      items: (o.items || []).map((it) => ({
+        ...it,
+        vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
+      })),
+    }));
+    res.json(formatted);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1844,11 +1877,29 @@ app.get("/api/v1/orders/me", requireAuth, async (req, res) => {
           ...(cleanPhone ? [{ address: { phone: { contains: cleanPhone.slice(-10) } } }] : []),
         ],
       },
-      include: { items: true, customer: true, address: true },
+      include: {
+        items: {
+          include: {
+            vendor: {
+              select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
+            },
+          },
+        },
+        customer: true,
+        address: true,
+      },
       orderBy: { createdAt: "desc" },
     }).catch(() => []);
 
-    res.json(orders || []);
+    const formatted = (orders || []).map((o) => ({
+      ...o,
+      items: (o.items || []).map((it) => ({
+        ...it,
+        vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
+      })),
+    }));
+
+    res.json(formatted);
   } catch (err) {
     res.json([]);
   }
@@ -1868,11 +1919,29 @@ app.get("/api/v1/orders/user/:userId", requireAuth, requireSelfOrAdmin("userId")
           ...(cleanPhone ? [{ address: { phone: { contains: cleanPhone.slice(-10) } } }] : []),
         ],
       },
-      include: { items: true, customer: true, address: true },
+      include: {
+        items: {
+          include: {
+            vendor: {
+              select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
+            },
+          },
+        },
+        customer: true,
+        address: true,
+      },
       orderBy: { createdAt: "desc" },
     }).catch(() => []);
 
-    res.json(orders || []);
+    const formatted = (orders || []).map((o) => ({
+      ...o,
+      items: (o.items || []).map((it) => ({
+        ...it,
+        vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
+      })),
+    }));
+
+    res.json(formatted);
   } catch (err) {
     res.json([]);
   }
@@ -1896,7 +1965,13 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
 
     const allOrders = await prisma.order.findMany({
       include: {
-        items: true,
+        items: {
+          include: {
+            vendor: {
+              select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
+            },
+          },
+        },
         customer: { select: { id: true, name: true, phone: true, email: true, role: true } },
         address: { include: { region: true } },
       },
@@ -1910,21 +1985,33 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
     const vId = vendor?.id || vendorId;
     const vUserId = vendor?.userId;
     const vShop = (vendor?.shopName || vendorId).toLowerCase().trim();
+    const vPhone = vendor?.phone ? vendor.phone.replace(/\D/g, "") : "";
 
     const filtered = allOrders.filter((o) =>
       o.items && o.items.some((it) => {
-        const matchesId = it.vendorId && (
-          it.vendorId === vId ||
-          it.vendorId === vendorId ||
-          (vUserId && it.vendorId === vUserId)
+        const itVendorId = it.vendorId;
+        const itVendorPhone = it.vendor?.phone ? it.vendor.phone.replace(/\D/g, "") : "";
+        const matchesId = itVendorId && (
+          itVendorId === vId ||
+          itVendorId === vendorId ||
+          (vUserId && itVendorId === vUserId) ||
+          (vPhone && itVendorPhone && (vPhone.includes(itVendorPhone) || itVendorPhone.includes(vPhone)))
         );
-        const itShop = (it.vendorName || "").toLowerCase().trim();
+        const itShop = (it.vendor?.shopName || it.vendorName || "").toLowerCase().trim();
         const matchesShop = vShop && itShop && (vShop.includes(itShop) || itShop.includes(vShop));
         return matchesId || matchesShop;
       })
     );
 
-    res.json(filtered);
+    const formatted = filtered.map((o) => ({
+      ...o,
+      items: o.items.map((it) => ({
+        ...it,
+        vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
+      })),
+    }));
+
+    res.json(formatted);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

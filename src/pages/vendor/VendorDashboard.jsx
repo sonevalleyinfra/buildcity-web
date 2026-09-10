@@ -91,10 +91,12 @@ export default function VendorDashboard() {
     };
   }, [vendorId, shopName]);
 
-  // Combine and deduplicate orders from both fetchVendorOrders and reactive OrderContext.orders
-  const allVendorCandidateOrders = [...fetchedVendorOrders, ...orders];
+  // Combine orders specifically fetched for this vendor + reactive OrderContext orders
+  const fetchedIds = new Set((fetchedVendorOrders || []).map((o) => o?.id).filter(Boolean));
+
+  const allCandidateOrders = [...(fetchedVendorOrders || []), ...(orders || [])];
   const vendorOrderMap = new Map();
-  allVendorCandidateOrders.forEach((o) => {
+  allCandidateOrders.forEach((o) => {
     if (o && o.id && !vendorOrderMap.has(o.id)) {
       vendorOrderMap.set(o.id, o);
     }
@@ -102,11 +104,17 @@ export default function VendorDashboard() {
 
   const vendorOrders = Array.from(vendorOrderMap.values()).filter((o) => {
     if (!o || !Array.isArray(o.items) || o.items.length === 0) return false;
+    // 1. If the order was directly returned by backend vendor orders endpoint, include it directly
+    if (fetchedIds.has(o.id)) return true;
+
+    // 2. Otherwise, check item matching
     return o.items.some((it) => {
-      const itVendorId = it.vendorId;
-      const itVendorName = (it.vendorName || "").toLowerCase().trim();
+      const itVendorId = it.vendorId || it.vendor?.id;
+      const itVendorName = (it.vendorName || it.vendor?.shopName || "").toLowerCase().trim();
       const curShop = shopName.toLowerCase().trim();
       const curOwner = ownerName.toLowerCase().trim();
+      const curPhone = (user?.phone || matchedVendorObj.phone || "").replace(/\D/g, "");
+      const itPhone = (it.vendor?.phone || "").replace(/\D/g, "");
 
       const matchesId = itVendorId && (
         itVendorId === vendorId ||
@@ -115,10 +123,11 @@ export default function VendorDashboard() {
         itVendorId === user?.vendorInfo?.id ||
         itVendorId === matchedVendorObj.userId
       );
+      const matchesPhone = curPhone && itPhone && (curPhone.includes(itPhone) || itPhone.includes(curPhone));
       const matchesShop = curShop && itVendorName && (itVendorName.includes(curShop) || curShop.includes(itVendorName));
       const matchesOwner = curOwner && itVendorName && itVendorName.includes(curOwner);
 
-      return matchesId || matchesShop || matchesOwner;
+      return matchesId || matchesPhone || matchesShop || matchesOwner;
     });
   });
 

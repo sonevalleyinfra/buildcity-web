@@ -171,6 +171,7 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       }).then(list => list.map(v => { const { password, ...safe } = v; return safe; })).catch(() => []),
       prisma.productMaster.findMany({ include: { category: true }, orderBy: { createdAt: "desc" } }).catch(() => []),
       prisma.category.findMany().catch(() => []),
+      prisma.region.findMany({ orderBy: { name: "asc" } }).catch(() => []),
       prisma.order.findMany({
         include: {
           items: {

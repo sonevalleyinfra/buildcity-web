@@ -47,15 +47,19 @@ const isSameDistrict = (nameA, nameB) => {
 // Deep equality comparator for live orders to prevent unnecessary re-renders & flickering
 const areOrdersEqual = (listA, listB) => {
   if (listA === listB) return true;
+  if (!listA && !listB) return true;
+  if (!listA || !listB) return false;
   if (!Array.isArray(listA) || !Array.isArray(listB)) return false;
   if (listA.length !== listB.length) return false;
   for (let i = 0; i < listA.length; i++) {
     const a = listA[i];
     const b = listB[i];
     if (!a || !b) return false;
-    if (a.id !== b.id || a.status !== b.status || a.totalAmount !== b.totalAmount || a.total !== b.total) {
-      return false;
-    }
+    if (a.id !== b.id) return false;
+    if (String(a.status || "").toUpperCase() !== String(b.status || "").toUpperCase()) return false;
+    const aAmt = Number(a.totalAmount ?? a.total ?? 0);
+    const bAmt = Number(b.totalAmount ?? b.total ?? 0);
+    if (aAmt !== bAmt) return false;
   }
   return true;
 };
@@ -88,8 +92,17 @@ export default function DrDashboard() {
   } = useAdmin();
   const { orders: contextOrders = [], fetchAllOrders, updateOrderStatus } = useOrders() || {};
 
-  // Direct live orders state from DB with zero-flicker protection
-  const [directOrders, setDirectOrders] = useState([]);
+  // Direct live orders state from DB with zero-flicker persistent cache
+  const [directOrders, setDirectOrders] = useState(() => {
+    try {
+      const saved = localStorage.getItem("buildcity_dr_live_orders");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
 
   // Fetch live orders directly from DB endpoint (/api/v1/orders) with deep equality guard
   const fetchLiveOrdersDirect = async () => {
@@ -98,7 +111,13 @@ export default function DrDashboard() {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
-          setDirectOrders((prev) => (areOrdersEqual(prev, data) ? prev : data));
+          setDirectOrders((prev) => {
+            if (areOrdersEqual(prev, data)) return prev;
+            try {
+              localStorage.setItem("buildcity_dr_live_orders", JSON.stringify(data));
+            } catch {}
+            return data;
+          });
         }
       }
     } catch (err) {
@@ -106,22 +125,17 @@ export default function DrDashboard() {
     }
   };
 
-  // Continuous background polling (every 2.5s) synced directly with Supabase DB
+  // Continuous background polling (every 3s) synced directly with Supabase DB
   useEffect(() => {
     if (fetchCloudData) fetchCloudData();
-    if (fetchAllOrders) fetchAllOrders();
     fetchLiveOrdersDirect();
 
     const interval = setInterval(() => {
-      if (fetchCloudData) fetchCloudData();
-      if (fetchAllOrders) fetchAllOrders();
       fetchLiveOrdersDirect();
-    }, 2500);
+    }, 3000);
 
     const handleOrdersUpdated = () => {
       fetchLiveOrdersDirect();
-      if (fetchCloudData) fetchCloudData();
-      if (fetchAllOrders) fetchAllOrders();
     };
 
     window.addEventListener("buildcity_orders_updated", handleOrdersUpdated);
@@ -134,21 +148,23 @@ export default function DrDashboard() {
     };
   }, []);
 
-  // Stable, combined and deduplicated live orders list (Zero Flickering)
+  // Stable, zero-flicker live orders list (Direct DB stream priority)
   const orders = useMemo(() => {
-    const rawList = [
-      ...(Array.isArray(directOrders) ? directOrders : []),
-      ...(Array.isArray(adminOrders) ? adminOrders : []),
-      ...(Array.isArray(contextOrders) ? contextOrders : []),
-    ];
-    const orderDedupeMap = new Map();
-    rawList.forEach((o) => {
-      if (o && o.id && !orderDedupeMap.has(o.id)) {
-        orderDedupeMap.set(o.id, o);
+    if (Array.isArray(directOrders) && directOrders.length > 0) {
+      if (Array.isArray(contextOrders) && contextOrders.length > 0) {
+        const directIds = new Set(directOrders.map((o) => o.id));
+        const unsynced = contextOrders.filter((co) => co && co.id && !directIds.has(co.id));
+        if (unsynced.length > 0) {
+          return [...unsynced, ...directOrders];
+        }
       }
-    });
-    return Array.from(orderDedupeMap.values());
-  }, [directOrders, adminOrders, contextOrders]);
+      return directOrders;
+    }
+    if (Array.isArray(contextOrders) && contextOrders.length > 0) {
+      return contextOrders;
+    }
+    return [];
+  }, [directOrders, contextOrders]);
 
   const [activeTab, setActiveTab] = useState("products");
   const [searchTerm, setSearchTerm] = useState("");

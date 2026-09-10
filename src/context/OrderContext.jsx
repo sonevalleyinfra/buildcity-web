@@ -17,10 +17,38 @@ export function OrderProvider({ children }) {
 
   const [orders, setOrders] = useState([]);
 
+  const areOrdersEqual = (listA, listB) => {
+    if (listA === listB) return true;
+    if (!listA && !listB) return true;
+    if (!listA || !listB) return false;
+    if (!Array.isArray(listA) || !Array.isArray(listB)) return false;
+    if (listA.length !== listB.length) return false;
+    for (let i = 0; i < listA.length; i++) {
+      const a = listA[i];
+      const b = listB[i];
+      if (!a || !b) return false;
+      if (a.id !== b.id) return false;
+      if (String(a.status || "").toUpperCase() !== String(b.status || "").toUpperCase()) return false;
+      const aAmt = Number(a.totalAmount ?? a.total ?? 0);
+      const bAmt = Number(b.totalAmount ?? b.total ?? 0);
+      if (aAmt !== bAmt) return false;
+    }
+    return true;
+  };
+
   const normalizeOrder = (ord) => {
     if (!ord) return ord;
     const addr = ord.address || {};
-    const resolvedRegionName = addr.region?.name || ord.region?.name || addr.city || ord.districtName || ord.regionName || addr.district || "Varanasi";
+    let vendorRegion = null;
+    if (Array.isArray(ord.items)) {
+      for (const it of ord.items) {
+        if (it?.vendor?.region?.name || it?.vendorRegion) {
+          vendorRegion = it?.vendor?.region?.name || it?.vendorRegion;
+          break;
+        }
+      }
+    }
+    const resolvedRegionName = addr.region?.name || ord.region?.name || ord.districtName || ord.regionName || addr.city || vendorRegion || "Varanasi";
     const resolvedRegionId = addr.region?.id || addr.regionId || ord.region?.id || ord.regionId || "2ab0f187-d170-4432-8eef-e0ac31ed21c3";
     return {
       ...ord,
@@ -44,8 +72,11 @@ export function OrderProvider({ children }) {
           const data = await res.json();
           if (Array.isArray(data)) {
             const normalized = data.map(normalizeOrder);
-            setOrders(normalized);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+            setOrders((prev) => {
+              if (areOrdersEqual(prev, normalized)) return prev;
+              try { localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized)); } catch {}
+              return normalized;
+            });
             return normalized;
           }
         }
@@ -56,8 +87,11 @@ export function OrderProvider({ children }) {
           const data = await res.json();
           if (Array.isArray(data)) {
             const normalized = data.map(normalizeOrder);
-            setOrders(normalized);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+            setOrders((prev) => {
+              if (areOrdersEqual(prev, normalized)) return prev;
+              try { localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized)); } catch {}
+              return normalized;
+            });
             return normalized;
           }
         }
@@ -68,8 +102,11 @@ export function OrderProvider({ children }) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
             const normalized = data.map(normalizeOrder);
-            setOrders(normalized);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+            setOrders((prev) => {
+              if (areOrdersEqual(prev, normalized)) return prev;
+              try { localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized)); } catch {}
+              return normalized;
+            });
             return normalized;
           }
         }

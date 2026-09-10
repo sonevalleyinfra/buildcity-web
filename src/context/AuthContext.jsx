@@ -310,6 +310,7 @@ export function AuthProvider({ children }) {
     const userObj = {
       ...data.user,
       role: assignedRole,
+      drInfo: data.dr || data.user?.drInfo,
       vendorInfo: data.vendor || data.user?.vendorInfo,
       token: data.token,
     };

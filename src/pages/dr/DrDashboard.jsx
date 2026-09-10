@@ -143,6 +143,24 @@ export default function DrDashboard() {
     imageUrl: PRESET_IMAGES[0].url,
   });
 
+  // Helper to match region names with canonical alias support
+  const isSameDistrict = (nameA, nameB) => {
+    if (!nameA || !nameB) return false;
+    const a = nameA.toLowerCase().trim();
+    const b = nameB.toLowerCase().trim();
+    if (a === b) return true;
+
+    const getCanonical = (name) => {
+      if (["varanasi", "varnasi", "banaras", "kashi"].some((alias) => name.includes(alias))) return "varanasi";
+      if (["mirzapur", "mzp"].some((alias) => name.includes(alias))) return "mirzapur";
+      if (["prayagraj", "allahabad"].some((alias) => name.includes(alias))) return "prayagraj";
+      if (["jaunpur"].some((alias) => name.includes(alias))) return "jaunpur";
+      return name;
+    };
+
+    return getCanonical(a) === getCanonical(b);
+  };
+
   // Find current logged-in DR info dynamically from live DB drs list or user.drInfo
   const currentDr = (drs || []).find((d) => {
     const userPhoneClean = user?.phone ? user.phone.replace(/\D/g, "") : "";
@@ -156,43 +174,17 @@ export default function DrDashboard() {
     );
   }) || user?.drInfo || {};
   
-  // Find region object matching DR's assigned regionId or regionName
+  const rawDrRegionId = currentDr.regionId || currentDr.region?.id || user?.drInfo?.regionId || user?.drInfo?.region?.id || user?.regionId || "";
+  const rawDrRegionName = currentDr.region?.name || currentDr.regionName || user?.drInfo?.region?.name || user?.drInfo?.regionName || user?.regionName || "";
+
+  // Match region object from database regions list
   const drRegion = (regions || []).find((r) =>
-    (currentDr.regionId && (r.id === currentDr.regionId || String(r.id).toLowerCase() === String(currentDr.regionId).toLowerCase())) ||
-    (currentDr.region?.id && (r.id === currentDr.region.id || String(r.id).toLowerCase() === String(currentDr.region.id).toLowerCase())) ||
-    (user?.preferredRegionId && (r.id === user.preferredRegionId || String(r.id).toLowerCase() === String(user.preferredRegionId).toLowerCase())) ||
-    (currentDr.regionName && r.name?.toLowerCase().trim() === currentDr.regionName.toLowerCase().trim()) ||
-    (currentDr.region?.name && r.name?.toLowerCase().trim() === currentDr.region.name.toLowerCase().trim()) ||
-    (user?.preferredRegionName && r.name?.toLowerCase().trim() === user.preferredRegionName.toLowerCase().trim())
+    (rawDrRegionId && (r.id === rawDrRegionId || String(r.id).toLowerCase() === String(rawDrRegionId).toLowerCase())) ||
+    (rawDrRegionName && isSameDistrict(r.name, rawDrRegionName))
   );
 
-  const districtName = drRegion?.name || currentDr.region?.name || currentDr.regionName || user?.drInfo?.region?.name || user?.drInfo?.regionName || user?.preferredRegionName || "Varanasi";
-  const drRegionId = drRegion?.id || currentDr.regionId || currentDr.region?.id || user?.drInfo?.regionId || user?.drInfo?.region?.id || user?.preferredRegionId || "";
-
-  // Helper to match region names with full alias support
-  const matchRegionName = (nameA, nameB) => {
-    if (!nameA || !nameB) return false;
-    const a = nameA.toLowerCase().trim();
-    const b = nameB.toLowerCase().trim();
-    if (a === b || a.includes(b) || b.includes(a)) return true;
-
-    // Varanasi aliases
-    const varanasiAliases = ["varanasi", "varnasi", "banaras", "kashi"];
-    if (varanasiAliases.some((alias) => a.includes(alias)) && varanasiAliases.some((alias) => b.includes(alias))) return true;
-
-    // Mirzapur aliases
-    const mirzapurAliases = ["mirzapur", "mzp"];
-    if (mirzapurAliases.some((alias) => a.includes(alias)) && mirzapurAliases.some((alias) => b.includes(alias))) return true;
-
-    // Prayagraj aliases
-    const prayagrajAliases = ["prayagraj", "allahabad"];
-    if (prayagrajAliases.some((alias) => a.includes(alias)) && prayagrajAliases.some((alias) => b.includes(alias))) return true;
-
-    // Jaunpur aliases
-    if (a.includes("jaunpur") && b.includes("jaunpur")) return true;
-
-    return false;
-  };
+  const districtName = drRegion?.name || rawDrRegionName || "Mirzapur";
+  const drRegionId = drRegion?.id || rawDrRegionId || "";
 
   // DR Assigned Region Vendors Filter
   const districtVendors = vendors.filter((v) => {
@@ -207,8 +199,8 @@ export default function DrDashboard() {
       return true;
     }
 
-    // 2. Match Region Name with aliases
-    if (districtName && vRegName && matchRegionName(districtName, vRegName)) {
+    // 2. Match Region Name with canonical aliases
+    if (districtName && vRegName && isSameDistrict(districtName, vRegName)) {
       return true;
     }
 
@@ -227,7 +219,17 @@ export default function DrDashboard() {
     const pRegId = p.regionId;
     const pRegName = p.regionName || p.districtName || "";
 
-    // 1. Belongs to a vendor in this DR's district
+    // 1. Direct region ID match
+    if (drRegionId && pRegId && String(pRegId).toLowerCase() === String(drRegionId).toLowerCase()) {
+      return true;
+    }
+
+    // 2. Direct region Name match with canonical alias
+    if (districtName && pRegName && isSameDistrict(districtName, pRegName)) {
+      return true;
+    }
+
+    // 3. Belongs to a vendor in this DR's district
     const belongsToDistrictVendor = districtVendors.some(
       (v) =>
         (v.id && p.vendorId && String(v.id).toLowerCase() === String(p.vendorId).toLowerCase()) ||
@@ -235,80 +237,29 @@ export default function DrDashboard() {
     );
     if (belongsToDistrictVendor) return true;
 
-    // 2. Direct region ID match
-    if (drRegionId && pRegId && String(pRegId).toLowerCase() === String(drRegionId).toLowerCase()) {
-      return true;
-    }
-
-    // 3. Direct region Name match with aliases
-    if (districtName && pRegName && matchRegionName(districtName, pRegName)) {
-      return true;
-    }
-
     // 4. Added by DR
     const addedByDr =
       p.addedBy &&
       ((user?.name && p.addedBy.toLowerCase().includes(user.name.toLowerCase())) ||
-        p.addedBy.toLowerCase().includes("dr"));
+        (user?.phone && p.addedBy.includes(user.phone.replace(/\D/g, ""))));
     return addedByDr;
   });
 
-  // DR Assigned Region Orders Filter (Strictly filter orders belonging to DR's jurisdiction)
+  // DR Assigned Region Orders Filter (Strictly filter orders belonging to DR's jurisdiction destination)
   const districtOrders = orders.filter((o) => {
     if (!user) return true;
     if (user.role === "admin") return true;
 
-    // 1. Direct Region ID matching
+    // 1. Direct Delivery Address Region ID matching
     const orderRegionId = o.regionId || o.address?.regionId || o.address?.region?.id;
     if (drRegionId && orderRegionId && String(orderRegionId).toLowerCase() === String(drRegionId).toLowerCase()) {
       return true;
     }
 
-    // 2. Direct city / district / street / address name matching with aliases
+    // 2. Direct Delivery Address City / District / Region name matching
     const orderCity = o.districtName || o.regionName || o.address?.city || o.address?.district || o.address?.region?.name || "";
-    const orderStreet = o.address?.street || o.address?.address || o.address?.line || "";
-    if (districtName) {
-      if (orderCity && matchRegionName(districtName, orderCity)) return true;
-      if (orderStreet && matchRegionName(districtName, orderStreet)) return true;
-    }
-
-    // 3. Customer Preferred Region matching
-    const custRegionName = o.customer?.preferredRegionName || "";
-    const custRegionId = o.customer?.preferredRegionId || "";
-    if (drRegionId && custRegionId && String(custRegionId).toLowerCase() === String(drRegionId).toLowerCase()) {
+    if (districtName && orderCity && isSameDistrict(districtName, orderCity)) {
       return true;
-    }
-    if (districtName && custRegionName && matchRegionName(districtName, custRegionName)) {
-      return true;
-    }
-
-    // 4. District Vendor Item Matching: If any item in the order is from a vendor in this DR's district
-    if (Array.isArray(o.items) && o.items.length > 0) {
-      const hasDistrictVendorItem = o.items.some((it) => {
-        const itemVendorId = it.vendorId || it.vendor?.id;
-        const itemVendorName = (it.vendorName || it.vendor?.shopName || "").toLowerCase().trim();
-        const itemVendorRegId = it.vendor?.regionId || it.vendor?.region?.id;
-        const itemVendorRegName = it.vendor?.region?.name || it.vendor?.regionName || it.vendor?.districtName || "";
-
-        // A. Match item vendor's region directly to DR's region
-        if (drRegionId && itemVendorRegId && String(itemVendorRegId).toLowerCase() === String(drRegionId).toLowerCase()) {
-          return true;
-        }
-        if (districtName && itemVendorRegName && matchRegionName(districtName, itemVendorRegName)) {
-          return true;
-        }
-
-        // B. Match item vendor to any of this DR's onboarded vendors
-        return districtVendors.some(
-          (dv) =>
-            (itemVendorId &&
-              (String(dv.id).toLowerCase() === String(itemVendorId).toLowerCase() ||
-                String(dv.userId).toLowerCase() === String(itemVendorId).toLowerCase())) ||
-            (itemVendorName && (dv.shopName || "").toLowerCase().trim() === itemVendorName) ||
-            (dv.phone && it.vendor?.phone && dv.phone.replace(/\D/g, "") === it.vendor.phone.replace(/\D/g, ""))
-        );
-      });
-      if (hasDistrictVendorItem) return true;
     }
 
     return false;

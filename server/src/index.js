@@ -318,6 +318,8 @@ app.post("/api/v1/auth/vendor/login", async (req, res) => {
         name: drInDb?.name || userInDb?.name || "District Representative",
         phone: cleanPhone,
         role: "DR",
+        regionId: drInDb?.regionId || drInDb?.region?.id,
+        regionName: drInDb?.region?.name,
         drInfo: drInDb || null,
         tokenVersion: userInDb?.tokenVersion || drInDb?.user?.tokenVersion || 1,
       };
@@ -327,6 +329,7 @@ app.post("/api/v1/auth/vendor/login", async (req, res) => {
         success: true,
         token,
         user: drUserObj,
+        dr: drInDb,
       });
     }
 

@@ -286,8 +286,19 @@ export function AdminProvider({ children }) {
       if (ordersRes && Array.isArray(ordersRes)) {
         const formattedOrders = ordersRes.map((ord) => {
           const addr = ord.address || {};
-          const resolvedRegionName = ord.region?.name || ord.districtName || ord.regionName || addr.region?.name || addr.city || addr.district || "Varanasi";
-          const resolvedRegionId = ord.region?.id || ord.regionId || addr.region?.id || addr.regionId || "2ab0f187-d170-4432-8eef-e0ac31ed21c3";
+          let vendorRegionName = null;
+          let vendorRegionId = null;
+          if (Array.isArray(ord.items) && ord.items.length > 0) {
+            for (const it of ord.items) {
+              if (it?.vendor?.region?.name || it?.vendorRegion) {
+                vendorRegionName = it?.vendor?.region?.name || it?.vendorRegion;
+                vendorRegionId = it?.vendor?.region?.id || it?.vendor?.regionId;
+                break;
+              }
+            }
+          }
+          const resolvedRegionName = addr.region?.name || ord.region?.name || vendorRegionName || ord.districtName || ord.regionName || addr.city || addr.district || "Varanasi";
+          const resolvedRegionId = addr.region?.id || ord.region?.id || vendorRegionId || ord.regionId || addr.regionId || "2ab0f187-d170-4432-8eef-e0ac31ed21c3";
           return {
             ...ord,
             districtName: resolvedRegionName,

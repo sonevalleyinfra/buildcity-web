@@ -177,7 +177,7 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
           items: {
             include: {
               vendor: {
-                select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
+                select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true, region: true },
               },
             },
           },

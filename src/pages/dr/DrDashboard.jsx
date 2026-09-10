@@ -440,65 +440,72 @@ export default function DrDashboard() {
   const getOrderDistrict = (o) => {
     if (!o) return "Varanasi";
 
-    // 1. TOP PRIORITY: Explicit Order / Address Region (The official assigned region of the order)
-    if (o.districtName) {
-      const d = String(o.districtName).toLowerCase();
-      if (["varanasi", "varnasi", "banaras", "kashi", "vns"].some((a) => d.includes(a))) return "Varanasi";
-      if (["mirzapur", "mzp"].some((a) => d.includes(a))) return "Mirzapur";
-      if (["prayagraj", "allahabad"].some((a) => d.includes(a))) return "Prayagraj";
-      if (["jaunpur"].some((a) => d.includes(a))) return "Jaunpur";
-    }
-
-    if (o.regionName) {
-      const r = String(o.regionName).toLowerCase();
-      if (["varanasi", "varnasi", "banaras", "kashi", "vns"].some((a) => r.includes(a))) return "Varanasi";
-      if (["mirzapur", "mzp"].some((a) => r.includes(a))) return "Mirzapur";
-      if (["prayagraj", "allahabad"].some((a) => r.includes(a))) return "Prayagraj";
-      if (["jaunpur"].some((a) => r.includes(a))) return "Jaunpur";
-    }
-
-    if (o.region?.name) {
-      const r = String(o.region.name).toLowerCase();
-      if (["varanasi", "varnasi", "banaras", "kashi", "vns"].some((a) => r.includes(a))) return "Varanasi";
-      if (["mirzapur", "mzp"].some((a) => r.includes(a))) return "Mirzapur";
-      if (["prayagraj", "allahabad"].some((a) => r.includes(a))) return "Prayagraj";
-      if (["jaunpur"].some((a) => r.includes(a))) return "Jaunpur";
-    }
-
+    // 1. HIGHEST PRIORITY: Delivery Address Region (Strict customer delivery location)
     if (o.address?.region?.name) {
-      const r = String(o.address.region.name).toLowerCase();
-      if (["varanasi", "varnasi", "banaras", "kashi", "vns"].some((a) => r.includes(a))) return "Varanasi";
-      if (["mirzapur", "mzp"].some((a) => r.includes(a))) return "Mirzapur";
-      if (["prayagraj", "allahabad"].some((a) => r.includes(a))) return "Prayagraj";
-      if (["jaunpur"].some((a) => r.includes(a))) return "Jaunpur";
+      const r = getCanonicalDistrict(o.address.region.name);
+      if (r === "mirzapur") return "Mirzapur";
+      if (r === "prayagraj") return "Prayagraj";
+      if (r === "jaunpur") return "Jaunpur";
+      if (r === "varanasi") return "Varanasi";
     }
 
     if (o.address?.regionId) {
       const matched = (regions || []).find((r) => r.id === o.address.regionId);
-      if (matched?.name) return matched.name;
+      if (matched?.name) {
+        const r = getCanonicalDistrict(matched.name);
+        if (r === "mirzapur") return "Mirzapur";
+        if (r === "prayagraj") return "Prayagraj";
+        if (r === "jaunpur") return "Jaunpur";
+        if (r === "varanasi") return "Varanasi";
+      }
     }
 
-    // 2. SECOND PRIORITY: Vendor's Region from ordered items
+    // 2. SECOND PRIORITY: Vendor's Region from ordered items (Crucial for orders without delivery address)
     if (Array.isArray(o.items) && o.items.length > 0) {
       for (const it of o.items) {
         const vReg = it?.vendor?.region?.name || it?.vendorRegion || it?.regionName;
         if (vReg) {
-          const vr = String(vReg).toLowerCase();
-          if (["varanasi", "varnasi", "banaras", "kashi", "vns"].some((a) => vr.includes(a))) return "Varanasi";
-          if (["mirzapur", "mzp"].some((a) => vr.includes(a))) return "Mirzapur";
-          if (["prayagraj", "allahabad"].some((a) => vr.includes(a))) return "Prayagraj";
-          if (["jaunpur"].some((a) => vr.includes(a))) return "Jaunpur";
+          const vr = getCanonicalDistrict(vReg);
+          if (vr === "mirzapur") return "Mirzapur";
+          if (vr === "prayagraj") return "Prayagraj";
+          if (vr === "jaunpur") return "Jaunpur";
+          if (vr === "varanasi") return "Varanasi";
         }
       }
     }
 
-    // 3. LAST RESORT FALLBACK ONLY: Address City / Street text
+    // 3. THIRD PRIORITY: Order's explicit District / Region Name if set from DB
+    if (o.region?.name) {
+      const r = getCanonicalDistrict(o.region.name);
+      if (r === "mirzapur") return "Mirzapur";
+      if (r === "prayagraj") return "Prayagraj";
+      if (r === "jaunpur") return "Jaunpur";
+      if (r === "varanasi") return "Varanasi";
+    }
+
+    if (o.districtName) {
+      const d = getCanonicalDistrict(o.districtName);
+      if (d === "mirzapur") return "Mirzapur";
+      if (d === "prayagraj") return "Prayagraj";
+      if (d === "jaunpur") return "Jaunpur";
+      if (d === "varanasi") return "Varanasi";
+    }
+
+    if (o.regionName) {
+      const r = getCanonicalDistrict(o.regionName);
+      if (r === "mirzapur") return "Mirzapur";
+      if (r === "prayagraj") return "Prayagraj";
+      if (r === "jaunpur") return "Jaunpur";
+      if (r === "varanasi") return "Varanasi";
+    }
+
+    // 4. FALLBACK: Address City / Street text
     if (o.address?.city) {
-      const c = String(o.address.city).toLowerCase().trim();
-      if (["varanasi", "varnasi", "banaras", "kashi", "vns"].some((a) => c.includes(a))) return "Varanasi";
-      if (["mirzapur", "mzp"].some((a) => c.includes(a))) return "Mirzapur";
-      if (["prayagraj", "allahabad"].some((a) => c.includes(a))) return "Prayagraj";
-      if (["jaunpur"].some((a) => c.includes(a))) return "Jaunpur";
+      const c = getCanonicalDistrict(o.address.city);
+      if (c === "mirzapur") return "Mirzapur";
+      if (c === "prayagraj") return "Prayagraj";
+      if (c === "jaunpur") return "Jaunpur";
+      if (c === "varanasi") return "Varanasi";
     }
 
     return "Varanasi";

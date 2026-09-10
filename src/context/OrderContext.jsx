@@ -48,7 +48,7 @@ export function OrderProvider({ children }) {
         }
       }
     }
-    const resolvedRegionName = addr.region?.name || ord.region?.name || ord.districtName || ord.regionName || addr.city || vendorRegion || "Varanasi";
+    const resolvedRegionName = addr.region?.name || ord.region?.name || vendorRegion || ord.districtName || ord.regionName || addr.city || "Varanasi";
     const resolvedRegionId = addr.region?.id || addr.regionId || ord.region?.id || ord.regionId || "2ab0f187-d170-4432-8eef-e0ac31ed21c3";
     return {
       ...ord,

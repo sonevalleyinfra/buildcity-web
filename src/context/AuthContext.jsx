@@ -10,8 +10,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      const token = localStorage.getItem("buildcity_token");
-      if (saved && token) {
+      if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && (parsed.id || parsed.phone)) return parsed;
       }
@@ -20,35 +19,15 @@ export function AuthProvider({ children }) {
   });
   const [loading, setLoading] = useState(false);
 
-  // Listen for session expiry to reset user state cleanly
-  useEffect(() => {
-    const handleSessionExpired = () => {
-      setUser(null);
-    };
-    window.addEventListener("buildcity_session_expired", handleSessionExpired);
-    return () => window.removeEventListener("buildcity_session_expired", handleSessionExpired);
-  }, []);
-
   // App startup initialization — Sync latest user profile from Supabase Cloud DB in background
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    const token = typeof window !== "undefined" ? localStorage.getItem("buildcity_token") : null;
-    if (saved && token) {
+    if (saved) {
       try {
         const parsed = JSON.parse(saved);
         // Background me Supabase Cloud DB se latest user profile sync karein (Zero PII in URL)
         authFetch(`/api/v1/users/me`)
-          .then((r) => {
-            if (!r.ok) {
-              if (r.status === 401) {
-                setUser(null);
-                clearToken();
-                localStorage.removeItem(STORAGE_KEY);
-              }
-              return null;
-            }
-            return r.json();
-          })
+          .then((r) => r.json())
           .then((dbUser) => {
             if (dbUser && dbUser.name) {
               const refreshed = {
@@ -79,9 +58,6 @@ export function AuthProvider({ children }) {
         localStorage.removeItem(STORAGE_KEY);
         clearToken();
       }
-    } else if (saved && !token) {
-      localStorage.removeItem(STORAGE_KEY);
-      setUser(null);
     }
     setLoading(false);
   }, []);

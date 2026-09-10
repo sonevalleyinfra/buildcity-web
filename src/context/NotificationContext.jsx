@@ -79,10 +79,9 @@ export function NotificationProvider({ children }) {
     if (showLoading) setIsLoadingNotifs(true);
     try {
       let dbList = [];
-      const token = typeof window !== "undefined" ? localStorage.getItem("buildcity_token") : null;
 
-      // 1. Fetch from server DB notifications only if user is logged in AND token exists
-      if (user && token) {
+      // 1. Fetch from server DB notifications
+      if (user) {
         try {
           const res = await authFetch(`${API_BASE_URL}/api/v1/notifications/me`);
           if (res.ok) {
@@ -198,14 +197,8 @@ export function NotificationProvider({ children }) {
     }
 
     fetchDbNotifications();
-    const token = typeof window !== "undefined" ? localStorage.getItem("buildcity_token") : null;
-    let interval = null;
-    if (user && token) {
-      interval = setInterval(fetchDbNotifications, 10000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
+    const interval = setInterval(fetchDbNotifications, 5000);
+    return () => clearInterval(interval);
   }, [storageKey, user]);
 
   // Real-Time Individual Order Confirmation / Event Notification Addition

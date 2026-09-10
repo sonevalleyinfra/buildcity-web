@@ -27,8 +27,7 @@ export function CartProvider({ children }) {
     let isCancelled = false;
 
     const syncCart = async () => {
-      const token = typeof window !== "undefined" ? localStorage.getItem("buildcity_token") : null;
-      if ((user?.phone || user?.id) && token) {
+      if (user?.phone || user?.id) {
         // 1. Check local guest items
         let guestItems = [];
         try {
@@ -52,7 +51,7 @@ export function CartProvider({ children }) {
         // 3. Fetch Cloud DB Cart for logged-in account (e.g. from phone or another device)
         let dbCartItems = [];
         try {
-          const res = await authFetch(`${API_BASE_URL}/api/v1/cart`).then((r) => r.ok ? r.json() : null).catch(() => null);
+          const res = await authFetch(`${API_BASE_URL}/api/v1/cart`).then((r) => r.json()).catch(() => null);
           if (res && Array.isArray(res.cartItems)) {
             dbCartItems = res.cartItems;
           }
@@ -152,30 +151,25 @@ export function CartProvider({ children }) {
         localStorage.setItem(cartStorageKey, JSON.stringify(items));
       } catch {}
 
-      // If logged in with valid token, sync to Cloud Database with 1.2s debounce
-      const token = typeof window !== "undefined" ? localStorage.getItem("buildcity_token") : null;
-      if ((user?.phone || user?.id) && token) {
-        const timer = setTimeout(() => {
-          authFetch(`${API_BASE_URL}/api/v1/cart`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ items }),
-          }).then(r => {
-            if (r.status === 401) {
-              localStorage.removeItem("buildcity_token");
-              localStorage.removeItem("buildcity_auth");
-              return null;
-            }
-            return r.json();
-          }).then(data => {
-            if (data && data.invalidSession) {
-              // Stale token detected; remove it to prevent looping
-              localStorage.removeItem("buildcity_token");
-              localStorage.removeItem("buildcity_auth");
-            }
-          }).catch(() => {});
-        }, 1200);
-        return () => clearTimeout(timer);
+      // If logged in, sync to Cloud Database with 1.2s debounce to avoid exhausting connection pool
+      if (user?.phone || user?.id) {
+        const token = localStorage.getItem("buildcity_token");
+        if (token) {
+          const timer = setTimeout(() => {
+            authFetch(`${API_BASE_URL}/api/v1/cart`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ items }),
+            }).then(r => r.json()).then(data => {
+              if (data && data.invalidSession) {
+                // Stale token detected; remove it to prevent looping
+                localStorage.removeItem("buildcity_token");
+                localStorage.removeItem("buildcity_user");
+              }
+            }).catch(() => {});
+          }, 1200);
+          return () => clearTimeout(timer);
+        }
       }
     }
   }, [items, cartStorageKey, user]);
@@ -221,8 +215,7 @@ export function CartProvider({ children }) {
 
   const clearCart = () => {
     setItems([]);
-    const token = typeof window !== "undefined" ? localStorage.getItem("buildcity_token") : null;
-    if ((user?.phone || user?.id) && token) {
+    if (user?.phone || user?.id) {
       try {
         authFetch(`${API_BASE_URL}/api/v1/cart`, {
           method: "PUT",

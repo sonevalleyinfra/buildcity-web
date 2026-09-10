@@ -37,9 +37,8 @@ export default function DrDashboard() {
     vendors = [],
     products = [],
     productsLoading,
-    categories,
-    regions,
-    orders: adminOrders = [],
+    categories = [],
+    regions = [],
     fetchCloudData,
     addVendor,
     updateVendor,
@@ -53,43 +52,23 @@ export default function DrDashboard() {
     setVendorStatus,
     updateListingApprovalStatus,
   } = useAdmin();
-  const { orders: contextOrders = [], fetchAllOrders, updateOrderStatus } = useOrders() || {};
+  const { orders = [], fetchAllOrders, updateOrderStatus } = useOrders() || {};
 
-  const [directOrders, setDirectOrders] = useState([]);
-  const [directVendors, setDirectVendors] = useState([]);
-  const [directProducts, setDirectProducts] = useState([]);
-  const [directDrs, setDirectDrs] = useState([]);
-  const [directRegions, setDirectRegions] = useState([]);
-
-  // Auto real-time background sync every 2.5s for DR Portal (Polls DB directly)
+  // Continuous background polling (every 2.5s) synced directly with Supabase DB
   useEffect(() => {
-    let isMounted = true;
-    const syncAllDrData = async () => {
-      try {
-        const [ordsRes, vendsRes, prodsRes, drsRes, regsRes] = await Promise.all([
-          authFetch(`${API_BASE_URL}/api/v1/orders`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-          authFetch(`${API_BASE_URL}/api/v1/vendors`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-          authFetch(`${API_BASE_URL}/api/v1/vendor/listings`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-          authFetch(`${API_BASE_URL}/api/v1/drs`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-          authFetch(`${API_BASE_URL}/api/v1/regions`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-        ]);
+    if (fetchCloudData) fetchCloudData();
+    if (fetchAllOrders) fetchAllOrders();
 
-        if (isMounted) {
-          if (Array.isArray(ordsRes)) setDirectOrders(ordsRes);
-          if (Array.isArray(vendsRes)) setDirectVendors(vendsRes);
-          if (Array.isArray(prodsRes)) setDirectProducts(prodsRes);
-          if (Array.isArray(drsRes)) setDirectDrs(drsRes);
-          if (Array.isArray(regsRes)) setDirectRegions(regsRes);
-        }
-      } catch {}
+    const interval = setInterval(() => {
+      if (fetchCloudData) fetchCloudData();
+      if (fetchAllOrders) fetchAllOrders();
+    }, 2500);
+
+    const handleSync = () => {
       if (fetchCloudData) fetchCloudData();
       if (fetchAllOrders) fetchAllOrders();
     };
 
-    syncAllDrData();
-    const interval = setInterval(syncAllDrData, 2500);
-
-    const handleSync = () => syncAllDrData();
     window.addEventListener("buildcity_orders_updated", handleSync);
     window.addEventListener("buildcity_order_placed", handleSync);
     window.addEventListener("buildcity_vendors_updated", handleSync);
@@ -98,7 +77,6 @@ export default function DrDashboard() {
     window.addEventListener("storage", handleSync);
 
     return () => {
-      isMounted = false;
       clearInterval(interval);
       window.removeEventListener("buildcity_orders_updated", handleSync);
       window.removeEventListener("buildcity_order_placed", handleSync);
@@ -108,12 +86,6 @@ export default function DrDashboard() {
       window.removeEventListener("storage", handleSync);
     };
   }, []);
-
-  const allDrs = directDrs.length > 0 ? directDrs : drs;
-  const allVendors = directVendors.length > 0 ? directVendors : vendors;
-  const allRegions = directRegions.length > 0 ? directRegions : (regions || []);
-  const allRawProducts = directProducts.length > 0 ? directProducts : products;
-  const orders = directOrders.length > 0 ? directOrders : (contextOrders.length > 0 ? contextOrders : adminOrders);
 
   const [activeTab, setActiveTab] = useState("products");
   const [searchTerm, setSearchTerm] = useState("");
@@ -170,7 +142,7 @@ export default function DrDashboard() {
   };
 
   // Find current logged-in DR info dynamically from live DB drs list or user.drInfo
-  const currentDr = (allDrs || []).find((d) => {
+  const currentDr = (drs || []).find((d) => {
     const userPhoneClean = user?.phone ? user.phone.replace(/\D/g, "") : "";
     const dPhoneClean = d.phone ? d.phone.replace(/\D/g, "") : "";
     return (
@@ -186,16 +158,16 @@ export default function DrDashboard() {
   const rawDrRegionName = currentDr.region?.name || currentDr.regionName || user?.drInfo?.region?.name || user?.drInfo?.regionName || user?.regionName || user?.preferredRegionName || "";
 
   // Match region object from database regions list
-  const drRegion = (allRegions || []).find((r) =>
+  const drRegion = (regions || []).find((r) =>
     (rawDrRegionId && (r.id === rawDrRegionId || String(r.id).toLowerCase() === String(rawDrRegionId).toLowerCase())) ||
     (rawDrRegionName && isSameDistrict(r.name, rawDrRegionName))
   );
 
-  const districtName = drRegion?.name || rawDrRegionName || (allRegions[0]?.name || "Varanasi");
-  const drRegionId = drRegion?.id || rawDrRegionId || (allRegions.find((r) => isSameDistrict(r.name, districtName)))?.id || "";
+  const districtName = drRegion?.name || rawDrRegionName || (regions[0]?.name || "Varanasi");
+  const drRegionId = drRegion?.id || rawDrRegionId || (regions.find((r) => isSameDistrict(r.name, districtName)))?.id || "";
 
   // DR Assigned Region Vendors Filter (STRICT JURISDICTION LOCK)
-  const districtVendors = allVendors.filter((v) => {
+  const districtVendors = (vendors || []).filter((v) => {
     const vRegId = v.regionId || v.region?.id;
     const vRegName = v.region?.name || v.regionName || v.districtName || "";
 
@@ -213,7 +185,7 @@ export default function DrDashboard() {
   });
 
   // DR Assigned Region Products Filter (STRICT JURISDICTION LOCK)
-  const districtProducts = allRawProducts.filter((p) => {
+  const districtProducts = (products || []).filter((p) => {
     const pRegId = p.regionId || p.vendor?.regionId || p.vendor?.region?.id;
     const pRegName = p.vendor?.region?.name || p.regionName || p.districtName || "";
 

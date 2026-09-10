@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Logo from "../../components/Logo";
 import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
@@ -72,74 +72,29 @@ export default function DrDashboard() {
   } = useAdmin();
   const { orders: contextOrders = [], fetchAllOrders, updateOrderStatus } = useOrders() || {};
 
-  // Direct dedicated live orders fetch from backend (every 2.5s)
-  const [directOrders, setDirectOrders] = useState([]);
-
-  useEffect(() => {
-    let isCancelled = false;
-    const fetchDirectOrders = async () => {
-      try {
-        const res = await authFetch(`${API_BASE_URL}/api/v1/orders`);
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data) && !isCancelled) {
-            setDirectOrders(data);
-          }
-        }
-      } catch {}
-    };
-
-    fetchDirectOrders();
-    const orderInterval = setInterval(fetchDirectOrders, 2500);
-
-    return () => {
-      isCancelled = true;
-      clearInterval(orderInterval);
-    };
-  }, []);
-
-  // Continuous background polling (every 2.5s) synced directly with Supabase DB
+  // Continuous background polling (every 3s) synced directly with Supabase DB
   useEffect(() => {
     if (fetchCloudData) fetchCloudData();
     if (fetchAllOrders) fetchAllOrders();
 
     const interval = setInterval(() => {
       if (fetchCloudData) fetchCloudData();
-      if (fetchAllOrders) fetchAllOrders();
-    }, 2500);
+    }, 3000);
 
-    const handleSync = () => {
-      if (fetchCloudData) fetchCloudData();
-      if (fetchAllOrders) fetchAllOrders();
-    };
-
-    window.addEventListener("buildcity_orders_updated", handleSync);
-    window.addEventListener("buildcity_order_placed", handleSync);
-    window.addEventListener("buildcity_vendors_updated", handleSync);
-    window.addEventListener("buildcity_categories_updated", handleSync);
-    window.addEventListener("buildcity_regions_updated", handleSync);
-    window.addEventListener("storage", handleSync);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("buildcity_orders_updated", handleSync);
-      window.removeEventListener("buildcity_order_placed", handleSync);
-      window.removeEventListener("buildcity_vendors_updated", handleSync);
-      window.removeEventListener("buildcity_categories_updated", handleSync);
-      window.removeEventListener("buildcity_regions_updated", handleSync);
-      window.removeEventListener("storage", handleSync);
-    };
+    return () => clearInterval(interval);
   }, []);
 
-  // Combined and deduplicated live orders list (Direct Backend DB + Cloud-Sync + OrderContext)
-  const rawOrdersList = [...(directOrders || []), ...(adminOrders || []), ...(contextOrders || [])];
-  const orderDedupeMap = new Map();
-  rawOrdersList.forEach((o) => {
-    if (o && o.id && !orderDedupeMap.has(o.id)) {
-      orderDedupeMap.set(o.id, o);
-    }
-  });
-  const orders = Array.from(orderDedupeMap.values());
+  // Stable, combined and deduplicated live orders list (Zero Flickering)
+  const orders = useMemo(() => {
+    const rawList = (adminOrders && adminOrders.length > 0) ? adminOrders : (contextOrders || []);
+    const orderDedupeMap = new Map();
+    rawList.forEach((o) => {
+      if (o && o.id && !orderDedupeMap.has(o.id)) {
+        orderDedupeMap.set(o.id, o);
+      }
+    });
+    return Array.from(orderDedupeMap.values());
+  }, [adminOrders, contextOrders]);
 
   const [activeTab, setActiveTab] = useState("products");
   const [searchTerm, setSearchTerm] = useState("");
@@ -247,18 +202,63 @@ export default function DrDashboard() {
     return belongsToDistrictVendor;
   });
 
-  // Resolve single definitive district for each order
+  // Resolve single definitive district for each order with strict Region Priority
   const getOrderDistrict = (o) => {
     if (!o) return "Varanasi";
 
-    // 1. Direct Delivery Address Region Object
-    if (o.address?.region?.name) return o.address.region.name;
+    // 1. TOP PRIORITY: Explicit Order / Address Region (The official assigned region of the order)
+    if (o.districtName) {
+      const d = String(o.districtName).toLowerCase();
+      if (["varanasi", "varnasi", "banaras", "kashi", "vns"].some((a) => d.includes(a))) return "Varanasi";
+      if (["mirzapur", "mzp"].some((a) => d.includes(a))) return "Mirzapur";
+      if (["prayagraj", "allahabad"].some((a) => d.includes(a))) return "Prayagraj";
+      if (["jaunpur"].some((a) => d.includes(a))) return "Jaunpur";
+    }
+
+    if (o.regionName) {
+      const r = String(o.regionName).toLowerCase();
+      if (["varanasi", "varnasi", "banaras", "kashi", "vns"].some((a) => r.includes(a))) return "Varanasi";
+      if (["mirzapur", "mzp"].some((a) => r.includes(a))) return "Mirzapur";
+      if (["prayagraj", "allahabad"].some((a) => r.includes(a))) return "Prayagraj";
+      if (["jaunpur"].some((a) => r.includes(a))) return "Jaunpur";
+    }
+
+    if (o.region?.name) {
+      const r = String(o.region.name).toLowerCase();
+      if (["varanasi", "varnasi", "banaras", "kashi", "vns"].some((a) => r.includes(a))) return "Varanasi";
+      if (["mirzapur", "mzp"].some((a) => r.includes(a))) return "Mirzapur";
+      if (["prayagraj", "allahabad"].some((a) => r.includes(a))) return "Prayagraj";
+      if (["jaunpur"].some((a) => r.includes(a))) return "Jaunpur";
+    }
+
+    if (o.address?.region?.name) {
+      const r = String(o.address.region.name).toLowerCase();
+      if (["varanasi", "varnasi", "banaras", "kashi", "vns"].some((a) => r.includes(a))) return "Varanasi";
+      if (["mirzapur", "mzp"].some((a) => r.includes(a))) return "Mirzapur";
+      if (["prayagraj", "allahabad"].some((a) => r.includes(a))) return "Prayagraj";
+      if (["jaunpur"].some((a) => r.includes(a))) return "Jaunpur";
+    }
+
     if (o.address?.regionId) {
       const matched = (regions || []).find((r) => r.id === o.address.regionId);
       if (matched?.name) return matched.name;
     }
 
-    // 2. Address City matching
+    // 2. SECOND PRIORITY: Vendor's Region from ordered items
+    if (Array.isArray(o.items) && o.items.length > 0) {
+      for (const it of o.items) {
+        const vReg = it?.vendor?.region?.name || it?.vendorRegion || it?.regionName;
+        if (vReg) {
+          const vr = String(vReg).toLowerCase();
+          if (["varanasi", "varnasi", "banaras", "kashi", "vns"].some((a) => vr.includes(a))) return "Varanasi";
+          if (["mirzapur", "mzp"].some((a) => vr.includes(a))) return "Mirzapur";
+          if (["prayagraj", "allahabad"].some((a) => vr.includes(a))) return "Prayagraj";
+          if (["jaunpur"].some((a) => vr.includes(a))) return "Jaunpur";
+        }
+      }
+    }
+
+    // 3. LAST RESORT FALLBACK ONLY: Address City / Street text
     if (o.address?.city) {
       const c = String(o.address.city).toLowerCase().trim();
       if (["varanasi", "varnasi", "banaras", "kashi", "vns"].some((a) => c.includes(a))) return "Varanasi";
@@ -267,63 +267,38 @@ export default function DrDashboard() {
       if (["jaunpur"].some((a) => c.includes(a))) return "Jaunpur";
     }
 
-    // 3. Address Full String / Street / Line matching
-    const addrFull = typeof o.address === "string"
-      ? o.address
-      : [o.address?.street, o.address?.line, o.address?.address, o.customer?.address].filter(Boolean).join(" ");
-    if (addrFull) {
-      const s = addrFull.toLowerCase();
-      if (["mirzapur", "mzp"].some((a) => s.includes(a))) return "Mirzapur";
-      if (["prayagraj", "allahabad"].some((a) => s.includes(a))) return "Prayagraj";
-      if (["jaunpur"].some((a) => s.includes(a))) return "Jaunpur";
-      if (["varanasi", "varnasi", "banaras", "kashi", "vns"].some((a) => s.includes(a))) return "Varanasi";
-    }
-
-    // 4. Order direct region fields
-    if (o.region?.name) return o.region.name;
-    if (o.districtName) return o.districtName;
-    if (o.regionName) return o.regionName;
-    if (o.customer?.preferredRegionName) return o.customer.preferredRegionName;
-
-    // 5. Vendor's region from ordered items
-    if (Array.isArray(o.items) && o.items.length > 0) {
-      for (const it of o.items) {
-        const vReg = it?.vendor?.region?.name || it?.vendorRegion || it?.regionName;
-        if (vReg) return vReg;
-        if (it?.vendor?.regionId || it?.regionId) {
-          const matched = (regions || []).find((r) => r.id === (it.vendor?.regionId || it.regionId));
-          if (matched?.name) return matched.name;
-        }
-      }
-    }
     return "Varanasi";
   };
 
   // DR Assigned Region Orders Filter (Strict 1-to-1 region matching: only orders in DR's region)
   const currentDrCanonical = getCanonicalDistrict(districtName);
 
-  const districtOrders = (orders || []).filter((o) => {
-    if (!o) return false;
-    const ordDist = getOrderDistrict(o);
-    return getCanonicalDistrict(ordDist) === currentDrCanonical;
-  });
+  const districtOrders = useMemo(() => {
+    return (orders || []).filter((o) => {
+      if (!o) return false;
+      const ordDist = getOrderDistrict(o);
+      return getCanonicalDistrict(ordDist) === currentDrCanonical;
+    });
+  }, [orders, currentDrCanonical, regions]);
 
   // Filtered district orders by search and status filter
-  const filteredDistrictOrders = districtOrders.filter((ord) => {
-    if (!ord) return false;
-    const matchesSearch =
-      !searchTerm ||
-      (ord.id && String(ord.id).toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (ord.orderNumber && String(ord.orderNumber).toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (ord.customer?.name && String(ord.customer.name).toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (ord.customer?.phone && String(ord.customer.phone).includes(searchTerm)) ||
-      (Array.isArray(ord.items) && ord.items.some((i) => (i?.productName || i?.name || "").toLowerCase().includes(searchTerm.toLowerCase())));
+  const filteredDistrictOrders = useMemo(() => {
+    return districtOrders.filter((ord) => {
+      if (!ord) return false;
+      const matchesSearch =
+        !searchTerm ||
+        (ord.id && String(ord.id).toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (ord.orderNumber && String(ord.orderNumber).toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (ord.customer?.name && String(ord.customer.name).toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (ord.customer?.phone && String(ord.customer.phone).includes(searchTerm)) ||
+        (Array.isArray(ord.items) && ord.items.some((i) => (i?.productName || i?.name || "").toLowerCase().includes(searchTerm.toLowerCase())));
 
-    const ordStatus = (ord.status || "PENDING").toUpperCase();
-    const matchesStatus = orderStatusFilter === "ALL" || ordStatus === orderStatusFilter;
+      const ordStatus = (ord.status || "PENDING").toUpperCase();
+      const matchesStatus = orderStatusFilter === "ALL" || ordStatus === orderStatusFilter;
 
-    return matchesSearch && matchesStatus;
-  });
+      return matchesSearch && matchesStatus;
+    });
+  }, [districtOrders, searchTerm, orderStatusFilter]);
 
   // Filtered by search
   const filteredVendors = districtVendors.filter(

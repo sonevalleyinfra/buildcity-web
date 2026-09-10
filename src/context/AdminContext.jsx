@@ -286,8 +286,8 @@ export function AdminProvider({ children }) {
       if (ordersRes && Array.isArray(ordersRes)) {
         const formattedOrders = ordersRes.map((ord) => {
           const addr = ord.address || {};
-          const resolvedRegionName = addr.region?.name || ord.region?.name || addr.city || ord.districtName || ord.regionName || addr.district || "Varanasi";
-          const resolvedRegionId = addr.region?.id || addr.regionId || ord.region?.id || ord.regionId || "2ab0f187-d170-4432-8eef-e0ac31ed21c3";
+          const resolvedRegionName = ord.region?.name || ord.districtName || ord.regionName || addr.region?.name || addr.city || addr.district || "Varanasi";
+          const resolvedRegionId = ord.region?.id || ord.regionId || addr.region?.id || addr.regionId || "2ab0f187-d170-4432-8eef-e0ac31ed21c3";
           return {
             ...ord,
             districtName: resolvedRegionName,
@@ -302,8 +302,14 @@ export function AdminProvider({ children }) {
         try {
           localStorage.setItem("buildcity_orders", JSON.stringify(formattedOrders));
         } catch {}
-        setOrders(formattedOrders);
-        window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
+        setOrders((prev) => {
+          if (prev && prev.length === formattedOrders.length) {
+            const hasChanged = prev.some((p, i) => p.id !== formattedOrders[i]?.id || p.status !== formattedOrders[i]?.status);
+            if (!hasChanged) return prev;
+          }
+          window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
+          return formattedOrders;
+        });
       }
 
       if (usersRes && Array.isArray(usersRes) && usersRes.length > 0) {

@@ -2393,7 +2393,7 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
         reg = await prisma.region.findFirst().catch(() => null);
       }
 
-      const cityStr = typeof addrObj === "object" && addrObj.city ? addrObj.city : (reg ? reg.name : (req.body.districtName || "Mirzapur"));
+      const cityStr = reg ? reg.name : (typeof addrObj === "object" && addrObj.city ? addrObj.city : (req.body.districtName || "Varanasi"));
 
       if (reg && reg.id && targetCustomerId) {
         let existingAddress = await prisma.address.findFirst({

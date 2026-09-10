@@ -38,6 +38,12 @@ export default function Checkout() {
 
   const [successOrder, setSuccessOrder] = useState(null);
 
+  useEffect(() => {
+    if (region?.name) {
+      setNewCity(region.name);
+    }
+  }, [region?.name]);
+
   // Auto-update profile name if current name is missing, default, or placeholder
   const maybeUpdateProfileName = (enteredName) => {
     if (!enteredName || typeof enteredName !== "string" || !updateProfile) return;
@@ -61,12 +67,13 @@ export default function Checkout() {
 
   // Load Profile / Context Addresses for Logged-In Customer (Zero 404 network errors & zero flickering)
   useEffect(() => {
+    const activeRegion = region?.name || "Varanasi";
     const cleanContext = (contextAddresses || []).map((ca) => ({
       id: ca.id || "addr_" + Date.now(),
       fullName: ca.fullName || user?.name || "Customer",
       phone: ca.phone || user?.phone || "",
       street: ca.line || ca.street || "",
-      city: ca.city || region?.name || "Mirzapur",
+      city: activeRegion,
       state: ca.state || "Uttar Pradesh",
       pincode: ca.pincode || "221001",
     })).filter((a) => a.street && a.street.trim().length > 0 && !a.street.includes("Lanka Road") && !a.street.includes("House No. 12"));
@@ -77,7 +84,7 @@ export default function Checkout() {
         fullName: user.name || "Customer",
         phone: user.phone || "",
         street: user.address,
-        city: region?.name || "Mirzapur",
+        city: activeRegion,
         state: "Uttar Pradesh",
         pincode: "221001",
       });
@@ -91,7 +98,7 @@ export default function Checkout() {
     } else {
       setSelectedAddrId("");
     }
-  }, [user, contextAddresses, region]);
+  }, [user, contextAddresses, region?.name]);
 
   if (items.length === 0 && !successOrder) {
     return <Navigate to="/cart" replace />;
@@ -175,7 +182,8 @@ export default function Checkout() {
 
   // Order place - vendorId & vendorName strictly mapped with mandatory address DB insertion
   const handlePlaceOrder = async () => {
-    let targetAddr = activeAddress;
+    const activeRegionName = region?.name || "Varanasi";
+    const activeRegionId = region?.id || "2ab0f187-d170-4432-8eef-e0ac31ed21c3";
 
     // If no saved address selected, check inline form fields
     if (!targetAddr || !targetAddr.street) {
@@ -193,9 +201,14 @@ export default function Checkout() {
         fullName: newFullName || user?.name || "Customer",
         phone: newPhone || user?.phone || "7607650875",
         street: newStreet,
-        city: newCity || region?.name || "Mirzapur",
+        city: activeRegionName,
         state: "Uttar Pradesh",
         pincode: newPincode || "221001",
+      };
+    } else {
+      targetAddr = {
+        ...targetAddr,
+        city: activeRegionName,
       };
     }
 
@@ -219,8 +232,8 @@ export default function Checkout() {
         items: orderItems,
         address: targetAddr,
         total,
-        districtName: targetAddr?.city || region?.name || "Mirzapur",
-        regionId: region?.id || "mirzapur",
+        districtName: activeRegionName,
+        regionId: activeRegionId,
       });
 
       clearCart();
@@ -321,13 +334,17 @@ export default function Checkout() {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-navy-900 mb-1">District / City *</label>
+                      <label className="block text-xs font-bold text-navy-900 mb-1 flex items-center justify-between">
+                        <span>District / City *</span>
+                        <span className="text-[10px] text-brand-600 font-bold bg-brand-50 px-1.5 py-0.5 rounded border border-brand-200">
+                          🔒 {region?.name || "Varanasi"}
+                        </span>
+                      </label>
                       <input
                         type="text"
-                        required
-                        value={newCity}
-                        onChange={(e) => setNewCity(e.target.value)}
-                        className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-bold"
+                        readOnly
+                        value={region?.name || newCity || "Varanasi"}
+                        className="w-full bg-slate-100 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold text-navy-900 cursor-not-allowed"
                       />
                     </div>
                     <div>

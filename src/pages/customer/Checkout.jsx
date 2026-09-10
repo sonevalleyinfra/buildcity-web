@@ -540,13 +540,14 @@ export default function Checkout() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">District / City</label>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    District / City <span className="text-[10px] text-brand-600 font-semibold">(Selected Region)</span>
+                  </label>
                   <input
                     type="text"
-                    required
-                    value={newCity}
-                    onChange={(e) => setNewCity(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg p-2.5 outline-none focus:border-brand-500 font-medium"
+                    readOnly
+                    value={region?.name || newCity || "Varanasi"}
+                    className="w-full border border-slate-200 bg-slate-50 text-slate-700 font-bold rounded-lg p-2.5 outline-none cursor-not-allowed"
                   />
                 </div>
                 <div>

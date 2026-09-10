@@ -867,7 +867,7 @@ app.post("/api/v1/users", requireAuth, requireRole("ADMIN"), async (req, res) =>
 });
 
 // 2. DISTRICT REPRESENTATIVE (DR) ENDPOINTS
-app.get("/api/v1/drs", requireAuth, requireRole("ADMIN"), async (req, res) => {
+app.get("/api/v1/drs", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const drs = await prisma.dR.findMany({
       include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },

@@ -3,6 +3,7 @@ import Navbar from "../../components/Navbar";
 import BottomNav from "../../components/BottomNav";
 import { useAddresses } from "../../context/AddressContext";
 import { useAuth } from "../../context/AuthContext";
+import { useRegion } from "../../context/RegionContext";
 
 const emptyForm = {
   label: "Home",
@@ -18,6 +19,7 @@ export default function Addresses() {
   const { addresses, addAddress, updateAddress, removeAddress, setDefault, isSavingAddress } =
     useAddresses();
   const { user, updateProfile } = useAuth();
+  const { region } = useRegion();
 
   const uniqueAddresses = useMemo(() => {
     const map = new Map();
@@ -87,7 +89,7 @@ export default function Addresses() {
   };
 
   const openAdd = () => {
-    setForm({ ...emptyForm, fullName: user?.name || "" });
+    setForm({ ...emptyForm, fullName: user?.name || "", city: region?.name || "Varanasi" });
     setEditingId(null);
     setShowForm(true);
   };
@@ -97,6 +99,7 @@ export default function Addresses() {
       ...addr,
       line: addr.line || addr.street || "",
       fullName: addr.fullName || user?.name || "",
+      city: addr.city || region?.name || "Varanasi",
       isDefault: Boolean(addr.isDefault),
     });
     setEditingId(addr.id);
@@ -105,19 +108,22 @@ export default function Addresses() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.line.trim() || !form.city.trim() || !form.pincode.trim()) return;
+    const resolvedCity = region?.name || form.city || "Varanasi";
+    if (!form.line.trim() || !form.pincode.trim()) return;
 
     setSubmitting(true);
     if (form.fullName && form.fullName.trim()) {
       maybeUpdateProfileName(form.fullName);
     }
 
+    const payload = { ...form, city: resolvedCity, regionId: region?.id };
+
     try {
       if (editingId) {
-        await updateAddress(editingId, form);
+        await updateAddress(editingId, payload);
         showStatus("✓ Address updated successfully!");
       } else {
-        await addAddress(form);
+        await addAddress(payload);
         showStatus("✓ New address added successfully!");
       }
     } catch {}
@@ -211,13 +217,14 @@ export default function Addresses() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1 block">City / District</label>
+                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1 block">
+                      City / District <span className="text-[10px] text-brand-600 font-semibold lowercase">({region?.name || "selected region"})</span>
+                    </label>
                     <input
                       name="city"
-                      value={form.city || ""}
-                      onChange={handleChange}
-                      placeholder="City (e.g. Varanasi)"
-                      className="w-full text-sm border border-slate-200 rounded-xl px-3.5 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 font-medium"
+                      readOnly
+                      value={region?.name || form.city || "Varanasi"}
+                      className="w-full text-sm border border-slate-200 bg-slate-50 text-slate-700 font-bold rounded-xl px-3.5 py-2.5 outline-none cursor-not-allowed"
                     />
                   </div>
                   <div>

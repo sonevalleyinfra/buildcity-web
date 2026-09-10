@@ -476,7 +476,7 @@ export default function Home() {
       <main className="max-w-6xl mx-auto px-4 pt-4 sm:pt-6 space-y-6">
         {/* 🌟 1. HERO CAROUSEL BANNER (SWIPEABLE) */}
         <div
-          className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#07132B] via-[#0A1A3A] to-[#0D224D] shadow-lg border border-slate-800/40 select-none group touch-pan-y flex flex-col"
+          className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#07132B] via-[#0A1A3A] to-[#0D224D] shadow-lg select-none group touch-pan-y flex flex-col"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -728,7 +728,7 @@ export default function Home() {
         </section>
 
         {/* 🎁 7. EXCLUSIVE DEALS BANNER CARD */}
-        <section className="bg-gradient-to-r from-[#07132B] via-[#0A1A3A] to-[#0D224D] rounded-2xl p-4 text-white shadow-lg border border-slate-800/40 relative overflow-hidden flex items-center justify-between">
+        <section className="bg-gradient-to-r from-[#07132B] via-[#0A1A3A] to-[#0D224D] rounded-2xl p-4 text-white shadow-lg relative overflow-hidden flex items-center justify-between">
           <div className="max-w-[55%] z-10">
             <h3 className="text-sm sm:text-base font-black leading-tight">Exclusive Deals</h3>
             <p className="text-[10px] sm:text-xs text-slate-300 font-medium mt-1 mb-3">

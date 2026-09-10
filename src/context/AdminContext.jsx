@@ -311,13 +311,13 @@ export function AdminProvider({ children }) {
 
       if (vendorsRes && Array.isArray(vendorsRes)) {
         const formattedVendors = vendorsRes.map((v) => {
-          const resolvedRegName = v.regionName || v.districtName || v.region?.name || (v.regionId === "r2" ? "Mirzapur" : "Varanasi");
+          const resolvedRegName = v.region?.name || v.regionName || v.districtName || "Varanasi";
           return {
             id: v.id,
             shopName: v.shopName,
             ownerName: v.ownerName,
             phone: v.phone,
-            regionId: v.regionId,
+            regionId: v.regionId || v.region?.id,
             regionName: resolvedRegName,
             districtName: resolvedRegName,
             status: v.status || "APPROVED",
@@ -409,8 +409,8 @@ export function AdminProvider({ children }) {
             ? vendorsRes?.find((v) => String(v.id).toLowerCase() === String(l.vendorId).toLowerCase())
             : null;
           const isVendorSuspended = (matchedVendor && matchedVendor.status === "SUSPENDED") || (l.vendor && l.vendor.status === "SUSPENDED");
-          const resolvedRegionName = l.regionName || l.districtName || l.vendor?.region?.name || matchedVendor?.region?.name || matchedVendor?.regionName || "Mirzapur";
-          const resolvedRegionId = l.regionId || l.vendor?.regionId || matchedVendor?.regionId || matchedVendor?.region?.id || "mirzapur";
+          const resolvedRegionName = l.vendor?.region?.name || matchedVendor?.region?.name || l.regionName || l.districtName || "Varanasi";
+          const resolvedRegionId = l.vendor?.regionId || l.vendor?.region?.id || matchedVendor?.regionId || matchedVendor?.region?.id || l.regionId || "2ab0f187-d170-4432-8eef-e0ac31ed21c3";
           const isListingApproved = l.approvalStatus === "APPROVED" || !l.approvalStatus || l.approvalStatus === "";
 
           return {

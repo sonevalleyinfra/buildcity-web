@@ -119,7 +119,6 @@ export default function DrDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [listingFilter, setListingFilter] = useState("ALL");
   const [orderStatusFilter, setOrderStatusFilter] = useState("ALL");
-  const [selectedDistrictName, setSelectedDistrictName] = useState("");
 
   // Modals state
   const [showVendorModal, setShowVendorModal] = useState(false);
@@ -192,17 +191,13 @@ export default function DrDashboard() {
     (rawDrRegionName && isSameDistrict(r.name, rawDrRegionName))
   );
 
-  const defaultDistrict = drRegion?.name || rawDrRegionName || (allRegions[0]?.name || "Varanasi");
-  const districtName = selectedDistrictName || defaultDistrict;
-  const drRegionId = (allRegions.find((r) => isSameDistrict(r.name, districtName)))?.id || drRegion?.id || rawDrRegionId || "";
+  const districtName = drRegion?.name || rawDrRegionName || (allRegions[0]?.name || "Varanasi");
+  const drRegionId = drRegion?.id || rawDrRegionId || (allRegions.find((r) => isSameDistrict(r.name, districtName)))?.id || "";
 
-  // DR Assigned Region Vendors Filter
+  // DR Assigned Region Vendors Filter (STRICT JURISDICTION LOCK)
   const districtVendors = allVendors.filter((v) => {
-    if (!user) return true;
-    if (user.role === "admin" && !selectedDistrictName) return true;
-
     const vRegId = v.regionId || v.region?.id;
-    const vRegName = v.regionName || v.districtName || v.region?.name || "";
+    const vRegName = v.region?.name || v.regionName || v.districtName || "";
 
     // 1. Match Region ID
     if (drRegionId && vRegId && String(vRegId).toLowerCase() === String(drRegionId).toLowerCase()) {
@@ -217,13 +212,10 @@ export default function DrDashboard() {
     return false;
   });
 
-  // DR Assigned Region Products Filter
+  // DR Assigned Region Products Filter (STRICT JURISDICTION LOCK)
   const districtProducts = allRawProducts.filter((p) => {
-    if (!user) return true;
-    if (user.role === "admin" && !selectedDistrictName) return true;
-
-    const pRegId = p.regionId;
-    const pRegName = p.regionName || p.districtName || "";
+    const pRegId = p.regionId || p.vendor?.regionId || p.vendor?.region?.id;
+    const pRegName = p.vendor?.region?.name || p.regionName || p.districtName || "";
 
     // 1. Direct region ID match
     if (drRegionId && pRegId && String(pRegId).toLowerCase() === String(drRegionId).toLowerCase()) {
@@ -241,38 +233,36 @@ export default function DrDashboard() {
         (v.id && p.vendorId && String(v.id).toLowerCase() === String(p.vendorId).toLowerCase()) ||
         (v.shopName && p.vendorName && v.shopName.toLowerCase().trim() === p.vendorName.toLowerCase().trim())
     );
-    if (belongsToDistrictVendor) return true;
-
-    return false;
+    return belongsToDistrictVendor;
   });
 
-  // DR Assigned Region Orders Filter (Strictly filter orders belonging to DR's jurisdiction destination)
+  // DR Assigned Region Orders Filter (Strictly filter orders belonging to this DR's district destination)
   const districtOrders = orders.filter((o) => {
-    if (!user) return true;
-    if (user.role === "admin" && !selectedDistrictName) return true;
-
     // 1. Direct Delivery Address Region ID matching
     const orderRegionId = o.address?.regionId || o.address?.region?.id || o.regionId || o.region?.id;
     if (drRegionId && orderRegionId && String(orderRegionId).toLowerCase() === String(drRegionId).toLowerCase()) {
       return true;
     }
 
-    // 2. Direct Delivery Address Region Name matching
-    const orderRegionName = o.address?.region?.name || o.region?.name || o.districtName || o.regionName || o.address?.district || o.address?.city || "";
+    // 2. Direct Delivery Address Region Name matching (prioritizing true address region name over city)
+    const orderRegionName = o.address?.region?.name || o.region?.name || o.address?.city || o.districtName || o.regionName || o.address?.district || "";
     if (districtName && orderRegionName && isSameDistrict(districtName, orderRegionName)) {
       return true;
     }
 
-    // 3. Fallback: match by items' vendor region
+    // 3. Match by items' vendor belonging to this district
     if (Array.isArray(o.items) && o.items.length > 0) {
-      const hasItemInRegion = o.items.some((it) => {
+      const hasItemInDistrict = o.items.some((it) => {
+        const itVendorId = it.vendorId;
         const itVendorRegId = it.vendor?.regionId || it.vendor?.region?.id || it.regionId;
         const itVendorRegName = it.vendor?.region?.name || it.vendorRegion || it.regionName || "";
+        
+        if (districtVendors.some(v => v.id === itVendorId)) return true;
         if (drRegionId && itVendorRegId && String(itVendorRegId).toLowerCase() === String(drRegionId).toLowerCase()) return true;
         if (districtName && itVendorRegName && isSameDistrict(districtName, itVendorRegName)) return true;
         return false;
       });
-      if (hasItemInRegion) return true;
+      if (hasItemInDistrict) return true;
     }
 
     return false;
@@ -527,11 +517,11 @@ export default function DrDashboard() {
           {/* Quick Metrics */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-5 border-t border-slate-700/60">
             <div className="bg-white/10 rounded-xl p-3.5 backdrop-blur-xs border border-white/10">
-              <p className="text-[11px] text-slate-300 font-medium">Active District</p>
+              <p className="text-[11px] text-slate-300 font-medium">Assigned District</p>
               <p className="text-lg font-black mt-0.5 tracking-tight text-amber-300">📍 {districtName}</p>
             </div>
             <div className="bg-white/10 rounded-xl p-3.5 backdrop-blur-xs border border-white/10">
-              <p className="text-[11px] text-slate-300 font-medium">Active Vendors</p>
+              <p className="text-[11px] text-slate-300 font-medium">District Vendors</p>
               <p className="text-lg font-black mt-0.5 tracking-tight">{districtVendors.length}</p>
             </div>
             <div className="bg-white/10 rounded-xl p-3.5 backdrop-blur-xs border border-white/10">
@@ -539,35 +529,9 @@ export default function DrDashboard() {
               <p className="text-lg font-black mt-0.5 tracking-tight">{districtOrders.length}</p>
             </div>
             <div className="bg-white/10 rounded-xl p-3.5 backdrop-blur-xs border border-white/10">
-              <p className="text-[11px] text-slate-300 font-medium">Assigned Mobile</p>
-              <p className="text-lg font-black mt-0.5 tracking-tight">{user?.phone}</p>
+              <p className="text-[11px] text-slate-300 font-medium">District Products</p>
+              <p className="text-lg font-black mt-0.5 tracking-tight">{districtProducts.length}</p>
             </div>
-          </div>
-
-          {/* District Switcher Chips */}
-          <div className="flex flex-wrap items-center gap-2 mt-4 pt-3.5 border-t border-white/10">
-            <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
-              <span>Switch District:</span>
-            </span>
-            {allRegions.map((r) => {
-              const isSelected = isSameDistrict(districtName, r.name);
-              return (
-                <button
-                  key={r.id || r.name}
-                  type="button"
-                  onClick={() => setSelectedDistrictName(r.name)}
-                  className={`text-xs font-bold px-3 py-1 rounded-full transition-all cursor-pointer flex items-center gap-1 ${
-                    isSelected
-                      ? "bg-amber-400 text-navy-950 font-black shadow-xs ring-2 ring-amber-300/50 scale-105"
-                      : "bg-white/10 hover:bg-white/20 text-white border border-white/10"
-                  }`}
-                >
-                  <span>📍</span>
-                  <span>{r.name}</span>
-                  {isSelected && <span className="text-[10px]">✓</span>}
-                </button>
-              );
-            })}
           </div>
         </div>
 

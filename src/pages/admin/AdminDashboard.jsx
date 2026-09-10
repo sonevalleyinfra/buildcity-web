@@ -123,6 +123,12 @@ export default function AdminDashboard() {
     (a, b) => new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0)
   );
 
+  // Live total revenue calculated accurately across all platform orders
+  const liveTotalRevenue = displayOrders.reduce(
+    (sum, o) => sum + (Number(o.totalAmount || o.total || o.amount) || 0),
+    0
+  );
+
   // Tab State: Overview, District Reps, Vendors, Products, Listings, Orders, Categories, Regions
   const [tab, setTab] = useState("Overview");
   const tabsContainerRef = useRef(null);
@@ -693,8 +699,10 @@ export default function AdminDashboard() {
               <div className="bg-white border border-slate-200/90 rounded-2xl p-4.5 shadow-2xs hover:shadow-md hover:border-brand-300 transition-all duration-200 relative overflow-hidden group">
                 <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brand-500 to-brand-600" />
                 <p className="text-xs font-semibold text-slate-500 tracking-tight">Total Revenue</p>
-                <p className="text-2xl font-black text-navy-900 tracking-tight mt-1">₹{Number(stats?.totalRevenue || 0).toLocaleString("en-IN")}</p>
-                <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold inline-block mt-1">From completed orders</span>
+                <p className="text-2xl font-black text-navy-900 tracking-tight mt-1">₹{Number(liveTotalRevenue || 0).toLocaleString("en-IN")}</p>
+                <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold inline-block mt-1">
+                  From {displayOrders.length} platform orders
+                </span>
               </div>
               <div className="bg-white border border-slate-200/90 rounded-2xl p-4.5 shadow-2xs hover:shadow-md hover:border-brand-300 transition-all duration-200 relative overflow-hidden group">
                 <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />

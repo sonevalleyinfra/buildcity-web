@@ -215,8 +215,6 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       users: users || [],
     };
 
-    setCached(cacheKey, data, 30000); // 30s cache
-    res.setHeader("X-Cache", "MISS");
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1313,6 +1311,17 @@ app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN", "DR")
     return res.status(404).json({ error: "Master Product not found" });
   } catch (err) {
     console.error("PATCH Master Product error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  try {
+    const rawId = req.params.id;
+    await prisma.vendorProduct.deleteMany({ where: { masterProductId: rawId } }).catch(() => null);
+    await prisma.productMaster.delete({ where: { id: rawId } }).catch(() => null);
+    res.json({ success: true, message: "Master product deleted" });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

@@ -492,6 +492,8 @@ export function AdminProvider({ children }) {
 
   const addDr = async (drData) => {
     const regionObj = regions.find((r) => r.id === drData.regionId) || {};
+    const targetRegionName = regionObj.name || drData.regionName || "Varanasi";
+
     try {
       const res = await authFetch(`${API_BASE_URL}/api/v1/drs`, {
         method: "POST",
@@ -504,33 +506,56 @@ export function AdminProvider({ children }) {
         }),
       });
       if (res.ok) {
-        await fetchCloudData();
-        return;
+        const created = await res.json();
+        const formattedNewDr = {
+          id: created.id,
+          name: created.name,
+          phone: created.phone,
+          regionId: created.regionId,
+          regionName: created.region?.name || targetRegionName,
+          status: created.status || "ACTIVE",
+          vendorCount: 0,
+          productCount: 0,
+          joinedOn: created.joinedOn ? created.joinedOn.split("T")[0] : new Date().toISOString().split("T")[0],
+        };
+        setDrs((prev) => {
+          const updated = [formattedNewDr, ...prev.filter((d) => d.id !== formattedNewDr.id && d.phone !== formattedNewDr.phone)];
+          try { localStorage.setItem(DRS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+          return updated;
+        });
+        fetchCloudData();
+        return formattedNewDr;
       }
-    } catch {}
+    } catch (err) {
+      console.warn("DB DR add note:", err.message);
+    }
 
-    const newDr = {
+    const fallbackDr = {
       id: "dr-" + Date.now(),
       name: drData.name,
       phone: drData.phone.trim(),
       password: drData.password ? drData.password.trim() : "dr123",
       regionId: drData.regionId,
-      regionName: regionObj.name || drData.regionName || "General",
+      regionName: targetRegionName,
       status: "ACTIVE",
       vendorCount: 0,
       productCount: 0,
       joinedOn: new Date().toISOString().split("T")[0],
     };
-    setDrs((prev) => [newDr, ...prev]);
-    return newDr;
+    setDrs((prev) => {
+      const updated = [fallbackDr, ...prev];
+      try { localStorage.setItem(DRS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    return fallbackDr;
   };
 
   const updateDr = async (id, drData) => {
     const regionObj = regions.find((r) => r.id === drData.regionId) || {};
     const newRegName = regionObj.name || drData.regionName || "General";
 
-    setDrs((prev) =>
-      prev.map((d) =>
+    setDrs((prev) => {
+      const updated = prev.map((d) =>
         d.id === id
           ? {
               ...d,
@@ -541,8 +566,10 @@ export function AdminProvider({ children }) {
               regionName: newRegName,
             }
           : d
-      )
-    );
+      );
+      try { localStorage.setItem(DRS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
 
     try {
       await authFetch(`${API_BASE_URL}/api/v1/drs/${id}`, {
@@ -555,7 +582,7 @@ export function AdminProvider({ children }) {
           regionId: drData.regionId,
         }),
       });
-      await fetchCloudData();
+      fetchCloudData();
     } catch (err) {
       console.warn("Update DR error:", err.message);
     }
@@ -563,15 +590,17 @@ export function AdminProvider({ children }) {
 
   const toggleDrActive = async (id) => {
     let nextStatus = "ACTIVE";
-    setDrs((prev) =>
-      prev.map((d) => {
+    setDrs((prev) => {
+      const updated = prev.map((d) => {
         if (d.id === id) {
           nextStatus = d.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
           return { ...d, status: nextStatus };
         }
         return d;
-      })
-    );
+      });
+      try { localStorage.setItem(DRS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
 
     try {
       await authFetch(`${API_BASE_URL}/api/v1/drs/${id}`, {
@@ -579,18 +608,22 @@ export function AdminProvider({ children }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: nextStatus }),
       });
-      await fetchCloudData();
+      fetchCloudData();
     } catch {}
   };
 
   const removeDr = async (id) => {
-    setDrs((prev) => prev.filter((d) => d.id !== id));
+    setDrs((prev) => {
+      const updated = prev.filter((d) => d.id !== id);
+      try { localStorage.setItem(DRS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
     try {
       const res = await authFetch(`${API_BASE_URL}/api/v1/drs/${id}`, {
         method: "DELETE",
       });
       if (res.ok) {
-        await fetchCloudData();
+        fetchCloudData();
       }
     } catch (err) {
       console.warn("Delete DR error:", err.message);
@@ -618,26 +651,52 @@ export function AdminProvider({ children }) {
       });
       if (res.ok) {
         const createdV = await res.json();
-        await fetchCloudData();
-        return createdV;
+        const formattedNewVendor = {
+          id: createdV.id,
+          shopName: createdV.shopName,
+          ownerName: createdV.ownerName,
+          phone: createdV.phone,
+          regionId: createdV.regionId,
+          regionName: createdV.region?.name || targetRegionName,
+          districtName: createdV.region?.name || targetRegionName,
+          status: createdV.status || "APPROVED",
+          commissionRate: Number(createdV.commissionRate) || 10,
+          productCount: 0,
+          joinedOn: createdV.joinedOn ? createdV.joinedOn.split("T")[0] : new Date().toISOString().split("T")[0],
+          addedByDr: createdV.addedByDr || vendorData.addedByDr || "Admin",
+        };
+        setVendors((prev) => {
+          const updated = [formattedNewVendor, ...prev.filter((v) => v.id !== formattedNewVendor.id && v.phone !== formattedNewVendor.phone)];
+          try { localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+          return updated;
+        });
+        fetchCloudData();
+        return formattedNewVendor;
       }
-    } catch {}
+    } catch (err) {
+      console.warn("Add vendor DB note:", err.message);
+    }
 
-    const newVendor = {
+    const fallbackVendor = {
       id: "v-" + Date.now(),
       shopName: vendorData.shopName,
       ownerName: vendorData.ownerName,
       phone: vendorData.phone,
       regionId: vendorData.regionId || "r1",
-      regionName: regionObj.name || vendorData.regionName || "Varanasi",
+      regionName: targetRegionName,
+      districtName: targetRegionName,
       status: "APPROVED",
       commissionRate: vendorData.commissionRate || 10,
       productCount: 0,
       joinedOn: new Date().toISOString().split("T")[0],
-      addedByDr: vendorData.addedByDr || "System",
+      addedByDr: vendorData.addedByDr || "Admin",
     };
-    setVendors((prev) => [newVendor, ...prev]);
-    return newVendor;
+    setVendors((prev) => {
+      const updated = [fallbackVendor, ...prev];
+      try { localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    return fallbackVendor;
   };
 
   const updateVendor = async (id, vendorData) => {
@@ -1094,6 +1153,9 @@ export function AdminProvider({ children }) {
   };
 
   const addMasterProduct = async (mpData) => {
+    const catObj = categories.find((c) => c.id === mpData.categoryId) || {};
+    const catName = catObj.name || mpData.categoryName || "General";
+
     try {
       const res = await authFetch(`${API_BASE_URL}/api/v1/master-products`, {
         method: "POST",
@@ -1101,17 +1163,37 @@ export function AdminProvider({ children }) {
         body: JSON.stringify(mpData),
       });
       if (res.ok) {
-        await fetchCloudData();
-        return;
+        const created = await res.json();
+        const formattedNewMp = {
+          id: created.id,
+          name: created.name,
+          categoryId: created.categoryId,
+          categoryName: created.category?.name || catName,
+          brand: created.brand || mpData.brand || "Generic",
+          type: created.type || mpData.type || "Standard",
+          grade: created.grade || mpData.grade || "Standard Grade",
+          unit: created.unit || mpData.unit || "Unit",
+          suggestedPrice: Number(created.suggestedPrice) || Number(mpData.suggestedPrice) || 100,
+          imageUrl: created.imageUrl || mpData.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+          addedBy: created.addedBy || mpData.addedBy || "Admin",
+        };
+        setMasterProducts((prev) => {
+          const updated = [formattedNewMp, ...prev.filter((m) => m.id !== formattedNewMp.id)];
+          try { localStorage.setItem(MASTER_PRODUCTS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+          return updated;
+        });
+        fetchCloudData();
+        return formattedNewMp;
       }
-    } catch {}
+    } catch (err) {
+      console.warn("DB Master product add note:", err.message);
+    }
 
-    const catObj = categories.find((c) => c.id === mpData.categoryId) || {};
-    const newMp = {
+    const fallbackMp = {
       id: mpData.id || "mp-" + Date.now(),
       name: mpData.name,
       categoryId: mpData.categoryId || "c1",
-      categoryName: catObj.name || mpData.categoryName || "General",
+      categoryName: catName,
       brand: mpData.brand || "Generic",
       type: mpData.type || "Standard",
       grade: mpData.grade || "Standard Grade",
@@ -1120,21 +1202,29 @@ export function AdminProvider({ children }) {
       imageUrl: mpData.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
       addedBy: mpData.addedBy || "Admin",
     };
-    setMasterProducts((prev) => [newMp, ...prev]);
-    return newMp;
+    setMasterProducts((prev) => {
+      const updated = [fallbackMp, ...prev];
+      try { localStorage.setItem(MASTER_PRODUCTS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    return fallbackMp;
   };
 
   const updateMasterProduct = async (id, updates) => {
     const targetPrice = Number(updates.suggestedPrice !== undefined ? updates.suggestedPrice : updates.price);
 
-    setMasterProducts((prev) =>
-      prev.map((mp) => (mp.id === id ? { ...mp, ...updates, suggestedPrice: !isNaN(targetPrice) && targetPrice > 0 ? targetPrice : mp.suggestedPrice } : mp))
-    );
+    setMasterProducts((prev) => {
+      const updated = prev.map((mp) => (mp.id === id ? { ...mp, ...updates, suggestedPrice: !isNaN(targetPrice) && targetPrice > 0 ? targetPrice : mp.suggestedPrice } : mp));
+      try { localStorage.setItem(MASTER_PRODUCTS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
 
     if (!isNaN(targetPrice) && targetPrice > 0) {
-      setProducts((prev) =>
-        prev.map((p) => (p.masterProductId === id || p.id === id ? { ...p, price: targetPrice, suggestedPrice: targetPrice } : p))
-      );
+      setProducts((prev) => {
+        const updated = prev.map((p) => (p.masterProductId === id || p.id === id ? { ...p, price: targetPrice, suggestedPrice: targetPrice } : p));
+        try { localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+        return updated;
+      });
     }
 
     try {
@@ -1148,10 +1238,31 @@ export function AdminProvider({ children }) {
       });
 
       if (res.ok) {
-        await fetchCloudData();
+        fetchCloudData();
       }
     } catch (err) {
       console.warn("Update master product error:", err.message);
+    }
+  };
+
+  const removeMasterProduct = async (id) => {
+    setMasterProducts((prev) => {
+      const updated = prev.filter((mp) => mp.id !== id);
+      try { localStorage.setItem(MASTER_PRODUCTS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    setProducts((prev) => {
+      const updated = prev.filter((p) => p.masterProductId !== id && p.id !== id);
+      try { localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    try {
+      await authFetch(`${API_BASE_URL}/api/v1/master-products/${id}`, {
+        method: "DELETE",
+      });
+      fetchCloudData();
+    } catch (err) {
+      console.warn("Delete master product error:", err.message);
     }
   };
 
@@ -1338,6 +1449,7 @@ export function AdminProvider({ children }) {
         removeCoupon,
         addMasterProduct,
         updateMasterProduct,
+        removeMasterProduct,
         assignMasterProductToVendor,
         updateVendorProductListing,
         removeVendorProductListing,

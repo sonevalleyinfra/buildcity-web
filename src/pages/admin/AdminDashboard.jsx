@@ -80,6 +80,7 @@ export default function AdminDashboard() {
     toggleCouponActive,
     addMasterProduct,
     updateMasterProduct,
+    removeMasterProduct,
     updateVendorProductListing,
     updateListingApprovalStatus,
     updateOrderStatus,
@@ -507,6 +508,29 @@ export default function AdminDashboard() {
     } finally {
       setIsSubmittingEditProduct(false);
     }
+  };
+
+  const [deletingProductId, setDeletingProductId] = useState(null);
+
+  const handleDeleteProduct = async (p) => {
+    showAlert({
+      title: "Delete Product?",
+      message: `Are you sure you want to delete "${p.name}"? This will also remove it from vendor listings.`,
+      type: "warning",
+      confirmText: "Yes, Delete",
+      cancelText: "Cancel",
+      onConfirm: async () => {
+        setDeletingProductId(p.id);
+        try {
+          await removeMasterProduct(p.id);
+          showAlert({ title: "Product Deleted", message: `Product "${p.name}" has been removed.`, type: "success" });
+        } catch (err) {
+          showAlert({ title: "Error", message: "Failed to delete product: " + (err.message || err), type: "error" });
+        } finally {
+          setDeletingProductId(null);
+        }
+      },
+    });
   };
 
   const [isSubmittingCat, setIsSubmittingCat] = useState(false);
@@ -1544,12 +1568,21 @@ export default function AdminDashboard() {
                           <span className="text-[11px] text-slate-500"> /{p.unit}</span>
                         </td>
                         <td className="py-3.5 px-4 text-right">
-                          <button
-                            onClick={() => setEditingProduct({ ...p })}
-                            className="text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer"
-                          >
-                            ✏️ Edit
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => setEditingProduct({ ...p })}
+                              className="text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer"
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button
+                              disabled={deletingProductId === p.id}
+                              onClick={() => handleDeleteProduct(p)}
+                              className="text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-50"
+                            >
+                              {deletingProductId === p.id ? "⏳" : "🗑️ Delete"}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}

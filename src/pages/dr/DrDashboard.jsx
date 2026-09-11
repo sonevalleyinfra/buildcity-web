@@ -1278,7 +1278,7 @@ export default function DrDashboard() {
                             </button>
                             {v.status !== "APPROVED" && (
                               <button
-                                disabled={Boolean(updatingVendorStatus)}
+                                disabled={updatingVendorStatus?.id === v.id}
                                 onClick={() => handleToggleVendorStatus(v.id, "APPROVED")}
                                 className="text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-2.5 py-1.5 shadow-2xs active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1 min-w-[75px] justify-center"
                               >
@@ -1294,7 +1294,7 @@ export default function DrDashboard() {
                             )}
                             {v.status !== "SUSPENDED" && (
                               <button
-                                disabled={Boolean(updatingVendorStatus)}
+                                disabled={updatingVendorStatus?.id === v.id}
                                 onClick={() => handleToggleVendorStatus(v.id, "SUSPENDED")}
                                 className="text-[11px] font-semibold border border-amber-300 text-amber-700 hover:bg-amber-50 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1 min-w-[75px] justify-center"
                               >
@@ -1310,7 +1310,7 @@ export default function DrDashboard() {
                             )}
                             {v.status === "SUSPENDED" && (
                               <button
-                                disabled={Boolean(updatingVendorStatus)}
+                                disabled={updatingVendorStatus?.id === v.id}
                                 onClick={() => handleToggleVendorStatus(v.id, "APPROVED")}
                                 className="text-[11px] font-semibold border border-emerald-500 text-emerald-600 hover:bg-emerald-50 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1 min-w-[75px] justify-center"
                               >

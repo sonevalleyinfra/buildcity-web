@@ -1,7 +1,55 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useRef } from "react";
 import { useAuth } from "./AuthContext";
 import { authFetch } from "../config/authFetch";
 import { API_BASE_URL } from "../config/api";
+
+const areVendorsEqual = (listA, listB) => {
+  if (listA === listB) return true;
+  if (!listA && !listB) return true;
+  if (!listA || !listB) return false;
+  if (!Array.isArray(listA) || !Array.isArray(listB)) return false;
+  if (listA.length !== listB.length) return false;
+  for (let i = 0; i < listA.length; i++) {
+    const a = listA[i];
+    const b = listB[i];
+    if (!a || !b) return false;
+    if (
+      a.id !== b.id ||
+      a.status !== b.status ||
+      a.shopName !== b.shopName ||
+      a.phone !== b.phone ||
+      a.regionId !== b.regionId ||
+      a.commissionRate !== b.commissionRate ||
+      a.productCount !== b.productCount
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const areDrsEqual = (listA, listB) => {
+  if (listA === listB) return true;
+  if (!listA && !listB) return true;
+  if (!listA || !listB) return false;
+  if (!Array.isArray(listA) || !Array.isArray(listB)) return false;
+  if (listA.length !== listB.length) return false;
+  for (let i = 0; i < listA.length; i++) {
+    const a = listA[i];
+    const b = listB[i];
+    if (!a || !b) return false;
+    if (
+      a.id !== b.id ||
+      a.status !== b.status ||
+      a.name !== b.name ||
+      a.phone !== b.phone ||
+      a.regionId !== b.regionId
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
 
 const AdminContext = createContext(null);
 
@@ -153,6 +201,7 @@ export function AdminProvider({ children }) {
   const [masterProducts, setMasterProducts] = useState(loadInitialMasterProducts);
   const [products, setProducts] = useState(loadInitialProducts);
   const [productsLoading, setProductsLoading] = useState(true);
+  const isFetchingRef = useRef(false);
 
   // Fetch Public Catalog for standard customers and visitors (Single Unified 0.05s call)
   const fetchPublicCatalog = async () => {
@@ -258,6 +307,9 @@ export function AdminProvider({ children }) {
 
   // Single Source of Truth: Supabase Cloud DB se live data sync karne ke liye (Admin / DR / Vendor)
   const fetchCloudData = async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+
     let currentUser = user;
     if (!currentUser && typeof window !== "undefined") {
       try {
@@ -270,7 +322,12 @@ export function AdminProvider({ children }) {
     const isStaff = (currentRole === "admin" || currentRole === "dr" || currentRole === "vendor") && Boolean(currentToken);
 
     if (!isStaff) {
-      return fetchPublicCatalog();
+      try {
+        await fetchPublicCatalog();
+      } finally {
+        isFetchingRef.current = false;
+      }
+      return;
     }
 
     try {
@@ -298,11 +355,20 @@ export function AdminProvider({ children }) {
             }
           }
           const resolvedRegionName = addr.region?.name || ord.region?.name || vendorRegionName || ord.districtName || ord.regionName || addr.city || addr.district || "Varanasi";
-          const resolvedRegionId = addr.region?.id || ord.region?.id || vendorRegionId || ord.regionId || addr.regionId || "2ab0f187-d170-4432-8eef-e0ac31ed21c3";
+          const resolvedRegionId = addr.region?.id || ord.region?.id || vendorRegionId || ord.districtId || ord.regionId || "2ab0f187-d170-4432-8eef-e0ac31ed21c3";
+
           return {
-            ...ord,
-            districtName: resolvedRegionName,
+            id: ord.id,
+            orderNumber: ord.orderNumber || (ord.id ? ord.id.substring(0, 8).toUpperCase() : "ORD"),
+            date: ord.createdAt ? ord.createdAt.split("T")[0] : new Date().toISOString().split("T")[0],
+            createdAt: ord.createdAt || new Date().toISOString(),
+            customerName: ord.user?.name || addr.fullName || addr.name || "Customer",
+            customerPhone: ord.user?.phone || addr.phone || "9999999999",
+            shippingAddress: addr.street || addr.addressLine || "Varanasi",
+            address: addr,
+            status: ord.status || "Pending",
             regionName: resolvedRegionName,
+            districtName: resolvedRegionName,
             regionId: resolvedRegionId,
             total: Number(ord.totalAmount) || Number(ord.total) || 0,
             totalAmount: Number(ord.totalAmount) || Number(ord.total) || 0,
@@ -318,7 +384,6 @@ export function AdminProvider({ children }) {
             const hasChanged = prev.some((p, i) => p.id !== formattedOrders[i]?.id || p.status !== formattedOrders[i]?.status);
             if (!hasChanged) return prev;
           }
-          window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
           return formattedOrders;
         });
       }
@@ -345,8 +410,13 @@ export function AdminProvider({ children }) {
           productCount: 8,
           joinedOn: d.joinedOn ? d.joinedOn.split("T")[0] : "2026-05-10",
         }));
-        localStorage.setItem(DRS_STORAGE_KEY, JSON.stringify(formattedDrs));
-        setDrs((prev) => (JSON.stringify(prev) === JSON.stringify(formattedDrs) ? prev : formattedDrs));
+        setDrs((prev) => {
+          if (areDrsEqual(prev, formattedDrs)) return prev;
+          try {
+            localStorage.setItem(DRS_STORAGE_KEY, JSON.stringify(formattedDrs));
+          } catch {}
+          return formattedDrs;
+        });
       }
 
       if (vendorsRes && Array.isArray(vendorsRes)) {
@@ -369,8 +439,11 @@ export function AdminProvider({ children }) {
         });
 
         setVendors((prev) => {
-          localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(formattedVendors));
-          return JSON.stringify(prev) === JSON.stringify(formattedVendors) ? prev : formattedVendors;
+          if (areVendorsEqual(prev, formattedVendors)) return prev;
+          try {
+            localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(formattedVendors));
+          } catch {}
+          return formattedVendors;
         });
       }
 
@@ -508,6 +581,7 @@ export function AdminProvider({ children }) {
     } catch (err) {
       console.warn("Cloud sync note:", err.message);
     } finally {
+      isFetchingRef.current = false;
       setProductsLoading(false);
     }
   };

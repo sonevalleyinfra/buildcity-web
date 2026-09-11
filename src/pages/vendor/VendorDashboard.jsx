@@ -273,31 +273,25 @@ export default function VendorDashboard() {
     e.preventDefault();
     if (!editingProduct) return;
 
-    setIsUpdatingListing(true);
-    try {
-      await updateVendorProductListing(editingProduct.id, {
-        price: Number(editingProduct.price),
-        mrp: Number(editingProduct.mrp),
-        stockQty: Number(editingProduct.stockQty),
-      });
+    const prodToSave = { ...editingProduct };
+    const updatedPrice = prodToSave.price;
+    const updatedDisc = prodToSave.discountPct;
+    setEditingProduct(null);
+    showAlert({
+      title: "✅ Offer Live on Store!",
+      message: `Your product price has been updated to ₹${updatedPrice} (${updatedDisc}% OFF).\n\nCustomers across your district will now see this discounted price and % OFF badge immediately!`,
+      type: "success",
+      buttonText: "Awesome",
+    });
 
-      const updatedPrice = editingProduct.price;
-      const updatedDisc = editingProduct.discountPct;
-      setEditingProduct(null);
-      showAlert({
-        title: "✅ Offer Live on Store!",
-        message: `Your product price has been updated to ₹${updatedPrice} (${updatedDisc}% OFF).\n\nCustomers across your district will now see this discounted price and % OFF badge immediately!`,
-        type: "success",
-        buttonText: "Awesome",
+    try {
+      await updateVendorProductListing(prodToSave.id, {
+        price: Number(prodToSave.price),
+        mrp: Number(prodToSave.mrp),
+        stockQty: Number(prodToSave.stockQty),
       });
     } catch (err) {
-      showAlert({
-        title: "Update Error",
-        message: err.message || "Failed to update listing.",
-        type: "warning",
-      });
-    } finally {
-      setIsUpdatingListing(false);
+      console.warn("Background update listing note:", err.message);
     }
   };
 

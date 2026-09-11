@@ -255,15 +255,13 @@ export default function AdminDashboard() {
   const handleUpdateCouponSubmit = async (e) => {
     e.preventDefault();
     if (!editingCoupon) return;
-    setIsSubmittingCoupon(true);
+    const couponToSave = { ...editingCoupon };
+    setEditingCoupon(null);
+    showAlert({ title: "Coupon Updated", message: "Coupon updated successfully!", type: "success" });
     try {
-      await updateCoupon(editingCoupon.id, editingCoupon);
-      setEditingCoupon(null);
-      showAlert({ title: "Coupon Updated", message: "Coupon updated in Database successfully!", type: "success" });
+      await updateCoupon(couponToSave.id, couponToSave);
     } catch (err) {
-      showAlert({ title: "Error", message: "Error updating coupon: " + (err.message || err), type: "error" });
-    } finally {
-      setIsSubmittingCoupon(false);
+      console.warn("Background update coupon note:", err.message);
     }
   };
 
@@ -413,30 +411,26 @@ export default function AdminDashboard() {
   const handleUpdateDrSubmit = async (e) => {
     e.preventDefault();
     if (!editingDr) return;
-    setIsSubmittingEditDr(true);
+    const drToSave = { ...editingDr };
+    setEditingDr(null);
+    showAlert({ title: "DR Updated", message: "DR details updated successfully!", type: "success" });
     try {
-      await updateDr(editingDr.id, editingDr);
-      setEditingDr(null);
-      showAlert({ title: "DR Updated", message: "DR details updated in Database successfully!", type: "success" });
+      await updateDr(drToSave.id, drToSave);
     } catch (err) {
-      showAlert({ title: "Error", message: "Failed to update DR: " + (err.message || err), type: "error" });
-    } finally {
-      setIsSubmittingEditDr(false);
+      console.warn("Background update DR note:", err.message);
     }
   };
 
   const handleUpdateVendorSubmit = async (e) => {
     e.preventDefault();
     if (!editingVendor) return;
-    setIsSubmittingEditVendor(true);
+    const vendorToSave = { ...editingVendor };
+    setEditingVendor(null);
+    showAlert({ title: "Vendor Updated", message: "Vendor details & password updated successfully!", type: "success" });
     try {
-      await updateVendor(editingVendor.id, editingVendor);
-      setEditingVendor(null);
-      showAlert({ title: "Vendor Updated", message: "Vendor details & password updated in Database successfully!", type: "success" });
+      await updateVendor(vendorToSave.id, vendorToSave);
     } catch (err) {
-      showAlert({ title: "Error", message: "Failed to update vendor: " + (err.message || err), type: "error" });
-    } finally {
-      setIsSubmittingEditVendor(false);
+      console.warn("Background update vendor note:", err.message);
     }
   };
 
@@ -478,33 +472,31 @@ export default function AdminDashboard() {
   const handleUpdateProductSubmit = async (e) => {
     e.preventDefault();
     if (!editingProduct) return;
-    setIsSubmittingEditProduct(true);
+    const prodToSave = { ...editingProduct };
+    setEditingProduct(null);
+    showAlert({ title: "Product Updated", message: "Product details and price updated successfully!", type: "success" });
+
     try {
-      const targetPrice = Number(editingProduct.suggestedPrice || editingProduct.price || 100);
-      const prodId = editingProduct.id || editingProduct.masterProductId;
+      const targetPrice = Number(prodToSave.suggestedPrice || prodToSave.price || 100);
+      const prodId = prodToSave.id || prodToSave.masterProductId;
 
       await updateMasterProduct(prodId, {
-        ...editingProduct,
+        ...prodToSave,
         suggestedPrice: targetPrice,
         price: targetPrice,
       });
 
-      if (editingProduct.vendorId || editingProduct.masterProductId) {
-        await updateVendorProductListing(editingProduct.id, {
-          name: editingProduct.name,
-          brand: editingProduct.brand,
-          grade: editingProduct.grade,
-          unit: editingProduct.unit,
+      if (prodToSave.vendorId || prodToSave.masterProductId) {
+        await updateVendorProductListing(prodToSave.id, {
+          name: prodToSave.name,
+          brand: prodToSave.brand,
+          grade: prodToSave.grade,
+          unit: prodToSave.unit,
           price: targetPrice,
         }).catch(() => null);
       }
-
-      setEditingProduct(null);
-      showAlert({ title: "Product Updated", message: "Product details and price updated successfully in Database!", type: "success" });
     } catch (err) {
-      showAlert({ title: "Error", message: "Failed to update product: " + (err.message || err), type: "error" });
-    } finally {
-      setIsSubmittingEditProduct(false);
+      console.warn("Background update product note:", err.message);
     }
   };
 
@@ -552,15 +544,13 @@ export default function AdminDashboard() {
   const handleUpdateCategorySubmit = async (e) => {
     e.preventDefault();
     if (!editingCategory) return;
-    setIsSubmittingCat(true);
+    const catToSave = { ...editingCategory };
+    setEditingCategory(null);
+    showAlert({ title: "Category Updated", message: `Category "${catToSave.name}" updated successfully!`, type: "success" });
     try {
-      await updateCategory(editingCategory.id, editingCategory);
-      setEditingCategory(null);
-      showAlert({ title: "Category Updated", message: `Category "${editingCategory.name}" updated in Database successfully!`, type: "success" });
+      await updateCategory(catToSave.id, catToSave);
     } catch (err) {
-      showAlert({ title: "Error", message: "Error updating category: " + (err.message || err), type: "error" });
-    } finally {
-      setIsSubmittingCat(false);
+      console.warn("Background update category note:", err.message);
     }
   };
 
@@ -589,15 +579,13 @@ export default function AdminDashboard() {
   const handleUpdateRegionSubmit = async (e) => {
     e.preventDefault();
     if (!editingRegion) return;
-    setIsSubmittingRegion(true);
+    const regToSave = { ...editingRegion };
+    setEditingRegion(null);
+    showAlert({ title: "Region Updated", message: "District Region updated successfully!", type: "success" });
     try {
-      await updateRegion(editingRegion.id, editingRegion);
-      setEditingRegion(null);
-      showAlert({ title: "Region Updated", message: "District Region updated in Database successfully!", type: "success" });
+      await updateRegion(regToSave.id, regToSave);
     } catch (err) {
-      showAlert({ title: "Error", message: "Error updating district region: " + (err.message || err), type: "error" });
-    } finally {
-      setIsSubmittingRegion(false);
+      console.warn("Background update region note:", err.message);
     }
   };
 

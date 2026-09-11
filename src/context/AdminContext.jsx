@@ -686,7 +686,7 @@ export function AdminProvider({ children }) {
     });
 
     try {
-      await authFetch(`${API_BASE_URL}/api/v1/drs/${id}`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/drs/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -696,7 +696,9 @@ export function AdminProvider({ children }) {
           regionId: drData.regionId,
         }),
       });
-      fetchCloudData();
+      if (res.ok) {
+        fetchCloudData();
+      }
     } catch (err) {
       console.warn("Update DR error:", err.message);
     }
@@ -857,7 +859,7 @@ export function AdminProvider({ children }) {
           } catch {}
           return freshList;
         });
-        await fetchCloudData();
+        fetchCloudData();
       }
     } catch (err) {
       console.warn("Update vendor error:", err.message);

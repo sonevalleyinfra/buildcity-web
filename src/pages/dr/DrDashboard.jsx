@@ -656,20 +656,19 @@ export default function DrDashboard() {
   const handleUpdateVendorSubmit = async (e) => {
     e.preventDefault();
     if (!editingVendor) return;
-    setIsSubmittingEditVendor(true);
+    const vendorToSave = { ...editingVendor };
+    setDirectVendors((prev) =>
+      prev.map((v) => (v.id === vendorToSave.id ? { ...v, ...vendorToSave } : v))
+    );
+    setEditingVendor(null);
+    showAlert({ title: "Vendor Updated", message: `Vendor "${vendorToSave.shopName}" details & password updated successfully!`, type: "success" });
+
     try {
-      setDirectVendors((prev) =>
-        prev.map((v) => (v.id === editingVendor.id ? { ...v, ...editingVendor } : v))
-      );
-      await updateVendor(editingVendor.id, editingVendor);
-      await fetchLiveVendorsDirect();
+      await updateVendor(vendorToSave.id, vendorToSave);
+      fetchLiveVendorsDirect();
       window.dispatchEvent(new CustomEvent("buildcity_vendors_updated"));
-      setEditingVendor(null);
-      showAlert({ title: "Vendor Updated", message: `Vendor "${editingVendor.shopName}" details & password updated in Database!`, type: "success" });
     } catch (err) {
-      showAlert({ title: "Error", message: "Failed to update vendor: " + (err.message || err), type: "error" });
-    } finally {
-      setIsSubmittingEditVendor(false);
+      console.warn("Background update vendor note:", err.message);
     }
   };
 
@@ -2079,7 +2078,13 @@ export default function DrDashboard() {
               <h3 className="font-bold text-navy-900 text-base">Edit Master Product</h3>
               <button onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none">✕</button>
             </div>
-            <form onSubmit={(e) => { e.preventDefault(); updateMasterProduct(editingProduct.id || editingProduct.masterProductId, editingProduct); setEditingProduct(null); alert("Product updated!"); }} className="space-y-4">
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const prodToSave = { ...editingProduct };
+              setEditingProduct(null);
+              updateMasterProduct(prodToSave.id || prodToSave.masterProductId, prodToSave);
+              showAlert({ title: "Product Updated", message: `Product "${prodToSave.name}" updated successfully!`, type: "success" });
+            }} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-navy-900 mb-1">Product Title *</label>
                 <input

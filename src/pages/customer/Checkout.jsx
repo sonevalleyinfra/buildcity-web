@@ -5,6 +5,7 @@ import Navbar from "../../components/Navbar";
 import { useCart } from "../../context/CartContext";
 import { useOrders } from "../../context/OrderContext";
 import { useAuth } from "../../context/AuthContext";
+import { useAdmin } from "../../context/AdminContext";
 import { useRegion } from "../../context/RegionContext";
 import { useAddresses } from "../../context/AddressContext";
 import { useAlert } from "../../context/AlertContext";
@@ -19,6 +20,7 @@ export default function Checkout() {
   const { addNotification } = useNotifications();
   const navigate = useNavigate();
   const { user, updateProfile } = useAuth();
+  const { products = [], vendors = [] } = useAdmin() || {};
   const { region } = useRegion();
   const { addresses: contextAddresses = [], addAddress: addContextAddress } = useAddresses();
 
@@ -216,6 +218,33 @@ export default function Checkout() {
 
     if (targetAddr.fullName && targetAddr.fullName.trim()) {
       maybeUpdateProfileName(targetAddr.fullName);
+    }
+
+    // Verify none of the items belong to suspended vendors or are inactive
+    const hasSuspendedItems = items.some((item) => {
+      if (item.isVendorSuspended === true || item.inStock === false) return true;
+      const matchedVendor = vendors.find(
+        (v) => v.id === item.vendorId || (v.shopName && item.vendorName && v.shopName.toLowerCase() === item.vendorName.toLowerCase())
+      );
+      if (matchedVendor && matchedVendor.status === "SUSPENDED") return true;
+      const matchedProd = products.find(
+        (p) =>
+          p.id === item.id ||
+          p.id === item.productId ||
+          (p.name && item.name && p.name.toLowerCase() === item.name.toLowerCase() && (p.vendorId === item.vendorId || p.vendorName === item.vendorName))
+      );
+      return matchedProd && (matchedProd.isVendorSuspended === true || matchedProd.vendor?.status === "SUSPENDED" || matchedProd.isActive === false);
+    });
+
+    if (hasSuspendedItems) {
+      showAlert({
+        title: "⚠️ Order Blocked",
+        message: "Your cart contains items from suppliers that are currently suspended or unavailable. Please return to your cart and remove them before placing an order.",
+        type: "warning",
+        buttonText: "Return to Cart",
+      });
+      navigate("/cart");
+      return;
     }
 
     setPlacing(true);

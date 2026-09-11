@@ -255,6 +255,8 @@ export default function Home() {
   const liveVendorApproved = products
     .filter((p) => {
       if (p.approvalStatus !== "APPROVED" && p.approvalStatus !== undefined) return false;
+      // Do not show suspended vendor products or inactive products on storefront
+      if (p.isVendorSuspended === true || p.vendor?.status === "SUSPENDED" || p.vendorStatus === "SUSPENDED" || p.isActive === false) return false;
       const activeRegName = (region?.name || "Varanasi").toLowerCase().trim();
       const activeRegId = (region?.id || "").toLowerCase().trim();
       

@@ -148,7 +148,13 @@ export default function Categories() {
   const districtProducts = useMemo(() => {
     const map = new Map();
     products.forEach((p) => {
-      if (p.approvalStatus !== "APPROVED" || p.isActive !== true) return;
+      if (
+        p.approvalStatus !== "APPROVED" ||
+        p.isActive !== true ||
+        p.isVendorSuspended === true ||
+        p.vendor?.status === "SUSPENDED" ||
+        p.vendorStatus === "SUSPENDED"
+      ) return;
 
       const activeRegName = (region?.name || "Varanasi").toLowerCase().trim();
       const pRegName = (p.regionName || p.districtName || p.vendor?.region?.name || "varanasi").toLowerCase().trim();

@@ -2447,7 +2447,40 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
         return res.status(400).json({ error: `Invalid quantity for product: ${prodName || "Item"}` });
       }
 
-      // Fetch live vendor product from Supabase DB (Strict Vendor Matching First)
+      // Check if product or vendor is explicitly suspended
+      if (item.id || item.productId) {
+        const checkTargetVp = await prisma.vendorProduct.findFirst({
+          where: { id: item.id || item.productId },
+          include: { vendor: true },
+        }).catch(() => null);
+
+        if (checkTargetVp) {
+          if (checkTargetVp.vendor?.status === "SUSPENDED" || checkTargetVp.isActive === false) {
+            return res.status(400).json({
+              error: `Product '${checkTargetVp.name}' cannot be purchased because the supplier '${checkTargetVp.vendor?.shopName || "Vendor"}' is currently suspended or unavailable.`,
+            });
+          }
+        }
+      }
+
+      if (item.vendorId) {
+        const checkVendor = await prisma.vendor.findFirst({
+          where: {
+            OR: [
+              { id: item.vendorId },
+              { phone: String(item.vendorId).replace(/^v-/, "") },
+            ],
+          },
+        }).catch(() => null);
+
+        if (checkVendor && checkVendor.status === "SUSPENDED") {
+          return res.status(400).json({
+            error: `Supplier '${checkVendor.shopName || "Vendor"}' is currently suspended. Order cannot be placed.`,
+          });
+        }
+      }
+
+      // Fetch live vendor product from Supabase DB (Strict Vendor Matching First, excluding SUSPENDED)
       let liveVp = null;
 
       // 1. Check by direct vendorProduct ID
@@ -2457,6 +2490,7 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
             id: item.id || item.productId,
             approvalStatus: "APPROVED",
             isActive: true,
+            vendor: { status: { not: "SUSPENDED" } },
           },
           include: { vendor: { include: { region: true } } },
         }).catch(() => null);
@@ -2469,6 +2503,7 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
             name: { equals: prodName, mode: "insensitive" },
             approvalStatus: "APPROVED",
             isActive: true,
+            vendor: { status: { not: "SUSPENDED" } },
             OR: [
               ...(item.vendorId ? [
                 { vendorId: item.vendorId },
@@ -2492,6 +2527,7 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
             name: { equals: prodName, mode: "insensitive" },
             approvalStatus: "APPROVED",
             isActive: true,
+            vendor: { status: { not: "SUSPENDED" } },
             OR: [
               { regionName: { equals: targetRegionName, mode: "insensitive" } },
               { vendor: { region: { name: { equals: targetRegionName, mode: "insensitive" } } } },
@@ -2508,13 +2544,14 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
             name: { equals: prodName, mode: "insensitive" },
             approvalStatus: "APPROVED",
             isActive: true,
+            vendor: { status: { not: "SUSPENDED" } },
           },
           include: { vendor: { include: { region: true } } },
         }).catch(() => null);
       }
 
-      if (!liveVp) {
-        return res.status(400).json({ error: `Product not available: ${prodName || item.id || "Item"}` });
+      if (!liveVp || liveVp.vendor?.status === "SUSPENDED" || liveVp.isActive === false) {
+        return res.status(400).json({ error: `Product not available or supplier suspended: ${prodName || item.id || "Item"}` });
       }
 
       const verifiedPrice = Number(liveVp.price);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import NotificationPanel from "../../components/NotificationPanel";
@@ -29,7 +29,7 @@ export default function Cart() {
     currentRegionName,
     updateCartToCurrentRegion,
   } = useCart();
-  const { coupons: adminCoupons = [], products = [] } = useAdmin();
+  const { coupons: adminCoupons = [], products = [], vendors = [] } = useAdmin();
   const { region } = useRegion();
   const { showAlert } = useAlert();
   const navigate = useNavigate();
@@ -43,6 +43,50 @@ export default function Cart() {
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponError, setCouponError] = useState("");
   const [showCouponsModal, setShowCouponsModal] = useState(false);
+
+  // Identify cart items belonging to suspended vendors or inactive products
+  const unavailableItemIds = useMemo(() => {
+    const set = new Set();
+    items.forEach((item) => {
+      // 1. Direct suspension flag on cart item
+      if (item.isVendorSuspended === true || item.inStock === false) {
+        set.add(item.id);
+        return;
+      }
+
+      // 2. Matched vendor suspended check
+      const matchedVendor = vendors.find(
+        (v) => v.id === item.vendorId || (v.shopName && item.vendorName && v.shopName.toLowerCase() === item.vendorName.toLowerCase())
+      );
+      if (matchedVendor && matchedVendor.status === "SUSPENDED") {
+        set.add(item.id);
+        return;
+      }
+
+      // 3. Matched product in catalog check
+      const matchedProd = products.find(
+        (p) =>
+          p.id === item.id ||
+          p.id === item.productId ||
+          (p.name && item.name && p.name.toLowerCase() === item.name.toLowerCase() && (p.vendorId === item.vendorId || p.vendorName === item.vendorName))
+      );
+
+      if (matchedProd) {
+        if (
+          matchedProd.isVendorSuspended === true ||
+          matchedProd.vendor?.status === "SUSPENDED" ||
+          matchedProd.vendorStatus === "SUSPENDED" ||
+          matchedProd.isActive === false ||
+          (matchedProd.stockQty !== undefined && Number(matchedProd.stockQty) <= 0)
+        ) {
+          set.add(item.id);
+        }
+      }
+    });
+    return set;
+  }, [items, products, vendors]);
+
+  const hasUnavailableItems = unavailableItemIds.size > 0;
 
   const handleUpdateRegionPrices = async () => {
     setIsUpdatingPrices(true);
@@ -76,6 +120,16 @@ export default function Cart() {
   };
 
   const handleProceedToCheckout = async () => {
+    if (hasUnavailableItems) {
+      showAlert({
+        title: "⚠️ Unavailable Items in Cart",
+        message: "Your cart contains items from suppliers that are currently suspended or unavailable. Please remove them using the trash icon (🗑️) to proceed to checkout.",
+        type: "warning",
+        buttonText: "Understood",
+      });
+      return;
+    }
+
     if (hasRegionMismatch) {
       try {
         await updateCartToCurrentRegion(products);
@@ -289,43 +343,71 @@ export default function Cart() {
         <div className="grid md:grid-cols-3 gap-6">
           {/* Cart Items List */}
           <div className="md:col-span-2 space-y-3.5">
-            {items.map((item) => (
-              <div key={item.id} className="bg-white rounded-2xl border border-slate-200/90 p-4 flex gap-4 shadow-xs hover:border-slate-300 transition-all">
-                <Link to={`/product/${item.id}`} className="h-20 w-20 shrink-0 rounded-xl overflow-hidden bg-slate-100 border border-slate-100">
-                  <img src={item.img} alt={item.name} className="w-full h-full object-cover" />
-                </Link>
+            {items.map((item) => {
+              const isItemUnavailable = unavailableItemIds.has(item.id);
 
-                <div className="flex-1 min-w-0 flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-start justify-between gap-2">
-                      <Link to={`/product/${item.id}`} className="text-xs font-extrabold text-navy-900 line-clamp-1 hover:text-brand-600 transition-colors tracking-tight">
-                        {item.name}
-                      </Link>
-                      <button onClick={() => removeItem(item.id)} className="text-slate-400 hover:text-red-500 shrink-0 transition-colors cursor-pointer active:scale-95">
-                        <TrashIcon />
-                      </button>
-                    </div>
-                    {item.brand && <p className="text-[11px] font-semibold text-slate-500 mt-0.5">🏷️ {item.brand}</p>}
-                  </div>
+              return (
+                <div
+                  key={item.id}
+                  className={`bg-white rounded-2xl border p-4 flex gap-4 shadow-xs transition-all ${
+                    isItemUnavailable ? "border-rose-300 bg-rose-50/25" : "border-slate-200/90 hover:border-slate-300"
+                  }`}
+                >
+                  <Link to={`/product/${item.id}`} className="h-20 w-20 shrink-0 rounded-xl overflow-hidden bg-slate-100 border border-slate-100 relative">
+                    <img src={item.img} alt={item.name} className={`w-full h-full object-cover ${isItemUnavailable ? "grayscale opacity-80" : ""}`} />
+                    {isItemUnavailable && (
+                      <span className="absolute inset-x-0 bottom-0 bg-rose-600 text-white text-[8px] font-black text-center py-0.5 uppercase tracking-wider">
+                        Unavailable
+                      </span>
+                    )}
+                  </Link>
 
-                  <div className="flex items-center justify-between mt-3">
-                    <div className="flex items-center border border-slate-200/90 rounded-xl bg-slate-50 p-1 shadow-2xs">
-                      <button onClick={() => updateQty(item.id, item.qty - 1)} className="w-7 h-7 font-bold text-slate-600 hover:bg-white rounded-lg flex items-center justify-center transition-all active:scale-95 cursor-pointer">
-                        -
-                      </button>
-                      <span className="w-8 text-center text-xs font-black text-navy-900 tabular-nums">{item.qty}</span>
-                      <button onClick={() => updateQty(item.id, item.qty + 1)} className="w-7 h-7 font-bold text-slate-600 hover:bg-white rounded-lg flex items-center justify-center transition-all active:scale-95 cursor-pointer">
-                        +
-                      </button>
+                  <div className="flex-1 min-w-0 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-start justify-between gap-2">
+                        <Link to={`/product/${item.id}`} className="text-xs font-extrabold text-navy-900 line-clamp-1 hover:text-brand-600 transition-colors tracking-tight">
+                          {item.name}
+                        </Link>
+                        <button onClick={() => removeItem(item.id)} className="text-slate-400 hover:text-red-500 shrink-0 transition-colors cursor-pointer active:scale-95" title="Remove item">
+                          <TrashIcon />
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                        {item.brand && <p className="text-[11px] font-semibold text-slate-500">🏷️ {item.brand}</p>}
+                        {item.vendorName && <p className="text-[10px] font-bold text-slate-400">🏬 {item.vendorName}</p>}
+                      </div>
+                      {isItemUnavailable && (
+                        <div className="mt-1.5">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-black text-rose-700 bg-rose-100/90 px-2 py-0.5 rounded-md border border-rose-300">
+                            ⚠️ Unavailable (Supplier Suspended) — Please Remove
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-black text-navy-900 tracking-tight tabular-nums">₹{(item.price * item.qty).toLocaleString("en-IN")}</p>
-                      {item.mrp > item.price && <p className="text-[10px] text-slate-400 line-through tabular-nums">₹{(item.mrp * item.qty).toLocaleString("en-IN")}</p>}
+
+                    <div className="flex items-center justify-between mt-3">
+                      <div className="flex items-center border border-slate-200/90 rounded-xl bg-slate-50 p-1 shadow-2xs">
+                        <button onClick={() => updateQty(item.id, item.qty - 1)} className="w-7 h-7 font-bold text-slate-600 hover:bg-white rounded-lg flex items-center justify-center transition-all active:scale-95 cursor-pointer">
+                          -
+                        </button>
+                        <span className="w-8 text-center text-xs font-black text-navy-900 tabular-nums">{item.qty}</span>
+                        <button
+                          disabled={isItemUnavailable}
+                          onClick={() => updateQty(item.id, item.qty + 1)}
+                          className="w-7 h-7 font-bold text-slate-600 hover:bg-white rounded-lg flex items-center justify-center transition-all active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-black text-navy-900 tracking-tight tabular-nums">₹{(item.price * item.qty).toLocaleString("en-IN")}</p>
+                        {item.mrp > item.price && <p className="text-[10px] text-slate-400 line-through tabular-nums">₹{(item.mrp * item.qty).toLocaleString("en-IN")}</p>}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Right Sidebar: Coupon Code Section & Price Details */}
@@ -448,20 +530,37 @@ export default function Cart() {
                 </div>
               )}
 
+              {hasUnavailableItems && (
+                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-800 font-bold space-y-1">
+                  <p className="flex items-center gap-1 text-rose-900 font-black">
+                    <span>⚠️</span>
+                    <span>Unavailable Items in Cart</span>
+                  </p>
+                  <p className="text-[11px] font-medium text-rose-700 leading-snug">
+                    Some items belong to suspended suppliers. Please remove them using the trash icon (🗑️) to proceed to checkout.
+                  </p>
+                </div>
+              )}
+
               <button
+                disabled={hasUnavailableItems || hasRegionMismatch}
                 onClick={handleProceedToCheckout}
-                className={`w-full text-xs font-black rounded-xl py-3.5 shadow-md active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                  hasRegionMismatch
-                    ? "bg-amber-500 hover:bg-amber-600 text-white border border-amber-600 shadow-none"
-                    : "bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white"
+                className={`w-full text-xs font-black rounded-xl py-3.5 shadow-md transition-all flex items-center justify-center gap-2 ${
+                  hasUnavailableItems
+                    ? "bg-slate-200 text-slate-500 cursor-not-allowed border border-slate-300 shadow-none"
+                    : hasRegionMismatch
+                    ? "bg-amber-500 hover:bg-amber-600 text-white border border-amber-600 shadow-none active:scale-[0.98] cursor-pointer"
+                    : "bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white active:scale-[0.98] cursor-pointer"
                 }`}
               >
-                {hasRegionMismatch
+                {hasUnavailableItems
+                  ? "⚠️ Remove Unavailable Items to Checkout"
+                  : hasRegionMismatch
                   ? `🔒 Update Prices to Checkout (${currentRegionName})`
                   : "Proceed to Checkout →"}
               </button>
 
-              {hasRegionMismatch && (
+              {hasRegionMismatch && !hasUnavailableItems && (
                 <p className="text-[10px] font-bold text-amber-800 text-center mt-1.5 bg-amber-50 py-1.5 px-2 rounded-lg border border-amber-200">
                   ⚠️ Region update required for {currentRegionName} before placing order
                 </p>

@@ -11,6 +11,15 @@ export default function ProductCard({ product, className = "" }) {
   const cartItem = items.find((i) => i.id === product.id);
   const qty = cartItem ? cartItem.qty : 0;
 
+  // Availability & Vendor suspension check
+  const isUnavailable =
+    product.isVendorSuspended === true ||
+    product.vendor?.status === "SUSPENDED" ||
+    product.vendorStatus === "SUSPENDED" ||
+    product.isActive === false ||
+    product.inStock === false ||
+    (product.stockQty !== undefined && Number(product.stockQty) <= 0);
+
   // Price & Savings calculations
   const price = Number(product.price || product.suggestedPrice || 100);
   let mrp = Number(product.mrp || product.masterProduct?.suggestedPrice || 0);
@@ -23,6 +32,7 @@ export default function ProductCard({ product, className = "" }) {
   const handleAdd = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (isUnavailable) return;
     addItem(
       {
         id: product.id,
@@ -33,6 +43,7 @@ export default function ProductCard({ product, className = "" }) {
         vendorId: product.vendorId,
         vendorName: product.vendorName || "District Vendor",
         unit: product.unit,
+        isVendorSuspended: isUnavailable,
       },
       1
     );
@@ -41,6 +52,7 @@ export default function ProductCard({ product, className = "" }) {
   const handleIncrement = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (isUnavailable) return;
     updateQty(product.id, qty + 1);
   };
 
@@ -61,12 +73,16 @@ export default function ProductCard({ product, className = "" }) {
       {/* 🖼️ Product Link & Image (Big, clear, unblocked image) */}
       <Link to={`/product/${product.id}`} className="block">
         <div className="relative aspect-square w-full rounded-lg sm:rounded-xl overflow-hidden bg-gradient-to-b from-slate-50 to-slate-100/50 mb-1 border border-slate-100/90 flex items-center justify-center p-1 group-hover:bg-slate-50/90 transition-colors">
-          {/* Discount Badge */}
-          {discountPct > 0 && (
+          {/* Discount Badge / Unavailable Badge */}
+          {isUnavailable ? (
+            <span className="absolute top-1 left-1 z-10 bg-rose-50 text-rose-700 border border-rose-200 font-extrabold text-[8px] sm:text-[8.5px] px-1.5 py-0.5 rounded shadow-2xs tracking-tight">
+              Unavailable
+            </span>
+          ) : discountPct > 0 ? (
             <span className="absolute top-1 left-1 z-10 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-[8px] sm:text-[8.5px] px-1.5 py-0.5 rounded shadow-2xs tracking-tight">
               {discountPct}% OFF
             </span>
-          )}
+          ) : null}
 
           <img
             src={product.imageUrl || product.img || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80"}
@@ -117,7 +133,14 @@ export default function ProductCard({ product, className = "" }) {
 
         {/* 🛒 Compact Action Button / Stepper */}
         <div className="w-full mt-0.5">
-          {qty > 0 ? (
+          {isUnavailable ? (
+            <div
+              className="w-full bg-slate-100 text-rose-600 font-extrabold text-[10.5px] h-7 rounded-lg border border-rose-200/80 flex items-center justify-center select-none shadow-2xs cursor-not-allowed"
+              title="This product is currently unavailable"
+            >
+              Unavailable
+            </div>
+          ) : qty > 0 ? (
             <div className="w-full bg-[#0A192F] text-white rounded-lg flex items-center justify-between px-1 h-7 shadow-xs font-black text-xs">
               <button
                 type="button"

@@ -148,13 +148,7 @@ export default function Categories() {
   const districtProducts = useMemo(() => {
     const map = new Map();
     products.forEach((p) => {
-      if (
-        p.approvalStatus !== "APPROVED" ||
-        p.isActive !== true ||
-        p.isVendorSuspended === true ||
-        p.vendor?.status === "SUSPENDED" ||
-        p.vendorStatus === "SUSPENDED"
-      ) return;
+      if (p.approvalStatus !== "APPROVED") return;
 
       const activeRegName = (region?.name || "Varanasi").toLowerCase().trim();
       const pRegName = (p.regionName || p.districtName || p.vendor?.region?.name || "varanasi").toLowerCase().trim();
@@ -162,10 +156,17 @@ export default function Categories() {
       const matches = pRegName === activeRegName || pRegName.includes(activeRegName) || activeRegName.includes(pRegName);
       if (!matches) return;
 
+      const isSusp =
+        p.isVendorSuspended === true ||
+        p.vendor?.status === "SUSPENDED" ||
+        p.vendorStatus === "SUSPENDED" ||
+        p.isActive === false;
+
       const key = `${(p.name || "").toLowerCase()}_${p.vendorId || ""}`;
       if (!map.has(key)) {
         map.set(key, {
           ...p,
+          isVendorSuspended: Boolean(isSusp),
           price: (p.price !== undefined && p.price !== null && !isNaN(Number(p.price)))
             ? Math.round(Number(p.price))
             : Math.round(Number(p.suggestedPrice || 100) * (region?.priceFactor || 1)),

@@ -1,9 +1,11 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { useCart } from "../context/CartContext";
+import { useAdmin } from "../context/AdminContext";
 
 export default function ProductCard({ product, className = "" }) {
   const { items, addItem, updateQty, removeItem } = useCart();
+  const { vendors = [] } = useAdmin() || {};
 
   if (!product) return null;
 
@@ -12,10 +14,17 @@ export default function ProductCard({ product, className = "" }) {
   const qty = cartItem ? cartItem.qty : 0;
 
   // Availability & Vendor suspension check
-  const isUnavailable =
+  const matchedVendor = vendors.find(
+    (v) => v.id === product.vendorId || (v.shopName && product.vendorName && v.shopName.toLowerCase() === product.vendorName.toLowerCase())
+  );
+  const isVendorSuspended =
     product.isVendorSuspended === true ||
     product.vendor?.status === "SUSPENDED" ||
     product.vendorStatus === "SUSPENDED" ||
+    (matchedVendor && matchedVendor.status === "SUSPENDED");
+
+  const isUnavailable =
+    isVendorSuspended ||
     product.isActive === false ||
     product.inStock === false ||
     (product.stockQty !== undefined && Number(product.stockQty) <= 0);

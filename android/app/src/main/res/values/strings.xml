@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">BuildCity Partner</string>
+    <string name="title_activity_main">BuildCity Partner</string>
+    <string name="package_name">com.buildcity.vendor</string>
+    <string name="custom_url_scheme">com.buildcity.vendor</string>
+</resources>

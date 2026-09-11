@@ -28,6 +28,7 @@ dist-ssr
 # Environment variables & secrets
 .env
 .env.*
+!.env.vendor
 !.env.example
 
 # Scratch scripts & temporary test files (Prevent sensitive data leakage)

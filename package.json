@@ -6,11 +6,19 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:vendor": "vite build --mode vendor",
+    "cap:sync": "cap sync android",
+    "cap:open": "cap open android",
     "lint": "oxlint",
     "preview": "vite preview",
     "prepare": "husky"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/cli": "^8.5.1",
+    "@capacitor/core": "^8.5.1",
+    "@capacitor/status-bar": "^8.0.3",
     "@tailwindcss/vite": "^4.3.3",
     "dotenv": "^17.4.2",
     "firebase": "^12.17.1",

@@ -1,0 +1,16 @@
+{
+  "appId": "com.buildcity.vendor",
+  "appName": "BuildCity Partner",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "plugins": {
+    "StatusBar": {
+      "backgroundColor": "#0A192F",
+      "style": "DARK",
+      "overlaysWebView": false
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { CartProvider } from "./context/CartContext";
 import { OrderProvider } from "./context/OrderContext";
@@ -8,6 +8,8 @@ import { RegionProvider } from "./context/RegionContext";
 import { NotificationProvider } from "./context/NotificationContext";
 import { AdminProvider } from "./context/AdminContext";
 import ProtectedRoute from "./routes/ProtectedRoute";
+import { App as CapApp } from "@capacitor/app";
+import { Capacitor } from "@capacitor/core";
 
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
@@ -28,6 +30,55 @@ import DrDashboard from "./pages/dr/DrDashboard";
 
 import BottomNav from "./components/BottomNav";
 
+const isVendorApp = import.meta.env.VITE_APP_MODE === "vendor";
+
+function NativeBackButtonHandler() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let sub;
+    CapApp.addListener("backButton", ({ canGoBack }) => {
+      const exitRoutes = ["/", "/login", "/vendor/dashboard"];
+      if (exitRoutes.includes(location.pathname)) {
+        CapApp.exitApp();
+      } else if (canGoBack) {
+        navigate(-1);
+      } else {
+        CapApp.exitApp();
+      }
+    }).then((s) => {
+      sub = s;
+    });
+
+    return () => {
+      if (sub) sub.remove();
+    };
+  }, [location.pathname, navigate]);
+
+  return null;
+}
+
+function VendorRoot() {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
+        <div className="animate-spin h-8 w-8 border-4 border-brand-500 border-t-transparent rounded-full mb-3" />
+        <p className="text-xs text-slate-400 font-bold">Loading BuildCity Partner...</p>
+      </div>
+    );
+  }
+
+  if (user?.role === "vendor") {
+    return <Navigate to="/vendor/dashboard" replace />;
+  }
+
+  return <Navigate to="/login" replace />;
+}
+
 function CatchAll() {
   const { user, loading } = useAuth();
   if (loading) return null;
@@ -38,6 +89,8 @@ function CatchAll() {
       ? "/dr/dashboard"
       : user?.role === "vendor"
       ? "/vendor/dashboard"
+      : isVendorApp
+      ? "/login"
       : "/";
   return <Navigate to={target} replace />;
 }
@@ -61,7 +114,7 @@ function StorefrontMobileNav() {
     pathname === "/login" ||
     pathname === "/register";
 
-  if (isDashboardOrAuth) return null;
+  if (isDashboardOrAuth || isVendorApp) return null;
 
   return <BottomNav />;
 }
@@ -84,14 +137,15 @@ export default function App() {
                     <AdminProvider>
                       <BrowserRouter>
                         <ScrollToTop />
-                        <FirstTimeLocationModal />
+                        <NativeBackButtonHandler />
+                        {!isVendorApp && <FirstTimeLocationModal />}
                         <StorefrontMobileNav />
                         <Routes>
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
 
-                  {/* Public Storefront Routes (Flipkart Style Open Browsing) */}
-                  <Route path="/" element={<Home />} />
+                  {/* Public Storefront or Dedicated Vendor Root */}
+                  <Route path="/" element={isVendorApp ? <VendorRoot /> : <Home />} />
                   <Route path="/category/:slug" element={<CategoryListing />} />
                   <Route path="/categories" element={<Categories />} />
                   <Route path="/product/:id" element={<ProductDetail />} />

@@ -202,6 +202,26 @@ export function AdminProvider({ children }) {
   const [products, setProducts] = useState(loadInitialProducts);
   const [productsLoading, setProductsLoading] = useState(true);
   const isFetchingRef = useRef(false);
+  const recentEditsRef = useRef(new Map());
+
+  const markRecentEdit = (id, updates) => {
+    if (!id || !updates) return;
+    const key = String(id);
+    const existing = recentEditsRef.current.get(key);
+    recentEditsRef.current.set(key, {
+      updates: { ...(existing?.updates || {}), ...updates },
+      timestamp: Date.now(),
+    });
+  };
+
+  const getRecentEdit = (id) => {
+    if (!id) return null;
+    const entry = recentEditsRef.current.get(String(id));
+    if (entry && Date.now() - entry.timestamp < 6000) {
+      return entry.updates;
+    }
+    return null;
+  };
 
   // Fetch Public Catalog for standard customers and visitors (Single Unified 0.05s call)
   const fetchPublicCatalog = async () => {
@@ -340,6 +360,13 @@ export function AdminProvider({ children }) {
 
       const { drs: drsRes, vendors: vendorsRes, masterProducts: masterRes, categories: categoriesRes, regions: regionsRes, orders: ordersRes, listings: listingsRes, coupons: couponsRes, users: usersRes } = syncRes;
 
+      const now = Date.now();
+      for (const [key, entry] of recentEditsRef.current.entries()) {
+        if (now - entry.timestamp > 6000) {
+          recentEditsRef.current.delete(key);
+        }
+      }
+
       if (ordersRes && Array.isArray(ordersRes)) {
         const formattedOrders = ordersRes.map((ord) => {
           const addr = ord.address || {};
@@ -394,22 +421,33 @@ export function AdminProvider({ children }) {
       }
 
       if (couponsRes && Array.isArray(couponsRes)) {
-        localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(couponsRes));
-        setCoupons((prev) => (JSON.stringify(prev) === JSON.stringify(couponsRes) ? prev : couponsRes));
+        const formattedCoupons = couponsRes.map((c) => {
+          let item = { ...c };
+          const recent = getRecentEdit(c.id) || (c.code ? getRecentEdit(c.code) : null);
+          if (recent) item = { ...item, ...recent };
+          return item;
+        });
+        localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(formattedCoupons));
+        setCoupons((prev) => (JSON.stringify(prev) === JSON.stringify(formattedCoupons) ? prev : formattedCoupons));
       }
 
       if (drsRes && Array.isArray(drsRes)) {
-        const formattedDrs = drsRes.map((d) => ({
-          id: d.id,
-          name: d.name,
-          phone: d.phone,
-          regionId: d.regionId,
-          regionName: d.region?.name || "Varanasi",
-          status: d.status || "ACTIVE",
-          vendorCount: 2,
-          productCount: 8,
-          joinedOn: d.joinedOn ? d.joinedOn.split("T")[0] : "2026-05-10",
-        }));
+        const formattedDrs = drsRes.map((d) => {
+          let item = {
+            id: d.id,
+            name: d.name,
+            phone: d.phone,
+            regionId: d.regionId,
+            regionName: d.region?.name || "Varanasi",
+            status: d.status || "ACTIVE",
+            vendorCount: 2,
+            productCount: 8,
+            joinedOn: d.joinedOn ? d.joinedOn.split("T")[0] : "2026-05-10",
+          };
+          const recent = getRecentEdit(d.id);
+          if (recent) item = { ...item, ...recent };
+          return item;
+        });
         setDrs((prev) => {
           if (areDrsEqual(prev, formattedDrs)) return prev;
           try {
@@ -422,7 +460,7 @@ export function AdminProvider({ children }) {
       if (vendorsRes && Array.isArray(vendorsRes)) {
         const formattedVendors = vendorsRes.map((v) => {
           const resolvedRegName = v.region?.name || v.regionName || v.districtName || "Varanasi";
-          return {
+          let item = {
             id: v.id,
             shopName: v.shopName,
             ownerName: v.ownerName,
@@ -436,6 +474,9 @@ export function AdminProvider({ children }) {
             joinedOn: v.joinedOn ? v.joinedOn.split("T")[0] : "2026-03-12",
             addedByDr: v.addedByDr || "Admin",
           };
+          const recent = getRecentEdit(v.id);
+          if (recent) item = { ...item, ...recent };
+          return item;
         });
 
         setVendors((prev) => {
@@ -448,30 +489,40 @@ export function AdminProvider({ children }) {
       }
 
       if (masterRes && Array.isArray(masterRes)) {
-        const formattedMaster = masterRes.map((m) => ({
-          id: m.id,
-          name: m.name,
-          categoryId: m.categoryId,
-          categoryName: m.category?.name || "General",
-          brand: m.brand || "Generic",
-          type: m.type || "Standard",
-          grade: m.grade || "Standard Grade",
-          unit: m.unit || "Unit",
-          suggestedPrice: Number(m.suggestedPrice) || 100,
-          imageUrl: m.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
-          addedBy: m.addedBy || "Admin",
-        }));
+        const formattedMaster = masterRes.map((m) => {
+          let item = {
+            id: m.id,
+            name: m.name,
+            categoryId: m.categoryId,
+            categoryName: m.category?.name || "General",
+            brand: m.brand || "Generic",
+            type: m.type || "Standard",
+            grade: m.grade || "Standard Grade",
+            unit: m.unit || "Unit",
+            suggestedPrice: Number(m.suggestedPrice) || 100,
+            imageUrl: m.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+            addedBy: m.addedBy || "Admin",
+          };
+          const recent = getRecentEdit(m.id);
+          if (recent) item = { ...item, ...recent };
+          return item;
+        });
         localStorage.setItem(MASTER_PRODUCTS_STORAGE_KEY, JSON.stringify(formattedMaster));
         setMasterProducts((prev) => (JSON.stringify(prev) === JSON.stringify(formattedMaster) ? prev : formattedMaster));
       }
 
       if (categoriesRes && Array.isArray(categoriesRes)) {
-        const formattedCats = categoriesRes.map((c) => ({
-          id: c.id,
-          name: c.name,
-          productCount: c.productCount || 0,
-          isActive: c.isActive !== false,
-        }));
+        const formattedCats = categoriesRes.map((c) => {
+          let item = {
+            id: c.id,
+            name: c.name,
+            productCount: c.productCount || 0,
+            isActive: c.isActive !== false,
+          };
+          const recent = getRecentEdit(c.id);
+          if (recent) item = { ...item, ...recent };
+          return item;
+        });
 
         const map = new Map();
         formattedCats.forEach((c) => {
@@ -489,13 +540,18 @@ export function AdminProvider({ children }) {
       }
 
       if (Array.isArray(fetchedRegsList) && fetchedRegsList.length > 0) {
-        const formattedRegs = fetchedRegsList.map((r) => ({
-          id: r.id,
-          name: r.name,
-          state: r.state || "Uttar Pradesh",
-          baseDeliveryCharge: Number(r.baseDeliveryCharge) || 49,
-          isActive: r.isActive !== false,
-        }));
+        const formattedRegs = fetchedRegsList.map((r) => {
+          let item = {
+            id: r.id,
+            name: r.name,
+            state: r.state || "Uttar Pradesh",
+            baseDeliveryCharge: Number(r.baseDeliveryCharge) || 49,
+            isActive: r.isActive !== false,
+          };
+          const recent = getRecentEdit(r.id);
+          if (recent) item = { ...item, ...recent };
+          return item;
+        });
 
         const map = new Map();
         formattedRegs.forEach((r) => {
@@ -526,7 +582,7 @@ export function AdminProvider({ children }) {
           const resolvedRegionId = l.vendor?.regionId || l.vendor?.region?.id || matchedVendor?.regionId || matchedVendor?.region?.id || l.regionId || "2ab0f187-d170-4432-8eef-e0ac31ed21c3";
           const isListingApproved = l.approvalStatus === "APPROVED" || !l.approvalStatus || l.approvalStatus === "";
 
-          return {
+          let item = {
             id: l.id,
             masterProductId: l.masterProductId,
             name: l.name || l.masterProduct?.name || "Product",
@@ -549,6 +605,9 @@ export function AdminProvider({ children }) {
             isVendorSuspended: Boolean(isVendorSuspended),
             addedBy: l.addedBy || "Vendor",
           };
+          const recent = getRecentEdit(l.id) || (l.masterProductId ? getRecentEdit(l.masterProductId) : null);
+          if (recent) item = { ...item, ...recent };
+          return item;
         });
         localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(formattedListings));
         setProducts((prev) => {
@@ -667,6 +726,7 @@ export function AdminProvider({ children }) {
   const updateDr = async (id, drData) => {
     const regionObj = regions.find((r) => r.id === drData.regionId) || {};
     const newRegName = regionObj.name || drData.regionName || "General";
+    markRecentEdit(id, { ...drData, regionName: newRegName });
 
     setDrs((prev) => {
       const updated = prev.map((d) =>
@@ -717,6 +777,7 @@ export function AdminProvider({ children }) {
       try { localStorage.setItem(DRS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
       return updated;
     });
+    markRecentEdit(id, { status: nextStatus });
 
     try {
       await authFetch(`${API_BASE_URL}/api/v1/drs/${id}`, {
@@ -816,6 +877,7 @@ export function AdminProvider({ children }) {
   };
 
   const updateVendor = async (id, vendorData) => {
+    markRecentEdit(id, vendorData);
     setVendors((prev) => {
       const updatedList = prev.map((v) =>
         v.id === id
@@ -832,6 +894,7 @@ export function AdminProvider({ children }) {
       );
       try {
         localStorage.setItem("buildcity_admin_vendors", JSON.stringify(updatedList));
+        localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(updatedList));
       } catch {}
       return updatedList;
     });
@@ -856,6 +919,7 @@ export function AdminProvider({ children }) {
           const freshList = prev.map((v) => (v.id === id ? { ...v, ...updatedApiV, password: vendorData.password || v.password } : v));
           try {
             localStorage.setItem("buildcity_admin_vendors", JSON.stringify(freshList));
+            localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(freshList));
           } catch {}
           return freshList;
         });
@@ -867,6 +931,7 @@ export function AdminProvider({ children }) {
   };
 
   const setVendorStatus = async (id, status) => {
+    markRecentEdit(id, { status });
     const isSusp = status === "SUSPENDED";
 
     try {
@@ -953,6 +1018,7 @@ export function AdminProvider({ children }) {
   };
 
   const updateCategory = async (id, updates) => {
+    markRecentEdit(id, updates);
     setCategories((prev) => {
       const updated = prev.map((c) => (c.id === id ? { ...c, ...updates } : c));
       localStorage.setItem(CATS_STORAGE_KEY, JSON.stringify(updated));
@@ -1016,6 +1082,9 @@ export function AdminProvider({ children }) {
       return updated;
     });
 
+    if (catId) markRecentEdit(catId, { isActive: nextState });
+    if (catName) markRecentEdit(catName, { isActive: nextState });
+
     const targetParam = catId || catName;
     if (targetParam) {
       authFetch(`${API_BASE_URL}/api/v1/categories/${encodeURIComponent(targetParam)}`, {
@@ -1074,6 +1143,7 @@ export function AdminProvider({ children }) {
   };
 
   const updateRegion = async (id, updates) => {
+    markRecentEdit(id, updates);
     setRegions((prev) => {
       const updated = prev.map((r) => (r.id === id ? { ...r, ...updates } : r));
       localStorage.setItem(REGS_STORAGE_KEY, JSON.stringify(updated));
@@ -1137,6 +1207,9 @@ export function AdminProvider({ children }) {
       return updated;
     });
 
+    if (regId) markRecentEdit(regId, { isActive: nextState });
+    if (regName) markRecentEdit(regName, { isActive: nextState });
+
     const targetParam = regId || regName;
     if (targetParam) {
       authFetch(`${API_BASE_URL}/api/v1/regions/${encodeURIComponent(targetParam)}`, {
@@ -1197,6 +1270,8 @@ export function AdminProvider({ children }) {
   };
 
   const updateCoupon = async (id, updates) => {
+    markRecentEdit(id, updates);
+    if (updates.code) markRecentEdit(updates.code, updates);
     setCoupons((prev) => {
       const updated = prev.map((c) => (c.id === id || c.code === id ? { ...c, ...updates } : c));
       localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(updated));
@@ -1232,6 +1307,9 @@ export function AdminProvider({ children }) {
       window.dispatchEvent(new Event("buildcity_coupons_updated"));
       return updated;
     });
+
+    if (cpId) markRecentEdit(cpId, { isActive: nextState });
+    if (cpCode) markRecentEdit(cpCode, { isActive: nextState });
 
     const param = cpId || cpCode;
     if (param) {
@@ -1328,6 +1406,11 @@ export function AdminProvider({ children }) {
 
   const updateMasterProduct = async (id, updates) => {
     const targetPrice = Number(updates.suggestedPrice !== undefined ? updates.suggestedPrice : updates.price);
+    markRecentEdit(id, {
+      ...updates,
+      suggestedPrice: !isNaN(targetPrice) && targetPrice > 0 ? targetPrice : updates.suggestedPrice,
+      price: !isNaN(targetPrice) && targetPrice > 0 ? targetPrice : updates.price,
+    });
 
     setMasterProducts((prev) => {
       const updated = prev.map((mp) => (mp.id === id ? { ...mp, ...updates, suggestedPrice: !isNaN(targetPrice) && targetPrice > 0 ? targetPrice : mp.suggestedPrice } : mp));
@@ -1446,6 +1529,7 @@ export function AdminProvider({ children }) {
   };
 
   const updateVendorProductListing = async (id, updates) => {
+    markRecentEdit(id, updates);
     setProducts((prev) => {
       const updated = prev.map((p) => (p.id === id ? { ...p, ...updates } : p));
       try { localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
@@ -1468,6 +1552,7 @@ export function AdminProvider({ children }) {
   };
 
   const updateListingApprovalStatus = async (id, approvalStatus) => {
+    markRecentEdit(id, { approvalStatus, isActive: approvalStatus === "APPROVED" });
     // 1. Instant optimistic UI update strictly for targeted item ID
     setProducts((prev) =>
       prev.map((p) => (p.id === id ? { ...p, approvalStatus, isActive: approvalStatus === "APPROVED" } : p))
@@ -1572,6 +1657,7 @@ export function AdminProvider({ children }) {
         updateListingApprovalStatus,
         updateOrderStatus,
         fetchCloudData,
+        markRecentEdit,
       }}
     >
       {children}

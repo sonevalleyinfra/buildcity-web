@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Logo from "../../components/Logo";
 import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
@@ -131,8 +131,33 @@ export default function DrDashboard() {
     removeVendorProductListing,
     setVendorStatus,
     updateListingApprovalStatus,
+    markRecentEdit,
   } = useAdmin();
   const { orders: contextOrders = [], fetchAllOrders, updateOrderStatus } = useOrders() || {};
+
+  const recentDrEditsRef = useRef(new Map());
+
+  const markRecentDrEdit = (id, updates) => {
+    if (!id || !updates) return;
+    const key = String(id);
+    const existing = recentDrEditsRef.current.get(key);
+    recentDrEditsRef.current.set(key, {
+      updates: { ...(existing?.updates || {}), ...updates },
+      timestamp: Date.now(),
+    });
+    if (markRecentEdit) {
+      markRecentEdit(id, updates);
+    }
+  };
+
+  const getRecentDrEdit = (id) => {
+    if (!id) return null;
+    const entry = recentDrEditsRef.current.get(String(id));
+    if (entry && Date.now() - entry.timestamp < 6000) {
+      return entry.updates;
+    }
+    return null;
+  };
 
   // Direct live orders state from DB with zero-flicker persistent cache
   const [directOrders, setDirectOrders] = useState(() => {
@@ -198,12 +223,17 @@ export default function DrDashboard() {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
+          const merged = data.map((v) => {
+            const recent = getRecentDrEdit(v.id);
+            if (recent) return { ...v, ...recent };
+            return v;
+          });
           setDirectVendors((prev) => {
-            if (areVendorsEqual(prev, data)) return prev;
+            if (areVendorsEqual(prev, merged)) return prev;
             try {
-              localStorage.setItem("buildcity_dr_live_vendors", JSON.stringify(data));
+              localStorage.setItem("buildcity_dr_live_vendors", JSON.stringify(merged));
             } catch {}
-            return data;
+            return merged;
           });
         }
       }
@@ -225,7 +255,7 @@ export default function DrDashboard() {
             const resolvedRegionId = l.regionId || l.vendor?.regionId || l.vendor?.region?.id || "mirzapur";
             const isListingApproved = l.approvalStatus === "APPROVED" || !l.approvalStatus || l.approvalStatus === "";
 
-            return {
+            let item = {
               id: l.id,
               masterProductId: l.masterProductId,
               name: l.name || l.masterProduct?.name || "Product",
@@ -249,6 +279,9 @@ export default function DrDashboard() {
               isVendorSuspended: Boolean(isVendorSuspended),
               addedBy: l.addedBy || "Vendor",
             };
+            const recent = getRecentDrEdit(l.id) || (l.masterProductId ? getRecentDrEdit(l.masterProductId) : null);
+            if (recent) item = { ...item, ...recent };
+            return item;
           });
 
           setDirectProducts((prev) => {
@@ -575,6 +608,7 @@ export default function DrDashboard() {
 
   const handleToggleVendorStatus = async (vendorId, nextStatus) => {
     if (updatingVendorStatus) return;
+    markRecentDrEdit(vendorId, { status: nextStatus });
     setUpdatingVendorStatus({ id: vendorId, action: nextStatus });
     try {
       setDirectVendors((prev) =>
@@ -657,6 +691,7 @@ export default function DrDashboard() {
     e.preventDefault();
     if (!editingVendor) return;
     const vendorToSave = { ...editingVendor };
+    markRecentDrEdit(vendorToSave.id, vendorToSave);
     setDirectVendors((prev) =>
       prev.map((v) => (v.id === vendorToSave.id ? { ...v, ...vendorToSave } : v))
     );
@@ -1037,8 +1072,14 @@ export default function DrDashboard() {
                               onClick={async () => {
                                 if (busyListingAction) return;
                                 setBusyListingAction({ id: p.id, action: "APPROVED" });
+                                markRecentDrEdit(p.id, { approvalStatus: "APPROVED", isActive: true });
+                                setDirectProducts((prev) =>
+                                  prev.map((item) => (item.id === p.id ? { ...item, approvalStatus: "APPROVED", isActive: true } : item))
+                                );
                                 try {
                                   await updateListingApprovalStatus(p.id, "APPROVED");
+                                  await fetchLiveProductsDirect();
+                                  window.dispatchEvent(new CustomEvent("buildcity_products_updated"));
                                 } finally {
                                   setBusyListingAction(null);
                                 }
@@ -1070,8 +1111,14 @@ export default function DrDashboard() {
                               onClick={async () => {
                                 if (busyListingAction) return;
                                 setBusyListingAction({ id: p.id, action: "REJECTED" });
+                                markRecentDrEdit(p.id, { approvalStatus: "REJECTED", isActive: false });
+                                setDirectProducts((prev) =>
+                                  prev.map((item) => (item.id === p.id ? { ...item, approvalStatus: "REJECTED", isActive: false } : item))
+                                );
                                 try {
                                   await updateListingApprovalStatus(p.id, "REJECTED");
+                                  await fetchLiveProductsDirect();
+                                  window.dispatchEvent(new CustomEvent("buildcity_products_updated"));
                                 } finally {
                                   setBusyListingAction(null);
                                 }
@@ -1428,6 +1475,7 @@ export default function DrDashboard() {
                                   e.preventDefault();
                                   if (busyListingAction) return;
                                   setBusyListingAction({ id: p.id, action: "APPROVED" });
+                                  markRecentDrEdit(p.id, { approvalStatus: "APPROVED", isActive: true });
                                   try {
                                     setDirectProducts((prev) =>
                                       prev.map((item) => (item.id === p.id ? { ...item, approvalStatus: "APPROVED", isActive: true } : item))
@@ -1467,6 +1515,7 @@ export default function DrDashboard() {
                                   e.preventDefault();
                                   if (busyListingAction) return;
                                   setBusyListingAction({ id: p.id, action: "REJECTED" });
+                                  markRecentDrEdit(p.id, { approvalStatus: "REJECTED", isActive: false });
                                   try {
                                     setDirectProducts((prev) =>
                                       prev.map((item) => (item.id === p.id ? { ...item, approvalStatus: "REJECTED", isActive: false } : item))

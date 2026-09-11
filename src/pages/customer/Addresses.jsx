@@ -108,7 +108,7 @@ export default function Addresses() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const resolvedCity = region?.name || form.city || "Varanasi";
+    const resolvedCity = form.city || region?.name || "Varanasi";
     if (!form.line.trim() || !form.pincode.trim()) return;
 
     setSubmitting(true);
@@ -218,12 +218,12 @@ export default function Addresses() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1 block">
-                      City / District <span className="text-[10px] text-brand-600 font-semibold lowercase">({region?.name || "selected region"})</span>
+                      City / District {editingId ? <span className="text-[10px] text-brand-600 font-semibold">(Fixed Address City)</span> : <span className="text-[10px] text-brand-600 font-semibold lowercase">({region?.name || "selected region"})</span>}
                     </label>
                     <input
                       name="city"
                       readOnly
-                      value={region?.name || form.city || "Varanasi"}
+                      value={form.city || region?.name || "Varanasi"}
                       className="w-full text-sm border border-slate-200 bg-slate-50 text-slate-700 font-bold rounded-xl px-3.5 py-2.5 outline-none cursor-not-allowed"
                     />
                   </div>

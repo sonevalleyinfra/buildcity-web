@@ -67,26 +67,48 @@ export default function Checkout() {
     }
   };
 
+  // Helper: check if an address matches the active region / district
+  const isDeliverableInRegion = (addr, currentRegionName) => {
+    if (!addr) return false;
+    const reg = (currentRegionName || "Varanasi").toLowerCase().trim();
+    const city = (addr.city || "").toLowerCase().trim();
+    const district = (addr.districtName || addr.regionName || "").toLowerCase().trim();
+
+    if (city === reg || district === reg) return true;
+    if (city && reg && (city.includes(reg) || reg.includes(city))) return true;
+
+    return false;
+  };
+
   // Load Profile / Context Addresses for Logged-In Customer (Zero 404 network errors & zero flickering)
   useEffect(() => {
     const activeRegion = region?.name || "Varanasi";
-    const cleanContext = (contextAddresses || []).map((ca) => ({
-      id: ca.id || "addr_" + Date.now(),
-      fullName: ca.fullName || user?.name || "Customer",
-      phone: ca.phone || user?.phone || "",
-      street: ca.line || ca.street || "",
-      city: activeRegion,
-      state: ca.state || "Uttar Pradesh",
-      pincode: ca.pincode || "221001",
-    })).filter((a) => a.street && a.street.trim().length > 0 && !a.street.includes("Lanka Road") && !a.street.includes("House No. 12"));
+    const cleanContext = (contextAddresses || []).map((ca) => {
+      let city = ca.city || ca.districtName;
+      if (!city) {
+        if (/mirzapur/i.test(ca.line || ca.street || "")) city = "Mirzapur";
+        else if (/varanasi/i.test(ca.line || ca.street || "")) city = "Varanasi";
+        else city = activeRegion;
+      }
+      return {
+        id: ca.id || "addr_" + Date.now(),
+        fullName: ca.fullName || user?.name || "Customer",
+        phone: ca.phone || user?.phone || "",
+        street: ca.line || ca.street || "",
+        city: city,
+        state: ca.state || "Uttar Pradesh",
+        pincode: ca.pincode || "221001",
+      };
+    }).filter((a) => a.street && a.street.trim().length > 0 && !a.street.includes("Lanka Road") && !a.street.includes("House No. 12"));
 
     if (user?.address && user.address.trim().length > 0 && !user.address.includes("Lanka Road")) {
+      const detectedCity = user.city || (/mirzapur/i.test(user.address) ? "Mirzapur" : (/varanasi/i.test(user.address) ? "Varanasi" : activeRegion));
       cleanContext.unshift({
         id: "addr_profile",
         fullName: user.name || "Customer",
         phone: user.phone || "",
         street: user.address,
-        city: activeRegion,
+        city: detectedCity,
         state: "Uttar Pradesh",
         pincode: "221001",
       });
@@ -95,10 +117,12 @@ export default function Checkout() {
     const uniqueAddrs = Array.from(new Map(cleanContext.map((a) => [a.id || a.street, a])).values());
 
     setDbAddresses(uniqueAddrs);
-    if (uniqueAddrs.length > 0) {
-      if (!selectedAddrId) setSelectedAddrId(uniqueAddrs[0].id);
-    } else {
-      setSelectedAddrId("");
+    
+    // Auto-select the first deliverable address for the active region
+    const currentSelected = uniqueAddrs.find((a) => a.id === selectedAddrId);
+    if (!currentSelected || !isDeliverableInRegion(currentSelected, activeRegion)) {
+      const firstDeliverable = uniqueAddrs.find((a) => isDeliverableInRegion(a, activeRegion));
+      setSelectedAddrId(firstDeliverable ? firstDeliverable.id : "");
     }
   }, [user, contextAddresses, region?.name]);
 
@@ -109,7 +133,8 @@ export default function Checkout() {
   const baseDeliveryFee = Number(region?.baseDeliveryCharge) || 49;
   const deliveryCharge = subtotal >= 25000 ? 0 : baseDeliveryFee;
   const total = subtotal + deliveryCharge;
-  const activeAddress = dbAddresses.find((a) => a.id === selectedAddrId) || dbAddresses[0];
+  const hasDeliverableAddress = dbAddresses.some((a) => isDeliverableInRegion(a, region?.name));
+  const activeAddress = dbAddresses.find((a) => a.id === selectedAddrId && isDeliverableInRegion(a, region?.name));
 
   const fetchWithRetry = async (url, options = {}, retries = 3) => {
     for (let i = 0; i < retries; i++) {
@@ -189,15 +214,20 @@ export default function Checkout() {
 
     let targetAddr = activeAddress ? { ...activeAddress } : null;
 
-    // If no saved address selected, check inline form fields
+    if (targetAddr && !isDeliverableInRegion(targetAddr, activeRegionName)) {
+      targetAddr = null;
+    }
+
+    // If no saved deliverable address selected, check inline form fields
     if (!targetAddr || !targetAddr.street) {
       if (!newStreet || !newStreet.trim()) {
         showAlert({
-          title: "📍 Delivery Address Required",
-          message: "Please enter your Site Delivery Address to complete your order.",
+          title: "📍 Deliverable Address Required",
+          message: `Please select or add a delivery address in ${activeRegionName} to complete your order.`,
           type: "warning",
-          buttonText: "Fill Address",
+          buttonText: "Add Address",
         });
+        setShowAddModal(true);
         return;
       }
 
@@ -212,7 +242,7 @@ export default function Checkout() {
     } else {
       targetAddr = {
         ...targetAddr,
-        city: activeRegionName,
+        city: targetAddr.city || activeRegionName,
       };
     }
 
@@ -405,31 +435,80 @@ export default function Checkout() {
                 </div>
               ) : (
                 <div className="space-y-2.5">
-                  {dbAddresses.map((a) => (
-                    <label
-                      key={a.id || a.street}
-                      className={`flex items-start gap-3 border rounded-lg p-3 cursor-pointer ${
-                        selectedAddrId === a.id
-                          ? "border-brand-500 bg-brand-50"
-                          : "border-slate-200"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="address"
-                        checked={selectedAddrId === a.id}
-                        onChange={() => setSelectedAddrId(a.id)}
-                        className="mt-1 h-4 w-4 accent-[#1E5FD9]"
-                      />
-                      <div>
-                        <span className="text-xs font-extrabold text-navy-900">
-                          👤 {a.fullName || user?.name || "Customer"} · 📱 {a.phone || user?.phone || "7607650875"}
-                        </span>
-                        <p className="text-xs text-slate-600 font-medium mt-0.5">{a.street}</p>
-                        <p className="text-[11px] text-slate-500 font-semibold">{a.city}, {a.state} - {a.pincode}</p>
+                  {dbAddresses.map((a) => {
+                    const isDeliverable = isDeliverableInRegion(a, region?.name);
+                    const isSelected = selectedAddrId === a.id;
+
+                    return (
+                      <div
+                        key={a.id || a.street}
+                        onClick={() => {
+                          if (isDeliverable) setSelectedAddrId(a.id);
+                        }}
+                        className={`flex items-start gap-3 border rounded-xl p-3.5 transition-all ${
+                          !isDeliverable
+                            ? "border-slate-200 bg-slate-50/70 opacity-60 cursor-not-allowed"
+                            : isSelected
+                            ? "border-brand-500 bg-brand-50/60 shadow-xs cursor-pointer ring-1 ring-brand-500/20"
+                            : "border-slate-200 hover:border-slate-300 bg-white cursor-pointer"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="address"
+                          disabled={!isDeliverable}
+                          checked={isSelected}
+                          onChange={() => {
+                            if (isDeliverable) setSelectedAddrId(a.id);
+                          }}
+                          className={`mt-1 h-4 w-4 ${
+                            !isDeliverable ? "cursor-not-allowed opacity-40" : "accent-[#1E5FD9] cursor-pointer"
+                          }`}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between flex-wrap gap-1">
+                            <span className={`text-xs font-extrabold ${isDeliverable ? "text-navy-900" : "text-slate-600"}`}>
+                              👤 {a.fullName || user?.name || "Customer"} · 📱 {a.phone || user?.phone || "7607650875"}
+                            </span>
+                            {isDeliverable ? (
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-md">
+                                ✓ Deliverable
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-amber-800 bg-amber-100/90 border border-amber-300/80 px-2 py-0.5 rounded-md">
+                                ⚠️ Not available for delivery in {region?.name || "Varanasi"}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-600 font-medium mt-0.5">{a.street}</p>
+                          <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
+                            📍 {a.city}, {a.state} - {a.pincode}
+                          </p>
+                        </div>
                       </div>
-                    </label>
-                  ))}
+                    );
+                  })}
+
+                  {/* If no deliverable address exists for this active region */}
+                  {!hasDeliverableAddress && (
+                    <div className="p-3.5 bg-amber-50/90 border border-amber-200/80 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 mt-3">
+                      <div>
+                        <p className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                          <span>⚠️</span> No deliverable address found in {region?.name || "Varanasi"}
+                        </p>
+                        <p className="text-[11px] text-amber-700 font-medium mt-0.5">
+                          Please add a site delivery address located in {region?.name || "Varanasi"} to place this order.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddModal(true)}
+                        className="text-xs font-bold bg-brand-600 hover:bg-brand-700 text-white px-3.5 py-2 rounded-lg shadow-xs cursor-pointer whitespace-nowrap active:scale-[0.98] transition-all"
+                      >
+                        + Add Address in {region?.name || "Varanasi"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

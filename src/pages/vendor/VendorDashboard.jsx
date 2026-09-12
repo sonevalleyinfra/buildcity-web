@@ -356,14 +356,14 @@ export default function VendorDashboard() {
         </div>
 
         {/* Quick Metrics Bar - Interactive Clickable Cards (2x2 on Mobile, 4 columns on Desktop) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mt-3 sm:mt-6 pt-3 sm:pt-5 border-t border-slate-700/60 relative z-10">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mt-3 sm:mt-5 pt-3 sm:pt-4 border-t border-slate-700/60 relative z-10">
           <button
             type="button"
             onClick={() => setActiveTab("overview")}
-            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2.5 sm:p-3.5 border border-white/10 hover:border-emerald-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group"
+            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2 sm:p-3.5 border border-white/10 hover:border-emerald-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group min-w-0"
           >
-            <p className="text-[9px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">Revenue</p>
-            <p className="text-sm sm:text-lg font-black text-white mt-0.5 tracking-tight">₹{Number(totalRevenue || 0).toLocaleString("en-IN")}</p>
+            <p className="text-[9px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors truncate">Revenue</p>
+            <p className="text-sm sm:text-lg font-black text-white mt-0.5 tracking-tight truncate">₹{Number(totalRevenue || 0).toLocaleString("en-IN")}</p>
             <span className="text-[8px] sm:text-[10px] text-emerald-400 font-extrabold flex items-center gap-1 mt-0.5">
               <span>Real-time</span>
               <span className="group-hover:translate-x-0.5 transition-transform">→</span>
@@ -373,10 +373,10 @@ export default function VendorDashboard() {
           <button
             type="button"
             onClick={() => setActiveTab("orders")}
-            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2.5 sm:p-3.5 border border-white/10 hover:border-amber-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group"
+            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2 sm:p-3.5 border border-white/10 hover:border-amber-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group min-w-0"
           >
-            <p className="text-[9px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">Orders</p>
-            <p className="text-sm sm:text-lg font-black text-white mt-0.5 tracking-tight">{activeOrdersCount} Active</p>
+            <p className="text-[9px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors truncate">Orders</p>
+            <p className="text-sm sm:text-lg font-black text-white mt-0.5 tracking-tight truncate">{activeOrdersCount} Active</p>
             <span className="text-[8px] sm:text-[10px] text-amber-300 font-extrabold flex items-center gap-1 mt-0.5">
               <span>Live Orders</span>
               <span className="group-hover:translate-x-0.5 transition-transform">→</span>
@@ -386,10 +386,10 @@ export default function VendorDashboard() {
           <button
             type="button"
             onClick={() => setActiveTab("products")}
-            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2.5 sm:p-3.5 border border-white/10 hover:border-brand-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group"
+            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2 sm:p-3.5 border border-white/10 hover:border-brand-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group min-w-0"
           >
-            <p className="text-[9px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">My Products</p>
-            <p className="text-sm sm:text-lg font-black text-white mt-0.5 tracking-tight">{vendorProducts.length} Listed</p>
+            <p className="text-[9px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors truncate">My Products</p>
+            <p className="text-sm sm:text-lg font-black text-white mt-0.5 tracking-tight truncate">{vendorProducts.length} Listed</p>
             <span className="text-[8px] sm:text-[10px] text-brand-300 font-extrabold flex items-center gap-1 mt-0.5">
               <span>Manage</span>
               <span className="group-hover:translate-x-0.5 transition-transform">→</span>
@@ -399,10 +399,10 @@ export default function VendorDashboard() {
           <button
             type="button"
             onClick={() => setShowCatalogModal(true)}
-            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2.5 sm:p-3.5 border border-white/10 hover:border-amber-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group"
+            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2 sm:p-3.5 border border-white/10 hover:border-amber-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group min-w-0"
           >
-            <p className="text-[9px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">Master Catalog</p>
-            <p className="text-sm sm:text-lg font-black text-amber-300 mt-0.5 tracking-tight">{masterProducts.length} Items</p>
+            <p className="text-[9px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors truncate">Master Catalog</p>
+            <p className="text-sm sm:text-lg font-black text-amber-300 mt-0.5 tracking-tight truncate">{masterProducts.length} Items</p>
             <span className="text-[8px] sm:text-[10px] text-slate-300 font-medium flex items-center gap-1 mt-0.5">
               <span>Add More</span>
               <span className="group-hover:translate-x-0.5 transition-transform">→</span>
@@ -412,10 +412,10 @@ export default function VendorDashboard() {
       </div>
 
       {/* Tabs Bar - Perfectly responsive on mobile */}
-      <div className="grid grid-cols-3 gap-1 p-1 bg-white rounded-xl border border-slate-200/90 shadow-2xs mb-4 sm:flex sm:items-center sm:gap-2 sm:p-1.5 sm:mb-6">
+      <div className="grid grid-cols-3 gap-1 p-1 bg-white rounded-xl border border-slate-200/90 shadow-2xs mb-3 sm:mb-6 sm:flex sm:items-center sm:gap-2 sm:p-1.5">
         <button
           onClick={() => setActiveTab("products")}
-          className={`py-2 px-1 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 text-center ${
+          className={`py-2 px-1 sm:px-4 text-[10px] sm:text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 text-center min-w-0 ${
             activeTab === "products" ? "bg-emerald-600 text-white shadow-xs font-extrabold" : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80 font-bold"
           }`}
         >
@@ -424,7 +424,7 @@ export default function VendorDashboard() {
         </button>
         <button
           onClick={() => setActiveTab("orders")}
-          className={`py-2 px-1 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 text-center ${
+          className={`py-2 px-1 sm:px-4 text-[10px] sm:text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 text-center min-w-0 ${
             activeTab === "orders" ? "bg-emerald-600 text-white shadow-xs font-extrabold" : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80 font-bold"
           }`}
         >
@@ -433,7 +433,7 @@ export default function VendorDashboard() {
         </button>
         <button
           onClick={() => setActiveTab("overview")}
-          className={`py-2 px-1 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 text-center ${
+          className={`py-2 px-1 sm:px-4 text-[10px] sm:text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 text-center min-w-0 ${
             activeTab === "overview" ? "bg-emerald-600 text-white shadow-xs font-extrabold" : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80 font-bold"
           }`}
         >
@@ -593,16 +593,16 @@ export default function VendorDashboard() {
       {/* : MY STORE PRODUCTS */}
       {activeTab === "products" && (
         <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
-          <div className="p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
+          <div className="p-3 sm:p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 bg-slate-50/50">
             <div>
-              <h3 className="font-extrabold text-navy-900 text-sm">Products Listed in My Store</h3>
-              <p className="text-xs text-slate-500">Edit your selling price (₹) and stock quantity for products added from the Master Catalog.</p>
+              <h3 className="font-extrabold text-navy-900 text-xs sm:text-sm">Products Listed in My Store</h3>
+              <p className="text-[11px] sm:text-xs text-slate-500">Edit your selling price (₹) and stock quantity for products added from the Master Catalog.</p>
             </div>
             <button
               onClick={() => setShowCatalogModal(true)}
-              className="bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer shrink-0"
+              className="w-full sm:w-auto bg-brand-500 hover:bg-brand-600 active:scale-[0.98] text-white font-bold text-xs px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl shadow-xs transition-all cursor-pointer shrink-0 text-center"
             >
-              🔍 Choose from Master Catalog
+              <span>🔍 Choose from Master Catalog</span>
             </button>
           </div>
 

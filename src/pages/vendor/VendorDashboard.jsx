@@ -95,12 +95,9 @@ export default function VendorDashboard() {
   useEffect(() => {
     if (showCatalogModal || editingProduct) {
       const origOverflow = document.body.style.overflow;
-      const origTouchAction = document.body.style.touchAction;
       document.body.style.overflow = "hidden";
-      document.body.style.touchAction = "none";
       return () => {
         document.body.style.overflow = origOverflow;
-        document.body.style.touchAction = origTouchAction;
       };
     }
   }, [showCatalogModal, editingProduct]);
@@ -1070,10 +1067,10 @@ export default function VendorDashboard() {
 
       {/* MODAL 1: CHOOSE FROM MASTER CATALOG MODAL (Full page on mobile, sleek dialog on desktop) */}
       {showCatalogModal && (
-        <div className="fixed inset-0 z-50 bg-white sm:bg-slate-900/70 sm:backdrop-blur-sm sm:p-4 flex flex-col sm:items-center sm:justify-center overflow-hidden overscroll-contain">
-          <div className="bg-white w-full h-full sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-2xl shadow-2xl border-0 sm:border border-slate-100 flex flex-col flex-1 sm:flex-initial min-h-0 overflow-hidden">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-200/80 px-4 py-3 sm:px-6 sm:py-4 bg-slate-50/70 shrink-0">
+        <div className="fixed inset-0 z-50 bg-slate-900/70 sm:backdrop-blur-sm sm:p-4 flex flex-col sm:items-center sm:justify-center">
+          <div className="bg-white w-full h-[100dvh] sm:h-auto sm:max-h-[88vh] sm:max-w-3xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+            {/* Modal Header (Fixed at top) */}
+            <div className="flex items-center justify-between border-b border-slate-200/80 px-4 py-3 sm:px-6 sm:py-3.5 bg-slate-50 shrink-0">
               <div className="min-w-0 pr-2">
                 <h3 className="font-black text-navy-900 text-sm sm:text-base truncate">Choose from Master Product Catalog</h3>
                 <p className="text-[11px] sm:text-xs text-slate-500 line-clamp-1">Verified products pre-configured by Admin & DR.</p>
@@ -1083,18 +1080,15 @@ export default function VendorDashboard() {
                   setShowCatalogModal(false);
                   setSelectedMasterProd(null);
                 }}
-                className="w-8 h-8 rounded-full bg-slate-200/80 hover:bg-slate-300 text-slate-700 flex items-center justify-center font-bold text-sm leading-none shrink-0 transition-colors cursor-pointer"
+                className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center font-bold text-sm leading-none shrink-0 transition-colors cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <div
-              className="p-3.5 sm:p-6 pb-16 sm:pb-6 overflow-y-auto flex-1 min-h-0 overscroll-contain flex flex-col space-y-3 sm:space-y-4"
-              style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
-            >
-              {/* Filter controls */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 shrink-0">
+            {/* Filter controls (Fixed under header so user can always filter / search) */}
+            <div className="px-3 py-2.5 sm:px-6 sm:py-3 bg-white border-b border-slate-200 shrink-0">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar shrink-0">
                   <button
                     onClick={() => setSelectedCategoryFilter("ALL")}
@@ -1129,6 +1123,10 @@ export default function VendorDashboard() {
                   className="bg-slate-50 text-xs border border-slate-200 rounded-xl px-3.5 py-2 outline-none focus:border-brand-500 w-full sm:w-60 shadow-2xs"
                 />
               </div>
+            </div>
+
+            {/* Scrollable Products List & Offer Config Drawer */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-6 space-y-3 pb-24 sm:pb-6">
 
               {/* Master Products List */}
               <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white">
@@ -1322,17 +1320,17 @@ export default function VendorDashboard() {
 
       {/* MODAL 2: EDIT LISTING PRICE, MRP, DISCOUNT & STOCK (Responsive Full-screen on Mobile, Modal on Desktop) */}
       {editingProduct && (
-        <div className="fixed inset-0 z-50 bg-white sm:bg-slate-900/70 sm:backdrop-blur-sm sm:p-4 flex flex-col sm:items-center sm:justify-center overflow-hidden overscroll-contain">
-          <div className="bg-white w-full h-full sm:h-auto sm:max-h-[90vh] sm:max-w-lg sm:rounded-2xl shadow-2xl border-0 sm:border border-slate-100 flex flex-col flex-1 sm:flex-initial min-h-0 overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-slate-900/70 sm:backdrop-blur-sm sm:p-4 flex flex-col sm:items-center sm:justify-center">
+          <div className="bg-white w-full h-[100dvh] sm:h-auto sm:max-h-[88vh] sm:max-w-lg sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden">
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-200/80 px-4 py-3 sm:px-6 sm:py-4 bg-slate-50/70 shrink-0">
+            <div className="flex items-center justify-between border-b border-slate-200/80 px-4 py-3 sm:px-6 sm:py-3.5 bg-slate-50 shrink-0">
               <div>
                 <h3 className="font-extrabold text-navy-900 text-sm sm:text-base">Edit Product Price & Live Offer</h3>
                 <p className="text-[11px] sm:text-xs text-slate-500">Update your discount offer to display % OFF for customers.</p>
               </div>
               <button
                 onClick={() => setEditingProduct(null)}
-                className="w-8 h-8 rounded-full bg-slate-200/80 hover:bg-slate-300 text-slate-700 flex items-center justify-center font-bold text-sm leading-none shrink-0 transition-colors cursor-pointer"
+                className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center font-bold text-sm leading-none shrink-0 transition-colors cursor-pointer"
               >
                 ✕
               </button>
@@ -1340,8 +1338,7 @@ export default function VendorDashboard() {
 
             <form
               onSubmit={handleUpdateListing}
-              className="p-4 sm:p-6 pb-16 sm:pb-6 overflow-y-auto flex-1 min-h-0 overscroll-contain flex flex-col space-y-3.5"
-              style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+              className="p-4 sm:p-6 pb-24 sm:pb-6 overflow-y-auto flex-1 min-h-0 flex flex-col space-y-3.5"
             >
               <div>
                 <label className="block text-[11px] font-bold text-slate-500 mb-1">Product Name</label>

@@ -1,4 +1,4 @@
-export default function Logo({ variant = "dark", size = "md" }) {
+export default function Logo({ variant = "dark", size = "md", iconOnly = false }) {
   const textColor = variant === "light" ? "text-white" : "text-navy-900";
   const subColor = variant === "light" ? "text-white/70" : "text-slate-500";
   const iconColor = variant === "light" ? "#FFFFFF" : "#EA580C";
@@ -11,8 +11,8 @@ export default function Logo({ variant = "dark", size = "md" }) {
   const s = sizes[size];
 
   return (
-    <div className="flex items-center gap-2.5">
-      <svg width={s.icon} height={s.icon} viewBox="0 0 32 32" fill="none">
+    <div className="flex items-center gap-2">
+      <svg width={s.icon} height={s.icon} viewBox="0 0 32 32" fill="none" className="shrink-0">
         <path
           d="M2 17L16 4L30 17"
           stroke={iconColor}
@@ -29,12 +29,14 @@ export default function Logo({ variant = "dark", size = "md" }) {
           opacity="0.45"
         />
       </svg>
-      <div className="leading-tight">
-        <div className={`font-extrabold tracking-tight ${s.title} ${textColor}`}>
-          Build City
+      {!iconOnly && (
+        <div className="leading-tight">
+          <div className={`font-extrabold tracking-tight ${s.title} ${textColor}`}>
+            Build City
+          </div>
+          <div className={`${s.sub} ${subColor} -mt-0.5`}>Building your dreams</div>
         </div>
-        <div className={`${s.sub} ${subColor} -mt-0.5`}>Building your dreams</div>
-      </div>
+      )}
     </div>
   );
 }

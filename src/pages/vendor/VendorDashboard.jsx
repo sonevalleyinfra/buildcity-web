@@ -321,41 +321,57 @@ export default function VendorDashboard() {
   return (
     <DashboardShell badge="Vendor Partner" badgeColor="#10B981">
       {/* Top Banner & Stats Overview */}
-      <div className="bg-navy-900 rounded-2xl sm:rounded-3xl p-3.5 sm:p-8 mb-3 sm:mb-6 text-white shadow-lg relative overflow-hidden">
+      <div className="bg-navy-900 rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 mb-3 sm:mb-6 text-white shadow-lg relative overflow-hidden">
         {/* Background glow effects */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-brand-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-6 relative z-10">
-          <div>
-            <div className="flex items-center gap-1.5 flex-wrap mb-1">
-              <span className={`text-[9px] sm:text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
-                matchedVendorObj.status === "APPROVED"
-                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                  : "bg-amber-500/20 text-amber-300 border-amber-500/30"
-              }`}>
-                ● STORE: {matchedVendorObj.status || "APPROVED"}
-              </span>
-              <span className="text-[9px] sm:text-[10px] font-bold bg-white/10 text-slate-200 px-2 py-0.5 rounded-full border border-white/10 flex items-center gap-1">
-                📍 {districtName}
-              </span>
-            </div>
-            <h1 className="text-lg sm:text-2xl font-black tracking-tight text-white">{shopName}</h1>
-            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 font-medium flex items-center gap-1 flex-wrap">
-              <span>Owner: <strong className="text-slate-200">{ownerName}</strong></span>
-              <span>·</span>
-              <span>📱 <strong className="text-slate-200">{vendorPhone}</strong></span>
-              <span>·</span>
-              <span>Comm: <strong className="text-amber-300">{matchedVendorObj.commissionRate || user?.vendorInfo?.commissionRate || 10}%</strong></span>
-            </p>
+        <div className="relative z-10">
+          {/* Top Info Badges Pill Row */}
+          <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+            <span className={`text-[9px] sm:text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
+              matchedVendorObj.status === "APPROVED"
+                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                : "bg-amber-500/20 text-amber-300 border-amber-500/30"
+            }`}>
+              ● STORE: {matchedVendorObj.status || "APPROVED"}
+            </span>
+
+            <span className="text-[9px] sm:text-[10px] font-bold bg-white/10 text-slate-200 px-2 py-0.5 rounded-full border border-white/10 flex items-center gap-1">
+              📍 {districtName}
+            </span>
+
+            {vendorPhone && (
+              <a
+                href={`tel:${vendorPhone}`}
+                className="text-[9px] sm:text-[10px] font-bold bg-white/10 hover:bg-white/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-400/20 flex items-center gap-1 transition-colors"
+              >
+                <span>📞 {vendorPhone}</span>
+              </a>
+            )}
+
+            <span className="text-[9px] sm:text-[10px] font-bold bg-white/10 text-amber-300 px-2 py-0.5 rounded-full border border-amber-400/20 flex items-center gap-1">
+              ⚡ {matchedVendorObj.commissionRate || user?.vendorInfo?.commissionRate || 10}% Comm.
+            </span>
           </div>
 
-          <button
-            onClick={() => setShowCatalogModal(true)}
-            className="w-full md:w-auto bg-brand-500 hover:bg-brand-600 active:scale-[0.98] transition-all text-white font-extrabold text-xs sm:text-sm px-4 py-2 sm:py-2.5 rounded-xl shadow-md hover:shadow-brand-500/25 flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
-          >
-            <span>🔍 Browse Master Catalog</span>
-          </button>
+          {/* Shop Title & Owner Name */}
+          <div className="flex items-baseline justify-between gap-2 flex-wrap">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white leading-tight">{shopName}</h1>
+              <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 font-medium">
+                Proprietor: <strong className="text-slate-200">{ownerName}</strong>
+              </p>
+            </div>
+
+            {/* Desktop-only secondary button if needed */}
+            <button
+              onClick={() => setShowCatalogModal(true)}
+              className="hidden md:flex items-center gap-1.5 bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all shadow-xs"
+            >
+              <span>🔍 Choose from Master Catalog</span>
+            </button>
+          </div>
         </div>
 
         {/* Quick Metrics Bar - Interactive Clickable Cards (2x2 on Mobile, 4 columns on Desktop) */}

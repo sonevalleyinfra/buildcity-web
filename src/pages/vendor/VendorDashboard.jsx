@@ -328,8 +328,8 @@ export default function VendorDashboard() {
 
         <div className="relative z-10">
           {/* Top Info Badges Pill Row */}
-          <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
-            <span className={`text-[9px] sm:text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
+          <div className="flex items-center gap-1.5 flex-wrap mb-2">
+            <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border ${
               matchedVendorObj.status === "APPROVED"
                 ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
                 : "bg-amber-500/20 text-amber-300 border-amber-500/30"
@@ -337,40 +337,31 @@ export default function VendorDashboard() {
               ● STORE: {matchedVendorObj.status || "APPROVED"}
             </span>
 
-            <span className="text-[9px] sm:text-[10px] font-bold bg-white/10 text-slate-200 px-2 py-0.5 rounded-full border border-white/10 flex items-center gap-1">
+            <span className="text-[10px] font-bold bg-white/10 text-slate-200 px-2.5 py-0.5 rounded-full border border-white/10 flex items-center gap-1">
               📍 {districtName}
             </span>
+
+            {ownerName && (
+              <span className="text-[10px] font-bold bg-white/10 text-slate-200 px-2.5 py-0.5 rounded-full border border-white/10 flex items-center gap-1">
+                👤 Owner: <strong className="text-white">{ownerName}</strong>
+              </span>
+            )}
 
             {vendorPhone && (
               <a
                 href={`tel:${vendorPhone}`}
-                className="text-[9px] sm:text-[10px] font-bold bg-white/10 hover:bg-white/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-400/20 flex items-center gap-1 transition-colors"
+                className="text-[10px] font-bold bg-white/10 hover:bg-white/20 active:scale-95 text-emerald-300 px-2.5 py-0.5 rounded-full border border-emerald-400/20 flex items-center gap-1 transition-all"
               >
-                <span>📞 {vendorPhone}</span>
+                <span>📱 {vendorPhone}</span>
               </a>
             )}
-
-            <span className="text-[9px] sm:text-[10px] font-bold bg-white/10 text-amber-300 px-2 py-0.5 rounded-full border border-amber-400/20 flex items-center gap-1">
-              ⚡ {matchedVendorObj.commissionRate || user?.vendorInfo?.commissionRate || 10}% Comm.
-            </span>
           </div>
 
-          {/* Shop Title & Owner Name */}
-          <div className="flex items-baseline justify-between gap-2 flex-wrap">
-            <div>
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white leading-tight">{shopName}</h1>
-              <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 font-medium">
-                Proprietor: <strong className="text-slate-200">{ownerName}</strong>
-              </p>
-            </div>
-
-            {/* Desktop-only secondary button if needed */}
-            <button
-              onClick={() => setShowCatalogModal(true)}
-              className="hidden md:flex items-center gap-1.5 bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all shadow-xs"
-            >
-              <span>🔍 Choose from Master Catalog</span>
-            </button>
+          {/* Shop Title */}
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
+              {shopName}
+            </h1>
           </div>
         </div>
 

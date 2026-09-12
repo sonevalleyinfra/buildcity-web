@@ -321,50 +321,54 @@ export default function VendorDashboard() {
   return (
     <DashboardShell badge="Vendor Partner" badgeColor="#10B981">
       {/* Top Banner & Stats Overview */}
-      <div className="bg-navy-900 rounded-2xl sm:rounded-3xl p-4 sm:p-8 mb-4 sm:mb-6 text-white shadow-xl relative overflow-hidden">
+      <div className="bg-navy-900 rounded-2xl sm:rounded-3xl p-3.5 sm:p-8 mb-3 sm:mb-6 text-white shadow-lg relative overflow-hidden">
         {/* Background glow effects */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-brand-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6 relative z-10">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-6 relative z-10">
           <div>
-            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap mb-1.5">
-              <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full border ${
+            <div className="flex items-center gap-1.5 flex-wrap mb-1">
+              <span className={`text-[9px] sm:text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
                 matchedVendorObj.status === "APPROVED"
                   ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
                   : "bg-amber-500/20 text-amber-300 border-amber-500/30"
               }`}>
-                ● STORE STATUS: {matchedVendorObj.status || "APPROVED"}
+                ● STORE: {matchedVendorObj.status || "APPROVED"}
               </span>
-              <span className="text-[10px] font-bold bg-white/10 text-slate-200 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full border border-white/10 flex items-center gap-1">
+              <span className="text-[9px] sm:text-[10px] font-bold bg-white/10 text-slate-200 px-2 py-0.5 rounded-full border border-white/10 flex items-center gap-1">
                 📍 {districtName}
               </span>
             </div>
-            <h1 className="text-xl sm:text-3xl font-black tracking-tight text-white">{shopName}</h1>
-            <p className="text-[11px] sm:text-xs text-slate-400 mt-1 font-medium">
-              Owner: <span className="text-slate-200 font-bold">{ownerName}</span> · Mobile: <span className="text-slate-200 font-bold">{vendorPhone}</span> · Commission: <span className="text-amber-300 font-bold">{matchedVendorObj.commissionRate || user?.vendorInfo?.commissionRate || 10}%</span>
+            <h1 className="text-lg sm:text-2xl font-black tracking-tight text-white">{shopName}</h1>
+            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 font-medium flex items-center gap-1 flex-wrap">
+              <span>Owner: <strong className="text-slate-200">{ownerName}</strong></span>
+              <span>·</span>
+              <span>📱 <strong className="text-slate-200">{vendorPhone}</strong></span>
+              <span>·</span>
+              <span>Comm: <strong className="text-amber-300">{matchedVendorObj.commissionRate || user?.vendorInfo?.commissionRate || 10}%</strong></span>
             </p>
           </div>
 
           <button
             onClick={() => setShowCatalogModal(true)}
-            className="w-full md:w-auto bg-brand-500 hover:bg-brand-600 active:scale-[0.98] transition-all text-white font-extrabold text-xs sm:text-sm px-5 py-3 rounded-xl shadow-lg hover:shadow-brand-500/25 flex items-center justify-center gap-2 cursor-pointer shrink-0"
+            className="w-full md:w-auto bg-brand-500 hover:bg-brand-600 active:scale-[0.98] transition-all text-white font-extrabold text-xs sm:text-sm px-4 py-2 sm:py-2.5 rounded-xl shadow-md hover:shadow-brand-500/25 flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
           >
-            <span>🔍 Choose from Master Catalog</span>
+            <span>🔍 Browse Master Catalog</span>
           </button>
         </div>
 
         {/* Quick Metrics Bar - Interactive Clickable Cards (2x2 on Mobile, 4 columns on Desktop) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 mt-4 sm:mt-6 pt-4 sm:pt-5 border-t border-slate-700/60 relative z-10">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mt-3 sm:mt-6 pt-3 sm:pt-5 border-t border-slate-700/60 relative z-10">
           <button
             type="button"
             onClick={() => setActiveTab("overview")}
-            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-3 sm:p-3.5 border border-white/10 hover:border-emerald-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group"
+            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2.5 sm:p-3.5 border border-white/10 hover:border-emerald-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group"
           >
-            <p className="text-[10px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">Total Store Revenue</p>
-            <p className="text-base sm:text-lg font-black text-white mt-0.5 tracking-tight">₹{Number(totalRevenue || 0).toLocaleString("en-IN")}</p>
-            <span className="text-[9px] sm:text-[10px] text-emerald-400 font-extrabold flex items-center gap-1 mt-0.5">
-              <span>Real-time DB</span>
+            <p className="text-[9px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">Revenue</p>
+            <p className="text-sm sm:text-lg font-black text-white mt-0.5 tracking-tight">₹{Number(totalRevenue || 0).toLocaleString("en-IN")}</p>
+            <span className="text-[8px] sm:text-[10px] text-emerald-400 font-extrabold flex items-center gap-1 mt-0.5">
+              <span>Real-time</span>
               <span className="group-hover:translate-x-0.5 transition-transform">→</span>
             </span>
           </button>
@@ -372,12 +376,12 @@ export default function VendorDashboard() {
           <button
             type="button"
             onClick={() => setActiveTab("orders")}
-            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-3 sm:p-3.5 border border-white/10 hover:border-amber-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group"
+            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2.5 sm:p-3.5 border border-white/10 hover:border-amber-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group"
           >
-            <p className="text-[10px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">Active Orders</p>
-            <p className="text-base sm:text-lg font-black text-white mt-0.5 tracking-tight">{activeOrdersCount} Orders</p>
-            <span className="text-[9px] sm:text-[10px] text-amber-300 font-extrabold flex items-center gap-1 mt-0.5">
-              <span>Live Orders in DB</span>
+            <p className="text-[9px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">Orders</p>
+            <p className="text-sm sm:text-lg font-black text-white mt-0.5 tracking-tight">{activeOrdersCount} Active</p>
+            <span className="text-[8px] sm:text-[10px] text-amber-300 font-extrabold flex items-center gap-1 mt-0.5">
+              <span>Live Orders</span>
               <span className="group-hover:translate-x-0.5 transition-transform">→</span>
             </span>
           </button>
@@ -385,12 +389,12 @@ export default function VendorDashboard() {
           <button
             type="button"
             onClick={() => setActiveTab("products")}
-            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-3 sm:p-3.5 border border-white/10 hover:border-brand-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group"
+            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2.5 sm:p-3.5 border border-white/10 hover:border-brand-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group"
           >
-            <p className="text-[10px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">My Store Products</p>
-            <p className="text-base sm:text-lg font-black text-white mt-0.5 tracking-tight">{vendorProducts.length} Items</p>
-            <span className="text-[9px] sm:text-[10px] text-brand-300 font-extrabold flex items-center gap-1 mt-0.5">
-              <span>My Listings</span>
+            <p className="text-[9px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">My Products</p>
+            <p className="text-sm sm:text-lg font-black text-white mt-0.5 tracking-tight">{vendorProducts.length} Listed</p>
+            <span className="text-[8px] sm:text-[10px] text-brand-300 font-extrabold flex items-center gap-1 mt-0.5">
+              <span>Manage</span>
               <span className="group-hover:translate-x-0.5 transition-transform">→</span>
             </span>
           </button>
@@ -398,12 +402,12 @@ export default function VendorDashboard() {
           <button
             type="button"
             onClick={() => setShowCatalogModal(true)}
-            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-3 sm:p-3.5 border border-white/10 hover:border-amber-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group"
+            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2.5 sm:p-3.5 border border-white/10 hover:border-amber-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group"
           >
-            <p className="text-[10px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">Master Catalog</p>
-            <p className="text-base sm:text-lg font-black text-amber-300 mt-0.5 tracking-tight">{masterProducts.length} Products</p>
-            <span className="text-[9px] sm:text-[10px] text-slate-300 font-medium flex items-center gap-1 mt-0.5">
-              <span>Browse Catalog</span>
+            <p className="text-[9px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors">Master Catalog</p>
+            <p className="text-sm sm:text-lg font-black text-amber-300 mt-0.5 tracking-tight">{masterProducts.length} Items</p>
+            <span className="text-[8px] sm:text-[10px] text-slate-300 font-medium flex items-center gap-1 mt-0.5">
+              <span>Add More</span>
               <span className="group-hover:translate-x-0.5 transition-transform">→</span>
             </span>
           </button>

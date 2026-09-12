@@ -6,6 +6,55 @@ import { useOrders } from "../../context/OrderContext";
 import { useAlert } from "../../context/AlertContext";
 import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
 
+// Helper for ultra-fast, zero-latency image resolution with bundled offline assets
+const resolveProductImage = (imageUrl, categoryName = "", productName = "") => {
+  const cat = (categoryName || "").toLowerCase();
+  const name = (productName || "").toLowerCase();
+
+  const getBundledAsset = () => {
+    if (cat.includes("cement") || name.includes("cement") || name.includes("birla") || name.includes("acc") || name.includes("ultratech") || name.includes("ambuja")) {
+      return "/categories/cement.png";
+    }
+    if (cat.includes("steel") || cat.includes("tmt") || name.includes("steel") || name.includes("tmt") || name.includes("jindal") || name.includes("tata tiscon")) {
+      return "/categories/steel.png";
+    }
+    if (cat.includes("paint") || name.includes("paint") || name.includes("asian") || name.includes("berger") || name.includes("nerolac")) {
+      return "/categories/paints.png";
+    }
+    if (cat.includes("plumb") || cat.includes("pipe") || name.includes("pipe") || name.includes("astral") || name.includes("ashirvad") || name.includes("supreme")) {
+      return "/categories/plumbing.png";
+    }
+    if (cat.includes("tile") || cat.includes("marble") || name.includes("tile") || name.includes("kajaria") || name.includes("somany")) {
+      return "/categories/tiles.png";
+    }
+    if (cat.includes("stone") || cat.includes("sand") || cat.includes("aggregate") || cat.includes("gitti") || cat.includes("morang") || cat.includes("balu")) {
+      return "/categories/crushed_stone.png";
+    }
+    if (cat.includes("rebar") || name.includes("rebar") || name.includes("rod") || name.includes("sariya")) {
+      return "/categories/rebars.png";
+    }
+    return "/categories/cement.png";
+  };
+
+  // If no URL or generic placeholder URL, use instant bundled asset directly!
+  if (!imageUrl || typeof imageUrl !== "string" || imageUrl.trim() === "" || imageUrl.includes("photo-1589939705384-5185137a7f0f")) {
+    return getBundledAsset();
+  }
+
+  // If already a local asset, return as-is
+  if (imageUrl.startsWith("/") || imageUrl.startsWith("assets/")) {
+    return imageUrl;
+  }
+
+  // If Unsplash, optimize with thumbnail params to load 10x faster
+  if (imageUrl.includes("images.unsplash.com")) {
+    const base = imageUrl.split("?")[0];
+    return `${base}?auto=format&fit=crop&w=160&h=160&q=75`;
+  }
+
+  return imageUrl;
+};
+
 // Vendor Dashboard component — Vendor partner ka main portal (Master Catalog selection, Custom Price & Stock setting, Orders management)
 export default function VendorDashboard() {
   const { user } = useAuth();
@@ -64,20 +113,25 @@ export default function VendorDashboard() {
   const districtName = matchedVendorObj.region?.name || matchedVendorObj.regionName || matchedVendorObj.districtName || user?.vendorInfo?.region?.name || user?.vendorInfo?.regionName || "Mirzapur";
   const vendorId = matchedVendorObj.id || user?.vendorInfo?.id || user?.vendorId || user?.id || (user?.phone ? `v-${user.phone}` : `v-${Date.now()}`);
 
-  // Continuous background polling (every 3.5s) for vendor orders + instant event triggers
+  // Background polling (every 8s with stable equality) for vendor orders + instant event triggers
   useEffect(() => {
     let isMounted = true;
     const syncVendorOrders = async () => {
       try {
         const vOrds = await fetchVendorOrders(vendorId);
         if (isMounted && Array.isArray(vOrds)) {
-          setFetchedVendorOrders(vOrds);
+          setFetchedVendorOrders((prev) => {
+            if (prev.length === vOrds.length && JSON.stringify(prev) === JSON.stringify(vOrds)) {
+              return prev;
+            }
+            return vOrds;
+          });
         }
       } catch {}
     };
 
     syncVendorOrders();
-    const interval = setInterval(syncVendorOrders, 3500);
+    const interval = setInterval(syncVendorOrders, 8000);
 
     const handleOrderEvent = () => syncVendorOrders();
     window.addEventListener("buildcity_orders_updated", handleOrderEvent);
@@ -504,7 +558,17 @@ export default function VendorDashboard() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {vendorProducts.map((p) => (
                     <div key={p.id} className="border border-slate-200 rounded-xl p-3 flex gap-3 items-center bg-slate-50/50">
-                      <img src={p.imageUrl} alt={p.name} className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0" />
+                      <img
+                        src={resolveProductImage(p.imageUrl, p.categoryName, p.name)}
+                        alt={p.name}
+                        loading="lazy"
+                        decoding="async"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = resolveProductImage(null, p.categoryName, p.name);
+                        }}
+                        className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0 bg-slate-100"
+                      />
                       <div className="overflow-hidden flex-1">
                         <p className="font-bold text-xs text-navy-900 truncate">{p.name}</p>
                         <span className="text-[10px] bg-slate-100 text-slate-700 font-semibold px-1.5 py-0.5 rounded inline-block mt-0.5">
@@ -652,7 +716,17 @@ export default function VendorDashboard() {
                       <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
-                            <img src={p.imageUrl} alt={p.name} className="w-11 h-11 object-cover rounded-lg border border-slate-200 shrink-0" />
+                            <img
+                              src={resolveProductImage(p.imageUrl, p.categoryName, p.name)}
+                              alt={p.name}
+                              loading="lazy"
+                              decoding="async"
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src = resolveProductImage(null, p.categoryName, p.name);
+                              }}
+                              className="w-11 h-11 object-cover rounded-lg border border-slate-200 shrink-0 bg-slate-100"
+                            />
                             <div>
                               <span className="font-bold text-navy-900">{p.name}</span>
                               <p className="text-[10px] text-slate-400">Packaging: {p.unit}</p>
@@ -730,8 +804,14 @@ export default function VendorDashboard() {
                     <div key={p.id} className="p-4 hover:bg-slate-50/50 transition-colors">
                       <div className="flex items-start gap-3">
                         <img
-                          src={p.imageUrl}
+                          src={resolveProductImage(p.imageUrl, p.categoryName, p.name)}
                           alt={p.name}
+                          loading="lazy"
+                          decoding="async"
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = resolveProductImage(null, p.categoryName, p.name);
+                          }}
                           className="w-16 h-16 object-cover rounded-xl border border-slate-200 shrink-0 bg-slate-100 shadow-2xs"
                         />
                         <div className="flex-1 min-w-0">
@@ -1151,7 +1231,17 @@ export default function VendorDashboard() {
                         }`}
                       >
                         <div className="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0">
-                          <img src={mp.imageUrl} alt={mp.name} className="w-14 h-14 sm:w-12 sm:h-12 object-cover rounded-xl border border-slate-200 shrink-0 bg-slate-100" />
+                          <img
+                            src={resolveProductImage(mp.imageUrl, mp.categoryName, mp.name)}
+                            alt={mp.name}
+                            loading="lazy"
+                            decoding="async"
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = resolveProductImage(null, mp.categoryName, mp.name);
+                            }}
+                            className="w-14 h-14 sm:w-12 sm:h-12 object-cover rounded-xl border border-slate-200 shrink-0 bg-slate-100"
+                          />
                           <div className="min-w-0 flex-1">
                             <p className="font-extrabold text-xs sm:text-sm text-navy-900 leading-snug">{mp.name}</p>
                             <div className="flex flex-wrap items-center gap-1.5 mt-1">

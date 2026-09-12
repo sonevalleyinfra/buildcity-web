@@ -91,6 +91,20 @@ export default function VendorDashboard() {
     };
   }, [vendorId, shopName]);
 
+  // Lock document body scroll when modal/full-page sheet is open so background never scrolls
+  useEffect(() => {
+    if (showCatalogModal || editingProduct) {
+      const origOverflow = document.body.style.overflow;
+      const origTouchAction = document.body.style.touchAction;
+      document.body.style.overflow = "hidden";
+      document.body.style.touchAction = "none";
+      return () => {
+        document.body.style.overflow = origOverflow;
+        document.body.style.touchAction = origTouchAction;
+      };
+    }
+  }, [showCatalogModal, editingProduct]);
+
   // Combine orders specifically fetched for this vendor + reactive OrderContext orders
   const fetchedIds = new Set((fetchedVendorOrders || []).map((o) => o?.id).filter(Boolean));
 
@@ -420,7 +434,7 @@ export default function VendorDashboard() {
           }`}
         >
           <span>📦</span>
-          <span>Products ({vendorProducts.length})</span>
+          <span>Products</span>
         </button>
         <button
           onClick={() => setActiveTab("orders")}
@@ -1056,8 +1070,8 @@ export default function VendorDashboard() {
 
       {/* MODAL 1: CHOOSE FROM MASTER CATALOG MODAL (Full page on mobile, sleek dialog on desktop) */}
       {showCatalogModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm sm:p-4 flex items-center justify-center">
-          <div className="bg-white w-full h-full sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-2xl shadow-2xl border-0 sm:border border-slate-100 flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-white sm:bg-slate-900/70 sm:backdrop-blur-sm sm:p-4 flex flex-col sm:items-center sm:justify-center overflow-hidden overscroll-contain">
+          <div className="bg-white w-full h-full sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-2xl shadow-2xl border-0 sm:border border-slate-100 flex flex-col flex-1 sm:flex-initial min-h-0 overflow-hidden">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-200/80 px-4 py-3 sm:px-6 sm:py-4 bg-slate-50/70 shrink-0">
               <div className="min-w-0 pr-2">
@@ -1075,7 +1089,10 @@ export default function VendorDashboard() {
               </button>
             </div>
 
-            <div className="p-3.5 sm:p-6 overflow-y-auto flex-1 flex flex-col space-y-3 sm:space-y-4">
+            <div
+              className="p-3.5 sm:p-6 pb-16 sm:pb-6 overflow-y-auto flex-1 min-h-0 overscroll-contain flex flex-col space-y-3 sm:space-y-4"
+              style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+            >
               {/* Filter controls */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 shrink-0">
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar shrink-0">
@@ -1305,8 +1322,8 @@ export default function VendorDashboard() {
 
       {/* MODAL 2: EDIT LISTING PRICE, MRP, DISCOUNT & STOCK (Responsive Full-screen on Mobile, Modal on Desktop) */}
       {editingProduct && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm sm:p-4 flex items-center justify-center">
-          <div className="bg-white w-full h-full sm:h-auto sm:max-h-[90vh] sm:max-w-lg sm:rounded-2xl shadow-2xl border-0 sm:border border-slate-100 flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-white sm:bg-slate-900/70 sm:backdrop-blur-sm sm:p-4 flex flex-col sm:items-center sm:justify-center overflow-hidden overscroll-contain">
+          <div className="bg-white w-full h-full sm:h-auto sm:max-h-[90vh] sm:max-w-lg sm:rounded-2xl shadow-2xl border-0 sm:border border-slate-100 flex flex-col flex-1 sm:flex-initial min-h-0 overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-200/80 px-4 py-3 sm:px-6 sm:py-4 bg-slate-50/70 shrink-0">
               <div>
@@ -1321,7 +1338,11 @@ export default function VendorDashboard() {
               </button>
             </div>
 
-            <form onSubmit={handleUpdateListing} className="p-4 sm:p-6 overflow-y-auto flex-1 flex flex-col space-y-3.5">
+            <form
+              onSubmit={handleUpdateListing}
+              className="p-4 sm:p-6 pb-16 sm:pb-6 overflow-y-auto flex-1 min-h-0 overscroll-contain flex flex-col space-y-3.5"
+              style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+            >
               <div>
                 <label className="block text-[11px] font-bold text-slate-500 mb-1">Product Name</label>
                 <input type="text" disabled value={editingProduct.name} className="w-full bg-slate-100 text-slate-600 text-xs border border-slate-200 rounded-xl px-3 py-2 font-bold cursor-not-allowed" />

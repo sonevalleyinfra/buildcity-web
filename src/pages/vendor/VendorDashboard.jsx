@@ -415,30 +415,30 @@ export default function VendorDashboard() {
       <div className="grid grid-cols-3 gap-1 p-1 bg-white rounded-xl border border-slate-200/90 shadow-2xs mb-3 sm:mb-6 sm:flex sm:items-center sm:gap-2 sm:p-1.5">
         <button
           onClick={() => setActiveTab("products")}
-          className={`py-2 px-1 sm:px-4 text-[10px] sm:text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 text-center min-w-0 ${
+          className={`py-2 px-1 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 text-center whitespace-nowrap ${
             activeTab === "products" ? "bg-emerald-600 text-white shadow-xs font-extrabold" : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80 font-bold"
           }`}
         >
           <span>📦</span>
-          <span className="truncate">Products ({vendorProducts.length})</span>
+          <span>Products ({vendorProducts.length})</span>
         </button>
         <button
           onClick={() => setActiveTab("orders")}
-          className={`py-2 px-1 sm:px-4 text-[10px] sm:text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 text-center min-w-0 ${
+          className={`py-2 px-1 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 text-center whitespace-nowrap ${
             activeTab === "orders" ? "bg-emerald-600 text-white shadow-xs font-extrabold" : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80 font-bold"
           }`}
         >
           <span>🛍️</span>
-          <span className="truncate">Orders ({vendorOrders.length})</span>
+          <span>Orders</span>
         </button>
         <button
           onClick={() => setActiveTab("overview")}
-          className={`py-2 px-1 sm:px-4 text-[10px] sm:text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 text-center min-w-0 ${
+          className={`py-2 px-1 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 text-center whitespace-nowrap ${
             activeTab === "overview" ? "bg-emerald-600 text-white shadow-xs font-extrabold" : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80 font-bold"
           }`}
         >
           <span>📊</span>
-          <span className="truncate">Store Info</span>
+          <span>Store Info</span>
         </button>
       </div>
 

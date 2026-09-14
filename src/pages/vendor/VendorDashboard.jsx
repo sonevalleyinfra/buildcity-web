@@ -57,7 +57,7 @@ const resolveProductImage = (imageUrl, categoryName = "", productName = "") => {
 
 // Vendor Dashboard component — Vendor partner ka main portal (Master Catalog selection, Custom Price & Stock setting, Orders management)
 export default function VendorDashboard() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { showAlert, showConfirm } = useAlert();
   const {
     masterProducts = [],
@@ -71,8 +71,8 @@ export default function VendorDashboard() {
   } = useAdmin();
   const { orders = [], fetchVendorOrders, updateOrderStatus } = useOrders();
 
-  // Tabs navigation state: "products" -> My Shop Items, "orders" -> Customer Orders, "overview" -> Store Info & Sales
-  const [activeTab, setActiveTab] = useState("products");
+  // Tabs navigation state: "overview" -> Store Info (First), "products" -> My Shop Items, "orders" -> Customer Orders, "profile" -> Vendor Profile
+  const [activeTab, setActiveTab] = useState("overview");
   const [fetchedVendorOrders, setFetchedVendorOrders] = useState([]);
 
   // Master Catalog — Admin/DR dwara banaye gaye Master Products select karne ke liye
@@ -838,7 +838,7 @@ export default function VendorDashboard() {
 
           {/* 🏷️ ROUND CATEGORY STORY BUBBLES (LIKE BUILD CITY HOME SCREEN) */}
           <div className="bg-white rounded-2xl border border-slate-200/90 p-3 shadow-xs">
-            <div className="flex items-center justify-between gap-2 mb-2.5 px-1">
+            <div className="flex items-center justify-between gap-2 mb-1 px-1">
               <span className="text-[11px] font-black text-navy-900 uppercase tracking-wider flex items-center gap-1">
                 <span>🏷️ Categories</span>
               </span>
@@ -847,7 +847,7 @@ export default function VendorDashboard() {
               </span>
             </div>
 
-            <div className="flex items-center gap-3 overflow-x-auto pb-1.5 px-1 hide-scrollbar scroll-smooth">
+            <div className="flex items-center gap-3 overflow-x-auto py-3 px-2 hide-scrollbar scroll-smooth">
               {/* All Items Bubble */}
               <button
                 type="button"
@@ -857,7 +857,7 @@ export default function VendorDashboard() {
                 <div
                   className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center shadow-xs transition-all ${
                     vendorStoreCategoryFilter === "ALL"
-                      ? "bg-gradient-to-tr from-emerald-600 to-teal-500 text-white ring-3 ring-emerald-500 ring-offset-2 scale-105 shadow-md"
+                      ? "bg-gradient-to-tr from-emerald-600 to-teal-500 text-white border-[3px] border-emerald-500 shadow-md shadow-emerald-500/20"
                       : "bg-slate-100 text-slate-700 border-2 border-slate-200 hover:border-slate-300"
                   }`}
                 >
@@ -893,16 +893,16 @@ export default function VendorDashboard() {
                     className="flex flex-col items-center shrink-0 cursor-pointer active:scale-95 transition-all text-center group"
                   >
                     <div
-                      className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white flex items-center justify-center p-1.5 shadow-xs transition-all overflow-hidden ${
+                      className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white flex items-center justify-center p-1 shadow-xs transition-all overflow-hidden ${
                         isSelected
-                          ? "ring-3 ring-emerald-500 ring-offset-2 border-2 border-emerald-500 scale-105 shadow-md"
+                          ? "border-[3px] border-emerald-500 shadow-md shadow-emerald-500/20"
                           : "border-2 border-slate-200 hover:border-slate-300"
                       }`}
                     >
                       <img
                         src={cat.img || resolveCategoryBubbleImage(cat.name)}
                         alt={cat.name}
-                        className="w-full h-full object-cover rounded-full group-hover:scale-105 transition-transform"
+                        className="w-full h-full object-cover rounded-full"
                         onError={(e) => {
                           e.currentTarget.onerror = null;
                           e.currentTarget.src = "/categories/cement.png";
@@ -1028,56 +1028,33 @@ export default function VendorDashboard() {
                       </div>
 
                       <div className="mt-2 pt-2 border-t border-slate-100 space-y-2">
-                        {/* Price Row: Bold Selling Price + Strike MRP */}
-                        <div className="flex items-baseline justify-between gap-1 flex-wrap">
+                        {/* Price & Stock Row matching image media_1789363777327.png */}
+                        <div className="flex items-center justify-between gap-1 flex-wrap">
                           <div className="flex items-baseline gap-1">
-                            <span className="text-sm sm:text-base font-black text-emerald-700">₹{p.price}</span>
+                            <span className="text-base font-black text-navy-950">₹{p.price}</span>
+                            <span className="text-[10.5px] text-slate-500 font-semibold">/{p.unit || "unit"}</span>
                             {numMrp > numPrice && (
-                              <span className="text-[10px] text-slate-400 line-through font-medium">₹{p.mrp}</span>
+                              <span className="text-[10px] text-slate-400 line-through font-medium ml-0.5">₹{p.mrp}</span>
                             )}
                           </div>
-                          <span className="text-[9px] text-slate-400 font-bold">/{p.unit || "unit"}</span>
+
+                          <span className={`px-2 py-0.5 rounded-lg text-[10.5px] font-bold border ${
+                            p.stockQty > 0
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : "bg-rose-50 text-rose-700 border-rose-200"
+                          }`}>
+                            {p.stockQty > 0 ? `${p.stockQty} in stock` : "Out of stock"}
+                          </span>
                         </div>
 
-                        {/* Stock Stepper & Status */}
-                        <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-1.5 flex items-center justify-between">
-                          <div className="flex items-center gap-1 min-w-0">
-                            <span className={`w-2 h-2 rounded-full shrink-0 ${p.stockQty > 0 ? "bg-emerald-500" : "bg-rose-500"}`} />
-                            <span className="text-[10px] font-bold text-slate-700 truncate">
-                              {p.stockQty > 0 ? `${p.stockQty} in stock` : "Out of Stock"}
-                            </span>
-                          </div>
-
-                          {/* Quick Stepper Buttons */}
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => handleQuickStockChange(p, -10)}
-                              disabled={p.stockQty <= 0}
-                              className="w-5 h-5 rounded-md bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-black text-xs flex items-center justify-center cursor-pointer active:scale-90 disabled:opacity-30 disabled:cursor-not-allowed shadow-2xs"
-                              title="-10 Stock"
-                            >
-                              -
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleQuickStockChange(p, 10)}
-                              className="w-5 h-5 rounded-md bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-black text-xs flex items-center justify-center cursor-pointer active:scale-90 shadow-2xs"
-                              title="+10 Stock"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Full-width "Bhav Badle" Button */}
+                        {/* Full-width "Edit Price & Stock" Button matching media_1789363777327.png */}
                         <button
                           type="button"
                           onClick={() => handleOpenEditProduct(p)}
-                          className="w-full bg-amber-50 hover:bg-amber-100 active:scale-[0.98] border border-amber-300 text-amber-900 font-black text-[11px] sm:text-xs py-2 rounded-xl transition-all flex items-center justify-center gap-1 shadow-2xs cursor-pointer"
+                          className="w-full bg-[#FFF9F2] hover:bg-[#FFF2E2] active:scale-[0.98] border border-[#FED7AA] text-[#0F172A] font-extrabold text-xs py-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
                         >
                           <span>🏷️</span>
-                          <span>Bhav Badle</span>
+                          <span>Edit Price & Stock</span>
                         </button>
                       </div>
                     </div>
@@ -1170,9 +1147,9 @@ export default function VendorDashboard() {
                         <td className="py-3.5 px-4 text-right">
                           <button
                             onClick={() => handleOpenEditProduct(p)}
-                            className="text-[11px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg px-3 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer shadow-2xs"
+                            className="text-[11px] font-bold bg-[#FFF9F2] hover:bg-[#FFF2E2] text-[#0F172A] border border-[#FED7AA] rounded-lg px-3 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer shadow-2xs"
                           >
-                            🏷️ Bhav Badle
+                            🏷️ Edit Price & Stock
                           </button>
                         </td>
                       </tr>
@@ -1449,6 +1426,132 @@ export default function VendorDashboard() {
         </div>
       )}
 
+      {/* ========================================================================= */}
+      {/* PAGE 4: VENDOR PROFILE & BUSINESS ACCOUNT (DEDICATED FULL VIEW)           */}
+      {/* ========================================================================= */}
+      {activeTab === "profile" && (
+        <div className="space-y-4 sm:space-y-6">
+          {/* Profile Card Header */}
+          <div className="bg-navy-900 rounded-2xl sm:rounded-3xl p-5 sm:p-7 text-white shadow-lg relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-80 h-80 bg-brand-500/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand-500 to-amber-500 text-white font-black text-2xl flex items-center justify-center shadow-md border-2 border-white/20 shrink-0">
+                  {(ownerName || "V").charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">{ownerName}</h2>
+                    <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-black px-2 py-0.5 rounded-md">
+                      ✓ Verified Partner
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-0.5">🏪 {shopName}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">📍 {districtName}, Uttar Pradesh</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={logout}
+                className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/30 text-xs font-bold px-4 py-2 rounded-xl transition-colors cursor-pointer self-start sm:self-auto flex items-center gap-1.5"
+              >
+                <span>🚪</span>
+                <span>Logout Account</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Business & Account Details Card */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-6 shadow-xs space-y-4">
+            <h3 className="font-extrabold text-navy-900 text-sm border-b border-slate-100 pb-2.5 flex items-center justify-between">
+              <span>👤 Partner Account Information</span>
+              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                Active Partner
+              </span>
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Shop Name</span>
+                <p className="font-extrabold text-navy-900 text-sm mt-0.5">{shopName}</p>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Owner Name</span>
+                <p className="font-extrabold text-navy-900 text-sm mt-0.5">{ownerName}</p>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Registered Mobile</span>
+                <p className="font-extrabold text-navy-900 text-sm mt-0.5">📱 {vendorPhone}</p>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Registered Email</span>
+                <p className="font-extrabold text-navy-900 text-sm mt-0.5">✉️ {user?.email || "Not specified"}</p>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Operating Region</span>
+                <p className="font-extrabold text-navy-900 text-sm mt-0.5">📍 {districtName}, UP</p>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Partner ID</span>
+                <p className="font-extrabold text-navy-900 text-sm mt-0.5 font-mono text-[11px]">{vendorId}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Stats Summary */}
+          <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 sm:p-4 text-center shadow-xs">
+              <span className="text-xl">📦</span>
+              <p className="text-base sm:text-lg font-black text-navy-900 mt-1">{vendorProducts.length}</p>
+              <span className="text-[10px] sm:text-xs text-slate-500 font-bold block">Materials Listed</span>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 sm:p-4 text-center shadow-xs">
+              <span className="text-xl">🛍️</span>
+              <p className="text-base sm:text-lg font-black text-navy-900 mt-1">{vendorOrders.length}</p>
+              <span className="text-[10px] sm:text-xs text-slate-500 font-bold block">Total Orders</span>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 sm:p-4 text-center shadow-xs">
+              <span className="text-xl">💰</span>
+              <p className="text-base sm:text-lg font-black text-navy-900 mt-1">₹{totalRevenue}</p>
+              <span className="text-[10px] sm:text-xs text-slate-500 font-bold block">Revenue</span>
+            </div>
+          </div>
+
+          {/* Help & Support Card */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-xs space-y-3">
+            <h4 className="font-extrabold text-navy-900 text-xs sm:text-sm">Support & Partner Help</h4>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              If you need help adding new materials to your catalog or want to update your delivery district, contact your assigned District Representative (DR) or BuildCity Partner Support.
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <a
+                href="tel:1800123456"
+                className="bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors"
+              >
+                <span>📞</span>
+                <span>Contact DR Support</span>
+              </a>
+              <button
+                type="button"
+                onClick={logout}
+                className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <span>🚪</span>
+                <span>Logout</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       </div>
 
       {/* MODAL 1: CHOOSE FROM MASTER CATALOG MODAL (Full page on mobile, sleek dialog on desktop) */}
@@ -1662,12 +1765,12 @@ export default function VendorDashboard() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 pt-1">
                     <div>
                       <label className="block text-[11px] font-bold text-navy-900 mb-1">
-                        Initial Stock Quantity *
+                        Available Stock Qty *
                       </label>
                       <input
                         type="number"
                         required
-                        min="0"
+                        min="1"
                         placeholder="100"
                         value={vendorStockQty}
                         onChange={(e) => setVendorStockQty(e.target.value)}
@@ -1714,72 +1817,62 @@ export default function VendorDashboard() {
         </div>
       )}
 
-      {/* MODAL 2: EDIT LISTING PRICE, MRP, DISCOUNT & STOCK (Responsive Full-screen on Mobile, Modal on Desktop) */}
+      {/* MODAL 2: EDIT LISTED PRODUCT MODAL (Bottom Sheet on mobile, modal dialog on desktop) */}
       {editingProduct && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 sm:backdrop-blur-sm sm:p-4 flex flex-col sm:items-center sm:justify-center">
-          <div className="bg-white w-full h-[100dvh] sm:h-auto sm:max-h-[88vh] sm:max-w-lg sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-200/80 px-4 py-3 sm:px-6 sm:py-3.5 bg-slate-50 shrink-0">
+        <div className="fixed inset-0 z-50 bg-slate-900/70 sm:backdrop-blur-sm sm:p-4 flex flex-col justify-end sm:items-center sm:justify-center">
+          <div className="bg-white w-full h-[90dvh] sm:h-auto sm:max-h-[90vh] sm:max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl p-5 sm:p-6 overflow-y-auto flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
               <div>
-                <h3 className="font-extrabold text-navy-900 text-sm sm:text-base">Edit Product Price & Live Offer</h3>
-                <p className="text-[11px] sm:text-xs text-slate-500">Update your discount offer to display % OFF for customers.</p>
+                <h3 className="font-extrabold text-navy-900 text-base">Edit Product Listing</h3>
+                <p className="text-xs text-slate-500">{editingProduct.name}</p>
               </div>
               <button
+                type="button"
                 onClick={() => setEditingProduct(null)}
-                className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center font-bold text-sm leading-none shrink-0 transition-colors cursor-pointer"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-sm leading-none transition-colors cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <form
-              onSubmit={handleUpdateListing}
-              className="p-4 sm:p-6 pb-24 sm:pb-6 overflow-y-auto flex-1 min-h-0 flex flex-col space-y-3.5"
-            >
+            <form onSubmit={handleUpdateListing} className="space-y-4 flex-1 flex flex-col">
               <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-1">Product Name</label>
-                <input type="text" disabled value={editingProduct.name} className="w-full bg-slate-100 text-slate-600 text-xs border border-slate-200 rounded-xl px-3 py-2 font-bold cursor-not-allowed" />
+                <label className="block text-[11px] font-bold text-navy-900 mb-1">Suggested / Base MRP (₹)</label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  value={editingProduct.mrp || ""}
+                  onChange={(e) => handleEditMrpChange(e.target.value)}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-bold"
+                />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-navy-900 mb-1">MRP / Base (₹) *</label>
+              <div>
+                <label className="block text-[11px] font-bold text-navy-900 mb-1">Discount (% OFF)</label>
+                <div className="relative">
                   <input
                     type="number"
-                    required
-                    min="1"
-                    value={editingProduct.mrp}
-                    onChange={(e) => handleEditMrpChange(e.target.value)}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-bold"
+                    min="0"
+                    max="90"
+                    value={editingProduct.discountPct || 0}
+                    onChange={(e) => handleEditDiscountChange(e.target.value)}
+                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-bold pr-8"
                   />
+                  <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-navy-900 mb-1">Discount (% OFF)</label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      min="0"
-                      max="90"
-                      value={editingProduct.discountPct}
-                      onChange={(e) => handleEditDiscountChange(e.target.value)}
-                      className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-bold pr-8"
-                    />
-                    <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-navy-900 mb-1">My Selling Price (₹) *</label>
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    value={editingProduct.price}
-                    onChange={(e) => handleEditPriceChange(e.target.value)}
-                    className="w-full bg-emerald-50 text-emerald-900 text-xs border border-emerald-300 rounded-xl px-3 py-2 outline-none focus:border-emerald-500 font-extrabold"
-                  />
-                </div>
+              <div>
+                <label className="block text-[11px] font-bold text-navy-900 mb-1">Customer Selling Price (₹) *</label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  value={editingProduct.price}
+                  onChange={(e) => handleEditPriceChange(e.target.value)}
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-bold"
+                />
               </div>
 
               {/* Live Preview Box */}
@@ -1833,8 +1926,23 @@ export default function VendorDashboard() {
         </div>
       )}
 
-      {/* Floating Bottom Navigation Bar (Persistent touch navigation across Products, Orders, Master Catalog & Store Info) */}
-      <div className="fixed bottom-3 inset-x-3 sm:max-w-md sm:mx-auto z-40 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/90 shadow-2xl p-1.5 flex items-center justify-between">
+      {/* Floating Bottom Navigation Bar (Persistent touch navigation across Store Info (1st), Products (2nd), Master Catalog (+), Orders (4th), Profile (5th)) */}
+      <div className="fixed bottom-3 inset-x-3 sm:max-w-lg sm:mx-auto z-40 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/90 shadow-2xl p-1.5 flex items-center justify-between">
+        {/* 1. Store Info (FIRST!) */}
+        <button
+          type="button"
+          onClick={() => setActiveTab("overview")}
+          className={`flex-1 flex flex-col items-center py-1 rounded-xl transition-all cursor-pointer active:scale-95 ${
+            activeTab === "overview"
+              ? "text-emerald-700 font-extrabold bg-emerald-50/80 shadow-2xs"
+              : "text-slate-500 hover:text-slate-900 font-semibold"
+          }`}
+        >
+          <span className="text-lg leading-none mb-0.5">📊</span>
+          <span className="text-[10px] tracking-tight">Store Info</span>
+        </button>
+
+        {/* 2. Products */}
         <button
           type="button"
           onClick={() => setActiveTab("products")}
@@ -1848,6 +1956,17 @@ export default function VendorDashboard() {
           <span className="text-[10px] tracking-tight">Products</span>
         </button>
 
+        {/* 3. Center Raised Action Button for Instant Master Catalog Access */}
+        <button
+          type="button"
+          onClick={() => setShowCatalogModal(true)}
+          className="w-11 h-11 -mt-5 bg-gradient-to-tr from-brand-600 via-brand-500 to-amber-400 text-white rounded-full flex items-center justify-center text-2xl font-black shadow-lg hover:scale-105 active:scale-95 transition-all cursor-pointer ring-4 ring-white shrink-0 mx-1"
+          title="Add from Master Catalog"
+        >
+          +
+        </button>
+
+        {/* 4. Orders */}
         <button
           type="button"
           onClick={() => setActiveTab("orders")}
@@ -1866,27 +1985,18 @@ export default function VendorDashboard() {
           )}
         </button>
 
-        {/* Center Raised Action Button for Instant Master Catalog Access */}
+        {/* 5. Profile (FIFTH!) */}
         <button
           type="button"
-          onClick={() => setShowCatalogModal(true)}
-          className="w-11 h-11 -mt-5 bg-gradient-to-tr from-brand-600 via-brand-500 to-amber-400 text-white rounded-full flex items-center justify-center text-2xl font-black shadow-lg hover:scale-105 active:scale-95 transition-all cursor-pointer ring-4 ring-white shrink-0 mx-1"
-          title="Add from Master Catalog"
-        >
-          +
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("overview")}
+          onClick={() => setActiveTab("profile")}
           className={`flex-1 flex flex-col items-center py-1 rounded-xl transition-all cursor-pointer active:scale-95 ${
-            activeTab === "overview"
+            activeTab === "profile"
               ? "text-emerald-700 font-extrabold bg-emerald-50/80 shadow-2xs"
               : "text-slate-500 hover:text-slate-900 font-semibold"
           }`}
         >
-          <span className="text-lg leading-none mb-0.5">📊</span>
-          <span className="text-[10px] tracking-tight">Store Info</span>
+          <span className="text-lg leading-none mb-0.5">👤</span>
+          <span className="text-[10px] tracking-tight">Profile</span>
         </button>
       </div>
     </DashboardShell>

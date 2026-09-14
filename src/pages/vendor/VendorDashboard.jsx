@@ -1529,14 +1529,31 @@ export default function VendorDashboard() {
                       {/* Ordered Items */}
                       <div className="space-y-1.5 pt-1">
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Ordered Materials:</span>
-                        {Array.isArray(ord.items) && ord.items.map((it, idx) => (
-                          <div key={idx} className="flex items-center justify-between text-xs py-1 border-b border-slate-50">
-                            <span className="font-bold text-navy-900 truncate pr-2">
-                              {it.productName || it.name} <span className="text-slate-400 font-normal">x{it.quantity}</span>
-                            </span>
-                            <span className="font-extrabold text-navy-900 shrink-0">₹{it.price * (it.quantity || 1)}</span>
-                          </div>
-                        ))}
+                        {Array.isArray(ord.items) && ord.items.map((it, idx) => {
+                          const itemQty = Number(it.quantity || it.qty || it.count || 1);
+                          const rawPrice = it.price ?? it.unitPrice ?? it.sellingPrice ?? it.rate;
+                          let lineTotal = 0;
+                          if (rawPrice !== undefined && rawPrice !== null && !isNaN(Number(rawPrice)) && Number(rawPrice) > 0) {
+                            lineTotal = Number(rawPrice) * itemQty;
+                          } else if (it.totalPrice || it.total || it.amount) {
+                            lineTotal = Number(it.totalPrice || it.total || it.amount) || 0;
+                          } else if (Array.isArray(ord.items) && ord.items.length === 1 && orderTotal > 0) {
+                            lineTotal = orderTotal;
+                          } else if (orderTotal > 0 && ord.items.length > 0) {
+                            lineTotal = Math.round(orderTotal / ord.items.length);
+                          }
+
+                          return (
+                            <div key={idx} className="flex items-center justify-between text-xs py-1 border-b border-slate-50">
+                              <span className="font-bold text-navy-900 truncate pr-2">
+                                {it.productName || it.name || "Material"} <span className="text-slate-400 font-normal">x{itemQty}</span>
+                              </span>
+                              <span className="font-extrabold text-navy-900 shrink-0">
+                                ₹{(Number(lineTotal) || 0).toLocaleString("en-IN")}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
 
                       {/* Total & Status Selector */}

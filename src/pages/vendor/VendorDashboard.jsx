@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import DashboardShell from "../../components/DashboardShell";
 import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
@@ -215,6 +215,7 @@ export default function VendorDashboard() {
   const [vendorStoreCategoryFilter, setVendorStoreCategoryFilter] = useState("ALL");
   const [productSearch, setProductSearch] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState("ALL");
+  const [orderSearch, setOrderSearch] = useState("");
 
   // Current vendor ki dukan par list huye products filter karo (Flexible DB Match)
   const vendorProducts = products.filter((p) => {
@@ -274,10 +275,76 @@ export default function VendorDashboard() {
     );
   });
 
-  // Filtered orders for dedicated orders page
+  // Calculate customer order counts (detect repeat buyers / frequent customers)
+  const customerOrderCounts = useMemo(() => {
+    const counts = {};
+    vendorOrders.forEach((o) => {
+      const rawAddr = o.address;
+      const isObj = typeof rawAddr === "object" && rawAddr !== null;
+      const phone = ((isObj && rawAddr.phone) || o.customer?.phone || o.phone || "").trim();
+      const name = ((isObj && (rawAddr.fullName || rawAddr.name)) || o.customer?.name || (typeof o.customer === "string" ? o.customer : "")).trim().toLowerCase();
+      const key = phone || name;
+      if (key) {
+        counts[key] = (counts[key] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [vendorOrders]);
+
+  const getCustomerStats = (ord) => {
+    const rawAddr = ord.address;
+    const isObj = typeof rawAddr === "object" && rawAddr !== null;
+    const phone = ((isObj && rawAddr.phone) || ord.customer?.phone || ord.phone || "").trim();
+    const name = ((isObj && (rawAddr.fullName || rawAddr.name)) || ord.customer?.name || (typeof ord.customer === "string" ? ord.customer : "")).trim().toLowerCase();
+    const key = phone || name;
+    const count = key ? (customerOrderCounts[key] || 1) : 1;
+    return {
+      orderCount: count,
+      isRepeat: count > 1,
+    };
+  };
+
+  const repeatOrdersCount = vendorOrders.filter((ord) => getCustomerStats(ord).isRepeat).length;
+
+  // Filtered orders for dedicated orders page (with status, search, and repeat filter)
   const filteredVendorOrders = vendorOrders.filter((ord) => {
-    if (orderStatusFilter === "ALL") return true;
-    return (ord.status || "PENDING").toUpperCase() === orderStatusFilter;
+    // 1. Status / Repeat Buyer Filter
+    if (orderStatusFilter === "REPEAT_BUYERS") {
+      if (!getCustomerStats(ord).isRepeat) return false;
+    } else if (orderStatusFilter !== "ALL") {
+      if ((ord.status || "PENDING").toUpperCase() !== orderStatusFilter) return false;
+    }
+
+    // 2. Search query filter (Order ID, Customer Name, Phone, Items, Delivery Address)
+    if (orderSearch.trim()) {
+      const q = orderSearch.toLowerCase().trim();
+      const rawAddr = ord.address;
+      const isObj = typeof rawAddr === "object" && rawAddr !== null;
+      const isStr = typeof rawAddr === "string" && rawAddr.trim().length > 0;
+      const custName = ((isObj && (rawAddr.fullName || rawAddr.name)) || ord.customer?.name || (typeof ord.customer === "string" ? ord.customer : "")).toLowerCase();
+      const phone = ((isObj && rawAddr.phone) || ord.customer?.phone || ord.phone || "").toLowerCase();
+      const ordId = String(ord.id || ord.orderNumber || "").toLowerCase();
+      const formattedId = formatShortId(ord.id || ord.orderNumber, "ORD").toLowerCase();
+      const street = (isObj ? (rawAddr.street || rawAddr.line || rawAddr.address) : (isStr ? rawAddr : "")).toLowerCase();
+      const city = (isObj ? rawAddr.city : (ord.districtName || ord.regionName || "")).toLowerCase();
+
+      const itemsMatch = Array.isArray(ord.items)
+        ? ord.items.some((i) => (i.productName || i.name || "").toLowerCase().includes(q))
+        : String(ord.items || "").toLowerCase().includes(q);
+
+      const matchesSearch =
+        custName.includes(q) ||
+        phone.includes(q) ||
+        ordId.includes(q) ||
+        formattedId.includes(q) ||
+        street.includes(q) ||
+        city.includes(q) ||
+        itemsMatch;
+
+      if (!matchesSearch) return false;
+    }
+
+    return true;
   });
 
   // Quick stock stepper handler (+/- on 2x2 product card)
@@ -649,46 +716,6 @@ export default function VendorDashboard() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
             <div className="lg:col-span-2 space-y-4 sm:space-y-6">
-              {/* Dukaan & Partner Details Card */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-500 to-amber-500 text-white font-black text-xl flex items-center justify-center shadow-xs">
-                      🏬
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <h3 className="font-extrabold text-navy-900 text-sm sm:text-base">{shopName}</h3>
-                        <span className="bg-emerald-50 text-emerald-700 font-extrabold text-[10px] px-2 py-0.5 rounded-md border border-emerald-200">
-                          ✓ Verified Partner
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-0.5">BuildCity Construction Materials Partner Profile</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Detail fields */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 text-xs">
-                  <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Shop Owner Name</span>
-                    <p className="font-extrabold text-navy-900 text-sm mt-0.5">👤 {ownerName}</p>
-                  </div>
-                  <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Registered Mobile Phone</span>
-                    <p className="font-extrabold text-navy-900 text-sm mt-0.5">📱 {vendorPhone}</p>
-                  </div>
-                  <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Delivery District</span>
-                    <p className="font-extrabold text-navy-900 text-sm mt-0.5">📍 {districtName}, Uttar Pradesh</p>
-                  </div>
-                  <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Store Catalog Status</span>
-                    <p className="font-extrabold text-navy-900 text-sm mt-0.5">📦 {vendorProducts.length} Active Materials</p>
-                  </div>
-                </div>
-              </div>
-
               {/* Store Products Preview Card */}
               <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
@@ -1244,7 +1271,7 @@ export default function VendorDashboard() {
       {activeTab === "orders" && (
         <div className="space-y-3.5 sm:space-y-5">
           {/* Dedicated Orders Page Header */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 sm:p-5 shadow-xs">
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 sm:p-5 shadow-xs space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
@@ -1254,13 +1281,18 @@ export default function VendorDashboard() {
                   <span className="bg-emerald-50 text-emerald-700 font-extrabold text-[10px] px-2 py-0.5 rounded-full border border-emerald-200">
                     {filteredVendorOrders.length} Orders
                   </span>
+                  {orderSearch && (
+                    <span className="bg-brand-50 text-brand-700 font-extrabold text-[10px] px-2 py-0.5 rounded-full border border-brand-200">
+                      Search: &quot;{orderSearch}&quot;
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Direct site orders received for <b>{shopName}</b> across {districtName}.
                 </p>
               </div>
 
-              {/* Status Filter Chips */}
+              {/* Status & Repeat Buyer Filter Chips */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 hide-scrollbar">
                 {["ALL", "PENDING", "PROCESSING", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"].map((st) => (
                   <button
@@ -1276,7 +1308,42 @@ export default function VendorDashboard() {
                     {st === "ALL" ? `All (${vendorOrders.length})` : st.replace(/_/g, " ")}
                   </button>
                 ))}
+
+                {/* Repeat Buyers Special Filter */}
+                <button
+                  type="button"
+                  onClick={() => setOrderStatusFilter(orderStatusFilter === "REPEAT_BUYERS" ? "ALL" : "REPEAT_BUYERS")}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
+                    orderStatusFilter === "REPEAT_BUYERS"
+                      ? "bg-amber-500 text-white font-black shadow-xs"
+                      : "bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300/80"
+                  }`}
+                >
+                  <span>👑</span>
+                  <span>Repeat Buyers ({repeatOrdersCount})</span>
+                </button>
               </div>
+            </div>
+
+            {/* Fast Live Search Bar */}
+            <div className="relative">
+              <input
+                type="text"
+                value={orderSearch}
+                onChange={(e) => setOrderSearch(e.target.value)}
+                placeholder="🔍 Search orders by customer name, phone number, order ID, or delivery address..."
+                className="w-full bg-slate-50 hover:bg-slate-100/70 focus:bg-white text-xs border border-slate-200/90 focus:border-brand-500 rounded-xl pl-3.5 pr-8 py-2.5 outline-none transition-all font-medium text-navy-900 placeholder:text-slate-400 shadow-2xs"
+              />
+              {orderSearch && (
+                <button
+                  type="button"
+                  onClick={() => setOrderSearch("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs font-black p-1 cursor-pointer"
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              )}
             </div>
           </div>
 
@@ -1291,11 +1358,21 @@ export default function VendorDashboard() {
           ) : filteredVendorOrders.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-200/90 p-8 text-center shadow-xs">
               <p className="text-3xl mb-2">🔍</p>
-              <h3 className="text-sm font-extrabold text-navy-900">No orders matching &quot;{orderStatusFilter}&quot;</h3>
+              <h3 className="text-sm font-extrabold text-navy-900">
+                {orderSearch
+                  ? `No orders matching "${orderSearch}"`
+                  : orderStatusFilter === "REPEAT_BUYERS"
+                  ? "No repeat customer orders found yet"
+                  : `No orders matching "${orderStatusFilter}"`}
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">Try resetting filters or searching with a different term.</p>
               <button
                 type="button"
-                onClick={() => setOrderStatusFilter("ALL")}
-                className="mt-3 bg-brand-500 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer"
+                onClick={() => {
+                  setOrderStatusFilter("ALL");
+                  setOrderSearch("");
+                }}
+                className="mt-3 bg-brand-500 hover:bg-brand-600 active:scale-95 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer transition-all shadow-xs"
               >
                 Show All Orders ({vendorOrders.length})
               </button>
@@ -1320,6 +1397,7 @@ export default function VendorDashboard() {
                   }
 
                   const formattedOrderId = formatShortId(ord.id || ord.orderNumber, "ORD");
+                  const customerStats = getCustomerStats(ord);
 
                   return (
                     <div key={ord.id} className="bg-white rounded-2xl p-3.5 border border-slate-200/90 shadow-xs space-y-3">
@@ -1345,7 +1423,21 @@ export default function VendorDashboard() {
                       {/* Customer Info & Direct Call Button */}
                       <div className="flex items-start justify-between gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                         <div className="min-w-0">
-                          <p className="font-extrabold text-navy-950 text-xs truncate">👤 {custFullName}</p>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="font-extrabold text-navy-950 text-xs truncate">👤 {custFullName}</p>
+                            {customerStats.isRepeat ? (
+                              <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-300/90 px-1.5 py-0.2 rounded-full text-[9px] font-black shadow-2xs">
+                                <span>👑 Repeat Customer</span>
+                                <span className="bg-amber-500 text-white text-[8px] px-1 rounded-full font-bold">
+                                  {customerStats.orderCount} Orders
+                                </span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 bg-slate-200/70 text-slate-600 px-1.5 py-0.2 rounded text-[9px] font-medium">
+                                🌱 1st Order
+                              </span>
+                            )}
+                          </div>
                           {custPhone && (
                             <p className="text-[11px] text-slate-600 font-semibold mt-0.5">📱 {custPhone}</p>
                           )}
@@ -1447,6 +1539,7 @@ export default function VendorDashboard() {
                       }
 
                       const formattedOrderId = formatShortId(ord.id || ord.orderNumber, "ORD");
+                      const customerStats = getCustomerStats(ord);
 
                       return (
                         <tr key={ord.id} className="hover:bg-slate-50/80 transition-colors">
@@ -1455,7 +1548,21 @@ export default function VendorDashboard() {
                             <span className="text-[11px] text-slate-400 font-medium block mt-0.5">{formatDateTimeIST(ord.createdAt || ord.date)}</span>
                           </td>
                           <td className="py-3.5 px-4 text-slate-800 min-w-[240px]">
-                            <p className="font-extrabold text-navy-900 text-xs">👤 Recipient: {custFullName}</p>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="font-extrabold text-navy-900 text-xs">👤 Recipient: {custFullName}</p>
+                              {customerStats.isRepeat ? (
+                                <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-300/90 px-1.5 py-0.2 rounded-full text-[9px] font-black shadow-2xs">
+                                  <span>👑 Repeat Customer</span>
+                                  <span className="bg-amber-500 text-white text-[8px] px-1 rounded-full font-bold">
+                                    {customerStats.orderCount} Orders
+                                  </span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 bg-slate-200/70 text-slate-600 px-1.5 py-0.2 rounded text-[9px] font-medium">
+                                  🌱 1st Order
+                                </span>
+                              )}
+                            </div>
                             {custPhone && (
                               <p className="text-[11px] text-slate-700 font-bold mt-0.5 flex items-center gap-1.5">
                                 <span>📱 Contact: {custPhone}</span>
@@ -1571,11 +1678,6 @@ export default function VendorDashboard() {
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Operating Region</span>
                 <p className="font-extrabold text-navy-900 text-sm mt-0.5">📍 {districtName}, UP</p>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Partner ID</span>
-                <p className="font-extrabold text-navy-900 text-sm mt-0.5 font-mono text-[11px]">{vendorId}</p>
               </div>
             </div>
           </div>

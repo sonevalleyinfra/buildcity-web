@@ -196,8 +196,25 @@ export default function VendorDashboard() {
     });
   });
 
-  // State for filtering vendor's own listed store products by category
+  // Category Bubble image resolver matching circular category tiles
+  const resolveCategoryBubbleImage = (catName = "") => {
+    const lower = (catName || "").toLowerCase().trim();
+    if (lower.includes("cement")) return "/categories/cement.png";
+    if (lower.includes("steel")) return "/categories/steel.png";
+    if (lower.includes("rebar") || lower.includes("sariya")) return "/categories/rebars.png";
+    if (lower.includes("stone") || lower.includes("gitti") || lower.includes("crush") || lower.includes("aggregate")) return "/categories/crushed_stone.png";
+    if (lower.includes("tile")) return "/categories/tiles.png";
+    if (lower.includes("plumb") || lower.includes("pipe")) return "/categories/plumbing.png";
+    if (lower.includes("paint")) return "/categories/paints.png";
+    if (lower.includes("brick")) return "https://images.unsplash.com/photo-1590069261209-f8e9b8642343?auto=format&fit=crop&w=160&q=80";
+    if (lower.includes("elect")) return "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=160&q=80";
+    return "/categories/cement.png";
+  };
+
+  // State for filtering vendor's own listed store products by category & search query
   const [vendorStoreCategoryFilter, setVendorStoreCategoryFilter] = useState("ALL");
+  const [productSearch, setProductSearch] = useState("");
+  const [orderStatusFilter, setOrderStatusFilter] = useState("ALL");
 
   // Current vendor ki dukan par list huye products filter karo (Flexible DB Match)
   const vendorProducts = products.filter((p) => {
@@ -211,6 +228,31 @@ export default function VendorDashboard() {
     return matchesId || matchesShop || matchesOwner;
   });
 
+  // Category Bubbles list (Home screen round story bubbles style)
+  const staticCategoryBubbles = [
+    { id: "Cement", name: "Cement", img: "/categories/cement.png" },
+    { id: "Steel", name: "Steel", img: "/categories/steel.png" },
+    { id: "Rebars", name: "Rebars", img: "/categories/rebars.png" },
+    { id: "Crushed Stone", name: "Crushed Stone", img: "/categories/crushed_stone.png" },
+    { id: "Tiles", name: "Tiles", img: "/categories/tiles.png" },
+    { id: "Plumbing", name: "Plumbing", img: "/categories/plumbing.png" },
+    { id: "Paints", name: "Paints", img: "/categories/paints.png" },
+  ];
+
+  const categoryBubbleMap = new Map();
+  staticCategoryBubbles.forEach((c) => categoryBubbleMap.set(c.name.toLowerCase(), c));
+  (categories || []).forEach((c) => {
+    const key = (c.name || "").toLowerCase();
+    if (!categoryBubbleMap.has(key)) {
+      categoryBubbleMap.set(key, {
+        id: c.id,
+        name: c.name,
+        img: resolveCategoryBubbleImage(c.name),
+      });
+    }
+  });
+  const allCategoryBubbles = Array.from(categoryBubbleMap.values());
+
   // Selected category ke mutabiq filtered vendor products
   const filteredVendorProducts = vendorProducts.filter((p) => {
     if (vendorStoreCategoryFilter === "ALL") return true;
@@ -219,6 +261,40 @@ export default function VendorDashboard() {
     const targetFilter = vendorStoreCategoryFilter.toLowerCase();
     return pCatId === vendorStoreCategoryFilter || pCatName === targetFilter || pCatName.includes(targetFilter);
   });
+
+  // Live search query filtered products for vendor's products page
+  const displayedVendorProducts = filteredVendorProducts.filter((p) => {
+    if (!productSearch) return true;
+    const q = productSearch.toLowerCase();
+    return (
+      (p.name || "").toLowerCase().includes(q) ||
+      (p.brand || "").toLowerCase().includes(q) ||
+      (p.categoryName || "").toLowerCase().includes(q) ||
+      (p.grade || "").toLowerCase().includes(q)
+    );
+  });
+
+  // Filtered orders for dedicated orders page
+  const filteredVendorOrders = vendorOrders.filter((ord) => {
+    if (orderStatusFilter === "ALL") return true;
+    return (ord.status || "PENDING").toUpperCase() === orderStatusFilter;
+  });
+
+  // Quick stock stepper handler (+/- on 2x2 product card)
+  const handleQuickStockChange = async (prod, delta) => {
+    const curStock = Number(prod.stockQty) || 0;
+    const newStock = Math.max(0, curStock + delta);
+    if (newStock === curStock) return;
+    try {
+      await updateVendorProductListing(prod.id, {
+        price: Number(prod.price),
+        mrp: Number(prod.mrp || prod.price),
+        stockQty: newStock,
+      });
+    } catch (err) {
+      console.warn("Stock change error:", err);
+    }
+  };
 
   // Category aur search term ke mutabiq Master Catalog products filter karo
   const filteredMasterProducts = masterProducts.filter((mp) => {
@@ -397,445 +473,634 @@ export default function VendorDashboard() {
 
   return (
     <DashboardShell badge="Vendor Partner" badgeColor="#10B981">
-      {/* Top Banner & Stats Overview */}
-      <div className="bg-navy-900 rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 mb-3 sm:mb-6 text-white shadow-lg relative overflow-hidden">
-        {/* Background glow effects */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-brand-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="pb-28 sm:pb-24">
 
-        <div className="relative z-10">
-          {/* Top Info Badges Pill Row */}
-          <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
-            <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border ${
-              matchedVendorObj.status === "APPROVED"
-                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                : "bg-amber-500/20 text-amber-300 border-amber-500/30"
-            }`}>
-              ● STORE: {matchedVendorObj.status || "APPROVED"}
-            </span>
+      {/* ========================================================================= */}
+      {/* PAGE 1: OVERVIEW / STORE INFO & SALES STATS (DEDICATED FULL VIEW)         */}
+      {/* ========================================================================= */}
+      {activeTab === "overview" && (
+        <div className="space-y-4 sm:space-y-6">
+          {/* Top Banner & Stats Overview */}
+          <div className="bg-navy-900 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-white shadow-lg relative overflow-hidden">
+            {/* Background glow effects */}
+            <div className="absolute top-0 right-0 w-96 h-96 bg-brand-500/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
-            <span className="text-[10px] font-bold bg-white/10 text-slate-200 px-2.5 py-0.5 rounded-full border border-white/10 flex items-center gap-1">
-              📍 {districtName}
-            </span>
-          </div>
-
-          {/* Shop Title */}
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white leading-tight">
-              {shopName}
-            </h1>
-            <p className="text-[11px] sm:text-xs text-slate-300 mt-1 font-medium flex items-center gap-1.5 flex-wrap select-none">
-              <span>Owner: <strong className="text-white font-bold">{ownerName}</strong></span>
-              <span>·</span>
-              <span>Mobile: <span className="text-slate-200 font-semibold">{vendorPhone}</span></span>
-            </p>
-          </div>
-        </div>
-
-        {/* Quick Metrics Bar - Interactive Clickable Cards (2x2 on Mobile, 4 columns on Desktop) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mt-3 sm:mt-5 pt-3 sm:pt-4 border-t border-slate-700/60 relative z-10">
-          <button
-            type="button"
-            onClick={() => setActiveTab("overview")}
-            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2 sm:p-3.5 border border-white/10 hover:border-emerald-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group min-w-0"
-          >
-            <p className="text-[9px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors truncate">Revenue</p>
-            <p className="text-sm sm:text-lg font-black text-white mt-0.5 tracking-tight truncate">₹{Number(totalRevenue || 0).toLocaleString("en-IN")}</p>
-            <span className="text-[8px] sm:text-[10px] text-emerald-400 font-extrabold flex items-center gap-1 mt-0.5">
-              <span>Real-time</span>
-              <span className="group-hover:translate-x-0.5 transition-transform">→</span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("orders")}
-            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2 sm:p-3.5 border border-white/10 hover:border-amber-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group min-w-0"
-          >
-            <p className="text-[9px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors truncate">Orders</p>
-            <p className="text-sm sm:text-lg font-black text-white mt-0.5 tracking-tight truncate">{activeOrdersCount} Active</p>
-            <span className="text-[8px] sm:text-[10px] text-amber-300 font-extrabold flex items-center gap-1 mt-0.5">
-              <span>Live Orders</span>
-              <span className="group-hover:translate-x-0.5 transition-transform">→</span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("products")}
-            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2 sm:p-3.5 border border-white/10 hover:border-brand-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group min-w-0"
-          >
-            <p className="text-[9px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors truncate">My Products</p>
-            <p className="text-sm sm:text-lg font-black text-white mt-0.5 tracking-tight truncate">{vendorProducts.length} Listed</p>
-            <span className="text-[8px] sm:text-[10px] text-brand-300 font-extrabold flex items-center gap-1 mt-0.5">
-              <span>Manage</span>
-              <span className="group-hover:translate-x-0.5 transition-transform">→</span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowCatalogModal(true)}
-            className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2 sm:p-3.5 border border-white/10 hover:border-amber-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group min-w-0"
-          >
-            <p className="text-[9px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors truncate">Master Catalog</p>
-            <p className="text-sm sm:text-lg font-black text-amber-300 mt-0.5 tracking-tight truncate">{masterProducts.length} Items</p>
-            <span className="text-[8px] sm:text-[10px] text-slate-300 font-medium flex items-center gap-1 mt-0.5">
-              <span>Add More</span>
-              <span className="group-hover:translate-x-0.5 transition-transform">→</span>
-            </span>
-          </button>
-        </div>
-      </div>
-
-      {/* Category Filter Bar (Replaces old tabs space - instant selective product filtering) */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 p-2.5 sm:p-3.5 shadow-xs mb-3 sm:mb-6">
-        <div className="flex items-center justify-between gap-2 mb-2 px-1">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-black text-navy-900 uppercase tracking-wider">🏷️ Select Category</span>
-            <span className="text-[10px] font-bold text-slate-400">({vendorProducts.length} Total Items)</span>
-          </div>
-          {activeTab !== "products" && (
-            <button
-              onClick={() => setActiveTab("products")}
-              className="text-[11px] font-bold text-brand-600 hover:text-brand-700 hover:underline cursor-pointer"
-            >
-              View Products Feed →
-            </button>
-          )}
-        </div>
-
-        {/* Horizontal scrollable category pill chips */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar">
-          <button
-            type="button"
-            onClick={() => {
-              setVendorStoreCategoryFilter("ALL");
-              if (activeTab !== "products") setActiveTab("products");
-            }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer active:scale-95 flex items-center gap-1.5 shadow-2xs ${
-              vendorStoreCategoryFilter === "ALL"
-                ? "bg-emerald-600 text-white shadow-xs"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200/80 border border-slate-200/60"
-            }`}
-          >
-            <span>🌐</span>
-            <span>All Items ({vendorProducts.length})</span>
-          </button>
-
-          {(categories || []).map((cat) => {
-            const countInStore = vendorProducts.filter(
-              (p) => p.categoryId === cat.id || (p.categoryName || "").toLowerCase() === cat.name.toLowerCase()
-            ).length;
-
-            const isSelected = vendorStoreCategoryFilter === cat.id || vendorStoreCategoryFilter.toLowerCase() === cat.name.toLowerCase();
-
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => {
-                  setVendorStoreCategoryFilter(cat.id);
-                  if (activeTab !== "products") setActiveTab("products");
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer active:scale-95 flex items-center gap-1.5 shadow-2xs ${
-                  isSelected
-                    ? "bg-emerald-600 text-white font-extrabold shadow-xs"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200/80 border border-slate-200/60"
-                }`}
-              >
-                <span>{cat.name}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
-                  isSelected ? "bg-white/20 text-white" : "bg-white text-slate-600 border border-slate-200"
+            <div className="relative z-10">
+              {/* Top Info Badges Pill Row */}
+              <div className="flex items-center gap-1.5 flex-wrap mb-2">
+                <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border ${
+                  matchedVendorObj.status === "APPROVED"
+                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                    : "bg-amber-500/20 text-amber-300 border-amber-500/30"
                 }`}>
-                  {countInStore}
+                  ● STORE: {matchedVendorObj.status || "APPROVED"}
+                </span>
+
+                <span className="text-[10px] font-bold bg-white/10 text-slate-200 px-2.5 py-0.5 rounded-full border border-white/10 flex items-center gap-1">
+                  📍 {districtName}
+                </span>
+
+                <span className="text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  🟢 Taking Customer Orders
+                </span>
+              </div>
+
+              {/* Shop Title */}
+              <div>
+                <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white leading-tight">
+                  {shopName}
+                </h1>
+                <p className="text-[11px] sm:text-xs text-slate-300 mt-1 font-medium flex items-center gap-1.5 flex-wrap select-none">
+                  <span>Owner: <strong className="text-white font-bold">{ownerName}</strong></span>
+                  <span>·</span>
+                  <span>Mobile: <span className="text-slate-200 font-semibold">{vendorPhone}</span></span>
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Metrics Bar - Interactive Clickable Cards (2x2 on Mobile, 4 columns on Desktop) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mt-4 sm:mt-5 pt-3 sm:pt-4 border-t border-slate-700/60 relative z-10">
+              <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 sm:p-3.5 border border-white/10 min-w-0">
+                <p className="text-[10px] sm:text-[11px] font-medium text-slate-300 truncate">Total Revenue</p>
+                <p className="text-base sm:text-xl font-black text-white mt-0.5 tracking-tight truncate">₹{Number(totalRevenue || 0).toLocaleString("en-IN")}</p>
+                <span className="text-[9px] sm:text-[10px] text-emerald-400 font-extrabold flex items-center gap-1 mt-0.5">
+                  <span>✓ Verified Orders</span>
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("orders")}
+                className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2.5 sm:p-3.5 border border-white/10 hover:border-amber-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group min-w-0"
+              >
+                <p className="text-[10px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors truncate">Orders</p>
+                <p className="text-base sm:text-xl font-black text-white mt-0.5 tracking-tight truncate">{activeOrdersCount} Active</p>
+                <span className="text-[9px] sm:text-[10px] text-amber-300 font-extrabold flex items-center gap-1 mt-0.5">
+                  <span>View Orders</span>
+                  <span className="group-hover:translate-x-0.5 transition-transform">→</span>
                 </span>
               </button>
-            );
-          })}
-        </div>
-      </div>
 
-      {/* : OVERVIEW / STORE INFO */}
-      {activeTab === "overview" && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            {/* Dukaan & Partner Details Card */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-500 to-amber-500 text-white font-black text-xl flex items-center justify-center shadow-xs">
-                    🏬
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <h3 className="font-extrabold text-navy-900 text-sm sm:text-base">{shopName}</h3>
-                      <span className="bg-emerald-50 text-emerald-700 font-extrabold text-[10px] px-2 py-0.5 rounded-md border border-emerald-200">
-                        ✓ Verified Partner
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 mt-0.5">BuildCity Construction Materials Partner Profile</p>
-                  </div>
-                </div>
-                <span className="text-[10px] font-black bg-emerald-500/20 text-emerald-700 border border-emerald-500/30 px-2.5 py-1 rounded-full flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  🟢 Taking Orders
+              <button
+                type="button"
+                onClick={() => setActiveTab("products")}
+                className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2.5 sm:p-3.5 border border-white/10 hover:border-brand-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group min-w-0"
+              >
+                <p className="text-[10px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors truncate">My Products</p>
+                <p className="text-base sm:text-xl font-black text-white mt-0.5 tracking-tight truncate">{vendorProducts.length} Listed</p>
+                <span className="text-[9px] sm:text-[10px] text-brand-300 font-extrabold flex items-center gap-1 mt-0.5">
+                  <span>Open Grid</span>
+                  <span className="group-hover:translate-x-0.5 transition-transform">→</span>
                 </span>
-              </div>
+              </button>
 
-              {/* Detail fields */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Shop Owner Name</span>
-                  <p className="font-extrabold text-navy-900 text-sm mt-0.5">👤 {ownerName}</p>
-                </div>
-                <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Registered Mobile Phone</span>
-                  <p className="font-extrabold text-navy-900 text-sm mt-0.5">📱 {vendorPhone}</p>
-                </div>
-                <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Delivery District</span>
-                  <p className="font-extrabold text-navy-900 text-sm mt-0.5">📍 {districtName}, Uttar Pradesh</p>
-                </div>
-                <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Store Catalog Status</span>
-                  <p className="font-extrabold text-navy-900 text-sm mt-0.5">📦 {vendorProducts.length} Active Materials</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Store Products List Preview */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-                <div>
-                  <h3 className="font-extrabold text-navy-900 text-sm">Products Active in My Store</h3>
-                  <p className="text-[11px] text-slate-500">Items you selected from the Master Catalog with your custom price & stock.</p>
-                </div>
-                <button
-                  onClick={() => setShowCatalogModal(true)}
-                  className="text-xs font-bold bg-brand-500 hover:bg-brand-600 text-white px-3 py-1.5 rounded-lg shadow-xs cursor-pointer"
-                >
-                  + Add from Master Catalog
-                </button>
-              </div>
-
-              {productsLoading ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 animate-pulse">
-                  {[1, 2, 3, 4].map((n) => (
-                    <div key={n} className="border border-slate-200 rounded-xl p-3 flex gap-3 items-center bg-slate-50/50">
-                      <div className="w-12 h-12 rounded-lg bg-slate-200 shrink-0" />
-                      <div className="overflow-hidden flex-1 space-y-1.5">
-                        <div className="h-3.5 bg-slate-200 rounded w-3/4" />
-                        <div className="h-2.5 bg-slate-200 rounded w-1/2" />
-                        <div className="flex items-center justify-between pt-1">
-                          <div className="h-3.5 bg-slate-200 rounded w-16" />
-                          <div className="h-3 bg-green-100 rounded w-12" />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : vendorProducts.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-2xl mb-1">📦</p>
-                  <p className="text-xs font-bold text-navy-900">Your store has no products yet!</p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Click &apos;Choose from Master Catalog&apos; to pick products created by Admin & DR.</p>
-                  <button
-                    onClick={() => setShowCatalogModal(true)}
-                    className="mt-3 bg-brand-500 text-white text-xs font-bold px-4 py-2 rounded-xl"
-                  >
-                    Open Master Catalog
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {vendorProducts.map((p) => (
-                    <div key={p.id} className="border border-slate-200 rounded-xl p-3 flex gap-3 items-center bg-slate-50/50">
-                      <img
-                        src={resolveProductImage(p.imageUrl, p.categoryName, p.name)}
-                        alt={p.name}
-                        loading="lazy"
-                        decoding="async"
-                        onError={(e) => {
-                          e.currentTarget.onerror = null;
-                          e.currentTarget.src = resolveProductImage(null, p.categoryName, p.name);
-                        }}
-                        className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0 bg-slate-100"
-                      />
-                      <div className="overflow-hidden flex-1">
-                        <p className="font-bold text-xs text-navy-900 truncate">{p.name}</p>
-                        <span className="text-[10px] bg-slate-100 text-slate-700 font-semibold px-1.5 py-0.5 rounded inline-block mt-0.5">
-                          {p.brand} · {p.grade}
-                        </span>
-                        <div className="flex items-center justify-between mt-1">
-                          <p className="text-xs font-extrabold text-navy-900">₹{p.price} <span className="text-[10px] font-normal text-slate-400">/{p.unit}</span></p>
-                          <span className="text-[10px] font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded">Stock: {p.stockQty}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Recent Orders List - Real DB Orders */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-extrabold text-navy-900 text-sm">Recent Customer Orders</h3>
-                <button
-                  onClick={() => setActiveTab("orders")}
-                  className="text-xs font-bold text-brand-600 hover:underline"
-                >
-                  View All ({vendorOrders.length}) →
-                </button>
-              </div>
-              {vendorOrders.length === 0 ? (
-                <div className="text-center py-6 text-xs text-slate-500 font-medium">
-                  📦 No orders placed for {shopName} in {districtName} yet.
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {vendorOrders.slice(0, 5).map((ord) => {
-                    const orderTotal = ord.totalAmount || ord.total || 0;
-                    const itemsSummary = Array.isArray(ord.items)
-                      ? ord.items.map((i) => `${i.productName || i.name} (x${i.quantity})`).join(", ")
-                      : ord.items || "Order Items";
-                    const custName = typeof ord.customer === "object" ? (ord.customer?.name || "Customer") : (typeof ord.customer === "string" && !ord.customer.includes("cmt") && !ord.customer.includes("usr") ? ord.customer : "Customer");
-
-                    return (
-                      <div key={ord.id} className="py-3 flex items-center justify-between gap-3 text-xs">
-                        <div>
-                          <span className="font-bold text-navy-900">{formatShortId(ord.id, "ORD")}</span>
-                          <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-bold border bg-blue-50 text-blue-700 border-blue-200">
-                            {ord.status || "Pending"}
-                          </span>
-                          <p className="text-slate-600 mt-0.5">👤 {custName} · {itemsSummary}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-extrabold text-navy-900 text-sm">₹{orderTotal}</p>
-                          <p className="text-[10px] text-slate-400">📍 {ord.districtName || districtName}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => setShowCatalogModal(true)}
+                className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2.5 sm:p-3.5 border border-white/10 hover:border-amber-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group min-w-0"
+              >
+                <p className="text-[10px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors truncate">Master Catalog</p>
+                <p className="text-base sm:text-xl font-black text-amber-300 mt-0.5 tracking-tight truncate">{masterProducts.length} Items</p>
+                <span className="text-[9px] sm:text-[10px] text-slate-300 font-medium flex items-center gap-1 mt-0.5">
+                  <span>+ Add More</span>
+                  <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+                </span>
+              </button>
             </div>
           </div>
 
-          {/* Right Sidebar */}
-          <div className="space-y-6">
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
-              <h3 className="font-extrabold text-navy-900 text-sm mb-3">Quick Actions</h3>
-              <div className="space-y-2">
-                <button
-                  onClick={() => setShowCatalogModal(true)}
-                  className="w-full bg-brand-50 hover:bg-brand-100 border border-brand-200 text-brand-700 text-xs font-bold p-3 rounded-xl flex items-center justify-between transition-colors cursor-pointer"
-                >
-                  <span>🔍 Pick from Master Catalog ({masterProducts.length} Items)</span>
-                  <span>→</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab("products")}
-                  className="w-full bg-slate-50 hover:bg-slate-100 border border-slate-200 text-navy-900 text-xs font-semibold p-3 rounded-xl flex items-center justify-between transition-colors cursor-pointer"
-                >
-                  <span>🏷️ Manage My Prices & Stock</span>
-                  <span>→</span>
-                </button>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+            <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+              {/* Dukaan & Partner Details Card */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-500 to-amber-500 text-white font-black text-xl flex items-center justify-center shadow-xs">
+                      🏬
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="font-extrabold text-navy-900 text-sm sm:text-base">{shopName}</h3>
+                        <span className="bg-emerald-50 text-emerald-700 font-extrabold text-[10px] px-2 py-0.5 rounded-md border border-emerald-200">
+                          ✓ Verified Partner
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">BuildCity Construction Materials Partner Profile</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Detail fields */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 text-xs">
+                  <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Shop Owner Name</span>
+                    <p className="font-extrabold text-navy-900 text-sm mt-0.5">👤 {ownerName}</p>
+                  </div>
+                  <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Registered Mobile Phone</span>
+                    <p className="font-extrabold text-navy-900 text-sm mt-0.5">📱 {vendorPhone}</p>
+                  </div>
+                  <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Delivery District</span>
+                    <p className="font-extrabold text-navy-900 text-sm mt-0.5">📍 {districtName}, Uttar Pradesh</p>
+                  </div>
+                  <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Store Catalog Status</span>
+                    <p className="font-extrabold text-navy-900 text-sm mt-0.5">📦 {vendorProducts.length} Active Materials</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Store Products Preview Card */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
+                  <div>
+                    <h3 className="font-extrabold text-navy-900 text-sm">Products Active in My Store</h3>
+                    <p className="text-[11px] text-slate-500">Items selected from the Master Catalog with your custom price & stock.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("products")}
+                    className="text-xs font-bold text-brand-600 hover:underline cursor-pointer"
+                  >
+                    View All ({vendorProducts.length}) →
+                  </button>
+                </div>
+
+                {productsLoading ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 animate-pulse">
+                    {[1, 2].map((n) => (
+                      <div key={n} className="border border-slate-200 rounded-xl p-2.5 flex gap-2.5 items-center bg-slate-50/50">
+                        <div className="w-12 h-12 rounded-lg bg-slate-200 shrink-0" />
+                        <div className="overflow-hidden flex-1 space-y-1.5">
+                          <div className="h-3.5 bg-slate-200 rounded w-3/4" />
+                          <div className="h-2.5 bg-slate-200 rounded w-1/2" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : vendorProducts.length === 0 ? (
+                  <div className="text-center py-6">
+                    <p className="text-2xl mb-1">📦</p>
+                    <p className="text-xs font-bold text-navy-900">Your store has no products yet!</p>
+                    <button
+                      onClick={() => setShowCatalogModal(true)}
+                      className="mt-2.5 bg-brand-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl cursor-pointer"
+                    >
+                      Open Master Catalog
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {vendorProducts.slice(0, 4).map((p) => (
+                      <div key={p.id} className="border border-slate-200 rounded-xl p-2.5 flex gap-2.5 items-center bg-slate-50/50">
+                        <img
+                          src={resolveProductImage(p.imageUrl, p.categoryName, p.name)}
+                          alt={p.name}
+                          loading="lazy"
+                          decoding="async"
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = resolveProductImage(null, p.categoryName, p.name);
+                          }}
+                          className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0 bg-white"
+                        />
+                        <div className="overflow-hidden flex-1 min-w-0">
+                          <p className="font-bold text-xs text-navy-900 truncate">{p.name}</p>
+                          <span className="text-[10px] bg-slate-100 text-slate-700 font-semibold px-1.5 py-0.2 rounded inline-block mt-0.5">
+                            {p.brand} · {p.grade}
+                          </span>
+                          <div className="flex items-center justify-between mt-1">
+                            <p className="text-xs font-extrabold text-navy-900">₹{p.price} <span className="text-[10px] font-normal text-slate-400">/{p.unit}</span></p>
+                            <span className="text-[10px] font-bold text-green-700 bg-green-50 px-1.5 py-0.2 rounded">Stock: {p.stockQty}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Recent Orders Preview Card */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs">
+                <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2.5">
+                  <h3 className="font-extrabold text-navy-900 text-sm">Recent Customer Orders</h3>
+                  <button
+                    onClick={() => setActiveTab("orders")}
+                    className="text-xs font-bold text-brand-600 hover:underline cursor-pointer"
+                  >
+                    View All ({vendorOrders.length}) →
+                  </button>
+                </div>
+                {vendorOrders.length === 0 ? (
+                  <div className="text-center py-5 text-xs text-slate-500 font-medium">
+                    📦 No orders placed for {shopName} in {districtName} yet.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {vendorOrders.slice(0, 3).map((ord) => {
+                      const orderTotal = ord.totalAmount || ord.total || 0;
+                      const custName = typeof ord.customer === "object" ? (ord.customer?.name || "Customer") : (typeof ord.customer === "string" && !ord.customer.includes("cmt") && !ord.customer.includes("usr") ? ord.customer : "Customer");
+
+                      return (
+                        <div key={ord.id} className="py-2.5 flex items-center justify-between gap-2.5 text-xs">
+                          <div>
+                            <span className="font-bold text-navy-900">{formatShortId(ord.id, "ORD")}</span>
+                            <span className="ml-2 px-1.5 py-0.2 rounded text-[10px] font-bold border bg-blue-50 text-blue-700 border-blue-200">
+                              {ord.status || "Pending"}
+                            </span>
+                            <p className="text-slate-600 mt-0.5">👤 {custName}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-extrabold text-navy-900 text-sm">₹{orderTotal}</p>
+                            <p className="text-[10px] text-slate-400">📍 {ord.districtName || districtName}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="bg-linear-to-br from-navy-900 to-slate-800 rounded-2xl p-5 text-white shadow-xs">
-              <span className="bg-amber-400 text-navy-900 text-[10px] font-extrabold px-2 py-0.5 rounded inline-block mb-2">
-                CATALOG POLICY
-              </span>
-              <h4 className="font-bold text-sm">Pre-verified Master Products</h4>
-              <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                All product titles, images, categories, brands & grades are verified by Admin and District Representatives (DR) to ensure standardization for customers in {districtName}.
-              </p>
+            {/* Right Sidebar */}
+            <div className="space-y-4 sm:space-y-6">
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs">
+                <h3 className="font-extrabold text-navy-900 text-sm mb-3">Quick Navigation</h3>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setShowCatalogModal(true)}
+                    className="w-full bg-brand-50 hover:bg-brand-100 border border-brand-200 text-brand-700 text-xs font-bold p-3 rounded-xl flex items-center justify-between transition-colors cursor-pointer"
+                  >
+                    <span>🔍 Pick from Master Catalog ({masterProducts.length} Items)</span>
+                    <span>→</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("products")}
+                    className="w-full bg-slate-50 hover:bg-slate-100 border border-slate-200 text-navy-900 text-xs font-semibold p-3 rounded-xl flex items-center justify-between transition-colors cursor-pointer"
+                  >
+                    <span>📦 Manage Products & Prices ({vendorProducts.length})</span>
+                    <span>→</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("orders")}
+                    className="w-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-semibold p-3 rounded-xl flex items-center justify-between transition-colors cursor-pointer"
+                  >
+                    <span>🛍️ Manage Customer Orders ({vendorOrders.length})</span>
+                    <span>→</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-navy-900 to-slate-800 rounded-2xl p-4 sm:p-5 text-white shadow-xs">
+                <span className="bg-amber-400 text-navy-900 text-[10px] font-extrabold px-2 py-0.5 rounded inline-block mb-2">
+                  CATALOG POLICY
+                </span>
+                <h4 className="font-bold text-sm">Pre-verified Master Products</h4>
+                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  All product titles, images, categories, brands & grades are verified by Admin and District Representatives (DR) to ensure quality standardization for customers in {districtName}.
+                </p>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* : MY STORE PRODUCTS */}
+      {/* ========================================================================= */}
+      {/* PAGE 2: MY PRODUCTS (DEDICATED FULL PAGE WITH ROUND BUBBLES & 2X2 GRID)  */}
+      {/* ========================================================================= */}
       {activeTab === "products" && (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
-          <div className="p-3 sm:p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 bg-slate-50/50">
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-extrabold text-navy-900 text-xs sm:text-sm">Products Listed in My Store</h3>
-                {vendorStoreCategoryFilter !== "ALL" && (
-                  <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <span>Category Filtered</span>
-                    <button
-                      type="button"
-                      onClick={() => setVendorStoreCategoryFilter("ALL")}
-                      className="text-emerald-950 hover:text-red-600 ml-0.5 cursor-pointer"
-                    >
-                      ✕
-                    </button>
+        <div className="space-y-3.5 sm:space-y-5">
+          {/* Dedicated Products Page Header */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 sm:p-5 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="font-black text-navy-900 text-base sm:text-lg tracking-tight">
+                    📦 My Products Catalog
+                  </h2>
+                  <span className="bg-brand-50 text-brand-700 font-extrabold text-[10px] px-2 py-0.5 rounded-full border border-brand-200">
+                    {displayedVendorProducts.length} Items Listed
                   </span>
+                  {vendorStoreCategoryFilter !== "ALL" && (
+                    <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span>Filtered: {vendorStoreCategoryFilter}</span>
+                      <button
+                        type="button"
+                        onClick={() => setVendorStoreCategoryFilter("ALL")}
+                        className="text-emerald-950 hover:text-red-600 ml-0.5 cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Direct storefront for <b>{shopName}</b> ({districtName}). Tap &apos;Bhav Badle&apos; to change price or stock.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowCatalogModal(true)}
+                className="bg-brand-500 hover:bg-brand-600 active:scale-[0.98] text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <span>➕</span>
+                <span>Choose from Master Catalog</span>
+              </button>
+            </div>
+
+            {/* Fast Search Input */}
+            <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                  placeholder="Search your listed products by name, brand, or grade..."
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl pl-9 pr-8 py-2 outline-none focus:border-brand-500 font-medium shadow-2xs"
+                />
+                <span className="absolute left-3 top-2.5 text-xs text-slate-400">🔍</span>
+                {productSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setProductSearch("")}
+                    className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-700 cursor-pointer"
+                  >
+                    ✕
+                  </button>
                 )}
               </div>
-              <p className="text-[11px] sm:text-xs text-slate-500">
-                Showing {filteredVendorProducts.length} of {vendorProducts.length} items. Edit selling price (₹) and stock quantity.
-              </p>
             </div>
-            <button
-              onClick={() => setShowCatalogModal(true)}
-              className="w-full sm:w-auto bg-brand-500 hover:bg-brand-600 active:scale-[0.98] text-white font-bold text-xs px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl shadow-xs transition-all cursor-pointer shrink-0 text-center"
-            >
-              <span>🔍 Choose from Master Catalog</span>
-            </button>
           </div>
 
+          {/* 🏷️ ROUND CATEGORY STORY BUBBLES (LIKE BUILD CITY HOME SCREEN) */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3 shadow-xs">
+            <div className="flex items-center justify-between gap-2 mb-2.5 px-1">
+              <span className="text-[11px] font-black text-navy-900 uppercase tracking-wider flex items-center gap-1">
+                <span>🏷️ Categories</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-semibold">
+                Tap bubble to filter products
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3 overflow-x-auto pb-1.5 px-1 hide-scrollbar scroll-smooth">
+              {/* All Items Bubble */}
+              <button
+                type="button"
+                onClick={() => setVendorStoreCategoryFilter("ALL")}
+                className="flex flex-col items-center shrink-0 cursor-pointer active:scale-95 transition-all text-center group"
+              >
+                <div
+                  className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center shadow-xs transition-all ${
+                    vendorStoreCategoryFilter === "ALL"
+                      ? "bg-gradient-to-tr from-emerald-600 to-teal-500 text-white ring-3 ring-emerald-500 ring-offset-2 scale-105 shadow-md"
+                      : "bg-slate-100 text-slate-700 border-2 border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  <span className="text-xl">🌐</span>
+                </div>
+                <span className={`text-[10.5px] sm:text-[11px] mt-1.5 font-extrabold truncate max-w-[66px] ${
+                  vendorStoreCategoryFilter === "ALL" ? "text-emerald-700 font-black" : "text-slate-700"
+                }`}>
+                  All Items
+                </span>
+                <span className="text-[9px] font-bold text-slate-400 -mt-0.5">
+                  ({vendorProducts.length})
+                </span>
+              </button>
+
+              {/* Individual Category Round Bubbles */}
+              {allCategoryBubbles.map((cat) => {
+                const count = vendorProducts.filter(
+                  (p) =>
+                    p.categoryId === cat.id ||
+                    (p.categoryName || "").toLowerCase() === cat.name.toLowerCase()
+                ).length;
+
+                const isSelected =
+                  vendorStoreCategoryFilter === cat.id ||
+                  vendorStoreCategoryFilter.toLowerCase() === cat.name.toLowerCase();
+
+                return (
+                  <button
+                    key={cat.id || cat.name}
+                    type="button"
+                    onClick={() => setVendorStoreCategoryFilter(cat.id || cat.name)}
+                    className="flex flex-col items-center shrink-0 cursor-pointer active:scale-95 transition-all text-center group"
+                  >
+                    <div
+                      className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white flex items-center justify-center p-1.5 shadow-xs transition-all overflow-hidden ${
+                        isSelected
+                          ? "ring-3 ring-emerald-500 ring-offset-2 border-2 border-emerald-500 scale-105 shadow-md"
+                          : "border-2 border-slate-200 hover:border-slate-300"
+                      }`}
+                    >
+                      <img
+                        src={cat.img || resolveCategoryBubbleImage(cat.name)}
+                        alt={cat.name}
+                        className="w-full h-full object-cover rounded-full group-hover:scale-105 transition-transform"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = "/categories/cement.png";
+                        }}
+                      />
+                    </div>
+                    <span className={`text-[10.5px] sm:text-[11px] mt-1.5 font-extrabold truncate max-w-[68px] ${
+                      isSelected ? "text-emerald-700 font-black" : "text-slate-700"
+                    }`}>
+                      {cat.name}
+                    </span>
+                    <span className="text-[9px] font-bold text-slate-400 -mt-0.5">
+                      ({count})
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Products Empty States */}
           {vendorProducts.length === 0 ? (
-            <div className="text-center py-12 px-4">
-              <p className="text-3xl mb-2">📦</p>
-              <p className="text-sm font-bold text-navy-900">No products added to your store</p>
-              <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                Admin aur DRs dwara banayi gayi Master Product List se apni zaroorat ke mutabiq products choose karke apna price aur stock set karein.
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-10 text-center shadow-xs">
+              <p className="text-4xl mb-2">📦</p>
+              <h3 className="text-base font-extrabold text-navy-900">No products in your store yet</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                Admin aur DRs dwara banayi gayi Master Product List se apni dukan ke liye materials select karein.
               </p>
               <button
                 onClick={() => setShowCatalogModal(true)}
-                className="mt-4 bg-brand-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl"
+                className="mt-4 bg-brand-500 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-xs cursor-pointer active:scale-95"
               >
                 Browse Master Catalog
               </button>
             </div>
-          ) : filteredVendorProducts.length === 0 ? (
-            <div className="text-center py-12 px-4">
+          ) : displayedVendorProducts.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-8 text-center shadow-xs">
               <p className="text-3xl mb-2">🔍</p>
-              <p className="text-sm font-bold text-navy-900">Is category mein koi product listed nahi hai</p>
-              <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                Aap &apos;All Items&apos; select kar sakte hain ya Master Catalog se is category ke products apni dukan par jod sakte hain.
+              <h3 className="text-sm font-extrabold text-navy-900">No products found</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                Is search ya category filter ke mutabiq koi product nahi mila.
               </p>
               <button
-                onClick={() => setVendorStoreCategoryFilter("ALL")}
-                className="mt-4 bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer"
+                onClick={() => {
+                  setVendorStoreCategoryFilter("ALL");
+                  setProductSearch("");
+                }}
+                className="mt-3 bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer"
               >
-                Show All Products ({vendorProducts.length})
+                Reset Filters ({vendorProducts.length} Items)
               </button>
             </div>
           ) : (
             <>
-              {/* Desktop Table View */}
-              <div className="hidden md:block overflow-x-auto">
+              {/* 📱 2X2 MOBILE PRODUCT GRID (EXACT REFERENCE DESIGN FROM media_1789362449574.png) */}
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 md:hidden">
+                {displayedVendorProducts.map((p) => {
+                  const numPrice = Number(p.price) || 0;
+                  const numMrp = Number(p.mrp) || numPrice;
+                  const discountPct = numMrp > numPrice ? Math.round(((numMrp - numPrice) / numMrp) * 100) : 0;
+
+                  return (
+                    <div
+                      key={p.id}
+                      className="bg-white rounded-2xl p-2.5 border border-slate-200/90 shadow-xs hover:shadow-md transition-all flex flex-col justify-between relative group"
+                    >
+                      <div>
+                        {/* Product Image Section */}
+                        <div className="relative aspect-square rounded-xl bg-slate-50 overflow-hidden border border-slate-100 p-2 flex items-center justify-center mb-2">
+                          <img
+                            src={resolveProductImage(p.imageUrl, p.categoryName, p.name)}
+                            alt={p.name}
+                            loading="lazy"
+                            decoding="async"
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = resolveProductImage(null, p.categoryName, p.name);
+                            }}
+                            className="w-full h-full object-contain mix-blend-multiply group-hover:scale-105 transition-transform duration-300"
+                          />
+
+                          {/* Top-Left Discount Ribbon */}
+                          {discountPct > 0 && (
+                            <span className="absolute top-1.5 left-1.5 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-md shadow-xs leading-none">
+                              {discountPct}% OFF
+                            </span>
+                          )}
+
+                          {/* Top-Right Approval Status Pill */}
+                          <span className={`absolute top-1.5 right-1.5 text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-md leading-none shadow-2xs ${
+                            p.approvalStatus === "PENDING_REVIEW"
+                              ? "bg-amber-100 text-amber-800 border border-amber-300"
+                              : p.approvalStatus === "REJECTED"
+                              ? "bg-rose-100 text-rose-800 border border-rose-300"
+                              : "bg-emerald-600 text-white"
+                          }`}>
+                            {p.approvalStatus === "PENDING_REVIEW" ? "Review" : p.approvalStatus === "REJECTED" ? "Rejected" : "Live"}
+                          </span>
+
+                          {/* Bottom-Right Unit Pill */}
+                          <span className="absolute bottom-1.5 right-1.5 bg-slate-900/80 text-white text-[8px] font-bold px-1.5 py-0.5 rounded backdrop-blur-xs leading-none">
+                            {p.unit || "Unit"}
+                          </span>
+                        </div>
+
+                        {/* Brand & Category line */}
+                        <div className="flex items-center gap-1 text-[10px] text-slate-500 font-semibold mb-0.5 truncate">
+                          <span className="text-brand-600 font-bold truncate">🏷️ {p.brand || "Brand"}</span>
+                          {p.grade && (
+                            <>
+                              <span>·</span>
+                              <span className="text-amber-700 bg-amber-50 px-1 rounded text-[9px] border border-amber-200 truncate">
+                                {p.grade}
+                              </span>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Product Title */}
+                        <h4 className="font-extrabold text-navy-950 text-xs sm:text-sm leading-snug line-clamp-2 min-h-[2rem]">
+                          {p.name}
+                        </h4>
+                      </div>
+
+                      <div className="mt-2 pt-2 border-t border-slate-100 space-y-2">
+                        {/* Price Row: Bold Selling Price + Strike MRP */}
+                        <div className="flex items-baseline justify-between gap-1 flex-wrap">
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-sm sm:text-base font-black text-emerald-700">₹{p.price}</span>
+                            {numMrp > numPrice && (
+                              <span className="text-[10px] text-slate-400 line-through font-medium">₹{p.mrp}</span>
+                            )}
+                          </div>
+                          <span className="text-[9px] text-slate-400 font-bold">/{p.unit || "unit"}</span>
+                        </div>
+
+                        {/* Stock Stepper & Status */}
+                        <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-1.5 flex items-center justify-between">
+                          <div className="flex items-center gap-1 min-w-0">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${p.stockQty > 0 ? "bg-emerald-500" : "bg-rose-500"}`} />
+                            <span className="text-[10px] font-bold text-slate-700 truncate">
+                              {p.stockQty > 0 ? `${p.stockQty} in stock` : "Out of Stock"}
+                            </span>
+                          </div>
+
+                          {/* Quick Stepper Buttons */}
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleQuickStockChange(p, -10)}
+                              disabled={p.stockQty <= 0}
+                              className="w-5 h-5 rounded-md bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-black text-xs flex items-center justify-center cursor-pointer active:scale-90 disabled:opacity-30 disabled:cursor-not-allowed shadow-2xs"
+                              title="-10 Stock"
+                            >
+                              -
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleQuickStockChange(p, 10)}
+                              className="w-5 h-5 rounded-md bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-black text-xs flex items-center justify-center cursor-pointer active:scale-90 shadow-2xs"
+                              title="+10 Stock"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Full-width "Bhav Badle" Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditProduct(p)}
+                          className="w-full bg-amber-50 hover:bg-amber-100 active:scale-[0.98] border border-amber-300 text-amber-900 font-black text-[11px] sm:text-xs py-2 rounded-xl transition-all flex items-center justify-center gap-1 shadow-2xs cursor-pointer"
+                        >
+                          <span>🏷️</span>
+                          <span>Bhav Badle</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 🖥️ DESKTOP TABLE VIEW (PRESERVED CLEAN FOR >= md SCREENS) */}
+              <div className="hidden md:block bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-slate-200/90 bg-slate-50/90 text-[11px] font-black text-slate-500 uppercase tracking-wider">
-                      <th className="py-3 px-4">Product Details</th>
-                      <th className="py-3 px-4">Category & Brand</th>
-                      <th className="py-3 px-4">Type & Grade</th>
-                      <th className="py-3 px-4">Approval Status</th>
-                      <th className="py-3 px-4">My Selling Price</th>
-                      <th className="py-3 px-4">Stock Qty</th>
-                      <th className="py-3 px-4 text-right">Actions</th>
+                      <th className="py-3.5 px-4">Product Details</th>
+                      <th className="py-3.5 px-4">Category & Brand</th>
+                      <th className="py-3.5 px-4">Type & Grade</th>
+                      <th className="py-3.5 px-4">Approval Status</th>
+                      <th className="py-3.5 px-4">Selling Price</th>
+                      <th className="py-3.5 px-4">Stock Qty</th>
+                      <th className="py-3.5 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredVendorProducts.map((p) => (
+                    {displayedVendorProducts.map((p) => (
                       <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
@@ -848,7 +1113,7 @@ export default function VendorDashboard() {
                                 e.currentTarget.onerror = null;
                                 e.currentTarget.src = resolveProductImage(null, p.categoryName, p.name);
                               }}
-                              className="w-11 h-11 object-cover rounded-lg border border-slate-200 shrink-0 bg-slate-100"
+                              className="w-11 h-11 object-cover rounded-lg border border-slate-200 shrink-0 bg-white"
                             />
                             <div>
                               <span className="font-bold text-navy-900">{p.name}</span>
@@ -903,155 +1168,214 @@ export default function VendorDashboard() {
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => handleOpenEditProduct(p)}
-                              className="text-[11px] font-bold bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer"
-                            >
-                              🏷️ Edit Price & Offer
-                            </button>
-                          </div>
+                          <button
+                            onClick={() => handleOpenEditProduct(p)}
+                            className="text-[11px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg px-3 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer shadow-2xs"
+                          >
+                            🏷️ Bhav Badle
+                          </button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-
-              {/* Mobile Touch-Friendly Card Feed (Zero Horizontal Scroll!) */}
-              <div className="md:hidden divide-y divide-slate-100">
-                {filteredVendorProducts.map((p) => {
-                  const discountPct = p.mrp > p.price ? Math.round(((p.mrp - p.price) / p.mrp) * 100) : 0;
-
-                  return (
-                    <div key={p.id} className="p-4 hover:bg-slate-50/50 transition-colors">
-                      <div className="flex items-start gap-3">
-                        <img
-                          src={resolveProductImage(p.imageUrl, p.categoryName, p.name)}
-                          alt={p.name}
-                          loading="lazy"
-                          decoding="async"
-                          onError={(e) => {
-                            e.currentTarget.onerror = null;
-                            e.currentTarget.src = resolveProductImage(null, p.categoryName, p.name);
-                          }}
-                          className="w-16 h-16 object-cover rounded-xl border border-slate-200 shrink-0 bg-slate-100 shadow-2xs"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-1.5">
-                            <h4 className="font-extrabold text-navy-900 text-xs sm:text-sm leading-snug line-clamp-2">
-                              {p.name}
-                            </h4>
-                            {p.approvalStatus === "PENDING_REVIEW" ? (
-                              <span className="shrink-0 bg-amber-50 text-amber-700 border border-amber-200/80 px-2 py-0.5 rounded-md text-[10px] font-bold">
-                                ⏳ Review
-                              </span>
-                            ) : p.approvalStatus === "REJECTED" ? (
-                              <span className="shrink-0 bg-rose-50 text-rose-700 border border-rose-200/80 px-2 py-0.5 rounded-md text-[10px] font-bold">
-                                🔴 Rejected
-                              </span>
-                            ) : (
-                              <span className="shrink-0 bg-emerald-50 text-emerald-700 border border-emerald-200/80 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                Live
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                            <span className="bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded text-[10px] font-semibold">
-                              {p.categoryName || "General"}
-                            </span>
-                            <span className="text-[10px] text-slate-600 font-medium">🏷️ {p.brand}</span>
-                            {p.grade && (
-                              <span className="bg-amber-50 text-amber-700 text-[9px] font-semibold px-1.5 py-0.2 rounded border border-amber-200">
-                                {p.grade}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Price & Stock Row */}
-                      <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
-                        <div>
-                          <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Selling Price</span>
-                          <div className="flex items-baseline gap-1.5 flex-wrap">
-                            <span className="text-base font-black text-navy-900">₹{p.price}</span>
-                            <span className="text-[11px] font-medium text-slate-500">/{p.unit}</span>
-                            {p.mrp > p.price && (
-                              <span className="text-[10px] text-slate-400 line-through">₹{p.mrp}</span>
-                            )}
-                            {discountPct > 0 && (
-                              <span className="text-[9px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1 py-0.2 rounded">
-                                {discountPct}% OFF
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="text-right">
-                          <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Stock Available</span>
-                          <span className={`inline-block text-xs font-black px-2 py-0.5 rounded-md ${
-                            p.stockQty > 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80" : "bg-rose-50 text-rose-700 border border-rose-200/80"
-                          }`}>
-                            {p.stockQty > 0 ? `${p.stockQty} in stock` : "Out of Stock"}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Touch Action Button */}
-                      <div className="mt-2.5">
-                        <button
-                          onClick={() => handleOpenEditProduct(p)}
-                          className="w-full bg-brand-50 hover:bg-brand-100 active:scale-[0.98] border border-brand-200/80 text-brand-800 font-bold text-xs py-2.5 px-3 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
-                        >
-                          <span>🏷️ Edit Price & Stock</span>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
             </>
           )}
         </div>
       )}
 
-      {/* CUSTOMER ORDERS (ISOLATED FOR THIS VENDOR ONLY) */}
+      {/* ========================================================================= */}
+      {/* PAGE 3: CUSTOMER ORDERS (DEDICATED FULL PAGE VIEW)                         */}
+      {/* ========================================================================= */}
       {activeTab === "orders" && (
-        <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden">
-          <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-            <div>
-              <h3 className="font-extrabold text-navy-900 text-sm">Customer Orders for {shopName}</h3>
-              <p className="text-[11px] text-slate-500">Only orders assigned to your shop ({shopName}) are visible here.</p>
+        <div className="space-y-3.5 sm:space-y-5">
+          {/* Dedicated Orders Page Header */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 sm:p-5 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="font-black text-navy-900 text-base sm:text-lg tracking-tight">
+                    🛍️ Customer Orders
+                  </h2>
+                  <span className="bg-emerald-50 text-emerald-700 font-extrabold text-[10px] px-2 py-0.5 rounded-full border border-emerald-200">
+                    {filteredVendorOrders.length} Orders
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Direct site orders received for <b>{shopName}</b> across {districtName}.
+                </p>
+              </div>
+
+              {/* Status Filter Chips */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 hide-scrollbar">
+                {["ALL", "PENDING", "PROCESSING", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"].map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setOrderStatusFilter(st)}
+                    className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all shrink-0 cursor-pointer ${
+                      orderStatusFilter === st
+                        ? "bg-navy-900 text-white font-black shadow-xs"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200/60"
+                    }`}
+                  >
+                    {st === "ALL" ? `All (${vendorOrders.length})` : st.replace(/_/g, " ")}
+                  </button>
+                ))}
+              </div>
             </div>
-            <span className="bg-brand-50 text-brand-700 text-xs font-bold px-3 py-1 rounded-full border border-brand-200/80 shadow-2xs">
-              {vendorOrders.length} Shop Orders
-            </span>
           </div>
+
           {vendorOrders.length === 0 ? (
-            <div className="text-center py-12 px-4">
-              <p className="text-3xl mb-2">🛍️</p>
-              <p className="text-sm font-bold text-navy-900">No orders for your store yet</p>
-              <p className="text-xs text-slate-500 mt-1">When customers order products from {shopName}, they will appear here in real-time.</p>
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-10 text-center shadow-xs">
+              <p className="text-4xl mb-2">🛍️</p>
+              <h3 className="text-base font-extrabold text-navy-900">No orders for your store yet</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                Jab customers {shopName} ke materials order karenge, wo real-time mein yahan dikhenge.
+              </p>
+            </div>
+          ) : filteredVendorOrders.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-8 text-center shadow-xs">
+              <p className="text-3xl mb-2">🔍</p>
+              <h3 className="text-sm font-extrabold text-navy-900">No orders matching &quot;{orderStatusFilter}&quot;</h3>
+              <button
+                type="button"
+                onClick={() => setOrderStatusFilter("ALL")}
+                className="mt-3 bg-brand-500 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer"
+              >
+                Show All Orders ({vendorOrders.length})
+              </button>
             </div>
           ) : (
             <>
-              {/* DESKTOP TABLE VIEW (Preserved exact design for screens >= md) */}
-              <div className="hidden md:block overflow-x-auto">
+              {/* 📱 MOBILE TOUCH-FRIENDLY ORDER CARDS */}
+              <div className="space-y-3 md:hidden">
+                {filteredVendorOrders.map((ord) => {
+                  const orderTotal = ord.totalAmount || ord.total || 0;
+                  const rawAddr = ord.address;
+                  const isObj = typeof rawAddr === "object" && rawAddr !== null;
+                  const isStr = typeof rawAddr === "string" && rawAddr.trim().length > 0;
+
+                  let custFullName = (isObj && (rawAddr.fullName || rawAddr.name)) || ord.customer?.name || (typeof ord.customer === "string" ? ord.customer : "Customer");
+                  let custPhone = (isObj && rawAddr.phone) || ord.customer?.phone || ord.phone || "";
+                  let streetAddr = isObj ? (rawAddr.street || rawAddr.line || rawAddr.address) : (isStr ? rawAddr : null);
+                  let cityAddr = isObj ? rawAddr.city : (ord.districtName || ord.regionName || "");
+
+                  if (!streetAddr) {
+                    streetAddr = `Site Delivery Location (${cityAddr || districtName})`;
+                  }
+
+                  const formattedOrderId = formatShortId(ord.id || ord.orderNumber, "ORD");
+
+                  return (
+                    <div key={ord.id} className="bg-white rounded-2xl p-3.5 border border-slate-200/90 shadow-xs space-y-3">
+                      {/* Top Row: ID, Time, Status */}
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                        <div>
+                          <span className="font-black text-brand-700 text-xs tracking-wide">{formattedOrderId}</span>
+                          <span className="text-[10px] text-slate-400 block font-medium mt-0.5">
+                            {formatDateTimeIST(ord.createdAt || ord.date)}
+                          </span>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                          (ord.status || "").toUpperCase() === "DELIVERED"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                            : (ord.status || "").toUpperCase() === "CANCELLED"
+                            ? "bg-rose-50 text-rose-700 border-rose-300"
+                            : "bg-amber-50 text-amber-700 border-amber-300"
+                        }`}>
+                          {ord.status || "PENDING"}
+                        </span>
+                      </div>
+
+                      {/* Customer Info & Direct Call Button */}
+                      <div className="flex items-start justify-between gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <div className="min-w-0">
+                          <p className="font-extrabold text-navy-950 text-xs truncate">👤 {custFullName}</p>
+                          {custPhone && (
+                            <p className="text-[11px] text-slate-600 font-semibold mt-0.5">📱 {custPhone}</p>
+                          )}
+                        </div>
+
+                        {custPhone && (
+                          <a
+                            href={`tel:${custPhone}`}
+                            className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-[11px] px-3 py-1.5 rounded-lg shadow-2xs flex items-center gap-1 shrink-0"
+                          >
+                            <span>📞</span>
+                            <span>Call</span>
+                          </a>
+                        )}
+                      </div>
+
+                      {/* Site Delivery Address */}
+                      <div className="p-2.5 bg-brand-50/50 border border-brand-200/70 rounded-xl text-xs text-navy-900 leading-relaxed shadow-2xs">
+                        <span className="text-[10px] font-black text-brand-800 uppercase tracking-wider block mb-0.5">
+                          📍 Site Delivery Address
+                        </span>
+                        <p className="font-semibold text-[11px] text-slate-800">{streetAddr}, {cityAddr || districtName}</p>
+                      </div>
+
+                      {/* Ordered Items */}
+                      <div className="space-y-1.5 pt-1">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Ordered Materials:</span>
+                        {Array.isArray(ord.items) && ord.items.map((it, idx) => (
+                          <div key={idx} className="flex items-center justify-between text-xs py-1 border-b border-slate-50">
+                            <span className="font-bold text-navy-900 truncate pr-2">
+                              {it.productName || it.name} <span className="text-slate-400 font-normal">x{it.quantity}</span>
+                            </span>
+                            <span className="font-extrabold text-navy-900 shrink-0">₹{it.price * (it.quantity || 1)}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Total & Status Selector */}
+                      <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">Total Amount:</span>
+                          <span className="text-base font-black text-navy-900">₹{orderTotal}</span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            value={ord.status || "PENDING"}
+                            onChange={async (e) => {
+                              const newSt = e.target.value;
+                              await updateOrderStatus(ord.id, newSt);
+                              setFetchedVendorOrders((prev) =>
+                                prev.map((o) => (o.id === ord.id ? { ...o, status: newSt } : o))
+                              );
+                            }}
+                            className="bg-slate-50 border border-slate-200 font-extrabold text-xs text-navy-900 rounded-xl px-2.5 py-1.5 outline-none focus:border-brand-500 cursor-pointer shadow-2xs"
+                          >
+                            <option value="PENDING">⏳ PENDING</option>
+                            <option value="PROCESSING">⚙️ PROCESSING</option>
+                            <option value="OUT_FOR_DELIVERY">🚚 OUT FOR DELIVERY</option>
+                            <option value="DELIVERED">✅ DELIVERED</option>
+                            <option value="CANCELLED">❌ CANCELLED</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 🖥️ DESKTOP ORDERS TABLE */}
+              <div className="hidden md:block bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-slate-200/90 bg-slate-50/90 text-[11px] font-black text-slate-500 uppercase tracking-wider">
-                      <th className="py-3 px-4">Order ID</th>
-                      <th className="py-3 px-4 min-w-[220px]">Customer Details & Delivery Address</th>
-                      <th className="py-3 px-4">Ordered Items</th>
-                      <th className="py-3 px-4">Total Amount</th>
-                      <th className="py-3 px-4">Change Status</th>
+                      <th className="py-3.5 px-4">Order ID</th>
+                      <th className="py-3.5 px-4 min-w-[220px]">Customer Details & Address</th>
+                      <th className="py-3.5 px-4">Ordered Items</th>
+                      <th className="py-3.5 px-4">Total Amount</th>
+                      <th className="py-3.5 px-4">Change Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {vendorOrders.map((ord) => {
+                    {filteredVendorOrders.map((ord) => {
                       const orderTotal = ord.totalAmount || ord.total || 0;
                       const itemsSummary = Array.isArray(ord.items)
                         ? ord.items.map((i) => `${i.productName || i.name} (x${i.quantity})`).join(", ")
@@ -1062,62 +1386,50 @@ export default function VendorDashboard() {
 
                       let custFullName = (isObj && (rawAddr.fullName || rawAddr.name)) || ord.customer?.name || (typeof ord.customer === "string" ? ord.customer : "Customer");
                       let custPhone = (isObj && rawAddr.phone) || ord.customer?.phone || ord.phone || "";
-
                       let streetAddr = isObj ? (rawAddr.street || rawAddr.line || rawAddr.address) : (isStr ? rawAddr : null);
                       let cityAddr = isObj ? rawAddr.city : (ord.districtName || ord.regionName || "");
-                      let pincodeAddr = isObj ? rawAddr.pincode : "";
-                      let stateAddr = (isObj && rawAddr.state) || "Uttar Pradesh";
 
-                      // Fallback only if no address object is present on older order records
                       if (!streetAddr) {
-                        if (ord.customer?.address) {
-                          streetAddr = ord.customer.address;
-                        } else if (custPhone) {
-                          streetAddr = `Site Delivery Location (Mobile: ${custPhone})`;
-                        } else {
-                          streetAddr = `Site Delivery Location (${cityAddr || 'Mirzapur'})`;
-                        }
-                      }
-
-                      if (!cityAddr || cityAddr.toLowerCase() === "district") {
-                        cityAddr = ord.districtName || ord.regionName || "Mirzapur";
+                        streetAddr = `Site Delivery Location (${cityAddr || districtName})`;
                       }
 
                       const formattedOrderId = formatShortId(ord.id || ord.orderNumber, "ORD");
 
                       return (
-                        <tr key={ord.id} className="hover:bg-slate-50/80 transition-colors duration-150">
+                        <tr key={ord.id} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-3.5 px-4">
                             <span className="font-extrabold text-brand-700 tracking-wide text-xs block">{formattedOrderId}</span>
                             <span className="text-[11px] text-slate-400 font-medium block mt-0.5">{formatDateTimeIST(ord.createdAt || ord.date)}</span>
                           </td>
-                          <td className="py-3.5 px-4 text-slate-800 min-w-[260px]">
+                          <td className="py-3.5 px-4 text-slate-800 min-w-[240px]">
                             <p className="font-extrabold text-navy-900 text-xs">👤 Recipient: {custFullName}</p>
                             {custPhone && (
-                              <p className="text-[11px] text-slate-700 font-bold mt-0.5">📱 Contact: {custPhone}</p>
+                              <p className="text-[11px] text-slate-700 font-bold mt-0.5 flex items-center gap-1.5">
+                                <span>📱 Contact: {custPhone}</span>
+                                <a href={`tel:${custPhone}`} className="text-emerald-700 hover:underline font-extrabold">📞 Call</a>
+                              </p>
                             )}
-                            <div className="mt-2 p-2.5 bg-brand-50/50 border border-brand-200/80 rounded-xl text-xs text-navy-900 leading-relaxed shadow-2xs">
-                              <div className="flex items-center justify-between border-b border-brand-200/60 pb-1 mb-1 font-extrabold text-[10px] text-brand-800 uppercase tracking-wider">
-                                <span>📍 FULL DELIVERY ADDRESS</span>
-                                {pincodeAddr && <span className="bg-brand-600 text-white px-1.5 py-0.5 rounded text-[10px]">PIN: {pincodeAddr}</span>}
-                              </div>
-                              <p className="font-extrabold text-navy-900 text-xs mt-1 whitespace-normal break-words">🏢 {streetAddr}</p>
-                              <p className="font-semibold text-slate-700 text-[11px] mt-1 whitespace-normal">🏙️ {cityAddr}, {stateAddr} {pincodeAddr ? `- ${pincodeAddr}` : ""}</p>
+                            <div className="mt-1.5 p-2 bg-brand-50/50 border border-brand-200/80 rounded-xl text-xs text-navy-900">
+                              <p className="text-[11px] font-medium">{streetAddr}, {cityAddr || districtName}</p>
                             </div>
                           </td>
-                          <td className="py-3.5 px-4 text-slate-600 max-w-xs">{itemsSummary}</td>
-                          <td className="py-3.5 px-4 font-extrabold text-navy-900">₹{orderTotal}</td>
+                          <td className="py-3.5 px-4 max-w-[200px]">
+                            <p className="text-xs font-semibold text-slate-700 leading-snug line-clamp-2">{itemsSummary}</p>
+                          </td>
+                          <td className="py-3.5 px-4 font-black text-navy-900 text-sm">
+                            ₹{orderTotal}
+                          </td>
                           <td className="py-3.5 px-4">
                             <select
                               value={ord.status || "PENDING"}
                               onChange={async (e) => {
                                 const newSt = e.target.value;
                                 await updateOrderStatus(ord.id, newSt);
-                                setVendorOrders((prev) =>
+                                setFetchedVendorOrders((prev) =>
                                   prev.map((o) => (o.id === ord.id ? { ...o, status: newSt } : o))
                                 );
                               }}
-                              className="bg-slate-50 border border-slate-200/90 font-extrabold text-xs text-navy-900 rounded-lg px-2.5 py-1.5 outline-none focus:border-brand-500 cursor-pointer shadow-2xs"
+                              className="bg-slate-50 border border-slate-200 font-bold text-xs text-navy-900 rounded-lg px-2.5 py-1.5 outline-none focus:border-brand-500 cursor-pointer shadow-2xs"
                             >
                               <option value="PENDING">⏳ PENDING</option>
                               <option value="PROCESSING">⚙️ PROCESSING</option>
@@ -1132,141 +1444,12 @@ export default function VendorDashboard() {
                   </tbody>
                 </table>
               </div>
-
-              {/* MOBILE TOUCH-FRIENDLY ORDER CARDS (< md) */}
-              <div className="md:hidden divide-y divide-slate-100">
-                {vendorOrders.map((ord) => {
-                  const orderTotal = ord.totalAmount || ord.total || 0;
-                  const itemsSummary = Array.isArray(ord.items)
-                    ? ord.items.map((i) => `${i.productName || i.name} (x${i.quantity})`).join(", ")
-                    : ord.items || "Order Items";
-                  const rawAddr = ord.address;
-                  const isObj = typeof rawAddr === "object" && rawAddr !== null;
-                  const isStr = typeof rawAddr === "string" && rawAddr.trim().length > 0;
-
-                  let custFullName = (isObj && (rawAddr.fullName || rawAddr.name)) || ord.customer?.name || (typeof ord.customer === "string" ? ord.customer : "Customer");
-                  let custPhone = (isObj && rawAddr.phone) || ord.customer?.phone || ord.phone || "";
-
-                  let streetAddr = isObj ? (rawAddr.street || rawAddr.line || rawAddr.address) : (isStr ? rawAddr : null);
-                  let cityAddr = isObj ? rawAddr.city : (ord.districtName || ord.regionName || "");
-                  let pincodeAddr = isObj ? rawAddr.pincode : "";
-                  let stateAddr = (isObj && rawAddr.state) || "Uttar Pradesh";
-
-                  if (!streetAddr) {
-                    if (ord.customer?.address) {
-                      streetAddr = ord.customer.address;
-                    } else if (custPhone) {
-                      streetAddr = `Site Delivery Location (Mobile: ${custPhone})`;
-                    } else {
-                      streetAddr = `Site Delivery Location (${cityAddr || 'Mirzapur'})`;
-                    }
-                  }
-
-                  if (!cityAddr || cityAddr.toLowerCase() === "district") {
-                    cityAddr = ord.districtName || ord.regionName || "Mirzapur";
-                  }
-
-                  const formattedOrderId = formatShortId(ord.id || ord.orderNumber, "ORD");
-
-                  return (
-                    <div key={ord.id} className="p-3.5 sm:p-4 bg-white hover:bg-slate-50/50 transition-colors">
-                      {/* Top Row: Order ID, Date & Total */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <span className="font-black text-brand-700 text-xs tracking-wider">
-                            {formattedOrderId}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-medium block">
-                            {formatDateTimeIST(ord.createdAt || ord.date)}
-                          </span>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Total Bill</span>
-                          <span className="text-sm font-black text-navy-900">₹{orderTotal}</span>
-                        </div>
-                      </div>
-
-                      {/* Customer Info & Direct Call Button */}
-                      <div className="mt-2.5 flex items-center justify-between gap-2 p-2.5 bg-slate-50/80 rounded-xl border border-slate-100">
-                        <div className="min-w-0 flex-1">
-                          <p className="font-extrabold text-navy-900 text-xs truncate">
-                            👤 {custFullName}
-                          </p>
-                          {custPhone && (
-                            <p className="text-[11px] text-slate-600 font-semibold mt-0.5">
-                              📱 {custPhone}
-                            </p>
-                          )}
-                        </div>
-                        {custPhone && (
-                          <a
-                            href={`tel:${custPhone}`}
-                            className="shrink-0 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all shadow-xs"
-                          >
-                            <span>📞 Call</span>
-                          </a>
-                        )}
-                      </div>
-
-                      {/* Full Delivery Site Address Box */}
-                      <div className="mt-2 p-2.5 bg-brand-50/40 border border-brand-200/70 rounded-xl text-xs text-navy-900 leading-relaxed shadow-2xs">
-                        <div className="flex items-center justify-between border-b border-brand-200/50 pb-1 mb-1 font-extrabold text-[10px] text-brand-800 uppercase tracking-wider">
-                          <span>📍 SITE DELIVERY ADDRESS</span>
-                          {pincodeAddr && (
-                            <span className="bg-brand-600 text-white px-1.5 py-0.2 rounded text-[9px] font-bold">
-                              PIN: {pincodeAddr}
-                            </span>
-                          )}
-                        </div>
-                        <p className="font-bold text-navy-900 text-xs mt-1 whitespace-normal break-words">
-                          🏢 {streetAddr}
-                        </p>
-                        <p className="font-medium text-slate-600 text-[11px] mt-0.5 whitespace-normal">
-                          🏙️ {cityAddr}, {stateAddr} {pincodeAddr ? `- ${pincodeAddr}` : ""}
-                        </p>
-                      </div>
-
-                      {/* Ordered Materials Summary */}
-                      <div className="mt-2 p-2 bg-slate-50/60 rounded-lg border border-slate-100">
-                        <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">
-                          Ordered Materials
-                        </span>
-                        <p className="text-xs text-slate-700 font-medium leading-snug">
-                          📦 {itemsSummary}
-                        </p>
-                      </div>
-
-                      {/* Status Selector Row */}
-                      <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                          Update Status:
-                        </span>
-                        <select
-                          value={ord.status || "PENDING"}
-                          onChange={async (e) => {
-                            const newSt = e.target.value;
-                            await updateOrderStatus(ord.id, newSt);
-                            setVendorOrders((prev) =>
-                              prev.map((o) => (o.id === ord.id ? { ...o, status: newSt } : o))
-                            );
-                          }}
-                          className="bg-slate-50 border border-slate-200 font-extrabold text-xs text-navy-900 rounded-lg px-2.5 py-1.5 outline-none focus:border-brand-500 cursor-pointer shadow-2xs"
-                        >
-                          <option value="PENDING">⏳ PENDING</option>
-                          <option value="PROCESSING">⚙️ PROCESSING</option>
-                          <option value="OUT_FOR_DELIVERY">🚚 OUT FOR DELIVERY</option>
-                          <option value="DELIVERED">✅ DELIVERED</option>
-                          <option value="CANCELLED">❌ CANCELLED</option>
-                        </select>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
             </>
           )}
         </div>
       )}
+
+      </div>
 
       {/* MODAL 1: CHOOSE FROM MASTER CATALOG MODAL (Full page on mobile, sleek dialog on desktop) */}
       {showCatalogModal && (

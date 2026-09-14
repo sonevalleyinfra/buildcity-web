@@ -196,6 +196,9 @@ export default function VendorDashboard() {
     });
   });
 
+  // State for filtering vendor's own listed store products by category
+  const [vendorStoreCategoryFilter, setVendorStoreCategoryFilter] = useState("ALL");
+
   // Current vendor ki dukan par list huye products filter karo (Flexible DB Match)
   const vendorProducts = products.filter((p) => {
     if (!p) return false;
@@ -206,6 +209,15 @@ export default function VendorDashboard() {
     const matchesShop = curShop && pShop && (pShop.includes(curShop) || curShop.includes(pShop));
     const matchesOwner = curOwner && p.vendor?.ownerName && p.vendor.ownerName.toLowerCase().includes(curOwner);
     return matchesId || matchesShop || matchesOwner;
+  });
+
+  // Selected category ke mutabiq filtered vendor products
+  const filteredVendorProducts = vendorProducts.filter((p) => {
+    if (vendorStoreCategoryFilter === "ALL") return true;
+    const pCatId = p.categoryId || "";
+    const pCatName = (p.categoryName || "").toLowerCase();
+    const targetFilter = vendorStoreCategoryFilter.toLowerCase();
+    return pCatId === vendorStoreCategoryFilter || pCatName === targetFilter || pCatName.includes(targetFilter);
   });
 
   // Category aur search term ke mutabiq Master Catalog products filter karo
@@ -476,41 +488,122 @@ export default function VendorDashboard() {
         </div>
       </div>
 
-      {/* Tabs Bar - Perfectly responsive on mobile */}
-      <div className="grid grid-cols-3 gap-1 p-1 bg-white rounded-xl border border-slate-200/90 shadow-2xs mb-3 sm:mb-6 sm:flex sm:items-center sm:gap-2 sm:p-1.5">
-        <button
-          onClick={() => setActiveTab("products")}
-          className={`py-2 px-1 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 text-center whitespace-nowrap ${
-            activeTab === "products" ? "bg-emerald-600 text-white shadow-xs font-extrabold" : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80 font-bold"
-          }`}
-        >
-          <span>📦</span>
-          <span>Products</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("orders")}
-          className={`py-2 px-1 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 text-center whitespace-nowrap ${
-            activeTab === "orders" ? "bg-emerald-600 text-white shadow-xs font-extrabold" : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80 font-bold"
-          }`}
-        >
-          <span>🛍️</span>
-          <span>Orders</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("overview")}
-          className={`py-2 px-1 sm:px-4 text-[11px] sm:text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 text-center whitespace-nowrap ${
-            activeTab === "overview" ? "bg-emerald-600 text-white shadow-xs font-extrabold" : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80 font-bold"
-          }`}
-        >
-          <span>📊</span>
-          <span>Store Info</span>
-        </button>
+      {/* Category Filter Bar (Replaces old tabs space - instant selective product filtering) */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-2.5 sm:p-3.5 shadow-xs mb-3 sm:mb-6">
+        <div className="flex items-center justify-between gap-2 mb-2 px-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-black text-navy-900 uppercase tracking-wider">🏷️ Select Category</span>
+            <span className="text-[10px] font-bold text-slate-400">({vendorProducts.length} Total Items)</span>
+          </div>
+          {activeTab !== "products" && (
+            <button
+              onClick={() => setActiveTab("products")}
+              className="text-[11px] font-bold text-brand-600 hover:text-brand-700 hover:underline cursor-pointer"
+            >
+              View Products Feed →
+            </button>
+          )}
+        </div>
+
+        {/* Horizontal scrollable category pill chips */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar">
+          <button
+            type="button"
+            onClick={() => {
+              setVendorStoreCategoryFilter("ALL");
+              if (activeTab !== "products") setActiveTab("products");
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer active:scale-95 flex items-center gap-1.5 shadow-2xs ${
+              vendorStoreCategoryFilter === "ALL"
+                ? "bg-emerald-600 text-white shadow-xs"
+                : "bg-slate-100 text-slate-700 hover:bg-slate-200/80 border border-slate-200/60"
+            }`}
+          >
+            <span>🌐</span>
+            <span>All Items ({vendorProducts.length})</span>
+          </button>
+
+          {(categories || []).map((cat) => {
+            const countInStore = vendorProducts.filter(
+              (p) => p.categoryId === cat.id || (p.categoryName || "").toLowerCase() === cat.name.toLowerCase()
+            ).length;
+
+            const isSelected = vendorStoreCategoryFilter === cat.id || vendorStoreCategoryFilter.toLowerCase() === cat.name.toLowerCase();
+
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => {
+                  setVendorStoreCategoryFilter(cat.id);
+                  if (activeTab !== "products") setActiveTab("products");
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer active:scale-95 flex items-center gap-1.5 shadow-2xs ${
+                  isSelected
+                    ? "bg-emerald-600 text-white font-extrabold shadow-xs"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200/80 border border-slate-200/60"
+                }`}
+              >
+                <span>{cat.name}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                  isSelected ? "bg-white/20 text-white" : "bg-white text-slate-600 border border-slate-200"
+                }`}>
+                  {countInStore}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* : OVERVIEW */}
+      {/* : OVERVIEW / STORE INFO */}
       {activeTab === "overview" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
+            {/* Dukaan & Partner Details Card */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-500 to-amber-500 text-white font-black text-xl flex items-center justify-center shadow-xs">
+                    🏬
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <h3 className="font-extrabold text-navy-900 text-sm sm:text-base">{shopName}</h3>
+                      <span className="bg-emerald-50 text-emerald-700 font-extrabold text-[10px] px-2 py-0.5 rounded-md border border-emerald-200">
+                        ✓ Verified Partner
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">BuildCity Construction Materials Partner Profile</p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-black bg-emerald-500/20 text-emerald-700 border border-emerald-500/30 px-2.5 py-1 rounded-full flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  🟢 Taking Orders
+                </span>
+              </div>
+
+              {/* Detail fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Shop Owner Name</span>
+                  <p className="font-extrabold text-navy-900 text-sm mt-0.5">👤 {ownerName}</p>
+                </div>
+                <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Registered Mobile Phone</span>
+                  <p className="font-extrabold text-navy-900 text-sm mt-0.5">📱 {vendorPhone}</p>
+                </div>
+                <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Delivery District</span>
+                  <p className="font-extrabold text-navy-900 text-sm mt-0.5">📍 {districtName}, Uttar Pradesh</p>
+                </div>
+                <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Store Catalog Status</span>
+                  <p className="font-extrabold text-navy-900 text-sm mt-0.5">📦 {vendorProducts.length} Active Materials</p>
+                </div>
+              </div>
+            </div>
+
             {/* Store Products List Preview */}
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
@@ -520,7 +613,7 @@ export default function VendorDashboard() {
                 </div>
                 <button
                   onClick={() => setShowCatalogModal(true)}
-                  className="text-xs font-bold bg-brand-500 hover:bg-brand-600 text-white px-3 py-1.5 rounded-lg shadow-xs"
+                  className="text-xs font-bold bg-brand-500 hover:bg-brand-600 text-white px-3 py-1.5 rounded-lg shadow-xs cursor-pointer"
                 >
                   + Add from Master Catalog
                 </button>
@@ -670,8 +763,24 @@ export default function VendorDashboard() {
         <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
           <div className="p-3 sm:p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 bg-slate-50/50">
             <div>
-              <h3 className="font-extrabold text-navy-900 text-xs sm:text-sm">Products Listed in My Store</h3>
-              <p className="text-[11px] sm:text-xs text-slate-500">Edit your selling price (₹) and stock quantity for products added from the Master Catalog.</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-extrabold text-navy-900 text-xs sm:text-sm">Products Listed in My Store</h3>
+                {vendorStoreCategoryFilter !== "ALL" && (
+                  <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <span>Category Filtered</span>
+                    <button
+                      type="button"
+                      onClick={() => setVendorStoreCategoryFilter("ALL")}
+                      className="text-emerald-950 hover:text-red-600 ml-0.5 cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-500">
+                Showing {filteredVendorProducts.length} of {vendorProducts.length} items. Edit selling price (₹) and stock quantity.
+              </p>
             </div>
             <button
               onClick={() => setShowCatalogModal(true)}
@@ -695,6 +804,20 @@ export default function VendorDashboard() {
                 Browse Master Catalog
               </button>
             </div>
+          ) : filteredVendorProducts.length === 0 ? (
+            <div className="text-center py-12 px-4">
+              <p className="text-3xl mb-2">🔍</p>
+              <p className="text-sm font-bold text-navy-900">Is category mein koi product listed nahi hai</p>
+              <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                Aap &apos;All Items&apos; select kar sakte hain ya Master Catalog se is category ke products apni dukan par jod sakte hain.
+              </p>
+              <button
+                onClick={() => setVendorStoreCategoryFilter("ALL")}
+                className="mt-4 bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer"
+              >
+                Show All Products ({vendorProducts.length})
+              </button>
+            </div>
           ) : (
             <>
               {/* Desktop Table View */}
@@ -712,7 +835,7 @@ export default function VendorDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {vendorProducts.map((p) => (
+                    {filteredVendorProducts.map((p) => (
                       <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
@@ -797,7 +920,7 @@ export default function VendorDashboard() {
 
               {/* Mobile Touch-Friendly Card Feed (Zero Horizontal Scroll!) */}
               <div className="md:hidden divide-y divide-slate-100">
-                {vendorProducts.map((p) => {
+                {filteredVendorProducts.map((p) => {
                   const discountPct = p.mrp > p.price ? Math.round(((p.mrp - p.price) / p.mrp) * 100) : 0;
 
                   return (
@@ -1526,6 +1649,63 @@ export default function VendorDashboard() {
           </div>
         </div>
       )}
+
+      {/* Floating Bottom Navigation Bar (Persistent touch navigation across Products, Orders, Master Catalog & Store Info) */}
+      <div className="fixed bottom-3 inset-x-3 sm:max-w-md sm:mx-auto z-40 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/90 shadow-2xl p-1.5 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setActiveTab("products")}
+          className={`flex-1 flex flex-col items-center py-1 rounded-xl transition-all cursor-pointer active:scale-95 ${
+            activeTab === "products"
+              ? "text-emerald-700 font-extrabold bg-emerald-50/80 shadow-2xs"
+              : "text-slate-500 hover:text-slate-900 font-semibold"
+          }`}
+        >
+          <span className="text-lg leading-none mb-0.5">📦</span>
+          <span className="text-[10px] tracking-tight">Products</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("orders")}
+          className={`flex-1 flex flex-col items-center py-1 rounded-xl transition-all cursor-pointer active:scale-95 relative ${
+            activeTab === "orders"
+              ? "text-emerald-700 font-extrabold bg-emerald-50/80 shadow-2xs"
+              : "text-slate-500 hover:text-slate-900 font-semibold"
+          }`}
+        >
+          <span className="text-lg leading-none mb-0.5">🛍️</span>
+          <span className="text-[10px] tracking-tight">Orders</span>
+          {activeOrdersCount > 0 && (
+            <span className="absolute top-0.5 right-2 bg-rose-500 text-white font-black text-[9px] min-w-4 h-4 px-1 rounded-full flex items-center justify-center shadow-xs">
+              {activeOrdersCount}
+            </span>
+          )}
+        </button>
+
+        {/* Center Raised Action Button for Instant Master Catalog Access */}
+        <button
+          type="button"
+          onClick={() => setShowCatalogModal(true)}
+          className="w-11 h-11 -mt-5 bg-gradient-to-tr from-brand-600 via-brand-500 to-amber-400 text-white rounded-full flex items-center justify-center text-2xl font-black shadow-lg hover:scale-105 active:scale-95 transition-all cursor-pointer ring-4 ring-white shrink-0 mx-1"
+          title="Add from Master Catalog"
+        >
+          +
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("overview")}
+          className={`flex-1 flex flex-col items-center py-1 rounded-xl transition-all cursor-pointer active:scale-95 ${
+            activeTab === "overview"
+              ? "text-emerald-700 font-extrabold bg-emerald-50/80 shadow-2xs"
+              : "text-slate-500 hover:text-slate-900 font-semibold"
+          }`}
+        >
+          <span className="text-lg leading-none mb-0.5">📊</span>
+          <span className="text-[10px] tracking-tight">Store Info</span>
+        </button>
+      </div>
     </DashboardShell>
   );
 }

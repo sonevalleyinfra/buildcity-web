@@ -280,6 +280,7 @@ export default function VendorDashboard() {
   const [productSearch, setProductSearch] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState("ALL");
   const [orderSearch, setOrderSearch] = useState("");
+  const [updatingOrderId, setUpdatingOrderId] = useState(null);
 
   // Current vendor ki dukan par list huye products filter karo (Flexible DB Match)
   const vendorProducts = products.filter((p) => {
@@ -592,10 +593,33 @@ export default function VendorDashboard() {
     });
   };
 
-  // Real DB stats calculation
+  // Real DB stats calculation: Revenue counts ONLY when order is DELIVERED!
   const totalRevenue = vendorOrders.reduce((sum, ord) => {
-    return sum + Number(ord.totalAmount || ord.total || 0);
+    const st = (ord.status || "").toUpperCase();
+    if (st !== "DELIVERED") return sum;
+    return sum + (Number(ord.totalAmount || ord.total || 0) || 0);
   }, 0);
+
+  // Live Status Change handler with real-time loading feedback
+  const handleStatusChange = async (orderId, newStatus) => {
+    if (!orderId || !newStatus) return;
+    setUpdatingOrderId(orderId);
+    try {
+      await updateOrderStatus(orderId, newStatus);
+      setFetchedVendorOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
+      );
+    } catch (err) {
+      console.warn("Status change error:", err);
+      showAlert({
+        title: "Status Update Error",
+        message: err.message || "Failed to update order status.",
+        type: "warning",
+      });
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
 
   const activeOrdersCount = vendorOrders.filter((o) => {
     const st = (o.status || "").toUpperCase();
@@ -701,16 +725,11 @@ export default function VendorDashboard() {
                     ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
                     : "bg-amber-500/20 text-amber-300 border-amber-500/30"
                 }`}>
-                  ● STORE: {matchedVendorObj.status || "APPROVED"}
+                  STORE: {matchedVendorObj.status || "APPROVED"}
                 </span>
 
                 <span className="text-[10px] font-bold bg-white/10 text-slate-200 px-2.5 py-0.5 rounded-full border border-white/10 flex items-center gap-1">
                   📍 {districtName}
-                </span>
-
-                <span className="text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  🟢 Taking Customer Orders
                 </span>
               </div>
 
@@ -721,7 +740,7 @@ export default function VendorDashboard() {
                 </h1>
                 <p className="text-[11px] sm:text-xs text-slate-300 mt-1 font-medium flex items-center gap-1.5 flex-wrap select-none">
                   <span>Owner: <strong className="text-white font-bold">{ownerName}</strong></span>
-                  <span>·</span>
+                  <span>•</span>
                   <span>Mobile: <span className="text-slate-200 font-semibold">{vendorPhone}</span></span>
                 </p>
               </div>
@@ -730,10 +749,10 @@ export default function VendorDashboard() {
             {/* Quick Metrics Bar - Interactive Clickable Cards (2x2 on Mobile, 4 columns on Desktop) */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mt-4 sm:mt-5 pt-3 sm:pt-4 border-t border-slate-700/60 relative z-10">
               <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 sm:p-3.5 border border-white/10 min-w-0">
-                <p className="text-[10px] sm:text-[11px] font-medium text-slate-300 truncate">Total Revenue</p>
+                <p className="text-[10px] sm:text-[11px] font-medium text-slate-300 truncate">Delivered Revenue</p>
                 <p className="text-base sm:text-xl font-black text-white mt-0.5 tracking-tight truncate">₹{Number(totalRevenue || 0).toLocaleString("en-IN")}</p>
                 <span className="text-[9px] sm:text-[10px] text-emerald-400 font-extrabold flex items-center gap-1 mt-0.5">
-                  <span>✓ Verified Orders</span>
+                  <span>✓ Delivered Orders Only</span>
                 </span>
               </div>
 
@@ -1473,15 +1492,24 @@ export default function VendorDashboard() {
                             {formatDateTimeIST(ord.createdAt || ord.date)}
                           </span>
                         </div>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
-                          (ord.status || "").toUpperCase() === "DELIVERED"
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                            : (ord.status || "").toUpperCase() === "CANCELLED"
-                            ? "bg-rose-50 text-rose-700 border-rose-300"
-                            : "bg-amber-50 text-amber-700 border-amber-300"
-                        }`}>
-                          {ord.status || "PENDING"}
-                        </span>
+                        {updatingOrderId === ord.id ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black border bg-brand-50 text-brand-700 border-brand-300 flex items-center gap-1 shadow-2xs animate-pulse">
+                            <span className="w-2 h-2 border border-brand-600 border-t-transparent rounded-full animate-spin" />
+                            <span>Updating...</span>
+                          </span>
+                        ) : (
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                            (ord.status || "").toUpperCase() === "DELIVERED"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                              : (ord.status || "").toUpperCase() === "CANCELLED"
+                              ? "bg-rose-50 text-rose-700 border-rose-300"
+                              : (ord.status || "").toUpperCase() === "OUT_FOR_DELIVERY"
+                              ? "bg-sky-50 text-sky-700 border-sky-300"
+                              : "bg-amber-50 text-amber-700 border-amber-300"
+                          }`}>
+                            {ord.status || "PENDING"}
+                          </span>
+                        )}
                       </div>
 
                       {/* Customer Info & Direct Call Button */}
@@ -1564,23 +1592,24 @@ export default function VendorDashboard() {
                         </div>
 
                         <div className="flex items-center gap-1.5">
-                          <select
-                            value={ord.status || "PENDING"}
-                            onChange={async (e) => {
-                              const newSt = e.target.value;
-                              await updateOrderStatus(ord.id, newSt);
-                              setFetchedVendorOrders((prev) =>
-                                prev.map((o) => (o.id === ord.id ? { ...o, status: newSt } : o))
-                              );
-                            }}
-                            className="bg-slate-50 border border-slate-200 font-extrabold text-xs text-navy-900 rounded-xl px-2.5 py-1.5 outline-none focus:border-brand-500 cursor-pointer shadow-2xs"
-                          >
-                            <option value="PENDING">⏳ PENDING</option>
-                            <option value="PROCESSING">⚙️ PROCESSING</option>
-                            <option value="OUT_FOR_DELIVERY">🚚 OUT FOR DELIVERY</option>
-                            <option value="DELIVERED">✅ DELIVERED</option>
-                            <option value="CANCELLED">❌ CANCELLED</option>
-                          </select>
+                          {updatingOrderId === ord.id ? (
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 border border-brand-200 rounded-xl text-brand-700 font-extrabold text-xs shadow-2xs animate-pulse">
+                              <span className="w-3.5 h-3.5 border-2 border-brand-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                              <span>Updating...</span>
+                            </div>
+                          ) : (
+                            <select
+                              value={ord.status || "PENDING"}
+                              onChange={(e) => handleStatusChange(ord.id, e.target.value)}
+                              className="bg-slate-50 hover:bg-slate-100 border border-slate-200 font-extrabold text-xs text-navy-900 rounded-xl px-2.5 py-1.5 outline-none focus:border-brand-500 cursor-pointer shadow-2xs transition-colors"
+                            >
+                              <option value="PENDING">⏳ PENDING</option>
+                              <option value="PROCESSING">⚙️ PROCESSING</option>
+                              <option value="OUT_FOR_DELIVERY">🚚 OUT FOR DELIVERY</option>
+                              <option value="DELIVERED">✅ DELIVERED</option>
+                              <option value="CANCELLED">❌ CANCELLED</option>
+                            </select>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1661,23 +1690,24 @@ export default function VendorDashboard() {
                             ₹{orderTotal}
                           </td>
                           <td className="py-3.5 px-4">
-                            <select
-                              value={ord.status || "PENDING"}
-                              onChange={async (e) => {
-                                const newSt = e.target.value;
-                                await updateOrderStatus(ord.id, newSt);
-                                setFetchedVendorOrders((prev) =>
-                                  prev.map((o) => (o.id === ord.id ? { ...o, status: newSt } : o))
-                                );
-                              }}
-                              className="bg-slate-50 border border-slate-200 font-bold text-xs text-navy-900 rounded-lg px-2.5 py-1.5 outline-none focus:border-brand-500 cursor-pointer shadow-2xs"
-                            >
-                              <option value="PENDING">⏳ PENDING</option>
-                              <option value="PROCESSING">⚙️ PROCESSING</option>
-                              <option value="OUT_FOR_DELIVERY">🚚 OUT FOR DELIVERY</option>
-                              <option value="DELIVERED">✅ DELIVERED</option>
-                              <option value="CANCELLED">❌ CANCELLED</option>
-                            </select>
+                            {updatingOrderId === ord.id ? (
+                              <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-brand-50 border border-brand-200 rounded-lg text-brand-700 font-extrabold text-xs shadow-2xs animate-pulse">
+                                <span className="w-3 h-3 border-2 border-brand-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                                <span>Updating...</span>
+                              </div>
+                            ) : (
+                              <select
+                                value={ord.status || "PENDING"}
+                                onChange={(e) => handleStatusChange(ord.id, e.target.value)}
+                                className="bg-slate-50 hover:bg-slate-100 border border-slate-200 font-bold text-xs text-navy-900 rounded-lg px-2.5 py-1.5 outline-none focus:border-brand-500 cursor-pointer shadow-2xs transition-colors"
+                              >
+                                <option value="PENDING">⏳ PENDING</option>
+                                <option value="PROCESSING">⚙️ PROCESSING</option>
+                                <option value="OUT_FOR_DELIVERY">🚚 OUT FOR DELIVERY</option>
+                                <option value="DELIVERED">✅ DELIVERED</option>
+                                <option value="CANCELLED">❌ CANCELLED</option>
+                              </select>
+                            )}
                           </td>
                         </tr>
                       );

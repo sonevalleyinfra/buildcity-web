@@ -473,7 +473,83 @@ export default function VendorDashboard() {
 
   return (
     <DashboardShell badge="Vendor Partner" badgeColor="#10B981">
-      <div className="pb-28 sm:pb-24">
+      <div className="pb-28 md:pb-8">
+
+        {/* 🖥️ DESKTOP TOP NAVIGATION TABS (Visible only on md: screens and above) */}
+        <div className="hidden md:flex items-center justify-between bg-white border border-slate-200/90 rounded-2xl p-2 mb-6 shadow-xs">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setActiveTab("overview")}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                activeTab === "overview"
+                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs font-extrabold"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              }`}
+            >
+              <span>📊</span>
+              <span>Store Info</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("products")}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                activeTab === "products"
+                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs font-extrabold"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              }`}
+            >
+              <span>📦</span>
+              <span>Products & Prices</span>
+              <span className="bg-slate-200 text-slate-700 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                {vendorProducts.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("orders")}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 relative ${
+                activeTab === "orders"
+                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs font-extrabold"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              }`}
+            >
+              <span>🛍️</span>
+              <span>Customer Orders</span>
+              {activeOrdersCount > 0 && (
+                <span className="bg-rose-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black animate-pulse">
+                  {activeOrdersCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("profile")}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                activeTab === "profile"
+                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs font-extrabold"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              }`}
+            >
+              <span>👤</span>
+              <span>Partner Profile</span>
+            </button>
+          </div>
+
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowCatalogModal(true)}
+              className="bg-gradient-to-r from-brand-600 to-amber-500 hover:from-brand-500 hover:to-amber-400 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-xs active:scale-[0.98] transition-all cursor-pointer flex items-center gap-2"
+            >
+              <span className="text-base leading-none font-black">+</span>
+              <span>Choose from Master Catalog</span>
+            </button>
+          </div>
+        </div>
 
       {/* ========================================================================= */}
       {/* PAGE 1: OVERVIEW / STORE INFO & SALES STATS (DEDICATED FULL VIEW)         */}
@@ -1927,7 +2003,7 @@ export default function VendorDashboard() {
       )}
 
       {/* Floating Bottom Navigation Bar (Persistent touch navigation across Store Info (1st), Products (2nd), Master Catalog (+), Orders (4th), Profile (5th)) */}
-      <div className="fixed bottom-3 inset-x-3 sm:max-w-lg sm:mx-auto z-40 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/90 shadow-2xl p-1.5 flex items-center justify-between">
+      <div className="md:hidden fixed bottom-3 inset-x-3 sm:max-w-lg sm:mx-auto z-40 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/90 shadow-2xl p-1.5 flex items-center justify-between">
         {/* 1. Store Info (FIRST!) */}
         <button
           type="button"

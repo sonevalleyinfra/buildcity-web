@@ -55,6 +55,70 @@ const resolveProductImage = (imageUrl, categoryName = "", productName = "") => {
   return imageUrl;
 };
 
+// =========================================================================
+// BESPOKE UNIQUE NAVIGATION ICONS (Architectural Storefront, Isometric Materials, Precision Plus, Site Dispatch Carrier, Verified Partner Badge)
+// =========================================================================
+function NavStoreIcon({ className = "w-4 h-4", active = false }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} stroke="currentColor" strokeWidth={active ? "2.2" : "1.8"} strokeLinecap="round" strokeLinejoin="round">
+      {/* Storefront Awning */}
+      <path d="M3 9.5l2.2-5.5h13.6l2.2 5.5" fill={active ? "currentColor" : "none"} fillOpacity={active ? "0.15" : "0"} />
+      <path d="M20 9.5v9.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9.5" />
+      {/* Dynamic Storefront Analytics Pillars */}
+      <path d="M8 18v-4" strokeWidth={active ? "2.4" : "2"} />
+      <path d="M12 18v-7" strokeWidth={active ? "2.4" : "2"} />
+      <path d="M16 18v-3" strokeWidth={active ? "2.4" : "2"} />
+    </svg>
+  );
+}
+
+function NavProductsIcon({ className = "w-4 h-4", active = false }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} stroke="currentColor" strokeWidth={active ? "2.2" : "1.8"} strokeLinecap="round" strokeLinejoin="round">
+      {/* Isometric 3D Materials Cube */}
+      <path d="M12 2.5L3.5 7.2v9.6L12 21.5l8.5-4.7V7.2L12 2.5z" fill={active ? "currentColor" : "none"} fillOpacity={active ? "0.12" : "0"} />
+      <path d="M12 2.5v19" />
+      <path d="M3.5 7.2L12 12l8.5-4.8" />
+      {/* Precision Price Tag Notch on Right Face */}
+      <circle cx="16" cy="14" r="1.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function NavPlusIcon({ className = "w-4 h-4" }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
+function NavOrdersIcon({ className = "w-4 h-4", active = false }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} stroke="currentColor" strokeWidth={active ? "2.2" : "1.8"} strokeLinecap="round" strokeLinejoin="round">
+      {/* Delivery Dispatch Tote */}
+      <path d="M5 8h14l1 12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2L5 8z" fill={active ? "currentColor" : "none"} fillOpacity={active ? "0.15" : "0"} />
+      {/* Carrier Handles */}
+      <path d="M9 8V6a3 3 0 0 1 6 0v2" />
+      {/* Verified Dispatch Checkmark */}
+      <path d="M9 14.5l2 2 4-4" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function NavProfileIcon({ className = "w-4 h-4", active = false }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} stroke="currentColor" strokeWidth={active ? "2.2" : "1.8"} strokeLinecap="round" strokeLinejoin="round">
+      {/* Partner User Avatar */}
+      <circle cx="12" cy="7" r="4" fill={active ? "currentColor" : "none"} fillOpacity={active ? "0.15" : "0"} />
+      <path d="M4 20.5a8 8 0 0 1 16 0" />
+      {/* Verified Partner Badge Indicator */}
+      <circle cx="18" cy="18" r="3" fill="#10B981" stroke="#FFFFFF" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
 // Vendor Dashboard component — Vendor partner ka main portal (Master Catalog selection, Custom Price & Stock setting, Orders management)
 export default function VendorDashboard() {
   const { user, logout } = useAuth();
@@ -554,7 +618,7 @@ export default function VendorDashboard() {
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               }`}
             >
-              <span>📊</span>
+              <NavStoreIcon className="w-4 h-4" active={activeTab === "overview"} />
               <span>Store Info</span>
             </button>
 
@@ -567,7 +631,7 @@ export default function VendorDashboard() {
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               }`}
             >
-              <span>📦</span>
+              <NavProductsIcon className="w-4 h-4" active={activeTab === "products"} />
               <span>Products & Prices</span>
               <span className="bg-slate-200 text-slate-700 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
                 {vendorProducts.length}
@@ -583,7 +647,7 @@ export default function VendorDashboard() {
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               }`}
             >
-              <span>🛍️</span>
+              <NavOrdersIcon className="w-4 h-4" active={activeTab === "orders"} />
               <span>Customer Orders</span>
               {activeOrdersCount > 0 && (
                 <span className="bg-rose-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black animate-pulse">
@@ -601,7 +665,7 @@ export default function VendorDashboard() {
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               }`}
             >
-              <span>👤</span>
+              <NavProfileIcon className="w-4 h-4" active={activeTab === "profile"} />
               <span>Partner Profile</span>
             </button>
           </div>
@@ -610,9 +674,9 @@ export default function VendorDashboard() {
             <button
               type="button"
               onClick={() => setShowCatalogModal(true)}
-              className="bg-gradient-to-r from-brand-600 to-amber-500 hover:from-brand-500 hover:to-amber-400 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-xs active:scale-[0.98] transition-all cursor-pointer flex items-center gap-2"
+              className="bg-gradient-to-r from-brand-600 to-amber-500 hover:from-brand-500 hover:to-amber-400 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-xs active:scale-[0.98] transition-all cursor-pointer flex items-center gap-2 group"
             >
-              <span className="text-base leading-none font-black">+</span>
+              <NavPlusIcon className="w-4 h-4 text-white group-hover:rotate-90 transition-transform duration-200" />
               <span>Choose from Master Catalog</span>
             </button>
           </div>
@@ -2110,13 +2174,13 @@ export default function VendorDashboard() {
         <button
           type="button"
           onClick={() => setActiveTab("overview")}
-          className={`flex-1 flex flex-col items-center py-1 rounded-xl transition-all cursor-pointer active:scale-95 ${
+          className={`flex-1 flex flex-col items-center py-1.5 rounded-xl transition-all cursor-pointer active:scale-95 ${
             activeTab === "overview"
-              ? "text-emerald-700 font-extrabold bg-emerald-50/80 shadow-2xs"
-              : "text-slate-500 hover:text-slate-900 font-semibold"
+              ? "text-emerald-700 font-extrabold bg-emerald-50/90 shadow-2xs"
+              : "text-slate-400 hover:text-slate-700 font-semibold"
           }`}
         >
-          <span className="text-lg leading-none mb-0.5">📊</span>
+          <NavStoreIcon className="w-5 h-5 mb-0.5" active={activeTab === "overview"} />
           <span className="text-[10px] tracking-tight">Store Info</span>
         </button>
 
@@ -2124,13 +2188,13 @@ export default function VendorDashboard() {
         <button
           type="button"
           onClick={() => setActiveTab("products")}
-          className={`flex-1 flex flex-col items-center py-1 rounded-xl transition-all cursor-pointer active:scale-95 ${
+          className={`flex-1 flex flex-col items-center py-1.5 rounded-xl transition-all cursor-pointer active:scale-95 ${
             activeTab === "products"
-              ? "text-emerald-700 font-extrabold bg-emerald-50/80 shadow-2xs"
-              : "text-slate-500 hover:text-slate-900 font-semibold"
+              ? "text-emerald-700 font-extrabold bg-emerald-50/90 shadow-2xs"
+              : "text-slate-400 hover:text-slate-700 font-semibold"
           }`}
         >
-          <span className="text-lg leading-none mb-0.5">📦</span>
+          <NavProductsIcon className="w-5 h-5 mb-0.5" active={activeTab === "products"} />
           <span className="text-[10px] tracking-tight">Products</span>
         </button>
 
@@ -2138,26 +2202,26 @@ export default function VendorDashboard() {
         <button
           type="button"
           onClick={() => setShowCatalogModal(true)}
-          className="w-11 h-11 -mt-5 bg-gradient-to-tr from-brand-600 via-brand-500 to-amber-400 text-white rounded-full flex items-center justify-center text-2xl font-black shadow-lg hover:scale-105 active:scale-95 transition-all cursor-pointer ring-4 ring-white shrink-0 mx-1"
+          className="w-11 h-11 -mt-5 bg-gradient-to-tr from-brand-600 via-brand-500 to-amber-400 text-white rounded-full flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all cursor-pointer ring-4 ring-white shrink-0 mx-1 group"
           title="Add from Master Catalog"
         >
-          +
+          <NavPlusIcon className="w-6 h-6 text-white group-hover:rotate-90 transition-transform duration-200" />
         </button>
 
         {/* 4. Orders */}
         <button
           type="button"
           onClick={() => setActiveTab("orders")}
-          className={`flex-1 flex flex-col items-center py-1 rounded-xl transition-all cursor-pointer active:scale-95 relative ${
+          className={`flex-1 flex flex-col items-center py-1.5 rounded-xl transition-all cursor-pointer active:scale-95 relative ${
             activeTab === "orders"
-              ? "text-emerald-700 font-extrabold bg-emerald-50/80 shadow-2xs"
-              : "text-slate-500 hover:text-slate-900 font-semibold"
+              ? "text-emerald-700 font-extrabold bg-emerald-50/90 shadow-2xs"
+              : "text-slate-400 hover:text-slate-700 font-semibold"
           }`}
         >
-          <span className="text-lg leading-none mb-0.5">🛍️</span>
+          <NavOrdersIcon className="w-5 h-5 mb-0.5" active={activeTab === "orders"} />
           <span className="text-[10px] tracking-tight">Orders</span>
           {activeOrdersCount > 0 && (
-            <span className="absolute top-0.5 right-2 bg-rose-500 text-white font-black text-[9px] min-w-4 h-4 px-1 rounded-full flex items-center justify-center shadow-xs">
+            <span className="absolute top-0.5 right-2 bg-rose-500 text-white font-black text-[9px] min-w-4 h-4 px-1 rounded-full flex items-center justify-center shadow-xs animate-pulse">
               {activeOrdersCount}
             </span>
           )}
@@ -2167,13 +2231,13 @@ export default function VendorDashboard() {
         <button
           type="button"
           onClick={() => setActiveTab("profile")}
-          className={`flex-1 flex flex-col items-center py-1 rounded-xl transition-all cursor-pointer active:scale-95 ${
+          className={`flex-1 flex flex-col items-center py-1.5 rounded-xl transition-all cursor-pointer active:scale-95 ${
             activeTab === "profile"
-              ? "text-emerald-700 font-extrabold bg-emerald-50/80 shadow-2xs"
-              : "text-slate-500 hover:text-slate-900 font-semibold"
+              ? "text-emerald-700 font-extrabold bg-emerald-50/90 shadow-2xs"
+              : "text-slate-400 hover:text-slate-700 font-semibold"
           }`}
         >
-          <span className="text-lg leading-none mb-0.5">👤</span>
+          <NavProfileIcon className="w-5 h-5 mb-0.5" active={activeTab === "profile"} />
           <span className="text-[10px] tracking-tight">Profile</span>
         </button>
       </div>

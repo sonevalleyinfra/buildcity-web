@@ -769,51 +769,40 @@ export default function VendorDashboard() {
           {/* OPTION 2: DEEP NAVY HEADER + 4 ELEVATED TINTED STAT CARDS */}
           {/* ========================================================= */}
           <div className="space-y-3">
-            {/* 1. Deep Navy Slim Header Card */}
-            <div className="bg-gradient-to-r from-slate-900 via-navy-900 to-indigo-950 rounded-2xl sm:rounded-3xl p-4 sm:p-5 text-white shadow-md relative overflow-hidden border border-slate-800">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-              
-              <div className="relative z-10 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  {/* Store Avatar Initial */}
-                  <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-white/10 backdrop-blur-md text-amber-300 font-black text-lg sm:text-xl flex items-center justify-center shrink-0 border border-white/15 shadow-inner">
-                    {(shopName || "D")[0]?.toUpperCase() || "D"}
+            {/* 1. Clean Light Slim Header Card (Mockup Style) */}
+            <div className="bg-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs relative">
+              <div className="flex items-center justify-between gap-3">
+                {/* Left Side: Shop Name + Verified Partner + Subtitle */}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h1 className="text-base sm:text-xl font-black text-slate-900 tracking-tight leading-tight truncate">
+                      {shopName || "Store"}
+                    </h1>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200/80">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      Verified Partner
+                    </span>
                   </div>
-
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h1 className="text-base sm:text-xl font-black text-white tracking-tight leading-tight truncate">
-                        {shopName}
-                      </h1>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        Verified
-                      </span>
-                    </div>
-                    <p className="text-[11px] sm:text-xs text-slate-300 font-medium mt-0.5 flex items-center gap-1.5 flex-wrap truncate">
-                      <span>📍 {districtName}</span>
-                      <span>•</span>
-                      <span>{vendorPhone}</span>
-                      {ownerName && (
-                        <>
-                          <span>•</span>
-                          <span className="text-slate-400">Owner: <strong className="text-slate-200">{ownerName}</strong></span>
-                        </>
-                      )}
+                  {ownerName ? (
+                    <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5 truncate">
+                      Owner: <strong className="text-slate-700">{ownerName}</strong>
+                      {vendorPhone && <span> • {vendorPhone}</span>}
                     </p>
-                  </div>
+                  ) : vendorPhone ? (
+                    <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5 truncate">
+                      {vendorPhone}
+                    </p>
+                  ) : null}
                 </div>
 
-                {/* Direct Call Button */}
-                {vendorPhone && (
-                  <a
-                    href={`tel:${vendorPhone}`}
-                    className="px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 flex items-center gap-1.5 shadow-2xs transition-all active:scale-95 shrink-0"
-                  >
-                    <span>📞</span>
-                    <span className="hidden sm:inline">Call</span>
-                  </a>
-                )}
+                {/* Right Side: Location Pill (Replaces Call button) */}
+                <div className="px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-50 hover:bg-slate-100/80 border border-slate-200/90 text-slate-700 text-xs sm:text-sm font-semibold flex items-center gap-1.5 shadow-2xs shrink-0 transition-colors">
+                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span className="font-medium">{districtName || "Location"}</span>
+                </div>
               </div>
             </div>
 

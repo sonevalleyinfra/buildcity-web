@@ -683,15 +683,9 @@ export default function VendorDashboard() {
   return (
     <DashboardShell
       badge={
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="text-xs sm:text-sm font-black text-slate-900 truncate max-w-[120px] sm:max-w-[200px]">
-            {shopName || "Vendor"}
-          </span>
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            Verified
-          </span>
-        </div>
+        <span className="text-xs sm:text-sm font-black text-slate-900 truncate max-w-[140px] sm:max-w-[220px]">
+          {shopName || "Vendor"}
+        </span>
       }
       hideLogout={true}
       rightContent={
@@ -1744,12 +1738,14 @@ export default function VendorDashboard() {
                         )}
                       </div>
 
-                      {/* Site Delivery Address */}
-                      <div className="p-2.5 bg-brand-50/50 border border-brand-200/70 rounded-xl text-xs text-navy-900 leading-relaxed shadow-2xs">
-                        <span className="text-[10px] font-black text-brand-800 uppercase tracking-wider block mb-0.5">
-                          📍 Site Delivery Address
-                        </span>
-                        <p className="font-semibold text-[11px] text-slate-800">{streetAddr}, {cityAddr || districtName}</p>
+                      {/* Site Delivery Address (Compact & Clean) */}
+                      <div className="px-2.5 py-1.5 bg-slate-50 border border-slate-200/80 rounded-lg flex items-start gap-1.5 text-slate-700">
+                        <span className="text-xs shrink-0 mt-0.5">📍</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-medium text-slate-800 leading-snug break-words">
+                            {streetAddr}{cityAddr ? `, ${cityAddr}` : ""}
+                          </p>
+                        </div>
                       </div>
 
                       {/* Ordered Items */}
@@ -1893,8 +1889,9 @@ export default function VendorDashboard() {
                                 <a href={`tel:${custPhone}`} className="text-emerald-700 hover:underline font-extrabold">📞 Call</a>
                               </p>
                             )}
-                            <div className="mt-1.5 p-2 bg-brand-50/50 border border-brand-200/80 rounded-xl text-xs text-navy-900">
-                              <p className="text-[11px] font-medium">{streetAddr}, {cityAddr || districtName}</p>
+                            <div className="mt-1 px-2.5 py-1 bg-slate-50 border border-slate-200/80 rounded-lg flex items-center gap-1.5 text-slate-700">
+                              <span className="text-xs shrink-0">📍</span>
+                              <p className="text-[11px] font-medium text-slate-800 truncate">{streetAddr}{cityAddr ? `, ${cityAddr}` : ""}</p>
                             </div>
                           </td>
                           <td className="py-3.5 px-4 max-w-[200px]">

@@ -769,33 +769,21 @@ export default function VendorDashboard() {
           {/* OPTION 2: DEEP NAVY HEADER + 4 ELEVATED TINTED STAT CARDS */}
           {/* ========================================================= */}
           <div className="space-y-3">
-            {/* 1. Clean Light Slim Header Card (Mockup Style) */}
+            {/* 1. Clean Light Slim Header Card (Compact & Clean) */}
             <div className="bg-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs relative">
               <div className="flex items-center justify-between gap-3">
-                {/* Left Side: Shop Name + Verified Partner + Subtitle */}
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h1 className="text-base sm:text-xl font-black text-slate-900 tracking-tight leading-tight truncate">
-                      {shopName || "Store"}
-                    </h1>
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200/80">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                      Verified Partner
-                    </span>
-                  </div>
-                  {ownerName ? (
-                    <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5 truncate">
-                      Owner: <strong className="text-slate-700">{ownerName}</strong>
-                      {vendorPhone && <span> • {vendorPhone}</span>}
-                    </p>
-                  ) : vendorPhone ? (
-                    <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5 truncate">
-                      {vendorPhone}
-                    </p>
-                  ) : null}
+                {/* Left Side: Shop Name + Verified Partner Badge Only */}
+                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                  <h1 className="text-base sm:text-xl font-black text-slate-900 tracking-tight leading-tight truncate">
+                    {shopName || "Store"}
+                  </h1>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200/80 shrink-0">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    Verified Partner
+                  </span>
                 </div>
 
-                {/* Right Side: Location Pill (Replaces Call button) */}
+                {/* Right Side: Location Pill */}
                 <div className="px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-50 hover:bg-slate-100/80 border border-slate-200/90 text-slate-700 text-xs sm:text-sm font-semibold flex items-center gap-1.5 shadow-2xs shrink-0 transition-colors">
                   <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -880,8 +868,8 @@ export default function VendorDashboard() {
               <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
                   <div>
-                    <h3 className="font-extrabold text-navy-900 text-sm">Products Active in My Store</h3>
-                    <p className="text-[11px] text-slate-500">Items selected from the Master Catalog with your custom price & stock.</p>
+                    <h3 className="font-extrabold text-navy-900 text-sm">Active Store Products</h3>
+                    <p className="text-[10px] sm:text-[11px] text-slate-400">Listed items with your price & stock</p>
                   </div>
                   <button
                     type="button"
@@ -907,7 +895,7 @@ export default function VendorDashboard() {
                 ) : vendorProducts.length === 0 ? (
                   <div className="text-center py-6">
                     <p className="text-2xl mb-1">📦</p>
-                    <p className="text-xs font-bold text-navy-900">Your store has no products yet!</p>
+                    <p className="text-xs font-bold text-navy-900">No products added yet</p>
                     <button
                       onClick={() => setShowCatalogModal(true)}
                       className="mt-2.5 bg-brand-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl cursor-pointer"
@@ -949,7 +937,7 @@ export default function VendorDashboard() {
               {/* Recent Orders Preview Card */}
               <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs">
                 <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2.5">
-                  <h3 className="font-extrabold text-navy-900 text-sm">Recent Customer Orders</h3>
+                  <h3 className="font-extrabold text-navy-900 text-sm">Recent Orders</h3>
                   <button
                     onClick={() => setActiveTab("orders")}
                     className="text-xs font-bold text-brand-600 hover:underline cursor-pointer"
@@ -991,39 +979,39 @@ export default function VendorDashboard() {
             {/* Right Sidebar */}
             <div className="space-y-4 sm:space-y-6">
               <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs">
-                <h3 className="font-extrabold text-navy-900 text-sm mb-3">Quick Navigation</h3>
+                <h3 className="font-extrabold text-navy-900 text-sm mb-3">Quick Actions</h3>
                 <div className="space-y-2">
                   <button
                     onClick={() => setShowCatalogModal(true)}
                     className="w-full bg-brand-50 hover:bg-brand-100 border border-brand-200 text-brand-700 text-xs font-bold p-3 rounded-xl flex items-center justify-between transition-colors cursor-pointer"
                   >
-                    <span>🔍 Pick from Master Catalog ({masterProducts.length} Items)</span>
+                    <span>🔍 Master Catalog ({masterProducts.length})</span>
                     <span>→</span>
                   </button>
                   <button
                     onClick={() => setActiveTab("products")}
                     className="w-full bg-slate-50 hover:bg-slate-100 border border-slate-200 text-navy-900 text-xs font-semibold p-3 rounded-xl flex items-center justify-between transition-colors cursor-pointer"
                   >
-                    <span>📦 Manage Products & Prices ({vendorProducts.length})</span>
+                    <span>📦 Manage Products ({vendorProducts.length})</span>
                     <span>→</span>
                   </button>
                   <button
                     onClick={() => setActiveTab("orders")}
                     className="w-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-semibold p-3 rounded-xl flex items-center justify-between transition-colors cursor-pointer"
                   >
-                    <span>🛍️ Manage Customer Orders ({vendorOrders.length})</span>
+                    <span>🛍️ Orders ({vendorOrders.length})</span>
                     <span>→</span>
                   </button>
                 </div>
               </div>
 
               <div className="bg-gradient-to-br from-navy-900 to-slate-800 rounded-2xl p-4 sm:p-5 text-white shadow-xs">
-                <span className="bg-amber-400 text-navy-900 text-[10px] font-extrabold px-2 py-0.5 rounded inline-block mb-2">
-                  CATALOG POLICY
+                <span className="bg-amber-400 text-navy-900 text-[10px] font-extrabold px-2 py-0.5 rounded inline-block mb-1.5">
+                  STANDARDIZED
                 </span>
-                <h4 className="font-bold text-sm">Pre-verified Master Products</h4>
-                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                  All product titles, images, categories, brands & grades are verified by Admin and District Representatives (DR) to ensure quality standardization for customers in {districtName}.
+                <h4 className="font-bold text-sm">Verified Catalog</h4>
+                <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
+                  All materials, brands & grades are verified by Admin & DR for {districtName}.
                 </p>
               </div>
             </div>
@@ -1042,14 +1030,14 @@ export default function VendorDashboard() {
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="font-black text-navy-900 text-base sm:text-lg tracking-tight">
-                    📦 My Products Catalog
+                    📦 My Products
                   </h2>
                   <span className="bg-brand-50 text-brand-700 font-extrabold text-[10px] px-2 py-0.5 rounded-full border border-brand-200">
-                    {displayedVendorProducts.length} Items Listed
+                    {displayedVendorProducts.length} Listed
                   </span>
                   {vendorStoreCategoryFilter !== "ALL" && (
                     <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <span>Filtered: {vendorStoreCategoryFilter}</span>
+                      <span>{vendorStoreCategoryFilter}</span>
                       <button
                         type="button"
                         onClick={() => setVendorStoreCategoryFilter("ALL")}
@@ -1060,8 +1048,8 @@ export default function VendorDashboard() {
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Direct storefront for <b>{shopName}</b> ({districtName}). Tap &apos;Bhav Badle&apos; to change price or stock.
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Update price or stock anytime.
                 </p>
               </div>
 
@@ -1071,7 +1059,7 @@ export default function VendorDashboard() {
                 className="bg-brand-500 hover:bg-brand-600 active:scale-[0.98] text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
               >
                 <span>➕</span>
-                <span>Choose from Master Catalog</span>
+                <span>Add from Master Catalog</span>
               </button>
             </div>
 
@@ -1082,7 +1070,7 @@ export default function VendorDashboard() {
                   type="text"
                   value={productSearch}
                   onChange={(e) => setProductSearch(e.target.value)}
-                  placeholder="Search your listed products by name, brand, or grade..."
+                  placeholder="Search products, brand, or grade..."
                   className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl pl-9 pr-8 py-2 outline-none focus:border-brand-500 font-medium shadow-2xs"
                 />
                 <span className="absolute left-3 top-2.5 text-xs text-slate-400">🔍</span>
@@ -1099,14 +1087,14 @@ export default function VendorDashboard() {
             </div>
           </div>
 
-          {/* 🏷️ ROUND CATEGORY STORY BUBBLES (LIKE BUILD CITY HOME SCREEN) */}
+          {/* 🏷️ ROUND CATEGORY STORY BUBBLES */}
           <div className="bg-white rounded-2xl border border-slate-200/90 p-3 shadow-xs">
             <div className="flex items-center justify-between gap-2 mb-1 px-1">
               <span className="text-[11px] font-black text-navy-900 uppercase tracking-wider flex items-center gap-1">
                 <span>🏷️ Categories</span>
               </span>
               <span className="text-[10px] text-slate-400 font-semibold">
-                Tap bubble to filter products
+                Tap to filter
               </span>
             </div>
 
@@ -1188,34 +1176,31 @@ export default function VendorDashboard() {
 
           {/* Products Empty States */}
           {vendorProducts.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200/90 p-10 text-center shadow-xs">
-              <p className="text-4xl mb-2">📦</p>
-              <h3 className="text-base font-extrabold text-navy-900">No products in your store yet</h3>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                Admin aur DRs dwara banayi gayi Master Product List se apni dukan ke liye materials select karein.
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-8 text-center shadow-xs">
+              <p className="text-3xl mb-1.5">📦</p>
+              <h3 className="text-sm font-extrabold text-navy-900">No products listed</h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Add products from the Master Catalog to start selling.
               </p>
               <button
                 onClick={() => setShowCatalogModal(true)}
-                className="mt-4 bg-brand-500 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-xs cursor-pointer active:scale-95"
+                className="mt-3 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-xs cursor-pointer active:scale-95"
               >
-                Browse Master Catalog
+                Browse Catalog
               </button>
             </div>
           ) : displayedVendorProducts.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200/90 p-8 text-center shadow-xs">
-              <p className="text-3xl mb-2">🔍</p>
-              <h3 className="text-sm font-extrabold text-navy-900">No products found</h3>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                Is search ya category filter ke mutabiq koi product nahi mila.
-              </p>
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-6 text-center shadow-xs">
+              <p className="text-2xl mb-1">🔍</p>
+              <h3 className="text-xs font-extrabold text-navy-900">No products found</h3>
               <button
                 onClick={() => {
                   setVendorStoreCategoryFilter("ALL");
                   setProductSearch("");
                 }}
-                className="mt-3 bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer"
+                className="mt-2.5 bg-emerald-600 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl cursor-pointer"
               >
-                Reset Filters ({vendorProducts.length} Items)
+                Reset Filters ({vendorProducts.length})
               </button>
             </div>
           ) : (
@@ -1436,19 +1421,19 @@ export default function VendorDashboard() {
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="font-black text-navy-900 text-base sm:text-lg tracking-tight">
-                    🛍️ Customer Orders
+                    🛍️ Orders
                   </h2>
                   <span className="bg-emerald-50 text-emerald-700 font-extrabold text-[10px] px-2 py-0.5 rounded-full border border-emerald-200">
-                    {filteredVendorOrders.length} Orders
+                    {filteredVendorOrders.length}
                   </span>
                   {orderSearch && (
                     <span className="bg-brand-50 text-brand-700 font-extrabold text-[10px] px-2 py-0.5 rounded-full border border-brand-200">
-                      Search: &quot;{orderSearch}&quot;
+                      &quot;{orderSearch}&quot;
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Direct site orders received for <b>{shopName}</b> across {districtName}.
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Store orders in {districtName}.
                 </p>
               </div>
 
@@ -1467,7 +1452,7 @@ export default function VendorDashboard() {
                   }`}
                 >
                   <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                  <span>⚡ Active Orders</span>
+                  <span>⚡ Active</span>
                   <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
                     orderSectionTab === "ACTIVE" ? "bg-amber-100 text-amber-900" : "bg-slate-200 text-slate-600"
                   }`}>
@@ -1492,7 +1477,7 @@ export default function VendorDashboard() {
                       : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
-                  <span>✓ Delivered / History</span>
+                  <span>✓ Delivered</span>
                   <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
                     orderSectionTab === "COMPLETED" ? "bg-emerald-100 text-emerald-900" : "bg-slate-200 text-slate-600"
                   }`}>
@@ -1615,8 +1600,8 @@ export default function VendorDashboard() {
                 type="text"
                 value={orderSearch}
                 onChange={(e) => setOrderSearch(e.target.value)}
-                placeholder="🔍 Search orders by customer name, phone number, order ID, or delivery address..."
-                className="w-full bg-slate-50 hover:bg-slate-100/70 focus:bg-white text-xs border border-slate-200/90 focus:border-brand-500 rounded-xl pl-3.5 pr-8 py-2.5 outline-none transition-all font-medium text-navy-900 placeholder:text-slate-400 shadow-2xs"
+                placeholder="Search orders by customer, phone, or ID..."
+                className="w-full bg-slate-50 hover:bg-slate-100/70 focus:bg-white text-xs border border-slate-200/90 focus:border-brand-500 rounded-xl pl-3.5 pr-8 py-2 outline-none transition-all font-medium text-navy-900 placeholder:text-slate-400 shadow-2xs"
               />
               {orderSearch && (
                 <button
@@ -1632,24 +1617,19 @@ export default function VendorDashboard() {
           </div>
 
           {vendorOrders.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200/90 p-10 text-center shadow-xs">
-              <p className="text-4xl mb-2">🛍️</p>
-              <h3 className="text-base font-extrabold text-navy-900">No orders for your store yet</h3>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                Jab customers {shopName} ke materials order karenge, wo real-time mein yahan dikhenge.
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-8 text-center shadow-xs">
+              <p className="text-3xl mb-1.5">🛍️</p>
+              <h3 className="text-sm font-extrabold text-navy-900">No orders yet</h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                New customer orders will appear here in real time.
               </p>
             </div>
           ) : filteredVendorOrders.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200/90 p-8 text-center shadow-xs">
-              <p className="text-3xl mb-2">🔍</p>
-              <h3 className="text-sm font-extrabold text-navy-900">
-                {orderSearch
-                  ? `No orders matching "${orderSearch}"`
-                  : orderStatusFilter === "REPEAT_BUYERS"
-                  ? "No repeat customer orders found yet"
-                  : `No orders matching "${orderStatusFilter}"`}
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-6 text-center shadow-xs">
+              <p className="text-2xl mb-1">🔍</p>
+              <h3 className="text-xs font-extrabold text-navy-900">
+                {orderSearch ? `No orders matching "${orderSearch}"` : "No matching orders"}
               </h3>
-              <p className="text-xs text-slate-500 mt-1">Try resetting filters or searching with a different term.</p>
               <button
                 type="button"
                 onClick={() => {

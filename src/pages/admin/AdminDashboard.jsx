@@ -89,22 +89,39 @@ export default function AdminDashboard() {
 
   const { orders: contextOrders = [], fetchAllOrders } = useOrders() || {};
 
-  // Always force cloud sync on AdminDashboard mount and poll every 3.5s
+  // Smart Real-time Sync for Super Admin: Instant Event Sync + Focus/Visibility Aware (Zero waste on inactive tabs)
   useEffect(() => {
     if (fetchCloudData) fetchCloudData();
     if (fetchAllOrders) fetchAllOrders();
-    const interval = setInterval(() => {
-      if (fetchAllOrders) fetchAllOrders();
-    }, 3500);
 
+    // 1. Smart Interval: Poll only when active tab is visible (every 60s instead of 3.5s)
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        if (fetchAllOrders) fetchAllOrders();
+      }
+    }, 60000);
+
+    // 2. Instant Sync on Focus
+    const handleFocus = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        if (fetchAllOrders) fetchAllOrders();
+        if (fetchCloudData) fetchCloudData();
+      }
+    };
+
+    // 3. Instant Event-Driven Sync
     const handleOrderSync = () => {
       if (fetchAllOrders) fetchAllOrders();
     };
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("visibilitychange", handleFocus);
     window.addEventListener("buildcity_orders_updated", handleOrderSync);
     window.addEventListener("buildcity_order_placed", handleOrderSync);
 
     return () => {
       clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("visibilitychange", handleFocus);
       window.removeEventListener("buildcity_orders_updated", handleOrderSync);
       window.removeEventListener("buildcity_order_placed", handleOrderSync);
     };

@@ -298,23 +298,39 @@ export default function DrDashboard() {
     }
   };
 
-  // Continuous background polling (every 3s) synced directly with Supabase DB
+  // Smart Real-time Sync for DR Dashboard: Instant Event Sync + Focus/Visibility Aware (Zero waste on inactive tabs)
   useEffect(() => {
     if (fetchCloudData) fetchCloudData();
     fetchLiveOrdersDirect();
     fetchLiveVendorsDirect();
     fetchLiveProductsDirect();
 
+    // 1. Smart Interval: Poll only when active tab is visible (every 60s instead of 3s)
     const interval = setInterval(() => {
-      fetchLiveOrdersDirect();
-      fetchLiveVendorsDirect();
-      fetchLiveProductsDirect();
-    }, 3000);
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchLiveOrdersDirect();
+        fetchLiveVendorsDirect();
+        fetchLiveProductsDirect();
+      }
+    }, 60000);
 
+    // 2. Instant Sync on Focus (when user returns to tab)
+    const handleFocus = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchLiveOrdersDirect();
+        fetchLiveVendorsDirect();
+        fetchLiveProductsDirect();
+        if (fetchCloudData) fetchCloudData();
+      }
+    };
+
+    // 3. Instant Event-Driven Sync
     const handleOrdersUpdated = () => fetchLiveOrdersDirect();
     const handleVendorsUpdated = () => fetchLiveVendorsDirect();
     const handleProductsUpdated = () => fetchLiveProductsDirect();
 
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("visibilitychange", handleFocus);
     window.addEventListener("buildcity_orders_updated", handleOrdersUpdated);
     window.addEventListener("buildcity_order_placed", handleOrdersUpdated);
     window.addEventListener("buildcity_vendors_updated", handleVendorsUpdated);
@@ -322,6 +338,8 @@ export default function DrDashboard() {
 
     return () => {
       clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("visibilitychange", handleFocus);
       window.removeEventListener("buildcity_orders_updated", handleOrdersUpdated);
       window.removeEventListener("buildcity_order_placed", handleOrdersUpdated);
       window.removeEventListener("buildcity_vendors_updated", handleVendorsUpdated);

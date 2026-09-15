@@ -128,14 +128,32 @@ export function OrderProvider({ children }) {
       }
     }
     fetchOrdersForCurrentRole();
-    const interval = setInterval(fetchOrdersForCurrentRole, 3000);
 
+    // 1. Smart Interval: Poll only when tab is visible to the user (every 45s instead of 3s)
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchOrdersForCurrentRole();
+      }
+    }, 45000);
+
+    // 2. Instant Sync on Window Focus (when user returns to the tab)
+    const handleFocus = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchOrdersForCurrentRole();
+      }
+    };
+
+    // 3. Instant Event-Driven Sync (0ms delay when order is placed or updated)
     const handleOrderEvent = () => fetchOrdersForCurrentRole();
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("visibilitychange", handleFocus);
     window.addEventListener("buildcity_orders_updated", handleOrderEvent);
     window.addEventListener("buildcity_order_placed", handleOrderEvent);
 
     return () => {
       clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("visibilitychange", handleFocus);
       window.removeEventListener("buildcity_orders_updated", handleOrderEvent);
       window.removeEventListener("buildcity_order_placed", handleOrderEvent);
     };

@@ -645,21 +645,43 @@ export function AdminProvider({ children }) {
     }
   };
 
-  // Live Auto Polling (3.5s background refresh) & Instant Event Sync from Supabase Cloud DB
+  // Smart Real-time Sync: Instant Event Sync + Focus/Visibility Aware Refresh (Zero waste when tab is inactive)
   useEffect(() => {
     fetchCloudData();
-    const interval = setInterval(fetchCloudData, 3500);
 
+    // 1. Smart Interval: Only runs when user has tab visibly open (every 60s instead of 3.5s)
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchCloudData();
+      }
+    }, 60000);
+
+    // 2. Instant Sync on Window Focus (when user switches back to this tab)
+    const handleFocus = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchCloudData();
+      }
+    };
+
+    // 3. Instant Event-Driven Sync (0ms delay when order placed, status changed, or cross-tab update)
     const handleStorage = () => fetchCloudData();
     window.addEventListener("storage", handleStorage);
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("visibilitychange", handleFocus);
     window.addEventListener("buildcity_orders_updated", handleStorage);
     window.addEventListener("buildcity_order_placed", handleStorage);
+    window.addEventListener("buildcity_products_updated", handleStorage);
+    window.addEventListener("buildcity_vendors_updated", handleStorage);
 
     return () => {
       clearInterval(interval);
       window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("visibilitychange", handleFocus);
       window.removeEventListener("buildcity_orders_updated", handleStorage);
       window.removeEventListener("buildcity_order_placed", handleStorage);
+      window.removeEventListener("buildcity_products_updated", handleStorage);
+      window.removeEventListener("buildcity_vendors_updated", handleStorage);
     };
   }, [user, userRole]);
 

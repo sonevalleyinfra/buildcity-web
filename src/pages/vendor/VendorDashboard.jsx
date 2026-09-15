@@ -177,7 +177,7 @@ export default function VendorDashboard() {
   const districtName = matchedVendorObj.region?.name || matchedVendorObj.regionName || matchedVendorObj.districtName || user?.vendorInfo?.region?.name || user?.vendorInfo?.regionName || "Mirzapur";
   const vendorId = matchedVendorObj.id || user?.vendorInfo?.id || user?.vendorId || user?.id || (user?.phone ? `v-${user.phone}` : `v-${Date.now()}`);
 
-  // Background polling (every 8s with stable equality) for vendor orders + instant event triggers
+  // Smart Vendor Orders Sync: Instant Event Sync + Focus/Visibility Aware (Zero requests when tab inactive)
   useEffect(() => {
     let isMounted = true;
     const syncVendorOrders = async () => {
@@ -195,15 +195,33 @@ export default function VendorDashboard() {
     };
 
     syncVendorOrders();
-    const interval = setInterval(syncVendorOrders, 8000);
 
+    // 1. Smart Interval: Poll only when tab is visible (every 45s instead of 8s)
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        syncVendorOrders();
+      }
+    }, 45000);
+
+    // 2. Instant Sync on Focus
+    const handleFocus = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        syncVendorOrders();
+      }
+    };
+
+    // 3. Instant Event-Driven Sync
     const handleOrderEvent = () => syncVendorOrders();
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("visibilitychange", handleFocus);
     window.addEventListener("buildcity_orders_updated", handleOrderEvent);
     window.addEventListener("buildcity_order_placed", handleOrderEvent);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("visibilitychange", handleFocus);
       window.removeEventListener("buildcity_orders_updated", handleOrderEvent);
       window.removeEventListener("buildcity_order_placed", handleOrderEvent);
     };

@@ -197,8 +197,30 @@ export function NotificationProvider({ children }) {
     }
 
     fetchDbNotifications();
-    const interval = setInterval(fetchDbNotifications, 5000);
-    return () => clearInterval(interval);
+
+    // Smart polling: Only poll when user's tab is actively visible (60s instead of 5s)
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchDbNotifications();
+      }
+    }, 60000);
+
+    const handleFocus = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchDbNotifications();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("visibilitychange", handleFocus);
+    window.addEventListener("buildcity_notifications_updated", handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("visibilitychange", handleFocus);
+      window.removeEventListener("buildcity_notifications_updated", handleFocus);
+    };
   }, [storageKey, user]);
 
   // Real-Time Individual Order Confirmation / Event Notification Addition

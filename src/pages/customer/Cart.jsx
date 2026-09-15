@@ -161,16 +161,26 @@ export default function Cart() {
     };
 
     fetchLiveCoupons();
-    const interval = setInterval(fetchLiveCoupons, 5000);
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchLiveCoupons();
+      }
+    }, 60000);
 
-    const onSync = () => fetchLiveCoupons();
+    const onSync = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchLiveCoupons();
+      }
+    };
     window.addEventListener("focus", onSync);
+    window.addEventListener("visibilitychange", onSync);
     window.addEventListener("buildcity_coupons_updated", onSync);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
       window.removeEventListener("focus", onSync);
+      window.removeEventListener("visibilitychange", onSync);
       window.removeEventListener("buildcity_coupons_updated", onSync);
     };
   }, []);

@@ -1653,6 +1653,7 @@ export default function VendorDashboard() {
 
                   const formattedOrderId = formatShortId(ord.id || ord.orderNumber, "ORD");
                   const customerStats = getCustomerStats(ord);
+                  const deliveryFee = Number(ord.deliveryCharge ?? ord.deliveryFee ?? ord.shippingFee ?? ord.deliveryAmount ?? 0);
 
                   const isPending = (ord.status || "PENDING").toUpperCase() === "PENDING";
 
@@ -1669,8 +1670,8 @@ export default function VendorDashboard() {
                               👤 {custFullName}
                             </span>
                             {customerStats.isRepeat && (
-                              <span className="bg-amber-50 text-amber-800 border border-amber-300/90 px-1.5 py-0.2 rounded text-[9px] font-black">
-                                👑 Repeat
+                              <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-300/90 px-1.5 py-0.2 rounded text-[9px] font-black">
+                                <span>👑 Repeat ({customerStats.orderCount})</span>
                               </span>
                             )}
                           </div>
@@ -1728,11 +1729,16 @@ export default function VendorDashboard() {
                         })}
                       </div>
 
-                      {/* Total & Status Selector */}
+                      {/* Total, Delivery Charge & Status Selector */}
                       <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-[10px] text-slate-400 font-bold">Total:</span>
-                          <span className="text-sm font-black text-navy-900">₹{orderTotal}</span>
+                        <div>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-[10px] text-slate-400 font-bold">Total:</span>
+                            <span className="text-sm font-black text-navy-900">₹{orderTotal}</span>
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-medium block">
+                            🚚 Delivery: {deliveryFee > 0 ? `₹${deliveryFee}` : "Free"}
+                          </span>
                         </div>
 
                         <div className="flex items-center gap-1.5">
@@ -1794,6 +1800,7 @@ export default function VendorDashboard() {
 
                       const formattedOrderId = formatShortId(ord.id || ord.orderNumber, "ORD");
                       const customerStats = getCustomerStats(ord);
+                      const deliveryFee = Number(ord.deliveryCharge ?? ord.deliveryFee ?? ord.shippingFee ?? ord.deliveryAmount ?? 0);
 
                       const isPending = (ord.status || "PENDING").toUpperCase() === "PENDING";
 
@@ -1822,10 +1829,7 @@ export default function VendorDashboard() {
                               <p className="font-extrabold text-navy-900 text-xs">👤 Recipient: {custFullName}</p>
                               {customerStats.isRepeat ? (
                                 <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-300/90 px-1.5 py-0.2 rounded-full text-[9px] font-black shadow-2xs">
-                                  <span>👑 Repeat Customer</span>
-                                  <span className="bg-amber-500 text-white text-[8px] px-1 rounded-full font-bold">
-                                    {customerStats.orderCount} Orders
-                                  </span>
+                                  <span>👑 Repeat ({customerStats.orderCount})</span>
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 bg-slate-200/70 text-slate-600 px-1.5 py-0.2 rounded text-[9px] font-medium">
@@ -1847,8 +1851,11 @@ export default function VendorDashboard() {
                           <td className="py-3.5 px-4 max-w-[200px]">
                             <p className="text-xs font-semibold text-slate-700 leading-snug line-clamp-2">{itemsSummary}</p>
                           </td>
-                          <td className="py-3.5 px-4 font-black text-navy-900 text-sm">
-                            ₹{orderTotal}
+                          <td className="py-3.5 px-4">
+                            <p className="font-black text-navy-900 text-sm">₹{orderTotal}</p>
+                            <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
+                              🚚 {deliveryFee > 0 ? `₹${deliveryFee}` : "Free"}
+                            </span>
                           </td>
                           <td className="py-3.5 px-4">
                             {updatingOrderId === ord.id ? (

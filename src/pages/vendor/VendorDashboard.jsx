@@ -765,89 +765,145 @@ export default function VendorDashboard() {
       {/* ========================================================================= */}
       {activeTab === "overview" && (
         <div className="space-y-4 sm:space-y-6">
-          {/* Top Banner & Stats Overview */}
-          <div className="bg-navy-900 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-white shadow-lg relative overflow-hidden">
-            {/* Background glow effects */}
-            <div className="absolute top-0 right-0 w-96 h-96 bg-brand-500/10 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+          {/* ========================================================= */}
+          {/* OPTION 2: DEEP NAVY HEADER + 4 ELEVATED TINTED STAT CARDS */}
+          {/* ========================================================= */}
+          <div className="space-y-3">
+            {/* 1. Deep Navy Slim Header Card */}
+            <div className="bg-gradient-to-r from-slate-900 via-navy-900 to-indigo-950 rounded-2xl sm:rounded-3xl p-4 sm:p-5 text-white shadow-md relative overflow-hidden border border-slate-800">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+              
+              <div className="relative z-10 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  {/* Store Avatar Initial */}
+                  <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-white/10 backdrop-blur-md text-amber-300 font-black text-lg sm:text-xl flex items-center justify-center shrink-0 border border-white/15 shadow-inner">
+                    {(shopName || "D")[0]?.toUpperCase() || "D"}
+                  </div>
 
-            <div className="relative z-10">
-              {/* Top Info Badges Pill Row */}
-              <div className="flex items-center gap-1.5 flex-wrap mb-2">
-                <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border ${
-                  matchedVendorObj.status === "APPROVED"
-                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                    : "bg-amber-500/20 text-amber-300 border-amber-500/30"
-                }`}>
-                  STORE: {matchedVendorObj.status || "APPROVED"}
-                </span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h1 className="text-base sm:text-xl font-black text-white tracking-tight leading-tight truncate">
+                        {shopName}
+                      </h1>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        Verified
+                      </span>
+                    </div>
+                    <p className="text-[11px] sm:text-xs text-slate-300 font-medium mt-0.5 flex items-center gap-1.5 flex-wrap truncate">
+                      <span>📍 {districtName}</span>
+                      <span>•</span>
+                      <span>{vendorPhone}</span>
+                      {ownerName && (
+                        <>
+                          <span>•</span>
+                          <span className="text-slate-400">Owner: <strong className="text-slate-200">{ownerName}</strong></span>
+                        </>
+                      )}
+                    </p>
+                  </div>
+                </div>
 
-                <span className="text-[10px] font-bold bg-white/10 text-slate-200 px-2.5 py-0.5 rounded-full border border-white/10 flex items-center gap-1">
-                  📍 {districtName}
-                </span>
-              </div>
-
-              {/* Shop Title */}
-              <div>
-                <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white leading-tight">
-                  {shopName}
-                </h1>
-                <p className="text-[11px] sm:text-xs text-slate-300 mt-1 font-medium flex items-center gap-1.5 flex-wrap select-none">
-                  <span>Owner: <strong className="text-white font-bold">{ownerName}</strong></span>
-                  <span>•</span>
-                  <span>Mobile: <span className="text-slate-200 font-semibold">{vendorPhone}</span></span>
-                </p>
+                {/* Direct Call Button */}
+                {vendorPhone && (
+                  <a
+                    href={`tel:${vendorPhone}`}
+                    className="px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 flex items-center gap-1.5 shadow-2xs transition-all active:scale-95 shrink-0"
+                  >
+                    <span>📞</span>
+                    <span className="hidden sm:inline">Call</span>
+                  </a>
+                )}
               </div>
             </div>
 
-            {/* Quick Metrics Bar - Interactive Clickable Cards (2x2 on Mobile, 4 columns on Desktop) */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mt-4 sm:mt-5 pt-3 sm:pt-4 border-t border-slate-700/60 relative z-10">
-              <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 sm:p-3.5 border border-white/10 min-w-0">
-                <p className="text-[10px] sm:text-[11px] font-medium text-slate-300 truncate">Delivered Revenue</p>
-                <p className="text-base sm:text-xl font-black text-white mt-0.5 tracking-tight truncate">₹{Number(totalRevenue || 0).toLocaleString("en-IN")}</p>
-                <span className="text-[9px] sm:text-[10px] text-emerald-400 font-extrabold flex items-center gap-1 mt-0.5">
-                  <span>✓ Delivered Orders Only</span>
-                </span>
+            {/* 2. 4 Elevated Floating Cards (2x2 on Mobile, 4 columns on Desktop) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
+              
+              {/* CARD 1: REVENUE (Delivered Only) */}
+              <div className="bg-white rounded-2xl p-3 sm:p-4 border border-emerald-200/80 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between group">
+                <div>
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200/60 flex items-center justify-center text-emerald-600 mb-2 group-hover:scale-105 transition-transform">
+                    <span className="text-sm font-black">₹</span>
+                  </div>
+                  <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 tracking-tight leading-tight">Delivered Revenue</p>
+                  <h2 className="text-base sm:text-xl font-black text-slate-900 tracking-tight mt-0.5 truncate">
+                    ₹{Number(totalRevenue || 0).toLocaleString("en-IN")}
+                  </h2>
+                </div>
+                <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+                  <span className="inline-flex items-center gap-0.5 text-[9px] font-extrabold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-200/50">
+                    ✓ Delivered
+                  </span>
+                </div>
               </div>
 
+              {/* CARD 2: ACTIVE ORDERS */}
               <button
                 type="button"
                 onClick={() => setActiveTab("orders")}
-                className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2.5 sm:p-3.5 border border-white/10 hover:border-amber-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group min-w-0"
+                className="text-left bg-white rounded-2xl p-3 sm:p-4 border border-sky-200/80 shadow-2xs hover:shadow-xs hover:border-sky-300 active:scale-[0.98] transition-all flex flex-col justify-between group cursor-pointer"
               >
-                <p className="text-[10px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors truncate">Orders</p>
-                <p className="text-base sm:text-xl font-black text-white mt-0.5 tracking-tight truncate">{activeOrdersCount} Active</p>
-                <span className="text-[9px] sm:text-[10px] text-amber-300 font-extrabold flex items-center gap-1 mt-0.5">
-                  <span>View Orders</span>
-                  <span className="group-hover:translate-x-0.5 transition-transform">→</span>
-                </span>
+                <div>
+                  <div className="w-8 h-8 rounded-xl bg-sky-50 border border-sky-200/60 flex items-center justify-center text-sky-600 mb-2 group-hover:scale-105 transition-transform">
+                    <span className="text-sm">📦</span>
+                  </div>
+                  <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 tracking-tight leading-tight group-hover:text-sky-700 transition-colors">Active Orders</p>
+                  <h2 className="text-base sm:text-xl font-black text-slate-900 tracking-tight mt-0.5 truncate">
+                    {activeOrdersCount} Active
+                  </h2>
+                </div>
+                <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-[9px] sm:text-[10px] font-black text-sky-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                    View Orders →
+                  </span>
+                </div>
               </button>
 
+              {/* CARD 3: MY PRODUCTS */}
               <button
                 type="button"
                 onClick={() => setActiveTab("products")}
-                className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2.5 sm:p-3.5 border border-white/10 hover:border-brand-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group min-w-0"
+                className="text-left bg-white rounded-2xl p-3 sm:p-4 border border-indigo-200/80 shadow-2xs hover:shadow-xs hover:border-indigo-300 active:scale-[0.98] transition-all flex flex-col justify-between group cursor-pointer"
               >
-                <p className="text-[10px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors truncate">My Products</p>
-                <p className="text-base sm:text-xl font-black text-white mt-0.5 tracking-tight truncate">{vendorProducts.length} Listed</p>
-                <span className="text-[9px] sm:text-[10px] text-brand-300 font-extrabold flex items-center gap-1 mt-0.5">
-                  <span>Open Grid</span>
-                  <span className="group-hover:translate-x-0.5 transition-transform">→</span>
-                </span>
+                <div>
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200/60 flex items-center justify-center text-indigo-600 mb-2 group-hover:scale-105 transition-transform">
+                    <span className="text-sm">🏷️</span>
+                  </div>
+                  <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 tracking-tight leading-tight group-hover:text-indigo-700 transition-colors">My Products</p>
+                  <h2 className="text-base sm:text-xl font-black text-slate-900 tracking-tight mt-0.5 truncate">
+                    {vendorProducts.length} Listed
+                  </h2>
+                </div>
+                <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-[9px] sm:text-[10px] font-black text-indigo-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                    Open Grid →
+                  </span>
+                </div>
               </button>
 
+              {/* CARD 4: MASTER CATALOG */}
               <button
                 type="button"
                 onClick={() => setShowCatalogModal(true)}
-                className="text-left bg-white/10 hover:bg-white/20 backdrop-blur-xs rounded-xl p-2.5 sm:p-3.5 border border-white/10 hover:border-amber-400/40 active:scale-[0.98] transition-all duration-200 cursor-pointer group min-w-0"
+                className="text-left bg-white rounded-2xl p-3 sm:p-4 border border-amber-200/80 shadow-2xs hover:shadow-xs hover:border-amber-300 active:scale-[0.98] transition-all flex flex-col justify-between group cursor-pointer"
               >
-                <p className="text-[10px] sm:text-[11px] font-medium text-slate-300 group-hover:text-white transition-colors truncate">Master Catalog</p>
-                <p className="text-base sm:text-xl font-black text-amber-300 mt-0.5 tracking-tight truncate">{masterProducts.length} Items</p>
-                <span className="text-[9px] sm:text-[10px] text-slate-300 font-medium flex items-center gap-1 mt-0.5">
-                  <span>+ Add More</span>
-                  <span className="group-hover:translate-x-0.5 transition-transform">→</span>
-                </span>
+                <div>
+                  <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-600 mb-2 group-hover:scale-105 transition-transform">
+                    <span className="text-sm">📙</span>
+                  </div>
+                  <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 tracking-tight leading-tight group-hover:text-amber-700 transition-colors">Master Catalog</p>
+                  <h2 className="text-base sm:text-xl font-black text-slate-900 tracking-tight mt-0.5 truncate">
+                    {masterProducts.length} Items
+                  </h2>
+                </div>
+                <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-[9px] sm:text-[10px] font-black text-amber-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                    + Add More →
+                  </span>
+                </div>
               </button>
+
             </div>
           </div>
 

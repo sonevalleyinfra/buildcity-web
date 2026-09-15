@@ -278,6 +278,7 @@ export default function VendorDashboard() {
   // State for filtering vendor's own listed store products by category & search query
   const [vendorStoreCategoryFilter, setVendorStoreCategoryFilter] = useState("ALL");
   const [productSearch, setProductSearch] = useState("");
+  const [orderSectionTab, setOrderSectionTab] = useState("ACTIVE"); // 'ACTIVE' (Pending, Processing, Out) vs 'COMPLETED' (Delivered, Cancelled)
   const [orderStatusFilter, setOrderStatusFilter] = useState("ALL");
   const [orderSearch, setOrderSearch] = useState("");
   const [updatingOrderId, setUpdatingOrderId] = useState(null);
@@ -369,48 +370,83 @@ export default function VendorDashboard() {
     };
   };
 
-  const repeatOrdersCount = vendorOrders.filter((ord) => getCustomerStats(ord).isRepeat).length;
+  // Active Orders (Pending, Processing, Out for Delivery) vs Completed Orders (Delivered, Cancelled)
+  const activeOrders = useMemo(() => {
+    return vendorOrders.filter((o) => {
+      const st = (o.status || "PENDING").toUpperCase();
+      return st === "PENDING" || st === "PROCESSING" || st === "OUT_FOR_DELIVERY";
+    });
+  }, [vendorOrders]);
 
-  // Filtered orders for dedicated orders page (with status, search, and repeat filter)
-  const filteredVendorOrders = vendorOrders.filter((ord) => {
-    // 1. Status / Repeat Buyer Filter
-    if (orderStatusFilter === "REPEAT_BUYERS") {
-      if (!getCustomerStats(ord).isRepeat) return false;
-    } else if (orderStatusFilter !== "ALL") {
-      if ((ord.status || "PENDING").toUpperCase() !== orderStatusFilter) return false;
-    }
+  const completedOrders = useMemo(() => {
+    return vendorOrders.filter((o) => {
+      const st = (o.status || "").toUpperCase();
+      return st === "DELIVERED" || st === "CANCELLED";
+    });
+  }, [vendorOrders]);
 
-    // 2. Search query filter (Order ID, Customer Name, Phone, Items, Delivery Address)
-    if (orderSearch.trim()) {
-      const q = orderSearch.toLowerCase().trim();
-      const rawAddr = ord.address;
-      const isObj = typeof rawAddr === "object" && rawAddr !== null;
-      const isStr = typeof rawAddr === "string" && rawAddr.trim().length > 0;
-      const custName = ((isObj && (rawAddr.fullName || rawAddr.name)) || ord.customer?.name || (typeof ord.customer === "string" ? ord.customer : "")).toLowerCase();
-      const phone = ((isObj && rawAddr.phone) || ord.customer?.phone || ord.phone || "").toLowerCase();
-      const ordId = String(ord.id || ord.orderNumber || "").toLowerCase();
-      const formattedId = formatShortId(ord.id || ord.orderNumber, "ORD").toLowerCase();
-      const street = (isObj ? (rawAddr.street || rawAddr.line || rawAddr.address) : (isStr ? rawAddr : "")).toLowerCase();
-      const city = (isObj ? rawAddr.city : (ord.districtName || ord.regionName || "")).toLowerCase();
+  const pendingOrdersCount = vendorOrders.filter((o) => (o.status || "PENDING").toUpperCase() === "PENDING").length;
 
-      const itemsMatch = Array.isArray(ord.items)
-        ? ord.items.some((i) => (i.productName || i.name || "").toLowerCase().includes(q))
-        : String(ord.items || "").toLowerCase().includes(q);
+  // Filtered orders for dedicated orders page (with tab, status, search, and repeat filter + Smart Pending-First Sort)
+  const filteredVendorOrders = useMemo(() => {
+    // 1. First partition by Selected Section Tab (ACTIVE vs COMPLETED)
+    const baseOrders = orderSectionTab === "ACTIVE" ? activeOrders : completedOrders;
 
-      const matchesSearch =
-        custName.includes(q) ||
-        phone.includes(q) ||
-        ordId.includes(q) ||
-        formattedId.includes(q) ||
-        street.includes(q) ||
-        city.includes(q) ||
-        itemsMatch;
+    const filtered = baseOrders.filter((ord) => {
+      // Status / Repeat Buyer Filter within the active tab
+      if (orderStatusFilter === "REPEAT_BUYERS") {
+        if (!getCustomerStats(ord).isRepeat) return false;
+      } else if (orderStatusFilter !== "ALL") {
+        if ((ord.status || "PENDING").toUpperCase() !== orderStatusFilter) return false;
+      }
 
-      if (!matchesSearch) return false;
-    }
+      // Search query filter (Order ID, Customer Name, Phone, Items, Delivery Address)
+      if (orderSearch.trim()) {
+        const q = orderSearch.toLowerCase().trim();
+        const rawAddr = ord.address;
+        const isObj = typeof rawAddr === "object" && rawAddr !== null;
+        const isStr = typeof rawAddr === "string" && rawAddr.trim().length > 0;
+        const custName = ((isObj && (rawAddr.fullName || rawAddr.name)) || ord.customer?.name || (typeof ord.customer === "string" ? ord.customer : "")).toLowerCase();
+        const phone = ((isObj && rawAddr.phone) || ord.customer?.phone || ord.phone || "").toLowerCase();
+        const ordId = String(ord.id || ord.orderNumber || "").toLowerCase();
+        const formattedId = formatShortId(ord.id || ord.orderNumber, "ORD").toLowerCase();
+        const street = (isObj ? (rawAddr.street || rawAddr.line || rawAddr.address) : (isStr ? rawAddr : "")).toLowerCase();
+        const city = (isObj ? rawAddr.city : (ord.districtName || ord.regionName || "")).toLowerCase();
 
-    return true;
-  });
+        const itemsMatch = Array.isArray(ord.items)
+          ? ord.items.some((i) => (i.productName || i.name || "").toLowerCase().includes(q))
+          : String(ord.items || "").toLowerCase().includes(q);
+
+        const matchesSearch =
+          custName.includes(q) ||
+          phone.includes(q) ||
+          ordId.includes(q) ||
+          formattedId.includes(q) ||
+          street.includes(q) ||
+          city.includes(q) ||
+          itemsMatch;
+
+        if (!matchesSearch) return false;
+      }
+
+      return true;
+    });
+
+    // 2. Smart Priority Sorting:
+    // For ACTIVE tab: PENDING first (urgency!), then PROCESSING, then OUT_FOR_DELIVERY, then newest date
+    // For COMPLETED tab: Newest date first
+    return filtered.sort((a, b) => {
+      if (orderSectionTab === "ACTIVE") {
+        const priority = { PENDING: 1, PROCESSING: 2, OUT_FOR_DELIVERY: 3 };
+        const pA = priority[(a.status || "PENDING").toUpperCase()] || 99;
+        const pB = priority[(b.status || "PENDING").toUpperCase()] || 99;
+        if (pA !== pB) return pA - pB;
+      }
+      const timeA = new Date(a.createdAt || a.date || 0).getTime();
+      const timeB = new Date(b.createdAt || b.date || 0).getTime();
+      return timeB - timeA;
+    });
+  }, [vendorOrders, activeOrders, completedOrders, orderSectionTab, orderStatusFilter, orderSearch, customerOrderCounts]);
 
   // Quick stock stepper handler (+/- on 2x2 product card)
   const handleQuickStockChange = async (prod, delta) => {
@@ -1375,22 +1411,146 @@ export default function VendorDashboard() {
                 </p>
               </div>
 
-              {/* Status & Repeat Buyer Filter Chips */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 hide-scrollbar">
-                {["ALL", "PENDING", "PROCESSING", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"].map((st) => (
-                  <button
-                    key={st}
-                    type="button"
-                    onClick={() => setOrderStatusFilter(st)}
-                    className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all shrink-0 cursor-pointer ${
-                      orderStatusFilter === st
-                        ? "bg-navy-900 text-white font-black shadow-xs"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200/60"
-                    }`}
-                  >
-                    {st === "ALL" ? `All (${vendorOrders.length})` : st.replace(/_/g, " ")}
-                  </button>
-                ))}
+              {/* 2 Dedicated Segmented Tabs: Active vs Completed */}
+              <div className="grid grid-cols-2 p-1 bg-slate-100/90 rounded-2xl border border-slate-200/80 gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOrderSectionTab("ACTIVE");
+                    setOrderStatusFilter("ALL");
+                  }}
+                  className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    orderSectionTab === "ACTIVE"
+                      ? "bg-white text-navy-900 shadow-sm border border-slate-200/80"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  <span>⚡ Active Orders</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                    orderSectionTab === "ACTIVE" ? "bg-amber-100 text-amber-900" : "bg-slate-200 text-slate-600"
+                  }`}>
+                    {activeOrders.length}
+                  </span>
+                  {pendingOrdersCount > 0 && (
+                    <span className="hidden sm:inline text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-rose-50 text-rose-700 border border-rose-200">
+                      {pendingOrdersCount} Pending
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOrderSectionTab("COMPLETED");
+                    setOrderStatusFilter("ALL");
+                  }}
+                  className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    orderSectionTab === "COMPLETED"
+                      ? "bg-white text-emerald-900 shadow-sm border border-slate-200/80"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <span>✓ Delivered / History</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                    orderSectionTab === "COMPLETED" ? "bg-emerald-100 text-emerald-900" : "bg-slate-200 text-slate-600"
+                  }`}>
+                    {completedOrders.length}
+                  </span>
+                </button>
+              </div>
+
+              {/* Contextual Sub-Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 hide-scrollbar">
+                {orderSectionTab === "ACTIVE" ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setOrderStatusFilter("ALL")}
+                      className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all shrink-0 cursor-pointer ${
+                        orderStatusFilter === "ALL"
+                          ? "bg-navy-900 text-white font-black shadow-2xs"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200/60"
+                      }`}
+                    >
+                      All Active ({activeOrders.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOrderStatusFilter("PENDING")}
+                      className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
+                        orderStatusFilter === "PENDING"
+                          ? "bg-amber-500 text-white font-black shadow-2xs"
+                          : "bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200"
+                      }`}
+                    >
+                      <span>⏳ Pending Action</span>
+                      <span className="px-1 py-0.2 bg-white/30 rounded text-[9px]">{activeOrders.filter(o => (o.status || "PENDING").toUpperCase() === "PENDING").length}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOrderStatusFilter("PROCESSING")}
+                      className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
+                        orderStatusFilter === "PROCESSING"
+                          ? "bg-sky-600 text-white font-black shadow-2xs"
+                          : "bg-sky-50 text-sky-800 hover:bg-sky-100 border border-sky-200"
+                      }`}
+                    >
+                      <span>⚙️ Processing</span>
+                      <span className="px-1 py-0.2 bg-white/30 rounded text-[9px]">{activeOrders.filter(o => (o.status || "").toUpperCase() === "PROCESSING").length}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOrderStatusFilter("OUT_FOR_DELIVERY")}
+                      className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
+                        orderStatusFilter === "OUT_FOR_DELIVERY"
+                          ? "bg-indigo-600 text-white font-black shadow-2xs"
+                          : "bg-indigo-50 text-indigo-800 hover:bg-indigo-100 border border-indigo-200"
+                      }`}
+                    >
+                      <span>🚚 Out for Delivery</span>
+                      <span className="px-1 py-0.2 bg-white/30 rounded text-[9px]">{activeOrders.filter(o => (o.status || "").toUpperCase() === "OUT_FOR_DELIVERY").length}</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setOrderStatusFilter("ALL")}
+                      className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all shrink-0 cursor-pointer ${
+                        orderStatusFilter === "ALL"
+                          ? "bg-navy-900 text-white font-black shadow-2xs"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200/60"
+                      }`}
+                    >
+                      All History ({completedOrders.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOrderStatusFilter("DELIVERED")}
+                      className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
+                        orderStatusFilter === "DELIVERED"
+                          ? "bg-emerald-600 text-white font-black shadow-2xs"
+                          : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200"
+                      }`}
+                    >
+                      <span>✓ Delivered</span>
+                      <span className="px-1 py-0.2 bg-white/30 rounded text-[9px]">{completedOrders.filter(o => (o.status || "").toUpperCase() === "DELIVERED").length}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOrderStatusFilter("CANCELLED")}
+                      className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
+                        orderStatusFilter === "CANCELLED"
+                          ? "bg-rose-600 text-white font-black shadow-2xs"
+                          : "bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200"
+                      }`}
+                    >
+                      <span>✕ Cancelled</span>
+                      <span className="px-1 py-0.2 bg-white/30 rounded text-[9px]">{completedOrders.filter(o => (o.status || "").toUpperCase() === "CANCELLED").length}</span>
+                    </button>
+                  </>
+                )}
 
                 {/* Repeat Buyers Special Filter */}
                 <button
@@ -1403,7 +1563,7 @@ export default function VendorDashboard() {
                   }`}
                 >
                   <span>👑</span>
-                  <span>Repeat Buyers ({repeatOrdersCount})</span>
+                  <span>Repeat Buyers</span>
                 </button>
               </div>
             </div>
@@ -1482,8 +1642,28 @@ export default function VendorDashboard() {
                   const formattedOrderId = formatShortId(ord.id || ord.orderNumber, "ORD");
                   const customerStats = getCustomerStats(ord);
 
+                  const isPending = (ord.status || "PENDING").toUpperCase() === "PENDING";
+
                   return (
-                    <div key={ord.id} className="bg-white rounded-2xl p-3.5 border border-slate-200/90 shadow-xs space-y-3">
+                    <div
+                      key={ord.id}
+                      className={`bg-white rounded-2xl p-3.5 border shadow-xs space-y-3 transition-all ${
+                        isPending
+                          ? "border-amber-300 ring-2 ring-amber-100/60 bg-gradient-to-b from-amber-50/20 to-white"
+                          : "border-slate-200/90"
+                      }`}
+                    >
+                      {/* Urgent Action Banner for PENDING */}
+                      {isPending && (
+                        <div className="flex items-center justify-between px-2.5 py-1 bg-amber-500/10 border border-amber-300/60 rounded-xl text-[10px] font-black text-amber-800">
+                          <span className="flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                            ⏳ NEW ACTION REQUIRED
+                          </span>
+                          <span className="text-[9px] font-bold text-amber-700">Dispatch / Process</span>
+                        </div>
+                      )}
+
                       {/* Top Row: ID, Time, Status */}
                       <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                         <div>
@@ -1651,10 +1831,26 @@ export default function VendorDashboard() {
                       const formattedOrderId = formatShortId(ord.id || ord.orderNumber, "ORD");
                       const customerStats = getCustomerStats(ord);
 
+                      const isPending = (ord.status || "PENDING").toUpperCase() === "PENDING";
+
                       return (
-                        <tr key={ord.id} className="hover:bg-slate-50/80 transition-colors">
+                        <tr
+                          key={ord.id}
+                          className={`transition-colors ${
+                            isPending
+                              ? "bg-amber-50/40 hover:bg-amber-50/70 border-l-4 border-l-amber-500"
+                              : "hover:bg-slate-50/80"
+                          }`}
+                        >
                           <td className="py-3.5 px-4">
-                            <span className="font-extrabold text-brand-700 tracking-wide text-xs block">{formattedOrderId}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-extrabold text-brand-700 tracking-wide text-xs block">{formattedOrderId}</span>
+                              {isPending && (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-500 text-white animate-pulse">
+                                  NEW
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[11px] text-slate-400 font-medium block mt-0.5">{formatDateTimeIST(ord.createdAt || ord.date)}</span>
                           </td>
                           <td className="py-3.5 px-4 text-slate-800 min-w-[240px]">

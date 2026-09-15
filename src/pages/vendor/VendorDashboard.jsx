@@ -681,7 +681,29 @@ export default function VendorDashboard() {
   }).length;
 
   return (
-    <DashboardShell badge="Vendor Partner" badgeColor="#10B981">
+    <DashboardShell
+      badge={
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-xs sm:text-sm font-black text-slate-900 truncate max-w-[120px] sm:max-w-[200px]">
+            {shopName || "Vendor"}
+          </span>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            Verified
+          </span>
+        </div>
+      }
+      hideLogout={true}
+      rightContent={
+        <div className="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl bg-slate-100/90 border border-slate-200/90 text-slate-700 text-[11px] sm:text-xs font-semibold flex items-center gap-1 shrink-0">
+          <svg className="w-3 h-3 text-slate-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span>{districtName || "Location"}</span>
+        </div>
+      }
+    >
       <div className="pb-28 md:pb-8">
 
         {/* 🖥️ DESKTOP TOP NAVIGATION TABS (Visible only on md: screens and above) */}
@@ -766,35 +788,10 @@ export default function VendorDashboard() {
       {activeTab === "overview" && (
         <div className="space-y-4 sm:space-y-6">
           {/* ========================================================= */}
-          {/* OPTION 2: DEEP NAVY HEADER + 4 ELEVATED TINTED STAT CARDS */}
+          {/* 3 ELEVATED TINTED STAT CARDS (Directly at top of page)    */}
           {/* ========================================================= */}
           <div className="space-y-3">
-            {/* 1. Clean Light Slim Header Card (Compact & Clean) */}
-            <div className="bg-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs relative">
-              <div className="flex items-center justify-between gap-3">
-                {/* Left Side: Shop Name + Verified Partner Badge Only */}
-                <div className="flex items-center gap-2 flex-wrap min-w-0">
-                  <h1 className="text-base sm:text-xl font-black text-slate-900 tracking-tight leading-tight truncate">
-                    {shopName || "Store"}
-                  </h1>
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200/80 shrink-0">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    Verified Partner
-                  </span>
-                </div>
-
-                {/* Right Side: Location Pill */}
-                <div className="px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-50 hover:bg-slate-100/80 border border-slate-200/90 text-slate-700 text-xs sm:text-sm font-semibold flex items-center gap-1.5 shadow-2xs shrink-0 transition-colors">
-                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  <span className="font-medium">{districtName || "Location"}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 2. Exactly 3 Elevated Floating Cards (Left to Right in 3 Equal Columns) */}
+            {/* Exactly 3 Elevated Floating Cards (Left to Right in 3 Equal Columns) */}
             <div className="grid grid-cols-3 gap-2 sm:gap-3.5">
               
               {/* CARD 1: REVENUE (Delivered Only) */}

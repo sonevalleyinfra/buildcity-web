@@ -135,8 +135,8 @@ export default function VendorDashboard() {
   } = useAdmin();
   const { orders = [], fetchVendorOrders, updateOrderStatus } = useOrders();
 
-  // Tabs navigation state: "overview" -> Store Info (First), "products" -> My Shop Items, "orders" -> Customer Orders, "profile" -> Vendor Profile
-  const [activeTab, setActiveTab] = useState("overview");
+  // Tabs navigation state: "orders" -> Default Open Screen, "products" -> My Shop Items, "overview" -> Store Info, "profile" -> Vendor Profile
+  const [activeTab, setActiveTab] = useState("orders");
   const [fetchedVendorOrders, setFetchedVendorOrders] = useState([]);
 
   // Master Catalog — Admin/DR dwara banaye gaye Master Products select karne ke liye

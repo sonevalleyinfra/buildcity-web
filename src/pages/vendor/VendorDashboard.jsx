@@ -817,22 +817,22 @@ export default function VendorDashboard() {
               </div>
             </div>
 
-            {/* 2. 4 Elevated Floating Cards (2x2 on Mobile, 4 columns on Desktop) */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
+            {/* 2. Exactly 3 Elevated Floating Cards (Left to Right in 3 Equal Columns) */}
+            <div className="grid grid-cols-3 gap-2 sm:gap-3.5">
               
               {/* CARD 1: REVENUE (Delivered Only) */}
-              <div className="bg-white rounded-2xl p-3 sm:p-4 border border-emerald-200/80 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between group">
+              <div className="bg-white rounded-2xl p-2.5 sm:p-4 border border-emerald-200/80 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between group">
                 <div>
-                  <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200/60 flex items-center justify-center text-emerald-600 mb-2 group-hover:scale-105 transition-transform">
-                    <span className="text-sm font-black">₹</span>
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-50 border border-emerald-200/60 flex items-center justify-center text-emerald-600 mb-1.5 sm:mb-2 group-hover:scale-105 transition-transform">
+                    <span className="text-xs sm:text-sm font-black">₹</span>
                   </div>
-                  <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 tracking-tight leading-tight">Delivered Revenue</p>
-                  <h2 className="text-base sm:text-xl font-black text-slate-900 tracking-tight mt-0.5 truncate">
+                  <p className="text-[9px] sm:text-[11px] font-bold text-slate-500 tracking-tight leading-tight">Revenue</p>
+                  <h2 className="text-xs sm:text-lg font-black text-slate-900 tracking-tight mt-0.5 truncate">
                     ₹{Number(totalRevenue || 0).toLocaleString("en-IN")}
                   </h2>
                 </div>
-                <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
-                  <span className="inline-flex items-center gap-0.5 text-[9px] font-extrabold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-200/50">
+                <div className="mt-2 pt-1.5 sm:pt-2 border-t border-slate-100 flex items-center justify-between">
+                  <span className="inline-flex items-center gap-0.5 text-[8px] sm:text-[9px] font-extrabold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/50">
                     ✓ Delivered
                   </span>
                 </div>
@@ -842,20 +842,20 @@ export default function VendorDashboard() {
               <button
                 type="button"
                 onClick={() => setActiveTab("orders")}
-                className="text-left bg-white rounded-2xl p-3 sm:p-4 border border-sky-200/80 shadow-2xs hover:shadow-xs hover:border-sky-300 active:scale-[0.98] transition-all flex flex-col justify-between group cursor-pointer"
+                className="text-left bg-white rounded-2xl p-2.5 sm:p-4 border border-sky-200/80 shadow-2xs hover:shadow-xs hover:border-sky-300 active:scale-[0.98] transition-all flex flex-col justify-between group cursor-pointer"
               >
                 <div>
-                  <div className="w-8 h-8 rounded-xl bg-sky-50 border border-sky-200/60 flex items-center justify-center text-sky-600 mb-2 group-hover:scale-105 transition-transform">
-                    <span className="text-sm">📦</span>
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-sky-50 border border-sky-200/60 flex items-center justify-center text-sky-600 mb-1.5 sm:mb-2 group-hover:scale-105 transition-transform">
+                    <span className="text-xs sm:text-sm">📦</span>
                   </div>
-                  <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 tracking-tight leading-tight group-hover:text-sky-700 transition-colors">Active Orders</p>
-                  <h2 className="text-base sm:text-xl font-black text-slate-900 tracking-tight mt-0.5 truncate">
+                  <p className="text-[9px] sm:text-[11px] font-bold text-slate-500 tracking-tight leading-tight group-hover:text-sky-700 transition-colors">Orders</p>
+                  <h2 className="text-xs sm:text-lg font-black text-slate-900 tracking-tight mt-0.5 truncate">
                     {activeOrdersCount} Active
                   </h2>
                 </div>
-                <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-[9px] sm:text-[10px] font-black text-sky-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
-                    View Orders →
+                <div className="mt-2 pt-1.5 sm:pt-2 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-[8px] sm:text-[10px] font-black text-sky-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                    View →
                   </span>
                 </div>
               </button>
@@ -864,42 +864,20 @@ export default function VendorDashboard() {
               <button
                 type="button"
                 onClick={() => setActiveTab("products")}
-                className="text-left bg-white rounded-2xl p-3 sm:p-4 border border-indigo-200/80 shadow-2xs hover:shadow-xs hover:border-indigo-300 active:scale-[0.98] transition-all flex flex-col justify-between group cursor-pointer"
+                className="text-left bg-white rounded-2xl p-2.5 sm:p-4 border border-indigo-200/80 shadow-2xs hover:shadow-xs hover:border-indigo-300 active:scale-[0.98] transition-all flex flex-col justify-between group cursor-pointer"
               >
                 <div>
-                  <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200/60 flex items-center justify-center text-indigo-600 mb-2 group-hover:scale-105 transition-transform">
-                    <span className="text-sm">🏷️</span>
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-indigo-50 border border-indigo-200/60 flex items-center justify-center text-indigo-600 mb-1.5 sm:mb-2 group-hover:scale-105 transition-transform">
+                    <span className="text-xs sm:text-sm">🏷️</span>
                   </div>
-                  <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 tracking-tight leading-tight group-hover:text-indigo-700 transition-colors">My Products</p>
-                  <h2 className="text-base sm:text-xl font-black text-slate-900 tracking-tight mt-0.5 truncate">
+                  <p className="text-[9px] sm:text-[11px] font-bold text-slate-500 tracking-tight leading-tight group-hover:text-indigo-700 transition-colors">Products</p>
+                  <h2 className="text-xs sm:text-lg font-black text-slate-900 tracking-tight mt-0.5 truncate">
                     {vendorProducts.length} Listed
                   </h2>
                 </div>
-                <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-[9px] sm:text-[10px] font-black text-indigo-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
-                    Open Grid →
-                  </span>
-                </div>
-              </button>
-
-              {/* CARD 4: MASTER CATALOG */}
-              <button
-                type="button"
-                onClick={() => setShowCatalogModal(true)}
-                className="text-left bg-white rounded-2xl p-3 sm:p-4 border border-amber-200/80 shadow-2xs hover:shadow-xs hover:border-amber-300 active:scale-[0.98] transition-all flex flex-col justify-between group cursor-pointer"
-              >
-                <div>
-                  <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-600 mb-2 group-hover:scale-105 transition-transform">
-                    <span className="text-sm">📙</span>
-                  </div>
-                  <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 tracking-tight leading-tight group-hover:text-amber-700 transition-colors">Master Catalog</p>
-                  <h2 className="text-base sm:text-xl font-black text-slate-900 tracking-tight mt-0.5 truncate">
-                    {masterProducts.length} Items
-                  </h2>
-                </div>
-                <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-[9px] sm:text-[10px] font-black text-amber-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
-                    + Add More →
+                <div className="mt-2 pt-1.5 sm:pt-2 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-[8px] sm:text-[10px] font-black text-indigo-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                    Grid →
                   </span>
                 </div>
               </button>

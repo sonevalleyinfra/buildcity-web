@@ -1659,78 +1659,31 @@ export default function VendorDashboard() {
                   return (
                     <div
                       key={ord.id}
-                      className={`bg-white rounded-2xl p-3.5 border shadow-xs space-y-3 transition-all ${
-                        isPending
-                          ? "border-amber-300 ring-2 ring-amber-100/60 bg-gradient-to-b from-amber-50/20 to-white"
-                          : "border-slate-200/90"
-                      }`}
+                      className="bg-white rounded-2xl p-3 border border-slate-200/90 shadow-2xs space-y-2.5 transition-all"
                     >
-                      {/* Urgent Action Banner for PENDING */}
-                      {isPending && (
-                        <div className="flex items-center justify-between px-2.5 py-1 bg-amber-500/10 border border-amber-300/60 rounded-xl text-[10px] font-black text-amber-800">
-                          <span className="flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
-                            ⏳ NEW ACTION REQUIRED
-                          </span>
-                          <span className="text-[9px] font-bold text-amber-700">Dispatch / Process</span>
-                        </div>
-                      )}
-
-                      {/* Top Row: ID, Time, Status */}
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                        <div>
-                          <span className="font-black text-brand-700 text-xs tracking-wide">{formattedOrderId}</span>
-                          <span className="text-[10px] text-slate-400 block font-medium mt-0.5">
-                            {formatDateTimeIST(ord.createdAt || ord.date)}
-                          </span>
-                        </div>
-                        {updatingOrderId === ord.id ? (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black border bg-brand-50 text-brand-700 border-brand-300 flex items-center gap-1 shadow-2xs animate-pulse">
-                            <span className="w-2 h-2 border border-brand-600 border-t-transparent rounded-full animate-spin" />
-                            <span>Updating...</span>
-                          </span>
-                        ) : (
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
-                            (ord.status || "").toUpperCase() === "DELIVERED"
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                              : (ord.status || "").toUpperCase() === "CANCELLED"
-                              ? "bg-rose-50 text-rose-700 border-rose-300"
-                              : (ord.status || "").toUpperCase() === "OUT_FOR_DELIVERY"
-                              ? "bg-sky-50 text-sky-700 border-sky-300"
-                              : "bg-amber-50 text-amber-700 border-amber-300"
-                          }`}>
-                            {ord.status || "PENDING"}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Customer Info & Direct Call Button */}
-                      <div className="flex items-start justify-between gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                      {/* Top Row: Customer Info, Date & Call Button */}
+                      <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <p className="font-extrabold text-navy-950 text-xs truncate">👤 {custFullName}</p>
-                            {customerStats.isRepeat ? (
-                              <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-300/90 px-1.5 py-0.2 rounded-full text-[9px] font-black shadow-2xs">
-                                <span>👑 Repeat Customer</span>
-                                <span className="bg-amber-500 text-white text-[8px] px-1 rounded-full font-bold">
-                                  {customerStats.orderCount} Orders
-                                </span>
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 bg-slate-200/70 text-slate-600 px-1.5 py-0.2 rounded text-[9px] font-medium">
-                                🌱 1st Order
+                            <span className="font-extrabold text-navy-950 text-xs truncate">
+                              👤 {custFullName}
+                            </span>
+                            {customerStats.isRepeat && (
+                              <span className="bg-amber-50 text-amber-800 border border-amber-300/90 px-1.5 py-0.2 rounded text-[9px] font-black">
+                                👑 Repeat
                               </span>
                             )}
                           </div>
-                          {custPhone && (
-                            <p className="text-[11px] text-slate-600 font-semibold mt-0.5">📱 {custPhone}</p>
-                          )}
+                          <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                            {formatDateTimeIST(ord.createdAt || ord.date)}
+                            {custPhone && <span> • 📱 {custPhone}</span>}
+                          </p>
                         </div>
 
                         {custPhone && (
                           <a
                             href={`tel:${custPhone}`}
-                            className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-[11px] px-3 py-1.5 rounded-lg shadow-2xs flex items-center gap-1 shrink-0"
+                            className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-[11px] px-2.5 py-1 rounded-lg shadow-2xs flex items-center gap-1 shrink-0"
                           >
                             <span>📞</span>
                             <span>Call</span>
@@ -1738,19 +1691,16 @@ export default function VendorDashboard() {
                         )}
                       </div>
 
-                      {/* Site Delivery Address (Compact & Clean) */}
-                      <div className="px-2.5 py-1.5 bg-slate-50 border border-slate-200/80 rounded-lg flex items-start gap-1.5 text-slate-700">
-                        <span className="text-xs shrink-0 mt-0.5">📍</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[11px] font-medium text-slate-800 leading-snug break-words">
-                            {streetAddr}{cityAddr ? `, ${cityAddr}` : ""}
-                          </p>
-                        </div>
+                      {/* Site Delivery Address (Compact) */}
+                      <div className="px-2 py-1 bg-slate-50 border border-slate-200/80 rounded-lg flex items-start gap-1 text-slate-700">
+                        <span className="text-[11px] shrink-0 mt-0.5">📍</span>
+                        <p className="text-[11px] font-medium text-slate-700 leading-tight truncate">
+                          {streetAddr}{cityAddr ? `, ${cityAddr}` : ""}
+                        </p>
                       </div>
 
                       {/* Ordered Items */}
-                      <div className="space-y-1.5 pt-1">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Ordered Materials:</span>
+                      <div className="space-y-1 pt-0.5">
                         {Array.isArray(ord.items) && ord.items.map((it, idx) => {
                           const itemQty = Number(it.quantity || it.qty || it.count || 1);
                           const rawPrice = it.price ?? it.unitPrice ?? it.sellingPrice ?? it.rate;
@@ -1766,11 +1716,11 @@ export default function VendorDashboard() {
                           }
 
                           return (
-                            <div key={idx} className="flex items-center justify-between text-xs py-1 border-b border-slate-50">
-                              <span className="font-bold text-navy-900 truncate pr-2">
+                            <div key={idx} className="flex items-center justify-between text-xs py-0.5 border-b border-slate-50">
+                              <span className="font-bold text-navy-900 truncate pr-2 text-[11px]">
                                 {it.productName || it.name || "Material"} <span className="text-slate-400 font-normal">x{itemQty}</span>
                               </span>
-                              <span className="font-extrabold text-navy-900 shrink-0">
+                              <span className="font-extrabold text-navy-900 shrink-0 text-xs">
                                 ₹{(Number(lineTotal) || 0).toLocaleString("en-IN")}
                               </span>
                             </div>
@@ -1779,23 +1729,23 @@ export default function VendorDashboard() {
                       </div>
 
                       {/* Total & Status Selector */}
-                      <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
-                        <div>
-                          <span className="text-[10px] text-slate-400 uppercase font-bold block">Total Amount:</span>
-                          <span className="text-base font-black text-navy-900">₹{orderTotal}</span>
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-[10px] text-slate-400 font-bold">Total:</span>
+                          <span className="text-sm font-black text-navy-900">₹{orderTotal}</span>
                         </div>
 
                         <div className="flex items-center gap-1.5">
                           {updatingOrderId === ord.id ? (
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 border border-brand-200 rounded-xl text-brand-700 font-extrabold text-xs shadow-2xs animate-pulse">
-                              <span className="w-3.5 h-3.5 border-2 border-brand-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-brand-50 border border-brand-200 rounded-lg text-brand-700 font-extrabold text-[11px] shadow-2xs animate-pulse">
+                              <span className="w-3 h-3 border-2 border-brand-600 border-t-transparent rounded-full animate-spin shrink-0" />
                               <span>Updating...</span>
                             </div>
                           ) : (
                             <select
                               value={ord.status || "PENDING"}
                               onChange={(e) => handleStatusChange(ord.id, e.target.value)}
-                              className="bg-slate-50 hover:bg-slate-100 border border-slate-200 font-extrabold text-xs text-navy-900 rounded-xl px-2.5 py-1.5 outline-none focus:border-brand-500 cursor-pointer shadow-2xs transition-colors"
+                              className="bg-slate-50 hover:bg-slate-100 border border-slate-200 font-extrabold text-[11px] text-navy-900 rounded-lg px-2 py-1 outline-none focus:border-brand-500 cursor-pointer shadow-2xs transition-colors"
                             >
                               <option value="PENDING">⏳ PENDING</option>
                               <option value="PROCESSING">⚙️ PROCESSING</option>

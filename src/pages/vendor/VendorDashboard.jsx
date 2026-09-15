@@ -1197,7 +1197,7 @@ export default function VendorDashboard() {
           ) : (
             <>
               {/* 📱 2X2 MOBILE PRODUCT GRID (EXACT REFERENCE DESIGN FROM media_1789362449574.png) */}
-              <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 md:hidden">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 md:hidden">
                 {displayedVendorProducts.map((p) => {
                   const numPrice = Number(p.price) || 0;
                   const numMrp = Number(p.mrp) || numPrice;
@@ -1206,11 +1206,11 @@ export default function VendorDashboard() {
                   return (
                     <div
                       key={p.id}
-                      className="bg-white rounded-2xl p-2.5 border border-slate-200/90 shadow-xs hover:shadow-md transition-all flex flex-col justify-between relative group"
+                      className="bg-white rounded-xl p-2 border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between relative group"
                     >
                       <div>
-                        {/* Product Image Section */}
-                        <div className="relative aspect-square rounded-xl bg-slate-50 overflow-hidden border border-slate-100 p-2 flex items-center justify-center mb-2">
+                        {/* Compact Product Image Section */}
+                        <div className="relative aspect-4/3 rounded-lg bg-slate-50 overflow-hidden border border-slate-100 p-1.5 flex items-center justify-center mb-1.5">
                           <img
                             src={resolveProductImage(p.imageUrl, p.categoryName, p.name)}
                             alt={p.name}
@@ -1220,79 +1220,67 @@ export default function VendorDashboard() {
                               e.currentTarget.onerror = null;
                               e.currentTarget.src = resolveProductImage(null, p.categoryName, p.name);
                             }}
-                            className="w-full h-full object-contain mix-blend-multiply group-hover:scale-105 transition-transform duration-300"
+                            className="w-full h-full object-contain mix-blend-multiply group-hover:scale-105 transition-transform duration-200"
                           />
 
-                          {/* Top-Left Discount Ribbon */}
-                          {discountPct > 0 && (
-                            <span className="absolute top-1.5 left-1.5 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-md shadow-xs leading-none">
-                              {discountPct}% OFF
-                            </span>
-                          )}
-
                           {/* Top-Right Approval Status Pill */}
-                          <span className={`absolute top-1.5 right-1.5 text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-md leading-none shadow-2xs ${
+                          <span className={`absolute top-1 right-1 text-[8px] font-bold px-1.5 py-0.2 rounded leading-none shadow-2xs ${
                             p.approvalStatus === "PENDING_REVIEW"
-                              ? "bg-amber-100 text-amber-800 border border-amber-300"
+                              ? "bg-amber-100 text-amber-800 border border-amber-200"
                               : p.approvalStatus === "REJECTED"
-                              ? "bg-rose-100 text-rose-800 border border-rose-300"
-                              : "bg-emerald-600 text-white"
+                              ? "bg-rose-100 text-rose-800 border border-rose-200"
+                              : "bg-emerald-50 text-emerald-700 border border-emerald-200"
                           }`}>
                             {p.approvalStatus === "PENDING_REVIEW" ? "Review" : p.approvalStatus === "REJECTED" ? "Rejected" : "Live"}
                           </span>
 
                           {/* Bottom-Right Unit Pill */}
-                          <span className="absolute bottom-1.5 right-1.5 bg-slate-900/80 text-white text-[8px] font-bold px-1.5 py-0.5 rounded backdrop-blur-xs leading-none">
-                            {p.unit || "Unit"}
+                          <span className="absolute bottom-1 right-1 bg-slate-900/70 text-white text-[7.5px] font-medium px-1 rounded leading-tight">
+                            {p.unit || "unit"}
                           </span>
                         </div>
 
                         {/* Brand & Category line */}
-                        <div className="flex items-center gap-1 text-[10px] text-slate-500 font-semibold mb-0.5 truncate">
+                        <div className="flex items-center gap-1 text-[9.5px] text-slate-500 font-medium mb-0.5 truncate">
                           <span className="text-brand-600 font-bold truncate">🏷️ {p.brand || "Brand"}</span>
                           {p.grade && (
                             <>
                               <span>·</span>
-                              <span className="text-amber-700 bg-amber-50 px-1 rounded text-[9px] border border-amber-200 truncate">
-                                {p.grade}
-                              </span>
+                              <span className="text-slate-500 truncate">{p.grade}</span>
                             </>
                           )}
                         </div>
 
                         {/* Product Title */}
-                        <h4 className="font-extrabold text-navy-950 text-xs sm:text-sm leading-snug line-clamp-2 min-h-[2rem]">
+                        <h4 className="font-bold text-navy-950 text-xs leading-tight truncate" title={p.name}>
                           {p.name}
                         </h4>
                       </div>
 
-                      <div className="mt-2 pt-2 border-t border-slate-100 space-y-2">
-                        {/* Price & Stock Row matching image media_1789363777327.png */}
-                        <div className="flex items-center justify-between gap-1 flex-wrap">
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-base font-black text-navy-950">₹{p.price}</span>
-                            <span className="text-[10.5px] text-slate-500 font-semibold">/{p.unit || "unit"}</span>
-                            {numMrp > numPrice && (
-                              <span className="text-[10px] text-slate-400 line-through font-medium ml-0.5">₹{p.mrp}</span>
-                            )}
+                      <div className="mt-1.5 pt-1.5 border-t border-slate-100 space-y-1.5">
+                        {/* Price & Stock Row */}
+                        <div className="flex items-center justify-between gap-1">
+                          <div className="flex items-baseline gap-0.5 truncate">
+                            <span className="text-sm font-black text-navy-950">₹{p.price}</span>
+                            <span className="text-[9.5px] text-slate-400">/{p.unit || "unit"}</span>
                           </div>
 
-                          <span className={`px-2 py-0.5 rounded-lg text-[10.5px] font-bold border ${
+                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold shrink-0 ${
                             p.stockQty > 0
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : "bg-rose-50 text-rose-700 border-rose-200"
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
+                              : "bg-rose-50 text-rose-700 border border-rose-200/60"
                           }`}>
-                            {p.stockQty > 0 ? `${p.stockQty} in stock` : "Out of stock"}
+                            {p.stockQty > 0 ? `${p.stockQty} left` : "Out"}
                           </span>
                         </div>
 
-                        {/* Full-width "Edit Price & Stock" Button matching media_1789363777327.png */}
+                        {/* Edit Button */}
                         <button
                           type="button"
                           onClick={() => handleOpenEditProduct(p)}
-                          className="w-full bg-[#FFF9F2] hover:bg-[#FFF2E2] active:scale-[0.98] border border-[#FED7AA] text-[#0F172A] font-extrabold text-xs py-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                          className="w-full bg-[#FFF9F2] hover:bg-[#FFF2E2] active:scale-[0.98] border border-[#FED7AA] text-slate-800 font-bold text-[11px] py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer"
                         >
-                          <span>🏷️</span>
+                          <span>✏️</span>
                           <span>Edit Price & Stock</span>
                         </button>
                       </div>
@@ -2292,89 +2280,105 @@ export default function VendorDashboard() {
               </button>
             </div>
 
-            <form onSubmit={handleUpdateListing} className="space-y-4 flex-1 flex flex-col">
-              <div>
-                <label className="block text-[11px] font-bold text-navy-900 mb-1">Suggested / Base MRP (₹)</label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  value={editingProduct.mrp || ""}
-                  onChange={(e) => handleEditMrpChange(e.target.value)}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-navy-900 mb-1">Discount (% OFF)</label>
-                <div className="relative">
+            <form onSubmit={handleUpdateListing} className="space-y-3 flex-1 flex flex-col">
+              {/* Row 1: MRP & Discount in 2 columns */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-navy-900 mb-1">MRP Price (₹)</label>
                   <input
                     type="number"
-                    min="0"
-                    max="90"
-                    value={editingProduct.discountPct || 0}
-                    onChange={(e) => handleEditDiscountChange(e.target.value)}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-bold pr-8"
+                    required
+                    min="1"
+                    value={editingProduct.mrp || ""}
+                    onChange={(e) => handleEditMrpChange(e.target.value)}
+                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-bold"
                   />
-                  <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-navy-900 mb-1">Discount (% OFF)</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      max="90"
+                      value={editingProduct.discountPct || 0}
+                      onChange={(e) => handleEditDiscountChange(e.target.value)}
+                      className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-bold pr-7"
+                    />
+                    <span className="absolute right-2.5 top-2 text-xs font-bold text-slate-400">%</span>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-navy-900 mb-1">Customer Selling Price (₹) *</label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  value={editingProduct.price}
-                  onChange={(e) => handleEditPriceChange(e.target.value)}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-bold"
-                />
+              {/* Row 2: Selling Price & Available Stock in 2 columns */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-navy-900 mb-1">Selling Price (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={editingProduct.price}
+                    onChange={(e) => handleEditPriceChange(e.target.value)}
+                    className="w-full bg-emerald-50 text-emerald-950 text-xs border border-emerald-300 rounded-xl px-3 py-2 outline-none focus:border-emerald-500 font-black"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-navy-900 mb-1">Stock Qty *</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={editingProduct.stockQty}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, stockQty: e.target.value })}
+                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-bold"
+                  />
+                </div>
               </div>
 
-              {/* Live Preview Box */}
-              <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Customer Store Preview:</span>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-base font-black text-navy-900">₹{Number(editingProduct.price || 0).toLocaleString("en-IN")}</span>
+              {/* Compact Live Preview Box */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-xl px-3 py-2 flex items-center justify-between gap-2">
+                <div className="flex items-baseline gap-1.5 truncate">
+                  <span className="text-[10px] text-slate-400 font-bold">Store:</span>
+                  <span className="text-sm font-black text-navy-900">₹{Number(editingProduct.price || 0).toLocaleString("en-IN")}</span>
                   {Number(editingProduct.mrp) > Number(editingProduct.price) && (
-                    <span className="text-xs text-slate-400 line-through">₹{Number(editingProduct.mrp).toLocaleString("en-IN")}</span>
+                    <span className="text-[10.5px] text-slate-400 line-through">₹{Number(editingProduct.mrp).toLocaleString("en-IN")}</span>
                   )}
                   {Number(editingProduct.discountPct) > 0 && (
-                    <span className="text-[11px] font-black text-emerald-700 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-md">
+                    <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded">
                       {editingProduct.discountPct}% OFF
                     </span>
                   )}
-                  <span className="text-[11px] text-slate-500 ml-auto">Packaging: <b>{editingProduct.unit || "Unit"}</b></span>
                 </div>
+                <span className="text-[10px] text-slate-500 font-semibold shrink-0">
+                  {editingProduct.unit || "unit"}
+                </span>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-navy-900 mb-1">Available Stock Qty *</label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  value={editingProduct.stockQty}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, stockQty: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-bold"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 mt-auto">
-                <button type="button" disabled={isUpdatingListing} onClick={() => setEditingProduct(null)} className="px-4 py-2.5 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 cursor-pointer disabled:opacity-50">Cancel</button>
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 mt-auto">
+                <button
+                  type="button"
+                  disabled={isUpdatingListing}
+                  onClick={() => setEditingProduct(null)}
+                  className="px-3.5 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
                 <button
                   type="submit"
                   disabled={isUpdatingListing}
-                  className="flex-1 sm:flex-none px-5 py-2.5 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs cursor-pointer active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="flex-1 sm:flex-none px-4 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs cursor-pointer active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                 >
                   {isUpdatingListing ? (
                     <>
-                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                      Saving & Syncing Live Offer...
+                      <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      Saving...
                     </>
                   ) : (
-                    "Save & Update Live Offer"
+                    "Save & Update"
                   )}
                 </button>
               </div>

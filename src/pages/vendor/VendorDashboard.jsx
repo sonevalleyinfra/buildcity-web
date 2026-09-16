@@ -748,7 +748,7 @@ export default function VendorDashboard() {
               onClick={() => setActiveTab("overview")}
               className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
                 activeTab === "overview"
-                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs font-extrabold"
+                  ? "bg-[#FFF7ED] text-[#C2410C] border border-[#FED7AA] shadow-2xs font-extrabold"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               }`}
             >
@@ -761,7 +761,7 @@ export default function VendorDashboard() {
               onClick={() => setActiveTab("products")}
               className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
                 activeTab === "products"
-                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs font-extrabold"
+                  ? "bg-[#FFF7ED] text-[#C2410C] border border-[#FED7AA] shadow-2xs font-extrabold"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               }`}
             >
@@ -777,7 +777,7 @@ export default function VendorDashboard() {
               onClick={() => setActiveTab("orders")}
               className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 relative ${
                 activeTab === "orders"
-                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs font-extrabold"
+                  ? "bg-[#FFF7ED] text-[#C2410C] border border-[#FED7AA] shadow-2xs font-extrabold"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               }`}
             >
@@ -795,7 +795,7 @@ export default function VendorDashboard() {
               onClick={() => setActiveTab("profile")}
               className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
                 activeTab === "profile"
-                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs font-extrabold"
+                  ? "bg-[#FFF7ED] text-[#C2410C] border border-[#FED7AA] shadow-2xs font-extrabold"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               }`}
             >
@@ -2457,7 +2457,7 @@ export default function VendorDashboard() {
           onClick={() => setActiveTab("overview")}
           className={`flex-1 flex flex-col items-center py-1.5 rounded-xl transition-all cursor-pointer active:scale-95 ${
             activeTab === "overview"
-              ? "text-emerald-700 font-extrabold bg-emerald-50/90 shadow-2xs"
+              ? "text-[#C2410C] font-extrabold bg-[#FFF7ED] border border-[#FED7AA]/60 shadow-2xs"
               : "text-slate-400 hover:text-slate-700 font-semibold"
           }`}
         >
@@ -2471,7 +2471,7 @@ export default function VendorDashboard() {
           onClick={() => setActiveTab("products")}
           className={`flex-1 flex flex-col items-center py-1.5 rounded-xl transition-all cursor-pointer active:scale-95 ${
             activeTab === "products"
-              ? "text-emerald-700 font-extrabold bg-emerald-50/90 shadow-2xs"
+              ? "text-[#C2410C] font-extrabold bg-[#FFF7ED] border border-[#FED7AA]/60 shadow-2xs"
               : "text-slate-400 hover:text-slate-700 font-semibold"
           }`}
         >
@@ -2495,7 +2495,7 @@ export default function VendorDashboard() {
           onClick={() => setActiveTab("orders")}
           className={`flex-1 flex flex-col items-center py-1.5 rounded-xl transition-all cursor-pointer active:scale-95 relative ${
             activeTab === "orders"
-              ? "text-emerald-700 font-extrabold bg-emerald-50/90 shadow-2xs"
+              ? "text-[#C2410C] font-extrabold bg-[#FFF7ED] border border-[#FED7AA]/60 shadow-2xs"
               : "text-slate-400 hover:text-slate-700 font-semibold"
           }`}
         >
@@ -2514,7 +2514,7 @@ export default function VendorDashboard() {
           onClick={() => setActiveTab("profile")}
           className={`flex-1 flex flex-col items-center py-1.5 rounded-xl transition-all cursor-pointer active:scale-95 ${
             activeTab === "profile"
-              ? "text-emerald-700 font-extrabold bg-emerald-50/90 shadow-2xs"
+              ? "text-[#C2410C] font-extrabold bg-[#FFF7ED] border border-[#FED7AA]/60 shadow-2xs"
               : "text-slate-400 hover:text-slate-700 font-semibold"
           }`}
         >

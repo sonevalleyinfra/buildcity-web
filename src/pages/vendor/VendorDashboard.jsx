@@ -136,8 +136,17 @@ export default function VendorDashboard() {
   const { orders = [], fetchVendorOrders, updateOrderStatus } = useOrders();
 
   // Tabs navigation state: "orders" -> Default Open Screen, "products" -> My Shop Items, "overview" -> Store Info, "profile" -> Vendor Profile
-  const [activeTab, setActiveTab] = useState("orders");
+  const [activeTab, setActiveTabState] = useState("orders");
+  const [tabHistory, setTabHistory] = useState(["orders"]);
   const [fetchedVendorOrders, setFetchedVendorOrders] = useState([]);
+
+  // Change tab and track history for Android back navigation
+  const switchTab = (newTab) => {
+    if (newTab === activeTab) return;
+    setActiveTabState(newTab);
+    setTabHistory((prev) => [...prev, newTab]);
+  };
+  const setActiveTab = switchTab;
 
   // Master Catalog — Admin/DR dwara banaye gaye Master Products select karne ke liye
   const [showCatalogModal, setShowCatalogModal] = useState(false);
@@ -226,6 +235,37 @@ export default function VendorDashboard() {
       window.removeEventListener("buildcity_order_placed", handleOrderEvent);
     };
   }, [vendorId, shopName]);
+
+  // Handle Android Native Back Button: Closes modal first -> Go back in tab history -> Exit only on final initial tab!
+  useEffect(() => {
+    window.__buildcity_vendor_back_handler = () => {
+      // 1. If Catalog modal is open, close it
+      if (showCatalogModal) {
+        setShowCatalogModal(false);
+        return true;
+      }
+      // 2. If Product Edit sheet is open, close it
+      if (editingProduct) {
+        setEditingProduct(null);
+        return true;
+      }
+      // 3. If there is previous tab history, go back to previous tab
+      if (tabHistory.length > 1) {
+        const updatedHistory = [...tabHistory];
+        updatedHistory.pop(); // Remove current tab
+        const prevTab = updatedHistory[updatedHistory.length - 1];
+        setTabHistory(updatedHistory);
+        setActiveTabState(prevTab);
+        return true; // Back action consumed, app does not exit!
+      }
+      // Return false if on last/initial tab so Android can safely exit app
+      return false;
+    };
+
+    return () => {
+      window.__buildcity_vendor_back_handler = null;
+    };
+  }, [showCatalogModal, editingProduct, tabHistory]);
 
   // Lock document body scroll when modal/full-page sheet is open so background never scrolls
   useEffect(() => {
@@ -896,7 +936,13 @@ export default function VendorDashboard() {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {vendorProducts.slice(0, 4).map((p) => (
-                      <div key={p.id} className="border border-slate-200/80 rounded-xl p-2 flex gap-2.5 items-center bg-white">
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => handleOpenEditProduct(p)}
+                        className="w-full text-left border border-slate-200/80 hover:border-brand-400 hover:shadow-xs rounded-xl p-2 flex gap-2.5 items-center bg-white active:scale-[0.98] transition-all cursor-pointer group"
+                        title="Click to view & edit product"
+                      >
                         <img
                           src={resolveProductImage(p.imageUrl, p.categoryName, p.name)}
                           alt={p.name}
@@ -906,10 +952,10 @@ export default function VendorDashboard() {
                             e.currentTarget.onerror = null;
                             e.currentTarget.src = resolveProductImage(null, p.categoryName, p.name);
                           }}
-                          className="w-11 h-11 rounded-lg object-cover border border-slate-200 shrink-0 bg-slate-50"
+                          className="w-11 h-11 rounded-lg object-cover border border-slate-200 shrink-0 bg-slate-50 group-hover:scale-105 transition-transform"
                         />
                         <div className="overflow-hidden flex-1 min-w-0">
-                          <p className="font-bold text-xs text-navy-900 truncate">{p.name}</p>
+                          <p className="font-bold text-xs text-navy-900 truncate group-hover:text-brand-600 transition-colors">{p.name}</p>
                           {(p.brand || p.grade) && (
                             <p className="text-[10px] text-slate-500 font-medium truncate mt-0.5">
                               {[p.brand, p.grade].filter(Boolean).join(" · ")}
@@ -920,7 +966,7 @@ export default function VendorDashboard() {
                             <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded">Stock: {p.stockQty}</span>
                           </div>
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -1627,7 +1673,7 @@ export default function VendorDashboard() {
           ) : (
             <>
               {/* 📱 MOBILE TOUCH-FRIENDLY ORDER CARDS */}
-              <div className="space-y-3 md:hidden">
+              <div className="space-y-4 md:hidden">
                 {filteredVendorOrders.map((ord) => {
                   const orderTotal = ord.totalAmount || ord.total || 0;
                   const rawAddr = ord.address;
@@ -1647,12 +1693,24 @@ export default function VendorDashboard() {
                   const customerStats = getCustomerStats(ord);
                   const deliveryFee = Number(ord.deliveryCharge ?? ord.deliveryFee ?? ord.shippingFee ?? ord.deliveryAmount ?? 0);
 
-                  const isPending = (ord.status || "PENDING").toUpperCase() === "PENDING";
+                  const orderStatusUpper = (ord.status || "PENDING").toUpperCase();
+                  const isPending = orderStatusUpper === "PENDING";
+                  const isDelivered = orderStatusUpper === "DELIVERED";
+                  const isCancelled = orderStatusUpper === "CANCELLED";
+
+                  // Distinctive border accent for instant visual separation between cards
+                  const statusAccentClass = isPending
+                    ? "border-l-4 border-l-amber-500"
+                    : isDelivered
+                    ? "border-l-4 border-l-emerald-500"
+                    : isCancelled
+                    ? "border-l-4 border-l-slate-400"
+                    : "border-l-4 border-l-sky-500";
 
                   return (
                     <div
                       key={ord.id}
-                      className="bg-white rounded-2xl p-3 border border-slate-200/90 shadow-2xs space-y-2.5 transition-all"
+                      className={`bg-white rounded-2xl p-3.5 border border-slate-200 shadow-sm hover:shadow-md ${statusAccentClass} space-y-2.5 transition-all`}
                     >
                       {/* Top Row: Customer Info, Date & Call Button */}
                       <div className="flex items-center justify-between gap-2">

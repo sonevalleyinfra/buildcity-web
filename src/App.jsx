@@ -41,6 +41,12 @@ function NativeBackButtonHandler() {
 
     let sub;
     CapApp.addListener("backButton", ({ canGoBack }) => {
+      // 1. If Vendor Dashboard has an open modal or tab history, let it handle back press first!
+      if (typeof window.__buildcity_vendor_back_handler === "function") {
+        const handled = window.__buildcity_vendor_back_handler();
+        if (handled) return;
+      }
+
       const exitRoutes = ["/", "/login", "/vendor/dashboard"];
       if (exitRoutes.includes(location.pathname)) {
         CapApp.exitApp();

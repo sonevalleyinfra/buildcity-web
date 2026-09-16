@@ -856,16 +856,15 @@ export default function VendorDashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
             <div className="lg:col-span-2 space-y-4 sm:space-y-6">
               {/* Store Products Preview Card */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 sm:p-5 shadow-xs">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 mb-3">
                   <div>
-                    <h3 className="font-extrabold text-navy-900 text-sm">Active Store Products</h3>
-                    <p className="text-[10px] sm:text-[11px] text-slate-400">Listed items with your price & stock</p>
+                    <h3 className="font-extrabold text-navy-900 text-sm">Products</h3>
                   </div>
                   <button
                     type="button"
                     onClick={() => setActiveTab("products")}
-                    className="text-xs font-bold text-brand-600 hover:underline cursor-pointer"
+                    className="text-xs font-bold text-brand-600 hover:text-brand-700 cursor-pointer"
                   >
                     View All ({vendorProducts.length}) →
                   </button>
@@ -886,18 +885,18 @@ export default function VendorDashboard() {
                 ) : vendorProducts.length === 0 ? (
                   <div className="text-center py-6">
                     <p className="text-2xl mb-1">📦</p>
-                    <p className="text-xs font-bold text-navy-900">No products added yet</p>
+                    <p className="text-xs font-bold text-navy-900">No products</p>
                     <button
                       onClick={() => setShowCatalogModal(true)}
                       className="mt-2.5 bg-brand-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl cursor-pointer"
                     >
-                      Open Master Catalog
+                      Add Products
                     </button>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {vendorProducts.slice(0, 4).map((p) => (
-                      <div key={p.id} className="border border-slate-200 rounded-xl p-2.5 flex gap-2.5 items-center bg-slate-50/50">
+                      <div key={p.id} className="border border-slate-200/80 rounded-xl p-2 flex gap-2.5 items-center bg-white">
                         <img
                           src={resolveProductImage(p.imageUrl, p.categoryName, p.name)}
                           alt={p.name}
@@ -907,16 +906,18 @@ export default function VendorDashboard() {
                             e.currentTarget.onerror = null;
                             e.currentTarget.src = resolveProductImage(null, p.categoryName, p.name);
                           }}
-                          className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0 bg-white"
+                          className="w-11 h-11 rounded-lg object-cover border border-slate-200 shrink-0 bg-slate-50"
                         />
                         <div className="overflow-hidden flex-1 min-w-0">
                           <p className="font-bold text-xs text-navy-900 truncate">{p.name}</p>
-                          <span className="text-[10px] bg-slate-100 text-slate-700 font-semibold px-1.5 py-0.2 rounded inline-block mt-0.5">
-                            {p.brand} · {p.grade}
-                          </span>
+                          {(p.brand || p.grade) && (
+                            <p className="text-[10px] text-slate-500 font-medium truncate mt-0.5">
+                              {[p.brand, p.grade].filter(Boolean).join(" · ")}
+                            </p>
+                          )}
                           <div className="flex items-center justify-between mt-1">
-                            <p className="text-xs font-extrabold text-navy-900">₹{p.price} <span className="text-[10px] font-normal text-slate-400">/{p.unit}</span></p>
-                            <span className="text-[10px] font-bold text-green-700 bg-green-50 px-1.5 py-0.2 rounded">Stock: {p.stockQty}</span>
+                            <p className="text-xs font-black text-navy-900">₹{p.price}</p>
+                            <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded">Stock: {p.stockQty}</span>
                           </div>
                         </div>
                       </div>
@@ -926,19 +927,19 @@ export default function VendorDashboard() {
               </div>
 
               {/* Recent Orders Preview Card */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs">
-                <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2.5">
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 sm:p-5 shadow-xs">
+                <div className="flex items-center justify-between mb-2.5 border-b border-slate-100 pb-2">
                   <h3 className="font-extrabold text-navy-900 text-sm">Recent Orders</h3>
                   <button
                     onClick={() => setActiveTab("orders")}
-                    className="text-xs font-bold text-brand-600 hover:underline cursor-pointer"
+                    className="text-xs font-bold text-brand-600 hover:text-brand-700 cursor-pointer"
                   >
                     View All ({vendorOrders.length}) →
                   </button>
                 </div>
                 {vendorOrders.length === 0 ? (
-                  <div className="text-center py-5 text-xs text-slate-500 font-medium">
-                    📦 No orders placed for {shopName} in {districtName} yet.
+                  <div className="text-center py-5 text-xs text-slate-400 font-medium">
+                    No orders yet
                   </div>
                 ) : (
                   <div className="divide-y divide-slate-100">
@@ -947,17 +948,20 @@ export default function VendorDashboard() {
                       const custName = typeof ord.customer === "object" ? (ord.customer?.name || "Customer") : (typeof ord.customer === "string" && !ord.customer.includes("cmt") && !ord.customer.includes("usr") ? ord.customer : "Customer");
 
                       return (
-                        <div key={ord.id} className="py-2.5 flex items-center justify-between gap-2.5 text-xs">
-                          <div>
-                            <span className="font-bold text-navy-900">{formatShortId(ord.id, "ORD")}</span>
-                            <span className="ml-2 px-1.5 py-0.2 rounded text-[10px] font-bold border bg-blue-50 text-blue-700 border-blue-200">
-                              {ord.status || "Pending"}
-                            </span>
-                            <p className="text-slate-600 mt-0.5">👤 {custName}</p>
+                        <div key={ord.id} className="py-2 flex items-center justify-between gap-2 text-xs">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-navy-900">{custName}</span>
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                {ord.status || "Pending"}
+                              </span>
+                            </div>
+                            {ord.deliveryAddress?.address && (
+                              <p className="text-[10px] text-slate-400 truncate max-w-[180px] mt-0.5">{ord.deliveryAddress.address}</p>
+                            )}
                           </div>
-                          <div className="text-right">
-                            <p className="font-extrabold text-navy-900 text-sm">₹{orderTotal}</p>
-                            <p className="text-[10px] text-slate-400">📍 {ord.districtName || districtName}</p>
+                          <div className="text-right shrink-0">
+                            <p className="font-black text-navy-900 text-xs">₹{orderTotal}</p>
                           </div>
                         </div>
                       );

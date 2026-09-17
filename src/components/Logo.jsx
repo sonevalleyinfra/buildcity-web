@@ -6,21 +6,18 @@ export default function Logo({ variant = "dark", size = "md", iconOnly = false }
 
   const sizes = {
     sm: {
-      badge: "w-7 h-7 rounded-lg",
-      iconSvg: "w-4 h-4",
+      badge: "w-8 h-8 p-1.5 rounded-xl",
       title: "text-base font-black tracking-tight",
       sub: "text-[9px] font-bold tracking-wider",
     },
     md: {
-      badge: "w-9 h-9 rounded-xl",
-      iconSvg: "w-5 h-5",
+      badge: "w-10 h-10 p-2 rounded-xl",
       title: "text-xl font-black tracking-tight",
       sub: "text-[10px] font-bold tracking-wider",
     },
     lg: {
-      badge: "w-11 h-11 rounded-2xl",
-      iconSvg: "w-6 h-6",
-      title: "text-2xl font-black tracking-tight",
+      badge: "w-14 h-14 p-2.5 rounded-2xl",
+      title: "text-2xl sm:text-3xl font-black tracking-tight",
       sub: "text-xs font-bold tracking-wider",
     },
   };
@@ -28,29 +25,20 @@ export default function Logo({ variant = "dark", size = "md", iconOnly = false }
 
   return (
     <div className="flex items-center gap-2.5 select-none group">
-      {/* Modern 3D Architectural / Construction Brand Icon */}
+      {/* BuildCity Official Orange Roof Brand Icon */}
       <div
-        className={`${s.badge} bg-gradient-to-tr from-brand-600 via-brand-500 to-amber-400 shadow-sm shadow-brand-500/30 flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform duration-200`}
+        className={`${s.badge} ${
+          isLight
+            ? "bg-white/10 backdrop-blur-md border border-white/20 shadow-lg shadow-black/20"
+            : "bg-orange-50/70 border border-orange-200/70 shadow-xs"
+        } flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-200`}
       >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          className={`${s.iconSvg} stroke-white`}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {/* Main high-rise architectural tower */}
-          <path d="M3 21h18" strokeWidth="2.2" />
-          <path d="M5 21V7l7-4v18" fill="rgba(255,255,255,0.15)" strokeWidth="2" />
-          <path d="M12 21V11l7 4v6" fill="rgba(255,255,255,0.25)" strokeWidth="2" />
-          {/* Structural window facets */}
-          <line x1="8" y1="9" x2="9" y2="9" strokeWidth="2.2" />
-          <line x1="8" y1="13" x2="9" y2="13" strokeWidth="2.2" />
-          <line x1="8" y1="17" x2="9" y2="17" strokeWidth="2.2" />
-          <line x1="15" y1="16" x2="16" y2="16" strokeWidth="2.2" />
-        </svg>
+        <img
+          src="/buildcity-roof-logo.png"
+          alt="BuildCity"
+          className="w-full h-full object-contain filter drop-shadow-[0_2px_4px_rgba(234,88,12,0.25)]"
+          loading="eager"
+        />
       </div>
 
       {!iconOnly && (
@@ -58,9 +46,9 @@ export default function Logo({ variant = "dark", size = "md", iconOnly = false }
           <div className={`${s.title} ${primaryTextColor} flex items-center`}>
             <span>Build</span>
             <span className={`${accentColor} ml-0.5`}>City</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 ml-1 inline-block animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-brand-500 ml-1 inline-block animate-pulse" />
           </div>
-          <div className={`${s.sub} ${subColor} uppercase tracking-widest mt-0.5`}>
+          <div className={`${s.sub} ${subColor} uppercase tracking-widest mt-1 font-bold`}>
             Building Materials
           </div>
         </div>

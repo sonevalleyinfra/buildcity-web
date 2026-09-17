@@ -67,15 +67,12 @@ function NativeBackButtonHandler() {
   return null;
 }
 
+import SplashScreen from "./components/SplashScreen";
+
 function VendorRoot() {
   const { user, loading } = useAuth();
   if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
-        <div className="animate-spin h-8 w-8 border-4 border-brand-500 border-t-transparent rounded-full mb-3" />
-        <p className="text-xs text-slate-400 font-bold">Loading BuildCity Partner...</p>
-      </div>
-    );
+    return <SplashScreen minDuration={800} />;
   }
 
   if (user?.role === "vendor") {
@@ -133,6 +130,7 @@ import FirstTimeLocationModal from "./components/FirstTimeLocationModal";
 export default function App() {
   return (
     <ErrorBoundary>
+      <SplashScreen minDuration={1400} />
       <AlertProvider>
         <AuthProvider>
           <RegionProvider>

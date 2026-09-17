@@ -66,4 +66,36 @@ body {
   scrollbar-color: #cbd5e1 #f1f5f9;
 }
 
+/* Splash Screen Animations */
+@keyframes splash-pulse {
+  0%, 100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 20px rgba(234, 88, 12, 0.45));
+  }
+  50% {
+    transform: scale(1.06);
+    filter: drop-shadow(0 0 45px rgba(249, 115, 22, 0.75));
+  }
+}
+
+@keyframes splash-beam {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.animate-splash-logo {
+  animation: splash-pulse 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-splash-beam {
+  animation: splash-beam 1.6s ease-in-out infinite;
+}
+
 

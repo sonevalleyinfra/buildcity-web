@@ -72,7 +72,7 @@ import SplashScreen from "./components/SplashScreen";
 function VendorRoot() {
   const { user, loading } = useAuth();
   if (loading) {
-    return <SplashScreen minDuration={800} />;
+    return Capacitor.isNativePlatform() ? <SplashScreen minDuration={800} /> : null;
   }
 
   if (user?.role === "vendor") {
@@ -130,7 +130,7 @@ import FirstTimeLocationModal from "./components/FirstTimeLocationModal";
 export default function App() {
   return (
     <ErrorBoundary>
-      <SplashScreen minDuration={1400} />
+      {Capacitor.isNativePlatform() && <SplashScreen minDuration={1200} />}
       <AlertProvider>
         <AuthProvider>
           <RegionProvider>

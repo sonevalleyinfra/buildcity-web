@@ -6,17 +6,17 @@ export default function Logo({ variant = "dark", size = "md", iconOnly = false }
 
   const sizes = {
     sm: {
-      badge: "w-8 h-8 p-1.5 rounded-xl",
+      badge: "w-7 h-7 sm:w-8 sm:h-8",
       title: "text-base font-black tracking-tight",
       sub: "text-[9px] font-bold tracking-wider",
     },
     md: {
-      badge: "w-10 h-10 p-2 rounded-xl",
+      badge: "w-9 h-9 sm:w-10 sm:h-10",
       title: "text-xl font-black tracking-tight",
       sub: "text-[10px] font-bold tracking-wider",
     },
     lg: {
-      badge: "w-14 h-14 p-2.5 rounded-2xl",
+      badge: "w-12 h-12 sm:w-14 sm:h-14",
       title: "text-2xl sm:text-3xl font-black tracking-tight",
       sub: "text-xs font-bold tracking-wider",
     },
@@ -24,19 +24,13 @@ export default function Logo({ variant = "dark", size = "md", iconOnly = false }
   const s = sizes[size] || sizes.md;
 
   return (
-    <div className="flex items-center gap-2.5 select-none group">
-      {/* BuildCity Official Orange Roof Brand Icon */}
-      <div
-        className={`${s.badge} ${
-          isLight
-            ? "bg-white/10 backdrop-blur-md border border-white/20 shadow-lg shadow-black/20"
-            : "bg-orange-50/70 border border-orange-200/70 shadow-xs"
-        } flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-200`}
-      >
+    <div className="flex items-center gap-2 select-none group">
+      {/* BuildCity Official Orange Roof Brand Icon (100% Transparent) */}
+      <div className={`${s.badge} flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-200`}>
         <img
           src="/buildcity-roof-logo.png"
           alt="BuildCity"
-          className="w-full h-full object-contain filter drop-shadow-[0_2px_4px_rgba(234,88,12,0.25)]"
+          className="w-full h-full object-contain"
           loading="eager"
         />
       </div>

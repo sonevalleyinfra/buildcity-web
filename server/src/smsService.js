@@ -11,7 +11,7 @@ const username = process.env.SMS_USERNAME || process.env.ARADHYA_SMS_USERNAME;
 const apikey = process.env.SMS_APIKEY || process.env.ARADHYA_SMS_APIKEY;
 
 if (!username || !apikey) {
-  throw new Error("Missing required SMS gateway credentials: SMS_USERNAME and SMS_APIKEY must be set in environment variables.");
+  console.warn("⚠️ [SMS Gateway] Warning: SMS_USERNAME and SMS_APIKEY not set in environment variables. Real SMS sending will be simulated/logged.");
 }
 
 async function sendRealSMSOTP(phone, otpCode) {

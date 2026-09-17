@@ -129,12 +129,12 @@ export function OrderProvider({ children }) {
     }
     fetchOrdersForCurrentRole();
 
-    // 1. Smart Interval: Poll only when tab is visible to the user (every 45s instead of 3s)
+    // 1. Smart Interval: Poll only when tab is visible to the user (every 90s fallback)
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
         fetchOrdersForCurrentRole();
       }
-    }, 45000);
+    }, 90000);
 
     // 2. Instant Sync on Window Focus (when user returns to the tab)
     const handleFocus = () => {

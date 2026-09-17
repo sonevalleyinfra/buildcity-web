@@ -186,15 +186,12 @@ app.get("/api/v1/public-catalog", async (req, res) => {
   }
 });
 
-// Single Unified Cloud Sync Endpoint (Real-time DB query for Staff and Partners with in-memory cache)
+// Single Unified Cloud Sync Endpoint (100% Real-time Live DB query for Staff and Partners)
 app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"), async (req, res) => {
   const role = req.auth.role;
-  const cacheKey = `cloud_sync_${role}`;
-  const cached = getCached(cacheKey);
-  if (cached) {
-    res.setHeader("X-Cache", "HIT");
-    return res.json(cached);
-  }
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
 
   try {
     const fetchPromises = [
@@ -273,8 +270,6 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       users: users || [],
     };
 
-    setCached(cacheKey, data, 25000); // 25s TTL in-memory cache to eliminate Supabase egress
-    res.setHeader("X-Cache", "MISS");
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1878,13 +1873,6 @@ app.delete("/api/v1/regions/:id", requireAuth, requireRole("ADMIN"), async (req,
 
 // 7. ORDERS & CHECKOUT ENDPOINTS (With Vendor Isolation & Status Updates)
 app.get("/api/v1/orders", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
-  const cacheKey = "admin_all_orders";
-  const cached = getCached(cacheKey);
-  if (cached) {
-    res.setHeader("X-Cache", "HIT");
-    return res.json(cached);
-  }
-
   try {
     const orders = await prisma.order.findMany({
       include: {
@@ -1907,8 +1895,6 @@ app.get("/api/v1/orders", requireAuth, requireRole("ADMIN", "DR"), async (req, r
         vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
       })),
     }));
-    setCached(cacheKey, formatted, 25000); // 25s TTL
-    res.setHeader("X-Cache", "MISS");
     res.json(formatted);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2003,13 +1989,6 @@ app.get("/api/v1/orders/user/:userId", requireAuth, requireSelfOrAdmin("userId")
 app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
     const { vendorId } = req.params;
-    const cacheKey = `vendor_orders_${vendorId}`;
-    const cached = getCached(cacheKey);
-    if (cached) {
-      res.setHeader("X-Cache", "HIT");
-      return res.json(cached);
-    }
-
     const cleanPhone = vendorId.replace(/^v-/, "").replace(/\D/g, "");
     const vendor = await prisma.vendor.findFirst({
       where: {
@@ -2070,8 +2049,6 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
       })),
     }));
 
-    setCached(cacheKey, formatted, 25000); // 25s TTL
-    res.setHeader("X-Cache", "MISS");
     res.json(formatted);
   } catch (err) {
     res.status(500).json({ error: err.message });

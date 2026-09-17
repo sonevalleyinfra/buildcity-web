@@ -1317,31 +1317,33 @@ export default function VendorDashboard() {
                         </h4>
                       </div>
 
-                      <div className="mt-1.5 pt-1.5 border-t border-slate-100 space-y-1.5">
+                      <div className="mt-2 pt-1.5 border-t border-slate-100 space-y-2">
                         {/* Price & Stock Row */}
                         <div className="flex items-center justify-between gap-1">
                           <div className="flex items-baseline gap-0.5 truncate">
                             <span className="text-sm font-black text-navy-950">₹{p.price}</span>
-                            <span className="text-[9.5px] text-slate-400">/{p.unit || "unit"}</span>
+                            <span className="text-[9.5px] text-slate-400 font-medium">/{p.unit || "unit"}</span>
                           </div>
 
-                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold shrink-0 ${
+                          <span className={`px-2 py-0.5 rounded-md text-[9.5px] font-bold shrink-0 ${
                             p.stockQty > 0
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
-                              : "bg-rose-50 text-rose-700 border border-rose-200/60"
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80"
+                              : "bg-rose-50 text-rose-700 border border-rose-200/80"
                           }`}>
-                            {p.stockQty > 0 ? `${p.stockQty} left` : "Out"}
+                            {p.stockQty > 0 ? `${p.stockQty} left` : "Out of stock"}
                           </span>
                         </div>
 
-                        {/* Edit Button */}
+                        {/* Sleek Edit Button */}
                         <button
                           type="button"
                           onClick={() => handleOpenEditProduct(p)}
-                          className="w-full bg-[#FFF9F2] hover:bg-[#FFF2E2] active:scale-[0.98] border border-[#FED7AA] text-slate-800 font-bold text-[11px] py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer"
+                          className="w-full bg-slate-900 hover:bg-slate-800 active:scale-[0.97] text-white font-bold text-xs py-1.5 px-3 rounded-lg transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
                         >
-                          <span>✏️</span>
-                          <span>Edit Price & Stock</span>
+                          <svg className="w-3.5 h-3.5 text-brand-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                          <span>Edit</span>
                         </button>
                       </div>
                     </div>
@@ -1434,9 +1436,12 @@ export default function VendorDashboard() {
                         <td className="py-3.5 px-4 text-right">
                           <button
                             onClick={() => handleOpenEditProduct(p)}
-                            className="text-[11px] font-bold bg-[#FFF9F2] hover:bg-[#FFF2E2] text-[#0F172A] border border-[#FED7AA] rounded-lg px-3 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer shadow-2xs"
+                            className="text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-lg px-3 py-1.5 active:scale-[0.97] transition-all duration-200 cursor-pointer shadow-2xs inline-flex items-center gap-1.5"
                           >
-                            🏷️ Edit Price & Stock
+                            <svg className="w-3.5 h-3.5 text-brand-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                            <span>Edit</span>
                           </button>
                         </td>
                       </tr>

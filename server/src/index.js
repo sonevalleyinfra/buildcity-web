@@ -85,6 +85,40 @@ app.get(["/health", "/api/v1/health"], (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString(), memoryUsage: process.memoryUsage().heapUsed });
 });
 
+// Database & Environment Diagnostic Check
+app.get("/api/v1/db-check", async (req, res) => {
+  const hasDbUrl = !!process.env.DATABASE_URL;
+  const dbHost = process.env.DATABASE_URL
+    ? (process.env.DATABASE_URL.match(/@([^:/]+)/) || [])[1] || "configured"
+    : "NOT_SET";
+  const hasDirectUrl = !!process.env.DIRECT_URL;
+  const hasJwt = !!process.env.JWT_SECRET;
+  const hasSms = !!process.env.SMS_USERNAME && !!process.env.SMS_APIKEY;
+
+  let dbStatus = "unknown";
+  let userCount = 0;
+  let dbError = null;
+
+  try {
+    userCount = await prisma.user.count();
+    dbStatus = "connected";
+  } catch (err) {
+    dbStatus = "error";
+    dbError = err.message;
+  }
+
+  res.json({
+    status: dbStatus,
+    hasDbUrl,
+    dbHost,
+    hasDirectUrl,
+    hasJwt,
+    hasSms,
+    userCount,
+    dbError,
+  });
+});
+
 // Automatic Self-Ping Keep-Alive to Prevent Render Free-Tier Sleep (Runs every 8 minutes)
 const RENDER_APP_URL = process.env.RENDER_EXTERNAL_URL || "https://buildcity-web.onrender.com";
 setInterval(async () => {

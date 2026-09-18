@@ -6,7 +6,22 @@ import { useAdmin } from "../context/AdminContext";
 export default function ProductCard({ product, className = "" }) {
   const { items, addItem, updateQty, removeItem } = useCart();
   const { vendors = [] } = useAdmin() || {};
-  const [cartStatus, setCartStatus] = useState("idle"); // "idle" | "adding" | "added"
+  const [cartStatus, setCartStatus] = useState("idle"); // "idle" | "stepper" | "added"
+  const timerRef = React.useRef(null);
+
+  // Clean up timer on unmount
+  React.useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const resetTimer = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      setCartStatus("idle");
+    }, 4000); // 4 seconds of inactivity reverts back to "+ Add"
+  };
 
   if (!product) return null;
 
@@ -42,9 +57,8 @@ export default function ProductCard({ product, className = "" }) {
   const handleAdd = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (isUnavailable || cartStatus === "adding") return;
+    if (isUnavailable) return;
 
-    setCartStatus("adding");
     addItem(
       {
         id: product.id,
@@ -60,13 +74,31 @@ export default function ProductCard({ product, className = "" }) {
       1
     );
 
-    // Provide visual confirmation that item was added to cart, then return to "+ Add"
-    setTimeout(() => {
-      setCartStatus("added");
-      setTimeout(() => {
-        setCartStatus("idle");
-      }, 1200);
-    }, 250);
+    setCartStatus("stepper");
+    resetTimer();
+  };
+
+  const handleIncrement = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isUnavailable) return;
+    updateQty(product.id, qty + 1);
+    setCartStatus("stepper");
+    resetTimer();
+  };
+
+  const handleDecrement = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (qty <= 1) {
+      removeItem(product.id);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      setCartStatus("idle");
+    } else {
+      updateQty(product.id, qty - 1);
+      setCartStatus("stepper");
+      resetTimer();
+    }
   };
 
   return (
@@ -86,14 +118,6 @@ export default function ProductCard({ product, className = "" }) {
               {discountPct}% OFF
             </span>
           ) : null}
-
-          {/* Cart Quantity indicator badge on image */}
-          {qty > 0 && (
-            <span className="absolute top-1 right-1 z-10 bg-brand-500 text-white font-black text-[8px] sm:text-[8.5px] px-1.5 py-0.5 rounded shadow-2xs tracking-tight flex items-center gap-0.5">
-              <span>🛒</span>
-              <span>{qty}</span>
-            </span>
-          )}
 
           <img
             src={product.imageUrl || product.img || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80"}
@@ -142,7 +166,7 @@ export default function ProductCard({ product, className = "" }) {
           </span>
         </div>
 
-        {/* 🛒 Action Button with clear animated feedback and return to '+ Add' */}
+        {/* 🛒 Action Button with + / - stepper that reverts to '+ Add' after 4s inactivity */}
         <div className="w-full mt-0.5">
           {isUnavailable ? (
             <div
@@ -151,23 +175,33 @@ export default function ProductCard({ product, className = "" }) {
             >
               Unavailable
             </div>
-          ) : cartStatus === "adding" ? (
-            <button
-              type="button"
-              disabled
-              className="w-full bg-brand-500 text-white text-[11px] font-black h-7 rounded-lg shadow-xs flex items-center justify-center gap-1.5 cursor-wait select-none"
-            >
-              <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              <span>Adding...</span>
-            </button>
-          ) : cartStatus === "added" ? (
-            <button
-              type="button"
-              className="w-full bg-emerald-600 text-white text-[11px] font-black h-7 rounded-lg shadow-xs flex items-center justify-center gap-1 select-none animate-fade-in"
-            >
-              <span>✓</span>
-              <span>Added!</span>
-            </button>
+          ) : cartStatus === "stepper" && qty > 0 ? (
+            <div className="flex items-center justify-between bg-brand-50 border border-brand-300 rounded-lg h-7 px-1 shadow-2xs select-none animate-fade-in">
+              <button
+                type="button"
+                onClick={handleDecrement}
+                className="w-6 h-5 flex items-center justify-center text-xs font-black text-brand-700 bg-white rounded shadow-2xs hover:bg-brand-600 hover:text-white active:scale-90 transition-all cursor-pointer"
+                title="Decrease quantity"
+              >
+                −
+              </button>
+              <div className="flex items-center gap-1">
+                <span className="text-[11px] font-black text-navy-950 px-1">
+                  {qty}
+                </span>
+                <span className="text-[9px] font-extrabold text-emerald-600 bg-emerald-100/70 px-1 rounded">
+                  ✓
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleIncrement}
+                className="w-6 h-5 flex items-center justify-center text-xs font-black text-brand-700 bg-white rounded shadow-2xs hover:bg-brand-600 hover:text-white active:scale-90 transition-all cursor-pointer"
+                title="Increase quantity"
+              >
+                +
+              </button>
+            </div>
           ) : (
             <button
               type="button"
@@ -175,6 +209,11 @@ export default function ProductCard({ product, className = "" }) {
               className="w-full bg-[#0A192F] hover:bg-brand-600 active:scale-95 text-white text-[11px] font-bold h-7 rounded-lg transition-all shadow-2xs hover:shadow-xs cursor-pointer flex items-center justify-center gap-1"
             >
               <span>+ Add</span>
+              {qty > 0 && (
+                <span className="ml-1 bg-white/20 text-white text-[9.5px] font-bold px-1.5 py-0.2 rounded-full">
+                  ({qty})
+                </span>
+              )}
             </button>
           )}
         </div>

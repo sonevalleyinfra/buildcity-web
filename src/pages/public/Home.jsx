@@ -5,6 +5,7 @@ import { useCart } from "../../context/CartContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useRegion } from "../../context/RegionContext";
 import Navbar from "../../components/Navbar";
+import Logo from "../../components/Logo";
 import RegionPicker from "../../components/RegionPicker";
 import NotificationPanel from "../../components/NotificationPanel";
 import ProductCard from "../../components/ProductCard";
@@ -377,11 +378,8 @@ export default function Home() {
         <div className="px-4 pt-3 pb-2 flex items-center justify-between">
           {/* Left: Brand Logo & Live Location */}
           <div className="flex items-center gap-1.5 shrink-0">
-            <Link to="/" className="flex items-center gap-1 active:scale-95 transition-transform shrink-0">
-              <span className="text-xl sm:text-2xl leading-none">🏗️</span>
-              <div className="font-black text-navy-950 text-sm sm:text-base leading-none tracking-tight">
-                Build <span className="text-brand-500">City</span>
-              </div>
+            <Link to="/" className="active:scale-95 transition-transform shrink-0 flex items-center">
+              <Logo size="sm" />
             </Link>
 
             <div className="h-3.5 w-px bg-slate-200 mx-0.5" />

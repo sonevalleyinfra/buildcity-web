@@ -84,7 +84,11 @@ export default function Register() {
           </span>
         );
       } else {
-        setError(err?.message || "Failed to send OTP. Please check mobile number.");
+        const rawErr = err?.message || "";
+        const cleanMsg = rawErr.toLowerCase().includes("failed to fetch")
+          ? "Network connection issue. Please check your internet connection or try again."
+          : rawErr || "Failed to send OTP. Please check mobile number.";
+        setError(cleanMsg);
       }
     } finally {
       setLoading(false);

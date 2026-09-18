@@ -10,6 +10,7 @@ export default function DashboardShell({
   subtitle,
   onProfileClick,
   isProfileActive = false,
+  logoIconOnly = false,
   children,
 }) {
   const { user, logout } = useAuth();
@@ -21,7 +22,7 @@ export default function DashboardShell({
         <div className="max-w-7xl mx-auto px-2.5 sm:px-6 py-2 sm:py-2.5 flex items-center justify-between gap-1.5 sm:gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {/* Universal BuildCity Brand Logo */}
-            <Logo size="sm" />
+            <Logo size="sm" iconOnly={logoIconOnly} />
 
             {badge && (
               typeof badge === "string" ? (

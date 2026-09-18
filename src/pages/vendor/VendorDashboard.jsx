@@ -722,10 +722,14 @@ export default function VendorDashboard() {
 
   return (
     <DashboardShell
+      logoIconOnly={true}
       badge={
-        <span className="text-xs sm:text-sm font-black text-slate-900 truncate max-w-[140px] sm:max-w-[220px]">
-          {shopName || "Vendor"}
-        </span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-slate-300 font-normal">|</span>
+          <span className="text-xs sm:text-sm font-black text-navy-950 truncate max-w-[170px] sm:max-w-[280px]" title={shopName || "Vendor Store"}>
+            {shopName || "Vendor Store"}
+          </span>
+        </div>
       }
       hideLogout={true}
       onProfileClick={() => setActiveTab("profile")}

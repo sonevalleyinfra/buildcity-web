@@ -728,6 +728,8 @@ export default function VendorDashboard() {
         </span>
       }
       hideLogout={true}
+      onProfileClick={() => setActiveTab("profile")}
+      isProfileActive={activeTab === "profile"}
       rightContent={
         <div className="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl bg-slate-100/90 border border-slate-200/90 text-slate-700 text-[11px] sm:text-xs font-semibold flex items-center gap-1 shrink-0">
           <svg className="w-3 h-3 text-slate-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -788,19 +790,6 @@ export default function VendorDashboard() {
                   {activeOrdersCount}
                 </span>
               )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("profile")}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
-                activeTab === "profile"
-                  ? "bg-[#FFF7ED] text-[#C2410C] border border-[#FED7AA] shadow-2xs font-extrabold"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-              }`}
-            >
-              <NavProfileIcon className="w-4 h-4" active={activeTab === "profile"} />
-              <span>Partner Profile</span>
             </button>
           </div>
 
@@ -1065,6 +1054,40 @@ export default function VendorDashboard() {
                   All materials, brands & grades are verified by Admin & DR for {districtName}.
                 </p>
               </div>
+
+              {/* DR Partner Support Quick Card */}
+              <div className="bg-emerald-50/90 border border-emerald-200 rounded-2xl p-4 shadow-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm">📞</span>
+                    <h4 className="font-black text-xs text-emerald-950">DR Partner Support</h4>
+                  </div>
+                  <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
+                    {districtName || "UP"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-emerald-800 font-medium">
+                  Direct contact line for material approval & vendor help:
+                </p>
+                <div className="flex items-center gap-2 pt-1">
+                  <a
+                    href="tel:+919956886527"
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-[11px] font-black py-2 rounded-xl text-center shadow-xs transition-all flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <span>📞</span>
+                    <span>Call DR</span>
+                  </a>
+                  <a
+                    href="https://wa.me/919956886527?text=Hello%20BuildCity%20Team,%20I%20am%20a%20Vendor%20Partner%20and%20need%20assistance"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 bg-white hover:bg-emerald-100 active:scale-95 text-emerald-800 border border-emerald-300 text-[11px] font-black py-2 rounded-xl text-center shadow-xs transition-all flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <span>💬</span>
+                    <span>WhatsApp</span>
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1083,9 +1106,6 @@ export default function VendorDashboard() {
                   <h2 className="font-black text-navy-900 text-base sm:text-lg tracking-tight">
                     📦 My Products
                   </h2>
-                  <span className="bg-brand-50 text-brand-700 font-extrabold text-[10px] px-2 py-0.5 rounded-full border border-brand-200">
-                    {displayedVendorProducts.length} Listed
-                  </span>
                   {vendorStoreCategoryFilter !== "ALL" && (
                     <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1">
                       <span>{vendorStoreCategoryFilter}</span>
@@ -1955,6 +1975,18 @@ export default function VendorDashboard() {
       {/* ========================================================================= */}
       {activeTab === "profile" && (
         <div className="space-y-4 sm:space-y-6">
+          {/* Back Navigation Bar */}
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setActiveTab("overview")}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:text-brand-600 hover:border-brand-200 text-xs font-bold shadow-2xs transition-all cursor-pointer active:scale-95"
+            >
+              <span>← Back to Store Info</span>
+            </button>
+            <span className="text-xs font-bold text-slate-400">Partner Profile</span>
+          </div>
+
           {/* Profile Card Header */}
           <div className="bg-navy-900 rounded-2xl sm:rounded-3xl p-5 sm:p-7 text-white shadow-lg relative overflow-hidden">
             <div className="absolute top-0 right-0 w-80 h-80 bg-brand-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -2052,16 +2084,25 @@ export default function VendorDashboard() {
             </p>
             <div className="flex flex-wrap gap-2 pt-1">
               <a
-                href="tel:1800123456"
-                className="bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors"
+                href="tel:+919956886527"
+                className="bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors active:scale-95 cursor-pointer"
               >
                 <span>📞</span>
-                <span>Contact DR Support</span>
+                <span>Contact DR Support (+91 9956886527)</span>
+              </a>
+              <a
+                href="https://wa.me/919956886527?text=Hello%20BuildCity%20Team,%20I%20am%20a%20Vendor%20Partner%20and%20need%20assistance"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors active:scale-95 cursor-pointer"
+              >
+                <span>💬</span>
+                <span>WhatsApp DR Support</span>
               </a>
               <button
                 type="button"
                 onClick={logout}
-                className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer active:scale-95 ml-auto"
               >
                 <span>🚪</span>
                 <span>Logout</span>
@@ -2518,20 +2559,6 @@ export default function VendorDashboard() {
               {activeOrdersCount}
             </span>
           )}
-        </button>
-
-        {/* 5. Profile (FIFTH!) */}
-        <button
-          type="button"
-          onClick={() => setActiveTab("profile")}
-          className={`flex-1 flex flex-col items-center py-1.5 rounded-xl transition-all cursor-pointer active:scale-95 ${
-            activeTab === "profile"
-              ? "text-[#C2410C] font-extrabold bg-[#FFF7ED] border border-[#FED7AA]/60 shadow-2xs"
-              : "text-slate-400 hover:text-slate-700 font-semibold"
-          }`}
-        >
-          <NavProfileIcon className="w-5 h-5 mb-0.5" active={activeTab === "profile"} />
-          <span className="text-[10px] tracking-tight">Profile</span>
         </button>
       </div>
     </DashboardShell>

@@ -1,7 +1,17 @@
 import Logo from "./Logo";
 import { useAuth } from "../context/AuthContext";
 
-export default function DashboardShell({ badge, badgeColor = "#1E5FD9", hideLogout = false, rightContent, title, subtitle, children }) {
+export default function DashboardShell({
+  badge,
+  badgeColor = "#1E5FD9",
+  hideLogout = false,
+  rightContent,
+  title,
+  subtitle,
+  onProfileClick,
+  isProfileActive = false,
+  children,
+}) {
   const { user, logout } = useAuth();
 
   return (
@@ -38,13 +48,44 @@ export default function DashboardShell({ badge, badgeColor = "#1E5FD9", hideLogo
 
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             {rightContent}
-            <div className="text-right hidden sm:block">
-              <p className="text-xs font-bold text-navy-900">{user?.name || "Dashboard User"}</p>
-              <p className="text-[11px] text-slate-500">📱 {user?.phone || user?.email || "Connected"}</p>
-            </div>
-            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-brand-100 text-brand-700 font-bold text-[10px] sm:text-xs flex items-center justify-center border border-brand-200 shrink-0">
-              {(user?.name || "U").charAt(0).toUpperCase()}
-            </div>
+            {onProfileClick ? (
+              <button
+                type="button"
+                onClick={onProfileClick}
+                className={`flex items-center gap-1.5 sm:gap-2.5 p-1 rounded-xl transition-all cursor-pointer group active:scale-95 ${
+                  isProfileActive
+                    ? "bg-brand-50 border border-brand-300 ring-2 ring-brand-500/20 shadow-2xs"
+                    : "hover:bg-slate-100"
+                }`}
+                title="View Partner Profile"
+              >
+                <div className="text-right hidden sm:block">
+                  <p className={`text-xs font-bold transition-colors ${
+                    isProfileActive ? "text-brand-700" : "text-navy-900 group-hover:text-brand-600"
+                  }`}>
+                    {user?.name || "Dashboard User"}
+                  </p>
+                  <p className="text-[11px] text-slate-500">📱 {user?.phone || user?.email || "Connected"}</p>
+                </div>
+                <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full font-black text-[11px] sm:text-xs flex items-center justify-center border transition-all shrink-0 shadow-2xs ${
+                  isProfileActive
+                    ? "bg-brand-500 text-white border-brand-600 ring-2 ring-brand-300"
+                    : "bg-brand-100 text-brand-700 border-brand-200 group-hover:scale-105 group-hover:bg-brand-200"
+                }`}>
+                  {(user?.name || "U").charAt(0).toUpperCase()}
+                </div>
+              </button>
+            ) : (
+              <>
+                <div className="text-right hidden sm:block">
+                  <p className="text-xs font-bold text-navy-900">{user?.name || "Dashboard User"}</p>
+                  <p className="text-[11px] text-slate-500">📱 {user?.phone || user?.email || "Connected"}</p>
+                </div>
+                <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-brand-100 text-brand-700 font-bold text-[10px] sm:text-xs flex items-center justify-center border border-brand-200 shrink-0">
+                  {(user?.name || "U").charAt(0).toUpperCase()}
+                </div>
+              </>
+            )}
             {!hideLogout && (
               <button
                 onClick={logout}

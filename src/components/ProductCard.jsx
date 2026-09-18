@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import { useAdmin } from "../context/AdminContext";
@@ -6,6 +6,7 @@ import { useAdmin } from "../context/AdminContext";
 export default function ProductCard({ product, className = "" }) {
   const { items, addItem, updateQty, removeItem } = useCart();
   const { vendors = [] } = useAdmin() || {};
+  const [cartStatus, setCartStatus] = useState("idle"); // "idle" | "adding" | "added"
 
   if (!product) return null;
 
@@ -41,7 +42,9 @@ export default function ProductCard({ product, className = "" }) {
   const handleAdd = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (isUnavailable) return;
+    if (isUnavailable || cartStatus === "adding") return;
+
+    setCartStatus("adding");
     addItem(
       {
         id: product.id,
@@ -56,23 +59,14 @@ export default function ProductCard({ product, className = "" }) {
       },
       1
     );
-  };
 
-  const handleIncrement = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (isUnavailable) return;
-    updateQty(product.id, qty + 1);
-  };
-
-  const handleDecrement = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (qty <= 1) {
-      removeItem(product.id);
-    } else {
-      updateQty(product.id, qty - 1);
-    }
+    // Provide visual confirmation that item was added to cart, then return to "+ Add"
+    setTimeout(() => {
+      setCartStatus("added");
+      setTimeout(() => {
+        setCartStatus("idle");
+      }, 1200);
+    }, 250);
   };
 
   return (
@@ -92,6 +86,14 @@ export default function ProductCard({ product, className = "" }) {
               {discountPct}% OFF
             </span>
           ) : null}
+
+          {/* Cart Quantity indicator badge on image */}
+          {qty > 0 && (
+            <span className="absolute top-1 right-1 z-10 bg-brand-500 text-white font-black text-[8px] sm:text-[8.5px] px-1.5 py-0.5 rounded shadow-2xs tracking-tight flex items-center gap-0.5">
+              <span>🛒</span>
+              <span>{qty}</span>
+            </span>
+          )}
 
           <img
             src={product.imageUrl || product.img || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80"}
@@ -140,7 +142,7 @@ export default function ProductCard({ product, className = "" }) {
           </span>
         </div>
 
-        {/* 🛒 Compact Action Button / Stepper */}
+        {/* 🛒 Action Button with clear animated feedback and return to '+ Add' */}
         <div className="w-full mt-0.5">
           {isUnavailable ? (
             <div
@@ -149,33 +151,28 @@ export default function ProductCard({ product, className = "" }) {
             >
               Unavailable
             </div>
-          ) : qty > 0 ? (
-            <div className="w-full bg-[#0A192F] text-white rounded-lg flex items-center justify-between px-1 h-7 shadow-xs font-black text-xs">
-              <button
-                type="button"
-                onClick={handleDecrement}
-                className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/20 active:scale-90 transition-all cursor-pointer text-sm leading-none"
-                title="Decrease quantity"
-              >
-                −
-              </button>
-              <span className="font-black text-xs px-1 select-none text-white tracking-tight">
-                {qty}
-              </span>
-              <button
-                type="button"
-                onClick={handleIncrement}
-                className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/20 active:scale-90 transition-all cursor-pointer text-sm leading-none"
-                title="Increase quantity"
-              >
-                +
-              </button>
-            </div>
+          ) : cartStatus === "adding" ? (
+            <button
+              type="button"
+              disabled
+              className="w-full bg-brand-500 text-white text-[11px] font-black h-7 rounded-lg shadow-xs flex items-center justify-center gap-1.5 cursor-wait select-none"
+            >
+              <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <span>Adding...</span>
+            </button>
+          ) : cartStatus === "added" ? (
+            <button
+              type="button"
+              className="w-full bg-emerald-600 text-white text-[11px] font-black h-7 rounded-lg shadow-xs flex items-center justify-center gap-1 select-none animate-fade-in"
+            >
+              <span>✓</span>
+              <span>Added!</span>
+            </button>
           ) : (
             <button
               type="button"
               onClick={handleAdd}
-              className="w-full bg-[#0A192F] hover:bg-brand-600 text-white text-[11px] font-bold h-7 rounded-lg transition-all shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+              className="w-full bg-[#0A192F] hover:bg-brand-600 active:scale-95 text-white text-[11px] font-bold h-7 rounded-lg transition-all shadow-2xs hover:shadow-xs cursor-pointer flex items-center justify-center gap-1"
             >
               <span>+ Add</span>
             </button>

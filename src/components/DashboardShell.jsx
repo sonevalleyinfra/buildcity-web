@@ -19,14 +19,9 @@ export default function DashboardShell({
       {/* Sticky Header */}
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-xs">
         <div className="max-w-7xl mx-auto px-2.5 sm:px-6 py-2 sm:py-2.5 flex items-center justify-between gap-1.5 sm:gap-2">
-          <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
-            {/* On mobile show only Logo icon; on desktop show full Logo with text */}
-            <div className="sm:hidden">
-              <Logo size="sm" iconOnly={true} />
-            </div>
-            <div className="hidden sm:block">
-              <Logo size="sm" />
-            </div>
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            {/* Universal BuildCity Brand Logo */}
+            <Logo size="sm" />
 
             {badge && (
               typeof badge === "string" ? (

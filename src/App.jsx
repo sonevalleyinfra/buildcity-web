@@ -126,6 +126,7 @@ import { AlertProvider } from "./context/AlertContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 import FirstTimeLocationModal from "./components/FirstTimeLocationModal";
+import FloatingCartBar from "./components/FloatingCartBar";
 
 export default function App() {
   return (
@@ -144,6 +145,7 @@ export default function App() {
                         <NativeBackButtonHandler />
                         {!isVendorApp && <FirstTimeLocationModal />}
                         <StorefrontMobileNav />
+                        {!isVendorApp && <FloatingCartBar />}
                         <Routes>
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />

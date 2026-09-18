@@ -758,7 +758,7 @@ export default function Home() {
       </main>
 
       {/* 🟢 8. FLOATING WHATSAPP & PHONE CALL ACTION BUTTONS */}
-      <div className="fixed bottom-20 right-3.5 sm:right-5 z-40 flex flex-col gap-2">
+      <div className="fixed bottom-32 sm:bottom-24 right-3.5 sm:right-5 z-40 flex flex-col gap-2">
         {/* WhatsApp Button */}
         <a
           href="https://wa.me/919956886527?text=Hello%20BuildCity%20Team,%20I%20have%20an%20inquiry%20regarding%20construction%20materials"

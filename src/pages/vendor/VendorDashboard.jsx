@@ -138,8 +138,28 @@ export default function VendorDashboard() {
   // Tabs navigation state: "orders" -> Default Open Screen, "products" -> My Shop Items, "overview" -> Store Info, "profile" -> Vendor Profile
   const [activeTab, setActiveTabState] = useState("orders");
   const [tabHistory, setTabHistory] = useState(["orders"]);
-  const [fetchedVendorOrders, setFetchedVendorOrders] = useState([]);
-  const [ordersLoaded, setOrdersLoaded] = useState(false);
+  const [fetchedVendorOrders, setFetchedVendorOrders] = useState(() => {
+    try {
+      const vKey = `buildcity_vendor_orders_${user?.vendorInfo?.id || user?.vendorId || user?.id || (user?.phone ? `v-${user.phone}` : "vnd")}`;
+      const saved = localStorage.getItem(vKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+  const [ordersLoaded, setOrdersLoaded] = useState(() => {
+    try {
+      const vKey = `buildcity_vendor_orders_${user?.vendorInfo?.id || user?.vendorId || user?.id || (user?.phone ? `v-${user.phone}` : "vnd")}`;
+      const saved = localStorage.getItem(vKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return true;
+      }
+    } catch {}
+    return false;
+  });
 
   // Change tab and track history for Android back navigation
   const switchTab = (newTab) => {
@@ -200,6 +220,9 @@ export default function VendorDashboard() {
             }
             return vOrds;
           });
+          try {
+            localStorage.setItem(`buildcity_vendor_orders_${vendorId}`, JSON.stringify(vOrds));
+          } catch {}
           setOrdersLoaded(true);
         }
       } catch {
@@ -755,15 +778,22 @@ export default function VendorDashboard() {
     return sum + (Number(ord.totalAmount || ord.total || 0) || 0);
   }, 0);
 
-  // Live Status Change handler with real-time loading feedback
+  // Live Status Change handler with real-time loading feedback & instant synchronous persistence
   const handleStatusChange = async (orderId, newStatus) => {
     if (!orderId || !newStatus) return;
     setUpdatingOrderId(orderId);
+
+    // 1. Instant optimistic state + localStorage update so refresh never shows stale status!
+    setFetchedVendorOrders((prev) => {
+      const updated = prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o));
+      try {
+        localStorage.setItem(`buildcity_vendor_orders_${vendorId}`, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
     try {
       await updateOrderStatus(orderId, newStatus);
-      setFetchedVendorOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
-      );
     } catch (err) {
       console.warn("Status change error:", err);
       showAlert({

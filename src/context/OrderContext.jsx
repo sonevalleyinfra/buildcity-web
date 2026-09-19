@@ -283,8 +283,17 @@ export function OrderProvider({ children }) {
     );
   };
 
-  // Update Order Status in Supabase Cloud DB
+  // Update Order Status in Supabase Cloud DB with instant synchronous cache persistence
   const updateOrderStatus = async (orderId, newStatus) => {
+    const currentStorageKey = getRoleStorageKey();
+
+    // Optimistic local state + storage update so refreshes never see stale statuses
+    setOrders((prev) => {
+      const updated = prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o));
+      try { localStorage.setItem(currentStorageKey, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+
     try {
       const res = await authFetch(`${API_BASE_URL}/api/v1/orders/${orderId}/status`, {
         method: "PATCH",
@@ -293,9 +302,11 @@ export function OrderProvider({ children }) {
       });
       if (res.ok) {
         const updated = await res.json();
-        setOrders((prev) =>
-          prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
-        );
+        setOrders((prev) => {
+          const next = prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o));
+          try { localStorage.setItem(currentStorageKey, JSON.stringify(next)); } catch {}
+          return next;
+        });
         window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
         return updated;
       }
@@ -303,10 +314,6 @@ export function OrderProvider({ children }) {
       console.warn("Update status note:", err.message);
     }
 
-    // Local state update
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
-    );
     window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
   };
 

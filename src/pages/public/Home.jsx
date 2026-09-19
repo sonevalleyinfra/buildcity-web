@@ -212,10 +212,15 @@ export default function Home() {
 
   useEffect(() => {
     const handleScroll = () => {
-      const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+      const scrollY =
+        window.pageYOffset ||
+        window.scrollY ||
+        document.documentElement.scrollTop ||
+        document.body.scrollTop ||
+        0;
 
-      // When at or near the very top (< 25px), always show search bar
-      if (scrollY < 25) {
+      // Always show search bar when near the top (< 20px)
+      if (scrollY < 20) {
         setIsSearchHidden(false);
         lastScrollY.current = scrollY;
         return;
@@ -223,20 +228,24 @@ export default function Home() {
 
       const diff = scrollY - lastScrollY.current;
 
-      // User scrolls down by 8px or more -> immediately minimize/hide search bar
-      if (diff > 8 && scrollY > 40) {
+      // Scroll down -> minimize search bar
+      if (diff > 5 && scrollY > 30) {
         setIsSearchHidden(true);
       }
-      // User scrolls up by 8px or more -> expand search bar
-      else if (diff < -8) {
+      // Scroll up -> expand search bar
+      else if (diff < -5) {
         setIsSearchHidden(false);
       }
 
       lastScrollY.current = scrollY;
     };
 
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
+    window.addEventListener("scroll", handleScroll, { passive: true, capture: true });
+    document.addEventListener("scroll", handleScroll, { passive: true, capture: true });
+    return () => {
+      window.removeEventListener("scroll", handleScroll, { capture: true });
+      document.removeEventListener("scroll", handleScroll, { capture: true });
+    };
   }, []);
 
   const touchStartX = useRef(null);

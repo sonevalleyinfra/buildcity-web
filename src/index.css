@@ -26,7 +26,7 @@
 html, body, #root {
   min-height: 100%;
   width: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 body {
@@ -35,7 +35,7 @@ body {
   color: #0F172A;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 /* Custom subtle scrollbars for horizontally scrollable pills & tiles */

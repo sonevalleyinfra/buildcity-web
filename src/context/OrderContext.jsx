@@ -61,9 +61,16 @@ export function OrderProvider({ children }) {
     };
   };
 
+  const getRoleStorageKey = () => {
+    if (user?.id) return `${STORAGE_KEY}_${userRole || "user"}_${user.id}`;
+    if (user?.phone) return `${STORAGE_KEY}_${userRole || "user"}_${user.phone}`;
+    return `${STORAGE_KEY}_${userRole || "anon"}`;
+  };
+
   const fetchOrdersForCurrentRole = async () => {
     const token = getToken() || user?.token || (typeof window !== "undefined" ? localStorage.getItem("buildcity_token") : null);
     if (!user || !token) return orders;
+    const currentStorageKey = getRoleStorageKey();
 
     try {
       if (isAdmin || isDr) {
@@ -74,14 +81,14 @@ export function OrderProvider({ children }) {
             const normalized = data.map(normalizeOrder);
             setOrders((prev) => {
               if (areOrdersEqual(prev, normalized)) return prev;
-              try { localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized)); } catch {}
+              try { localStorage.setItem(currentStorageKey, JSON.stringify(normalized)); } catch {}
               return normalized;
             });
             return normalized;
           }
         }
       } else if (isVendor) {
-        const vId = user.vendorInfo?.id || user.vendorId || user.id;
+        const vId = user.vendorInfo?.id || user.vendorId || user.phone || user.id;
         const res = await authFetch(`${API_BASE_URL}/api/v1/orders/vendor/${encodeURIComponent(vId)}`);
         if (res.ok) {
           const data = await res.json();
@@ -89,7 +96,7 @@ export function OrderProvider({ children }) {
             const normalized = data.map(normalizeOrder);
             setOrders((prev) => {
               if (areOrdersEqual(prev, normalized)) return prev;
-              try { localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized)); } catch {}
+              try { localStorage.setItem(currentStorageKey, JSON.stringify(normalized)); } catch {}
               return normalized;
             });
             return normalized;
@@ -104,7 +111,7 @@ export function OrderProvider({ children }) {
             const normalized = data.map(normalizeOrder);
             setOrders((prev) => {
               if (areOrdersEqual(prev, normalized)) return prev;
-              try { localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized)); } catch {}
+              try { localStorage.setItem(currentStorageKey, JSON.stringify(normalized)); } catch {}
               return normalized;
             });
             return normalized;
@@ -118,14 +125,18 @@ export function OrderProvider({ children }) {
   };
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const currentStorageKey = getRoleStorageKey();
+    const saved = localStorage.getItem(currentStorageKey);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) setOrders(parsed.map(normalizeOrder));
       } catch {
-        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(currentStorageKey);
       }
+    } else {
+      // Clear orders when switching to an un-cached role
+      setOrders([]);
     }
     fetchOrdersForCurrentRole();
 

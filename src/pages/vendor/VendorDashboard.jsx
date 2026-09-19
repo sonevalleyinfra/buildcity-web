@@ -139,6 +139,7 @@ export default function VendorDashboard() {
   const [activeTab, setActiveTabState] = useState("orders");
   const [tabHistory, setTabHistory] = useState(["orders"]);
   const [fetchedVendorOrders, setFetchedVendorOrders] = useState([]);
+  const [ordersLoaded, setOrdersLoaded] = useState(false);
 
   // Change tab and track history for Android back navigation
   const switchTab = (newTab) => {
@@ -199,8 +200,11 @@ export default function VendorDashboard() {
             }
             return vOrds;
           });
+          setOrdersLoaded(true);
         }
-      } catch {}
+      } catch {
+        if (isMounted) setOrdersLoaded(true);
+      }
     };
 
     syncVendorOrders();
@@ -278,54 +282,68 @@ export default function VendorDashboard() {
     }
   }, [showCatalogModal, editingProduct]);
 
-  // Combine orders specifically fetched for this vendor + reactive OrderContext orders
-  const fetchedIds = new Set((fetchedVendorOrders || []).map((o) => o?.id).filter(Boolean));
+  // Strict Vendor Orders Isolation:
+  // Primary and authoritative source is fetchedVendorOrders (returned directly by /api/v1/orders/vendor/:id).
+  // Never merge raw global context orders to prevent order count oscillation.
+  const isGenericStoreName = (str = "") => {
+    const s = String(str || "").trim().toLowerCase();
+    return !s || ["distributor store", "vendor owner", "vendor partner", "district vendor", "vendor", "store", "shop"].includes(s);
+  };
 
-  const allCandidateOrders = [...(fetchedVendorOrders || []), ...(orders || [])];
+  const isItemForThisVendor = (it) => {
+    if (!it) return false;
+    const itVendorId = it.vendorId || it.vendor?.id;
+    const itVendorName = String(it.vendorName || it.vendor?.shopName || "").trim();
+    const curShop = String(shopName || "").trim();
+    const curOwner = String(ownerName || "").trim();
+    const curPhone = (user?.phone || matchedVendorObj.phone || "").replace(/\D/g, "");
+    const itPhone = (it.vendor?.phone || "").replace(/\D/g, "");
+
+    const matchesId = Boolean(
+      itVendorId && (
+        itVendorId === vendorId ||
+        itVendorId === matchedVendorObj.id ||
+        (user?.id && itVendorId === user.id) ||
+        (user?.vendorInfo?.id && itVendorId === user.vendorInfo.id) ||
+        (matchedVendorObj.userId && itVendorId === matchedVendorObj.userId)
+      )
+    );
+    const matchesPhone = Boolean(curPhone && itPhone && curPhone.length >= 8 && itPhone.length >= 8 && curPhone.slice(-10) === itPhone.slice(-10));
+    const matchesShop = Boolean(
+      !isGenericStoreName(curShop) &&
+      !isGenericStoreName(itVendorName) &&
+      (itVendorName.toLowerCase() === curShop.toLowerCase() ||
+        (itVendorName.length > 5 && curShop.length > 5 && (itVendorName.toLowerCase().includes(curShop.toLowerCase()) || curShop.toLowerCase().includes(itVendorName.toLowerCase()))))
+    );
+    const matchesOwner = Boolean(!isGenericStoreName(curOwner) && curOwner.length > 3 && itVendorName.toLowerCase().includes(curOwner.toLowerCase()));
+
+    return Boolean(matchesId || matchesPhone || matchesShop || matchesOwner);
+  };
+
+  // Dedicated candidate orders: When loaded or has data, strictly use fetchedVendorOrders
+  const candidateOrders = (fetchedVendorOrders && fetchedVendorOrders.length > 0)
+    ? fetchedVendorOrders
+    : (ordersLoaded
+        ? []
+        : (orders || []).filter((o) => Array.isArray(o.items) && o.items.some(isItemForThisVendor)));
+
   const vendorOrderMap = new Map();
-  allCandidateOrders.forEach((o) => {
+  candidateOrders.forEach((o) => {
     if (o && o.id && !vendorOrderMap.has(o.id)) {
       vendorOrderMap.set(o.id, o);
     }
   });
 
-  const isItemForThisVendor = (it) => {
-    if (!it) return false;
-    const itVendorId = it.vendorId || it.vendor?.id;
-    const itVendorName = (it.vendorName || it.vendor?.shopName || "").toLowerCase().trim();
-    const curShop = shopName.toLowerCase().trim();
-    const curOwner = ownerName.toLowerCase().trim();
-    const curPhone = (user?.phone || matchedVendorObj.phone || "").replace(/\D/g, "");
-    const itPhone = (it.vendor?.phone || "").replace(/\D/g, "");
-
-    const matchesId = itVendorId && (
-      itVendorId === vendorId ||
-      itVendorId === matchedVendorObj.id ||
-      itVendorId === user?.id ||
-      itVendorId === user?.vendorInfo?.id ||
-      itVendorId === matchedVendorObj.userId
-    );
-    const matchesPhone = curPhone && itPhone && (curPhone.includes(itPhone) || itPhone.includes(curPhone));
-    const matchesShop = curShop && itVendorName && (itVendorName.includes(curShop) || curShop.includes(itVendorName));
-    const matchesOwner = curOwner && itVendorName && itVendorName.includes(curOwner);
-
-    return Boolean(matchesId || matchesPhone || matchesShop || matchesOwner);
-  };
-
   const vendorOrders = Array.from(vendorOrderMap.values())
     .map((o) => {
       if (!o || !Array.isArray(o.items) || o.items.length === 0) return null;
 
-      // Strictly retain ONLY items belonging to THIS vendor
+      // Filter items for this vendor
       let myItems = o.items.filter(isItemForThisVendor);
 
-      // Fallback: If no item explicitly matched by vendorId/shopName/phone,
-      // but order was returned by backend /api/v1/orders/vendor/:id AND none of the items are tagged with other vendors
-      if (myItems.length === 0 && fetchedIds.has(o.id)) {
-        const hasOtherVendorTag = o.items.some((it) => it.vendorId && !isItemForThisVendor(it));
-        if (!hasOtherVendorTag) {
-          myItems = o.items;
-        }
+      // If backend /api/v1/orders/vendor/:id returned this order, the items are already this vendor's items!
+      if (myItems.length === 0 && (ordersLoaded || (fetchedVendorOrders || []).some((f) => f.id === o.id))) {
+        myItems = o.items;
       }
 
       if (myItems.length === 0) return null;
@@ -343,19 +361,20 @@ export default function VendorDashboard() {
         return acc + line;
       }, 0);
 
-      const isSingleVendor = myItems.length === o.items.length;
-      const orderTotal = isSingleVendor && (o.totalAmount || o.total)
+      const totalItemsInOrder = o.totalOrderItemsCount || o.items.length;
+      const isSingleVendor = myItems.length === totalItemsInOrder;
+      const orderTotal = o.vendorItemsTotal || (isSingleVendor && (o.totalAmount || o.total)
         ? Number(o.totalAmount || o.total)
-        : vendorItemsTotal;
+        : vendorItemsTotal);
 
       return {
         ...o,
         items: myItems,
         totalAmount: orderTotal,
         total: orderTotal,
-        vendorItemsTotal,
+        vendorItemsTotal: o.vendorItemsTotal || vendorItemsTotal,
         isPartialOrder: !isSingleVendor,
-        totalOrderItemsCount: o.items.length,
+        totalOrderItemsCount: totalItemsInOrder,
       };
     })
     .filter(Boolean);
@@ -1864,11 +1883,6 @@ export default function VendorDashboard() {
                             <span className="text-[10px] text-slate-400 font-bold">Total:</span>
                             <span className="text-sm font-black text-navy-900">₹{orderTotal}</span>
                           </div>
-                          {ord.isPartialOrder && (
-                            <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-1.5 py-0.2 rounded inline-block">
-                              Store Items ({ord.items.length}/{ord.totalOrderItemsCount})
-                            </span>
-                          )}
                           <span className="text-[10px] text-slate-500 font-medium block">
                             🚚 Delivery: {deliveryFee > 0 ? `₹${deliveryFee}` : "Free"}
                           </span>
@@ -2016,11 +2030,6 @@ export default function VendorDashboard() {
                           </td>
                           <td className="py-3.5 px-4">
                             <p className="font-black text-navy-900 text-sm">₹{orderTotal}</p>
-                            {ord.isPartialOrder && (
-                              <span className="text-[9.5px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-1.5 py-0.2 rounded inline-block mt-0.5">
-                                Store Items ({ord.items.length} of {ord.totalOrderItemsCount})
-                              </span>
-                            )}
                             <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
                               🚚 {deliveryFee > 0 ? `₹${deliveryFee}` : "Free"}
                             </span>

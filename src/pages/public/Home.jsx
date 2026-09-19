@@ -211,41 +211,32 @@ export default function Home() {
   const ticking = useRef(false);
 
   useEffect(() => {
-    const updateScrollDir = () => {
-      const scrollY = window.scrollY;
+    const handleScroll = () => {
+      const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
 
-      // Always show when near the top of the page
-      if (scrollY < 40) {
+      // When at or near the very top (< 25px), always show search bar
+      if (scrollY < 25) {
         setIsSearchHidden(false);
         lastScrollY.current = scrollY;
-        ticking.current = false;
         return;
       }
 
       const diff = scrollY - lastScrollY.current;
 
-      // User is scrolling DOWN by more than 20px -> collapse search bar
-      if (diff > 20 && scrollY > 70) {
+      // User scrolls down by 8px or more -> immediately minimize/hide search bar
+      if (diff > 8 && scrollY > 40) {
         setIsSearchHidden(true);
       }
-      // User is scrolling UP by more than 15px -> expand search bar
-      else if (diff < -15) {
+      // User scrolls up by 8px or more -> expand search bar
+      else if (diff < -8) {
         setIsSearchHidden(false);
       }
 
       lastScrollY.current = scrollY;
-      ticking.current = false;
     };
 
-    const onScroll = () => {
-      if (!ticking.current) {
-        window.requestAnimationFrame(updateScrollDir);
-        ticking.current = true;
-      }
-    };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   const touchStartX = useRef(null);

@@ -747,7 +747,7 @@ export default function VendorDashboard() {
       <div className="pb-28 md:pb-8">
 
         {/* 🖥️ DESKTOP TOP NAVIGATION TABS (Visible only on md: screens and above) */}
-        <div className="hidden md:flex items-center justify-between bg-white border border-slate-200/90 rounded-2xl p-2 mb-6 shadow-xs">
+        <div className="hidden md:flex items-center justify-between bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl p-2 mb-6 shadow-xs sticky top-[52px] z-20">
           <div className="flex items-center gap-1.5">
             <button
               type="button"

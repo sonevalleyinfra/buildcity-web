@@ -371,32 +371,32 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-28 font-sans">
+    <div className="min-h-screen bg-[#F8FAFC] pb-28 font-sans w-full max-w-full overflow-x-hidden">
       {/* 🖥️ Desktop Navbar */}
       <div className="hidden lg:block">
         <Navbar />
       </div>
 
       {/* 📱 Mobile Top Header (Single Clean Solid Sticky Header) */}
-      <div className="lg:hidden bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+      <div className="lg:hidden bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs w-full max-w-full overflow-hidden">
         {/* Top Action Row (Logo & Location on Left, Notification & Cart on Right) */}
-        <div className="px-4 pt-3 pb-2 flex items-center justify-between">
+        <div className="px-3 pt-2.5 pb-2 flex items-center justify-between gap-1.5 w-full max-w-full">
           {/* Left: Brand Logo & Live Location */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 min-w-0 shrink">
             <Link to="/" className="active:scale-95 transition-transform shrink-0 flex items-center">
-              <Logo size="sm" />
+              <Logo size="sm" hideSubtitle={true} />
             </Link>
 
-            <div className="h-3.5 w-px bg-slate-200 mx-0.5" />
+            <div className="h-3.5 w-px bg-slate-200 mx-0.5 shrink-0" />
 
             <RegionPicker
               trigger={(r) => (
-                <div className="flex items-center gap-0.5 cursor-pointer group">
-                  <span className="text-slate-600 text-[10px] sm:text-[11px] leading-none">📍</span>
-                  <span className="font-bold text-slate-700 text-[11px] sm:text-xs leading-none tracking-tight truncate max-w-[85px] sm:max-w-[110px] group-hover:text-brand-600 transition-colors">
+                <div className="flex items-center gap-0.5 cursor-pointer group min-w-0">
+                  <span className="text-slate-600 text-[10px] sm:text-[11px] leading-none shrink-0">📍</span>
+                  <span className="font-bold text-slate-700 text-[11px] sm:text-xs leading-none tracking-tight truncate max-w-[70px] sm:max-w-[110px] group-hover:text-brand-600 transition-colors">
                     {r?.name || "Varanasi"}
                   </span>
-                  <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="text-slate-500 group-hover:text-black transition-transform">
+                  <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="text-slate-500 group-hover:text-black transition-transform shrink-0">
                     <path d="m6 9 6 6 6-6" />
                   </svg>
                 </div>
@@ -405,11 +405,11 @@ export default function Home() {
           </div>
 
           {/* Right: Login/Profile + Notification + Cart */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {user ? (
               <Link
                 to="/profile"
-                className="w-6.5 h-6.5 rounded-full bg-gradient-to-tr from-brand-600 to-brand-400 text-white font-black text-[10.5px] flex items-center justify-center shadow-xs border border-brand-500/30 active:scale-95 transition-all"
+                className="w-6.5 h-6.5 rounded-full bg-gradient-to-tr from-brand-600 to-brand-400 text-white font-black text-[10.5px] flex items-center justify-center shadow-xs border border-brand-500/30 active:scale-95 transition-all shrink-0"
                 title={`${user.name || "User"} (Profile)`}
               >
                 {(user.name || user.phone || "U")[0].toUpperCase()}
@@ -417,18 +417,18 @@ export default function Home() {
             ) : (
               <Link
                 to="/login"
-                className="bg-[#0A192F] hover:bg-brand-600 text-white font-extrabold text-[11px] px-2.5 py-1.5 rounded-xl shadow-2xs active:scale-95 transition-all flex items-center gap-1"
+                className="bg-[#0A192F] hover:bg-brand-600 text-white font-extrabold text-[10.5px] px-2 py-1 rounded-xl shadow-2xs active:scale-95 transition-all flex items-center gap-1 shrink-0"
                 title="Login / Register"
               >
-                <span>🔑</span>
+                <span className="text-[11px]">🔑</span>
                 <span>Login</span>
               </Link>
             )}
 
-            <NotificationPanel className="relative text-navy-900 hover:text-brand-600 transition-colors cursor-pointer" />
+            <NotificationPanel className="relative text-navy-900 hover:text-brand-600 transition-colors cursor-pointer shrink-0" />
             <Link
               to="/cart"
-              className="relative text-navy-900 hover:text-brand-600 transition-colors p-1"
+              className="relative text-navy-900 hover:text-brand-600 transition-colors p-1 shrink-0"
               title="Cart"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -453,7 +453,7 @@ export default function Home() {
               : "max-h-16 opacity-100 pb-3 pt-1"
           }`}
         >
-          <form onSubmit={handleSearch} className="px-4">
+          <form onSubmit={handleSearch} className="px-3">
             <div className="w-full flex items-center gap-2.5 bg-slate-100 rounded-xl px-3.5 py-2 border border-slate-200 focus-within:border-brand-500 focus-within:bg-white transition-all shadow-2xs h-10.5">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.2">
                 <circle cx="11" cy="11" r="8" />

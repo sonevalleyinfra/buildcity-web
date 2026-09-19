@@ -2025,31 +2025,59 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
     const vShop = (vendor?.shopName || vendorId).toLowerCase().trim();
     const vPhone = vendor?.phone ? vendor.phone.replace(/\D/g, "") : "";
 
-    const filtered = allOrders.filter((o) =>
-      o.items && o.items.some((it) => {
-        const itVendorId = it.vendorId;
-        const itVendorPhone = it.vendor?.phone ? it.vendor.phone.replace(/\D/g, "") : "";
-        const matchesId = itVendorId && (
-          itVendorId === vId ||
-          itVendorId === vendorId ||
-          (vUserId && itVendorId === vUserId) ||
-          (vPhone && itVendorPhone && (vPhone.includes(itVendorPhone) || itVendorPhone.includes(vPhone)))
-        );
-        const itShop = (it.vendor?.shopName || it.vendorName || "").toLowerCase().trim();
-        const matchesShop = vShop && itShop && (vShop.includes(itShop) || itShop.includes(vShop));
-        return matchesId || matchesShop;
+    const filtered = allOrders
+      .map((o) => {
+        if (!o || !Array.isArray(o.items) || o.items.length === 0) return null;
+
+        // Strictly retain ONLY items belonging to this vendor
+        const myItems = o.items.filter((it) => {
+          const itVendorId = it.vendorId;
+          const itVendorPhone = it.vendor?.phone ? it.vendor.phone.replace(/\D/g, "") : "";
+          const matchesId = itVendorId && (
+            itVendorId === vId ||
+            itVendorId === vendorId ||
+            (vUserId && itVendorId === vUserId) ||
+            (vPhone && itVendorPhone && (vPhone.includes(itVendorPhone) || itVendorPhone.includes(vPhone)))
+          );
+          const itShop = (it.vendor?.shopName || it.vendorName || "").toLowerCase().trim();
+          const matchesShop = vShop && itShop && (vShop.includes(itShop) || itShop.includes(vShop));
+          return matchesId || matchesShop;
+        });
+
+        if (myItems.length === 0) return null;
+
+        // Calculate this vendor's items subtotal
+        const vendorSubtotal = myItems.reduce((acc, it) => {
+          const qty = Number(it.quantity || 1);
+          const price = Number(it.priceAtPurchase || it.price || 0);
+          return acc + (price * qty);
+        }, 0);
+
+        const isFullOrder = myItems.length === o.items.length;
+        const vendorTotal = isFullOrder
+          ? Number(o.totalAmount || vendorSubtotal)
+          : vendorSubtotal;
+
+        return {
+          ...o,
+          items: myItems.map((it) => ({
+            ...it,
+            name: it.productName || it.name,
+            productName: it.productName || it.name,
+            price: Number(it.priceAtPurchase || it.price || 0),
+            totalPrice: Number(it.totalPrice || (Number(it.priceAtPurchase || it.price || 0) * Number(it.quantity || 1))),
+            vendorName: it.vendor?.shopName || it.vendorName || vendor?.shopName || "District Vendor",
+          })),
+          totalAmount: vendorTotal,
+          total: vendorTotal,
+          vendorItemsTotal: vendorSubtotal,
+          isPartialOrder: !isFullOrder,
+          allOrderItemsCount: o.items.length,
+        };
       })
-    );
+      .filter(Boolean);
 
-    const formatted = filtered.map((o) => ({
-      ...o,
-      items: o.items.map((it) => ({
-        ...it,
-        vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
-      })),
-    }));
-
-    res.json(formatted);
+    res.json(filtered);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

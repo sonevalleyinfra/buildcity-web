@@ -289,34 +289,76 @@ export default function VendorDashboard() {
     }
   });
 
-  const vendorOrders = Array.from(vendorOrderMap.values()).filter((o) => {
-    if (!o || !Array.isArray(o.items) || o.items.length === 0) return false;
-    // 1. If the order was directly returned by backend vendor orders endpoint, include it directly
-    if (fetchedIds.has(o.id)) return true;
+  const isItemForThisVendor = (it) => {
+    if (!it) return false;
+    const itVendorId = it.vendorId || it.vendor?.id;
+    const itVendorName = (it.vendorName || it.vendor?.shopName || "").toLowerCase().trim();
+    const curShop = shopName.toLowerCase().trim();
+    const curOwner = ownerName.toLowerCase().trim();
+    const curPhone = (user?.phone || matchedVendorObj.phone || "").replace(/\D/g, "");
+    const itPhone = (it.vendor?.phone || "").replace(/\D/g, "");
 
-    // 2. Otherwise, check item matching
-    return o.items.some((it) => {
-      const itVendorId = it.vendorId || it.vendor?.id;
-      const itVendorName = (it.vendorName || it.vendor?.shopName || "").toLowerCase().trim();
-      const curShop = shopName.toLowerCase().trim();
-      const curOwner = ownerName.toLowerCase().trim();
-      const curPhone = (user?.phone || matchedVendorObj.phone || "").replace(/\D/g, "");
-      const itPhone = (it.vendor?.phone || "").replace(/\D/g, "");
+    const matchesId = itVendorId && (
+      itVendorId === vendorId ||
+      itVendorId === matchedVendorObj.id ||
+      itVendorId === user?.id ||
+      itVendorId === user?.vendorInfo?.id ||
+      itVendorId === matchedVendorObj.userId
+    );
+    const matchesPhone = curPhone && itPhone && (curPhone.includes(itPhone) || itPhone.includes(curPhone));
+    const matchesShop = curShop && itVendorName && (itVendorName.includes(curShop) || curShop.includes(itVendorName));
+    const matchesOwner = curOwner && itVendorName && itVendorName.includes(curOwner);
 
-      const matchesId = itVendorId && (
-        itVendorId === vendorId ||
-        itVendorId === matchedVendorObj.id ||
-        itVendorId === user?.id ||
-        itVendorId === user?.vendorInfo?.id ||
-        itVendorId === matchedVendorObj.userId
-      );
-      const matchesPhone = curPhone && itPhone && (curPhone.includes(itPhone) || itPhone.includes(curPhone));
-      const matchesShop = curShop && itVendorName && (itVendorName.includes(curShop) || curShop.includes(itVendorName));
-      const matchesOwner = curOwner && itVendorName && itVendorName.includes(curOwner);
+    return Boolean(matchesId || matchesPhone || matchesShop || matchesOwner);
+  };
 
-      return matchesId || matchesPhone || matchesShop || matchesOwner;
-    });
-  });
+  const vendorOrders = Array.from(vendorOrderMap.values())
+    .map((o) => {
+      if (!o || !Array.isArray(o.items) || o.items.length === 0) return null;
+
+      // Strictly retain ONLY items belonging to THIS vendor
+      let myItems = o.items.filter(isItemForThisVendor);
+
+      // Fallback: If no item explicitly matched by vendorId/shopName/phone,
+      // but order was returned by backend /api/v1/orders/vendor/:id AND none of the items are tagged with other vendors
+      if (myItems.length === 0 && fetchedIds.has(o.id)) {
+        const hasOtherVendorTag = o.items.some((it) => it.vendorId && !isItemForThisVendor(it));
+        if (!hasOtherVendorTag) {
+          myItems = o.items;
+        }
+      }
+
+      if (myItems.length === 0) return null;
+
+      // Calculate total price for this vendor's items only
+      const vendorItemsTotal = myItems.reduce((acc, it) => {
+        const qty = Number(it.quantity || it.qty || it.count || 1);
+        const rawPrice = it.price ?? it.unitPrice ?? it.priceAtPurchase ?? it.sellingPrice ?? it.rate;
+        let line = 0;
+        if (rawPrice !== undefined && rawPrice !== null && !isNaN(Number(rawPrice)) && Number(rawPrice) > 0) {
+          line = Number(rawPrice) * qty;
+        } else if (it.totalPrice || it.total || it.amount) {
+          line = Number(it.totalPrice || it.total || it.amount) || 0;
+        }
+        return acc + line;
+      }, 0);
+
+      const isSingleVendor = myItems.length === o.items.length;
+      const orderTotal = isSingleVendor && (o.totalAmount || o.total)
+        ? Number(o.totalAmount || o.total)
+        : vendorItemsTotal;
+
+      return {
+        ...o,
+        items: myItems,
+        totalAmount: orderTotal,
+        total: orderTotal,
+        vendorItemsTotal,
+        isPartialOrder: !isSingleVendor,
+        totalOrderItemsCount: o.items.length,
+      };
+    })
+    .filter(Boolean);
 
   // Category Bubble image resolver matching circular category tiles
   const resolveCategoryBubbleImage = (catName = "") => {
@@ -1822,6 +1864,11 @@ export default function VendorDashboard() {
                             <span className="text-[10px] text-slate-400 font-bold">Total:</span>
                             <span className="text-sm font-black text-navy-900">₹{orderTotal}</span>
                           </div>
+                          {ord.isPartialOrder && (
+                            <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-1.5 py-0.2 rounded inline-block">
+                              Store Items ({ord.items.length}/{ord.totalOrderItemsCount})
+                            </span>
+                          )}
                           <span className="text-[10px] text-slate-500 font-medium block">
                             🚚 Delivery: {deliveryFee > 0 ? `₹${deliveryFee}` : "Free"}
                           </span>
@@ -1934,11 +1981,46 @@ export default function VendorDashboard() {
                               <p className="text-[11px] font-medium text-slate-800 truncate">{streetAddr}{cityAddr ? `, ${cityAddr}` : ""}</p>
                             </div>
                           </td>
-                          <td className="py-3.5 px-4 max-w-[200px]">
-                            <p className="text-xs font-semibold text-slate-700 leading-snug line-clamp-2">{itemsSummary}</p>
+                          <td className="py-3.5 px-4 min-w-[260px] max-w-[340px]">
+                            <div className="space-y-1 max-h-56 overflow-y-auto pr-1">
+                              {Array.isArray(ord.items) && ord.items.map((it, idx) => {
+                                const itemQty = Number(it.quantity || it.qty || it.count || 1);
+                                const rawPrice = it.price ?? it.unitPrice ?? it.priceAtPurchase ?? it.sellingPrice ?? it.rate;
+                                let lineTotal = 0;
+                                if (rawPrice !== undefined && rawPrice !== null && !isNaN(Number(rawPrice)) && Number(rawPrice) > 0) {
+                                  lineTotal = Number(rawPrice) * itemQty;
+                                } else if (it.totalPrice || it.total || it.amount) {
+                                  lineTotal = Number(it.totalPrice || it.total || it.amount) || 0;
+                                } else if (orderTotal > 0 && ord.items.length > 0) {
+                                  lineTotal = Math.round(orderTotal / ord.items.length);
+                                }
+
+                                return (
+                                  <div key={idx} className="flex items-center justify-between text-xs py-1 border-b border-slate-100/80 last:border-0">
+                                    <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-brand-500 shrink-0" />
+                                      <span className="font-bold text-navy-900 truncate text-[11.5px]" title={it.productName || it.name}>
+                                        {it.productName || it.name || "Material"}
+                                      </span>
+                                      <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded shrink-0">
+                                        x{itemQty}
+                                      </span>
+                                    </div>
+                                    <span className="font-extrabold text-navy-950 shrink-0 text-xs">
+                                      ₹{(Number(lineTotal) || 0).toLocaleString("en-IN")}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </td>
                           <td className="py-3.5 px-4">
                             <p className="font-black text-navy-900 text-sm">₹{orderTotal}</p>
+                            {ord.isPartialOrder && (
+                              <span className="text-[9.5px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-1.5 py-0.2 rounded inline-block mt-0.5">
+                                Store Items ({ord.items.length} of {ord.totalOrderItemsCount})
+                              </span>
+                            )}
                             <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
                               🚚 {deliveryFee > 0 ? `₹${deliveryFee}` : "Free"}
                             </span>

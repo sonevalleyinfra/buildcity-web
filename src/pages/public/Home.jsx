@@ -207,44 +207,93 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchHidden, setIsSearchHidden] = useState(false);
 
+  const isSearchHiddenRef = useRef(false);
+  const isTransitioningRef = useRef(false);
   const lastScrollY = useRef(0);
-  const ticking = useRef(false);
+  const scrollUpAccumulator = useRef(0);
+  const searchInputRef = useRef(null);
+  const isInputFocused = useRef(false);
 
   useEffect(() => {
+    lastScrollY.current = window.scrollY || document.documentElement.scrollTop || 0;
+
+    let rafId = null;
+
     const handleScroll = () => {
-      const scrollY =
-        window.pageYOffset ||
-        window.scrollY ||
-        document.documentElement.scrollTop ||
-        document.body.scrollTop ||
-        0;
+      if (rafId) return;
 
-      // Always show search bar when near the top (< 20px)
-      if (scrollY < 20) {
-        setIsSearchHidden(false);
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+
+        // If user is actively focused on search input, do not hide
+        if (isInputFocused.current) return;
+
+        // If currently in cooldown transition, ignore scroll events to prevent feedback oscillation
+        if (isTransitioningRef.current) return;
+
+        const scrollY =
+          window.pageYOffset ||
+          window.scrollY ||
+          document.documentElement.scrollTop ||
+          document.body.scrollTop ||
+          0;
+
+        // 1. When at or near the very top of the page (scrollY <= 30px), ALWAYS expand
+        if (scrollY <= 30) {
+          scrollUpAccumulator.current = 0;
+          if (isSearchHiddenRef.current) {
+            isSearchHiddenRef.current = false;
+            setIsSearchHidden(false);
+            isTransitioningRef.current = true;
+            setTimeout(() => {
+              isTransitioningRef.current = false;
+              lastScrollY.current = window.scrollY || 0;
+            }, 350);
+          }
+          lastScrollY.current = scrollY;
+          return;
+        }
+
+        const delta = scrollY - lastScrollY.current;
+
+        // 2. Scrolling DOWN: collapse search bar
+        if (delta > 0) {
+          scrollUpAccumulator.current = 0; // reset accumulated up-scroll
+
+          if (scrollY > 60 && delta > 12 && !isSearchHiddenRef.current) {
+            isSearchHiddenRef.current = true;
+            setIsSearchHidden(true);
+            isTransitioningRef.current = true;
+            setTimeout(() => {
+              isTransitioningRef.current = false;
+              lastScrollY.current = window.scrollY || 0;
+            }, 350);
+          }
+        }
+        // 3. Scrolling UP: expand search bar after deliberate upward scroll
+        else if (delta < 0) {
+          scrollUpAccumulator.current += Math.abs(delta);
+
+          if (scrollUpAccumulator.current > 60 && isSearchHiddenRef.current) {
+            isSearchHiddenRef.current = false;
+            setIsSearchHidden(false);
+            scrollUpAccumulator.current = 0;
+            isTransitioningRef.current = true;
+            setTimeout(() => {
+              isTransitioningRef.current = false;
+              lastScrollY.current = window.scrollY || 0;
+            }, 350);
+          }
+        }
+
         lastScrollY.current = scrollY;
-        return;
-      }
-
-      const diff = scrollY - lastScrollY.current;
-
-      // Scroll down -> minimize search bar
-      if (diff > 5 && scrollY > 30) {
-        setIsSearchHidden(true);
-      }
-      // Scroll up -> expand search bar
-      else if (diff < -5) {
-        setIsSearchHidden(false);
-      }
-
-      lastScrollY.current = scrollY;
+      });
     };
 
-    window.addEventListener("scroll", handleScroll, { passive: true, capture: true });
-    document.addEventListener("scroll", handleScroll, { passive: true, capture: true });
+    window.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
-      window.removeEventListener("scroll", handleScroll, { capture: true });
-      document.removeEventListener("scroll", handleScroll, { capture: true });
+      window.removeEventListener("scroll", handleScroll);
+      if (rafId) cancelAnimationFrame(rafId);
     };
   }, []);
 
@@ -399,8 +448,27 @@ export default function Home() {
             />
           </div>
 
-          {/* Right: Login/Profile + Notification + Cart */}
+          {/* Right: Quick Search (when collapsed) + Login/Profile + Notification + Cart */}
           <div className="flex items-center gap-2">
+            {isSearchHidden && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSearchHidden(false);
+                  isSearchHiddenRef.current = false;
+                  setTimeout(() => searchInputRef.current?.focus(), 150);
+                }}
+                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center active:scale-95 transition-all shadow-2xs border border-slate-200"
+                title="Search products"
+                aria-label="Search"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="m21 21-4.3-4.3" />
+                </svg>
+              </button>
+            )}
+
             {user ? (
               <Link
                 to="/profile"
@@ -442,9 +510,9 @@ export default function Home() {
 
         {/* Search Bar (Smoothly collapses when scrolling down, expands on scrolling up) */}
         <div
-          className={`transition-all duration-300 ease-out overflow-hidden ${
+          className={`transition-all duration-300 ease-in-out overflow-hidden ${
             isSearchHidden
-              ? "max-h-0 opacity-0 -translate-y-2 pointer-events-none pb-0"
+              ? "max-h-0 opacity-0 -translate-y-2 pointer-events-none pb-0 pt-0"
               : "max-h-16 opacity-100 translate-y-0 pb-3 pt-1"
           }`}
         >
@@ -455,8 +523,11 @@ export default function Home() {
                 <path d="m21 21-4.3-4.3" />
               </svg>
               <input
+                ref={searchInputRef}
                 type="text"
                 value={searchQuery}
+                onFocus={() => { isInputFocused.current = true; }}
+                onBlur={() => { isInputFocused.current = false; }}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search cement, steel, paints, pipes..."
                 className="w-full bg-transparent text-xs text-navy-900 font-medium outline-none placeholder:text-slate-400"

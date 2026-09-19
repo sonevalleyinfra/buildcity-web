@@ -23,10 +23,15 @@
   --color-surface: #F8FAFC;
 }
 
-html, body, #root {
+html, body {
   min-height: 100%;
   width: 100%;
-  overflow-x: clip;
+}
+
+#root {
+  min-height: 100%;
+  width: 100%;
+  position: relative;
 }
 
 body {
@@ -35,7 +40,6 @@ body {
   color: #0F172A;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow-x: clip;
 }
 
 /* Custom subtle scrollbars for horizontally scrollable pills & tiles */

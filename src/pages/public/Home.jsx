@@ -205,96 +205,52 @@ export default function Home() {
   const [slide, setSlide] = useState(0);
   const [justAddedId, setJustAddedId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isSearchHidden, setIsSearchHidden] = useState(false);
+  const [isScrolledDown, setIsScrolledDown] = useState(false);
 
-  const isSearchHiddenRef = useRef(false);
+  const isScrolledRef = useRef(false);
   const isTransitioningRef = useRef(false);
-  const lastScrollY = useRef(0);
-  const scrollUpAccumulator = useRef(0);
-  const searchInputRef = useRef(null);
-  const isInputFocused = useRef(false);
 
   useEffect(() => {
-    lastScrollY.current = window.scrollY || document.documentElement.scrollTop || 0;
-
-    let rafId = null;
+    let ticking = false;
 
     const handleScroll = () => {
-      if (rafId) return;
+      if (ticking) return;
 
-      rafId = window.requestAnimationFrame(() => {
-        rafId = null;
+      ticking = true;
+      window.requestAnimationFrame(() => {
+        ticking = false;
 
-        // If user is actively focused on search input, do not hide
-        if (isInputFocused.current) return;
-
-        // If currently in cooldown transition, ignore scroll events to prevent feedback oscillation
         if (isTransitioningRef.current) return;
 
         const scrollY =
           window.pageYOffset ||
           window.scrollY ||
           document.documentElement.scrollTop ||
-          document.body.scrollTop ||
           0;
 
-        // 1. When at or near the very top of the page (scrollY <= 30px), ALWAYS expand
-        if (scrollY <= 30) {
-          scrollUpAccumulator.current = 0;
-          if (isSearchHiddenRef.current) {
-            isSearchHiddenRef.current = false;
-            setIsSearchHidden(false);
-            isTransitioningRef.current = true;
-            setTimeout(() => {
-              isTransitioningRef.current = false;
-              lastScrollY.current = window.scrollY || 0;
-            }, 350);
-          }
-          lastScrollY.current = scrollY;
-          return;
+        // Scroll down past 50px -> minimize search
+        if (scrollY > 50 && !isScrolledRef.current) {
+          isScrolledRef.current = true;
+          setIsScrolledDown(true);
+          isTransitioningRef.current = true;
+          setTimeout(() => {
+            isTransitioningRef.current = false;
+          }, 320);
         }
-
-        const delta = scrollY - lastScrollY.current;
-
-        // 2. Scrolling DOWN: collapse search bar
-        if (delta > 0) {
-          scrollUpAccumulator.current = 0; // reset accumulated up-scroll
-
-          if (scrollY > 60 && delta > 12 && !isSearchHiddenRef.current) {
-            isSearchHiddenRef.current = true;
-            setIsSearchHidden(true);
-            isTransitioningRef.current = true;
-            setTimeout(() => {
-              isTransitioningRef.current = false;
-              lastScrollY.current = window.scrollY || 0;
-            }, 350);
-          }
+        // Scroll back to top (< 15px) -> expand search
+        else if (scrollY < 15 && isScrolledRef.current) {
+          isScrolledRef.current = false;
+          setIsScrolledDown(false);
+          isTransitioningRef.current = true;
+          setTimeout(() => {
+            isTransitioningRef.current = false;
+          }, 320);
         }
-        // 3. Scrolling UP: expand search bar after deliberate upward scroll
-        else if (delta < 0) {
-          scrollUpAccumulator.current += Math.abs(delta);
-
-          if (scrollUpAccumulator.current > 60 && isSearchHiddenRef.current) {
-            isSearchHiddenRef.current = false;
-            setIsSearchHidden(false);
-            scrollUpAccumulator.current = 0;
-            isTransitioningRef.current = true;
-            setTimeout(() => {
-              isTransitioningRef.current = false;
-              lastScrollY.current = window.scrollY || 0;
-            }, 350);
-          }
-        }
-
-        lastScrollY.current = scrollY;
       });
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-      if (rafId) cancelAnimationFrame(rafId);
-    };
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   const touchStartX = useRef(null);
@@ -448,27 +404,8 @@ export default function Home() {
             />
           </div>
 
-          {/* Right: Quick Search (when collapsed) + Login/Profile + Notification + Cart */}
+          {/* Right: Login/Profile + Notification + Cart */}
           <div className="flex items-center gap-2">
-            {isSearchHidden && (
-              <button
-                type="button"
-                onClick={() => {
-                  setIsSearchHidden(false);
-                  isSearchHiddenRef.current = false;
-                  setTimeout(() => searchInputRef.current?.focus(), 150);
-                }}
-                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center active:scale-95 transition-all shadow-2xs border border-slate-200"
-                title="Search products"
-                aria-label="Search"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-                  <circle cx="11" cy="11" r="8" />
-                  <path d="m21 21-4.3-4.3" />
-                </svg>
-              </button>
-            )}
-
             {user ? (
               <Link
                 to="/profile"
@@ -508,12 +445,12 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Search Bar (Smoothly collapses when scrolling down, expands on scrolling up) */}
+        {/* Search Bar (Smoothly collapses when scrolled down, restores at top) */}
         <div
           className={`transition-all duration-300 ease-in-out overflow-hidden ${
-            isSearchHidden
-              ? "max-h-0 opacity-0 -translate-y-2 pointer-events-none pb-0 pt-0"
-              : "max-h-16 opacity-100 translate-y-0 pb-3 pt-1"
+            isScrolledDown
+              ? "max-h-0 opacity-0 pb-0 pointer-events-none"
+              : "max-h-16 opacity-100 pb-3 pt-1"
           }`}
         >
           <form onSubmit={handleSearch} className="px-4">
@@ -523,11 +460,8 @@ export default function Home() {
                 <path d="m21 21-4.3-4.3" />
               </svg>
               <input
-                ref={searchInputRef}
                 type="text"
                 value={searchQuery}
-                onFocus={() => { isInputFocused.current = true; }}
-                onBlur={() => { isInputFocused.current = false; }}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search cement, steel, paints, pipes..."
                 className="w-full bg-transparent text-xs text-navy-900 font-medium outline-none placeholder:text-slate-400"

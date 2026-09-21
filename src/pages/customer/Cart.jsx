@@ -102,7 +102,7 @@ export default function Cart() {
       } else {
         showAlert({
           title: "✅ Region Sync Complete",
-          message: `Cart prices and vendor listings successfully updated for ${currentRegionName}!`,
+          message: `Cart prices and availability successfully updated for ${currentRegionName}!`,
           type: "success",
           buttonText: "Awesome",
         });
@@ -384,12 +384,11 @@ export default function Cart() {
                       </div>
                       <div className="flex flex-wrap items-center gap-2 mt-0.5">
                         {item.brand && <p className="text-[11px] font-semibold text-slate-500">🏷️ {item.brand}</p>}
-                        {item.vendorName && <p className="text-[10px] font-bold text-slate-400">🏬 {item.vendorName}</p>}
                       </div>
                       {isItemUnavailable && (
                         <div className="mt-1.5">
                           <span className="inline-flex items-center gap-1 text-[10px] font-black text-rose-700 bg-rose-100/90 px-2 py-0.5 rounded-md border border-rose-300">
-                            ⚠️ Unavailable (Supplier Suspended) — Please Remove
+                            ⚠️ Currently Unavailable — Please Remove
                           </span>
                         </div>
                       )}

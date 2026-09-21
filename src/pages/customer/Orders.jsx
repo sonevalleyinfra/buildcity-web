@@ -121,7 +121,7 @@ export default function Orders() {
               My Orders & Fulfillment
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Live delivery status updates directly from partner vendors in your district.
+              Live delivery status updates directly for your site delivery.
             </p>
           </div>
           <button

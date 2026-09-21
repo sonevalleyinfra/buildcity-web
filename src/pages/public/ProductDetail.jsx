@@ -38,7 +38,7 @@ function generateProduct(id, priceFactor = 1, regionName = "Varanasi") {
     reviews: 0,
     inStock: true,
     unit: "50kg Bag",
-    description: `High-quality certified construction material. Supplied directly by authorized BuildCity vendors across ${regionName}.`,
+    description: `High-quality certified construction material. Supplied directly via BuildCity Certified Delivery Network across ${regionName}.`,
     specs: [
       { label: "Brand", value: brand },
       { label: "Category", value: "Building Supplies" },
@@ -156,11 +156,9 @@ export default function ProductDetail() {
         unit: realProd.unit || "Unit",
         description:
           realProd.description ||
-          `High-quality certified ${realProd.name} by ${realProd.brand || "Authorized Brand"}. Supplied directly by ${
-            realProd.vendorName || "Authorized Vendor"
-          }.`,
+          `High-quality certified ${realProd.name} by ${realProd.brand || "Authorized Brand"}. Supplied directly via BuildCity Certified Delivery Network.`,
         specs: [
-          { label: "Vendor Shop", value: realProd.vendorName || "Authorized BuildCity Vendor" },
+          { label: "Fulfillment", value: "BuildCity Certified Network" },
           { label: "Brand", value: realProd.brand || "Generic" },
           { label: "Grade", value: realProd.grade || "Standard" },
           { label: "Type", value: realProd.type || "Standard Type" },

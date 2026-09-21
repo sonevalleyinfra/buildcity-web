@@ -59,7 +59,7 @@ export default function SearchResults() {
       return {
         id: p.id,
         name: p.name,
-        brand: p.brand || "Vendor Certified",
+        brand: p.brand || "BuildCity Certified",
         vendorName: p.vendorName || p.vendor?.shopName || "District Vendor",
         img: p.img || p.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
         mrp: calculatedMrp,

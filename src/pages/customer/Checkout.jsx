@@ -745,7 +745,7 @@ export default function Checkout() {
               Thank You For Your Order!
             </h2>
             <p className="text-xs text-slate-500 font-medium mb-5">
-              Your construction material order has been dispatched to district vendors for immediate site delivery.
+              Your construction material order has been confirmed for immediate site delivery.
             </p>
 
             {/* Order Details Card */}

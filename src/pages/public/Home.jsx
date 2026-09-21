@@ -174,22 +174,22 @@ const brandItems = [
 const DEFAULT_BANNER_SLIDES = [
   {
     id: "b-1",
-    tag: "BUILD YOUR DREAM SPACE",
-    title: "Quality Products. Best Prices.",
+    tag: "",
+    title: "",
     imageUrl: "https://res.cloudinary.com/lbwxvqmg/image/upload/v1788936739/buildcitybanner.jpg",
     targetUrl: "/categories",
   },
   {
     id: "b-2",
-    tag: "DIRECT SITE DELIVERY",
-    title: "Wholesale Rates. Zero Middlemen.",
+    tag: "",
+    title: "",
     imageUrl: "https://res.cloudinary.com/lbwxvqmg/image/upload/v1788938503/banner3.png",
     targetUrl: "/categories",
   },
   {
     id: "b-3",
-    tag: "100% CERTIFIED MATERIALS",
-    title: "Lab Tested. Site Delivered.",
+    tag: "",
+    title: "",
     imageUrl: "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1200&q=80",
     targetUrl: "/categories",
   },
@@ -534,18 +534,18 @@ export default function Home() {
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors" />
 
                   {/* 🏷️ Dynamic Badge, Title & Button overlay inside exact banner screen frame */}
-                  {(b.tag || b.title) && (
+                  {(Boolean(b.tag?.trim()) || Boolean(b.title?.trim())) && (
                     <div className="absolute inset-x-0 bottom-0 px-3 py-2.5 sm:px-6 sm:py-3.5 bg-gradient-to-t from-black/85 via-black/45 to-transparent flex items-center justify-between gap-2 z-10 pointer-events-none">
                       <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
-                        {b.tag && (
+                        {b.tag?.trim() && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 sm:px-3 sm:py-1 rounded-full bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 text-slate-950 font-black text-[9px] sm:text-xs uppercase tracking-wider shadow-md shrink-0 border border-amber-200/60">
                             <span className="text-[10px] sm:text-xs leading-none">✨</span>
-                            <span className="leading-none">{b.tag}</span>
+                            <span className="leading-none">{b.tag.trim()}</span>
                           </span>
                         )}
-                        {b.title && (
+                        {b.title?.trim() && (
                           <p className="text-white font-black text-xs sm:text-base md:text-lg drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] truncate max-w-[140px] sm:max-w-xs md:max-w-md leading-tight">
-                            {b.title}
+                            {b.title.trim()}
                           </p>
                         )}
                       </div>

@@ -141,8 +141,8 @@ let couponsList = [
 let bannersList = [
   {
     id: "b-1",
-    tag: "BUILD YOUR DREAM SPACE",
-    title: "Quality Products. Best Prices.",
+    tag: "",
+    title: "",
     imageUrl: "https://res.cloudinary.com/lbwxvqmg/image/upload/v1788936739/buildcitybanner.jpg",
     targetUrl: "/categories",
     isActive: true,
@@ -150,8 +150,8 @@ let bannersList = [
   },
   {
     id: "b-2",
-    tag: "DIRECT SITE DELIVERY",
-    title: "Wholesale Rates. Zero Middlemen.",
+    tag: "",
+    title: "",
     imageUrl: "https://res.cloudinary.com/lbwxvqmg/image/upload/v1788938503/banner3.png",
     targetUrl: "/categories",
     isActive: true,
@@ -159,8 +159,8 @@ let bannersList = [
   },
   {
     id: "b-3",
-    tag: "100% CERTIFIED MATERIALS",
-    title: "Lab Tested. Site Delivered.",
+    tag: "",
+    title: "",
     imageUrl: "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1200&q=80",
     targetUrl: "/categories",
     isActive: true,

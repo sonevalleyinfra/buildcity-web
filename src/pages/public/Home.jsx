@@ -241,16 +241,17 @@ export default function Home() {
           window.pageYOffset ||
           window.scrollY ||
           document.documentElement.scrollTop ||
+          document.body.scrollTop ||
           0;
 
-        // Scroll down past 50px -> minimize search
-        if (scrollY > 50 && !isScrolledRef.current) {
+        // Scroll down past 35px -> smoothly minimize search
+        if (scrollY > 35 && !isScrolledRef.current) {
           isScrolledRef.current = true;
           setIsScrolledDown(true);
           isTransitioningRef.current = true;
           setTimeout(() => {
             isTransitioningRef.current = false;
-          }, 320);
+          }, 300);
         }
         // Scroll back to top (< 15px) -> expand search
         else if (scrollY < 15 && isScrolledRef.current) {
@@ -259,13 +260,17 @@ export default function Home() {
           isTransitioningRef.current = true;
           setTimeout(() => {
             isTransitioningRef.current = false;
-          }, 320);
+          }, 300);
         }
       });
     };
 
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
+    window.addEventListener("scroll", handleScroll, { passive: true, capture: true });
+    document.addEventListener("scroll", handleScroll, { passive: true, capture: true });
+    return () => {
+      window.removeEventListener("scroll", handleScroll, { capture: true });
+      document.removeEventListener("scroll", handleScroll, { capture: true });
+    };
   }, []);
 
   const touchStartX = useRef(null);
@@ -386,7 +391,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-28 font-sans w-full max-w-full overflow-x-hidden">
+    <div className="min-h-screen bg-[#F8FAFC] pb-28 font-sans w-full max-w-full [overflow-x:clip]">
       {/* 🖥️ Desktop Navbar */}
       <div className="hidden lg:block">
         <Navbar />

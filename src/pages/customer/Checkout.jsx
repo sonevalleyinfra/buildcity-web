@@ -279,15 +279,44 @@ export default function Checkout() {
 
     setPlacing(true);
 
-    const orderItems = items.map((i) => ({
-      id: i.id || i.productId,
-      productId: i.productId || i.id,
-      name: i.name || i.productName || "Material Item",
-      quantity: i.qty || i.quantity || 1,
-      price: i.price || 100,
-      vendorId: i.vendorId,
-      vendorName: i.vendorName,
-    }));
+    const orderItems = items.map((i) => {
+      const pId = i.id || i.productId;
+      const cleanName = (i.name || i.productName || "").trim().toLowerCase();
+
+      // Find in catalog if vendorId is missing or empty
+      const catalogProd = Array.isArray(products)
+        ? products.find(
+            (p) =>
+              p.id === pId ||
+              (cleanName && p.name && p.name.trim().toLowerCase() === cleanName)
+          )
+        : null;
+
+      const resolvedVendorId =
+        i.vendorId ||
+        catalogProd?.vendorId ||
+        catalogProd?.vendor?.id ||
+        catalogProd?.vendorInfo?.id ||
+        (pId ? `v-${pId}` : "v1");
+
+      const resolvedVendorName =
+        i.vendorName ||
+        catalogProd?.vendorName ||
+        catalogProd?.vendor?.shopName ||
+        catalogProd?.vendorInfo?.shopName ||
+        "District Vendor";
+
+      return {
+        id: pId,
+        productId: pId,
+        name: i.name || i.productName || "Material Item",
+        quantity: i.qty || i.quantity || 1,
+        price: i.price || 100,
+        img: i.img || i.imageUrl,
+        vendorId: resolvedVendorId,
+        vendorName: resolvedVendorName,
+      };
+    });
 
     try {
       const order = await placeOrder({

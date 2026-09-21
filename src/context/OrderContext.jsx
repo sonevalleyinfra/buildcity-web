@@ -190,14 +190,29 @@ export function OrderProvider({ children }) {
       name: it.name || it.productName || "Material Item",
       quantity: Number(it.quantity || it.qty) || 1,
       price: Number(it.price) || 100,
-      vendorId: it.vendorId || "v1",
+      vendorId: it.vendorId,
       vendorName: it.vendorName || "District Vendor",
     }));
 
     // 2. Group items strictly by vendor identity (same vendor's multiple items grouped into one order)
     const vendorMap = new Map();
-    formattedItems.forEach((it) => {
-      const vKey = String(it.vendorId || it.vendorName || "v1").trim();
+    formattedItems.forEach((it, idx) => {
+      const rawVendorId = it.vendorId ? String(it.vendorId).trim() : "";
+      const rawVendorName = it.vendorName ? String(it.vendorName).trim() : "";
+
+      const isGenericId = !rawVendorId || rawVendorId === "v1" || rawVendorId === "default";
+      const isGenericName = !rawVendorName || rawVendorName.toLowerCase() === "district vendor" || rawVendorName.toLowerCase() === "vendor";
+
+      let vKey = "";
+      if (!isGenericId) {
+        vKey = `vid:${rawVendorId}`;
+      } else if (!isGenericName) {
+        vKey = `vname:${rawVendorName.toLowerCase()}`;
+      } else {
+        // Separate unknown items so distinct items without vendor don't collapse into a single order
+        vKey = `item:${it.productId || it.id || idx}`;
+      }
+
       if (!vendorMap.has(vKey)) {
         vendorMap.set(vKey, []);
       }

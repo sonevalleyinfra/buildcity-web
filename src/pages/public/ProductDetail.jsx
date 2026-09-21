@@ -46,6 +46,8 @@ function generateProduct(id, priceFactor = 1, regionName = "Varanasi") {
       { label: "Warranty", value: "Manufacturer Warranty" },
       { label: "Delivery", value: "Fast Site Delivery" },
     ],
+    vendorId: `v-${id}`,
+    vendorName: "BuildCity Direct",
     reviewsList: [],
   };
 }
@@ -287,6 +289,8 @@ export default function ProductDetail() {
         img: product.images[0],
         price: product.price,
         mrp: product.mrp,
+        vendorId: product.vendorId,
+        vendorName: product.vendorName,
       },
       qty
     );

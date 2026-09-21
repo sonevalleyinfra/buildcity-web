@@ -171,27 +171,27 @@ const brandItems = [
   },
 ];
 
-const bannerSlides = [
+const DEFAULT_BANNER_SLIDES = [
   {
+    id: "b-1",
     tag: "BUILD YOUR DREAM SPACE",
-    line1: "Quality Products.",
-    line2: "Best Prices.",
-    line3: "Reliable Service.",
-    img: "https://res.cloudinary.com/lbwxvqmg/image/upload/v1788936739/buildcitybanner.jpg",
+    title: "Quality Products. Best Prices.",
+    imageUrl: "https://res.cloudinary.com/lbwxvqmg/image/upload/v1788936739/buildcitybanner.jpg",
+    targetUrl: "/categories",
   },
   {
+    id: "b-2",
     tag: "DIRECT SITE DELIVERY",
-    line1: "Wholesale Rates.",
-    line2: "Zero Middlemen.",
-    line3: "Direct Delivery.",
-    img: "https://res.cloudinary.com/lbwxvqmg/image/upload/v1788938503/banner3.png",
+    title: "Wholesale Rates. Zero Middlemen.",
+    imageUrl: "https://res.cloudinary.com/lbwxvqmg/image/upload/v1788938503/banner3.png",
+    targetUrl: "/categories",
   },
   {
+    id: "b-3",
     tag: "100% CERTIFIED MATERIALS",
-    line1: "Lab Tested.",
-    line2: "Site Delivered.",
-    line3: "Pay On Delivery.",
-    img: "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1200&q=80",
+    title: "Lab Tested. Site Delivered.",
+    imageUrl: "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1200&q=80",
+    targetUrl: "/categories",
   },
 ];
 
@@ -199,8 +199,13 @@ export default function Home() {
   const { user } = useAuth();
   const { addItem, count } = useCart();
   const { region } = useRegion();
-  const { products = [], productsLoading } = useAdmin();
+  const { products = [], productsLoading, banners = [] } = useAdmin();
   const navigate = useNavigate();
+
+  const activeSlides = useMemo(() => {
+    const list = Array.isArray(banners) ? banners.filter((b) => b.isActive !== false) : [];
+    return list.length > 0 ? list : DEFAULT_BANNER_SLIDES;
+  }, [banners]);
 
   const [slide, setSlide] = useState(0);
   const [justAddedId, setJustAddedId] = useState(null);
@@ -289,11 +294,11 @@ export default function Home() {
   }, [liveVendorApproved]);
 
   const nextSlide = () => {
-    setSlide((s) => (s + 1) % bannerSlides.length);
+    setSlide((s) => (s + 1) % activeSlides.length);
   };
 
   const prevSlide = () => {
-    setSlide((s) => (s - 1 + bannerSlides.length) % bannerSlides.length);
+    setSlide((s) => (s - 1 + activeSlides.length) % activeSlides.length);
   };
 
   const handleTouchStart = (e) => {
@@ -343,10 +348,10 @@ export default function Home() {
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setSlide((s) => (s + 1) % bannerSlides.length);
+      setSlide((s) => (s + 1) % activeSlides.length);
     }, 5000);
     return () => clearInterval(timer);
-  }, []);
+  }, [activeSlides.length]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -490,9 +495,9 @@ export default function Home() {
         >
           {/* Banner Main Carousel Area */}
           <div className="relative aspect-[16/8.2] sm:aspect-[24/8] w-full flex items-stretch cursor-grab active:cursor-grabbing">
-            {bannerSlides.map((b, i) => (
+            {activeSlides.map((b, i) => (
               <div
-                key={i}
+                key={b.id || i}
                 className="absolute inset-0 transition-all duration-700 ease-out overflow-hidden"
                 style={{
                   opacity: slide === i ? 1 : 0,
@@ -501,10 +506,10 @@ export default function Home() {
                 }}
               >
                 {/* Full Banner Graphic Image */}
-                <Link to="/categories" className="block w-full h-full relative group">
+                <Link to={b.targetUrl || b.link || "/categories"} className="block w-full h-full relative group">
                   <img
-                    src={b.img}
-                    alt={b.tag || "Hero Banner"}
+                    src={b.imageUrl || b.img}
+                    alt={b.tag || b.title || "Hero Banner"}
                     className="w-full h-full object-fill sm:object-cover object-center"
                     onError={(e) => {
                       e.target.src = "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1200&q=80";
@@ -546,7 +551,7 @@ export default function Home() {
 
             {/* Interactive Dots Indicator */}
             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 sm:left-8 sm:translate-x-0 flex items-center gap-1.5 z-20 bg-black/25 backdrop-blur-xs px-2.5 py-1 rounded-full">
-              {bannerSlides.map((_, i) => (
+              {activeSlides.map((_, i) => (
                 <button
                   key={i}
                   type="button"

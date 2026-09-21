@@ -138,6 +138,49 @@ const loadInitialCoupons = () => {
   return seedCoupons;
 };
 
+const BANNERS_STORAGE_KEY = "buildcity_admin_banners";
+
+const seedBanners = [
+  {
+    id: "b-1",
+    tag: "BUILD YOUR DREAM SPACE",
+    title: "Quality Products. Best Prices.",
+    imageUrl: "https://res.cloudinary.com/lbwxvqmg/image/upload/v1788936739/buildcitybanner.jpg",
+    targetUrl: "/categories",
+    isActive: true,
+    displayOrder: 1,
+  },
+  {
+    id: "b-2",
+    tag: "DIRECT SITE DELIVERY",
+    title: "Wholesale Rates. Zero Middlemen.",
+    imageUrl: "https://res.cloudinary.com/lbwxvqmg/image/upload/v1788938503/banner3.png",
+    targetUrl: "/categories",
+    isActive: true,
+    displayOrder: 2,
+  },
+  {
+    id: "b-3",
+    tag: "100% CERTIFIED MATERIALS",
+    title: "Lab Tested. Site Delivered.",
+    imageUrl: "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1200&q=80",
+    targetUrl: "/categories",
+    isActive: true,
+    displayOrder: 3,
+  },
+];
+
+const loadInitialBanners = () => {
+  try {
+    const saved = localStorage.getItem(BANNERS_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return seedBanners;
+};
+
 const USERS_STORAGE_KEY = "buildcity_admin_users";
 const PRODUCTS_STORAGE_KEY = "buildcity_admin_products";
 const MASTER_PRODUCTS_STORAGE_KEY = "buildcity_admin_master_products";
@@ -198,6 +241,7 @@ export function AdminProvider({ children }) {
   const [categories, setCategories] = useState(loadInitialCategories);
   const [regions, setRegions] = useState(loadInitialRegions);
   const [coupons, setCoupons] = useState(loadInitialCoupons);
+  const [banners, setBanners] = useState(loadInitialBanners);
   const [masterProducts, setMasterProducts] = useState(loadInitialMasterProducts);
   const [products, setProducts] = useState(loadInitialProducts);
   const [productsLoading, setProductsLoading] = useState(true);
@@ -231,6 +275,7 @@ export function AdminProvider({ children }) {
       let listingsRes = [];
       let couponsRes = [];
       let masterRes = [];
+      let bannersRes = [];
 
       // 1. Try single consolidated endpoint first (Fastest path: 1 HTTP request)
       const unifiedRes = await authFetch(`${API_BASE_URL}/api/v1/public-catalog`)
@@ -243,20 +288,23 @@ export function AdminProvider({ children }) {
         listingsRes = unifiedRes.listings || [];
         couponsRes = unifiedRes.coupons || [];
         masterRes = unifiedRes.masterProducts || [];
+        bannersRes = unifiedRes.banners || [];
       } else {
         // Fallback to individual parallel endpoints
-        const [c, r, l, cp, m] = await Promise.all([
+        const [c, r, l, cp, m, bn] = await Promise.all([
           authFetch(`${API_BASE_URL}/api/v1/categories`).then((res) => res.json()).catch(() => []),
           authFetch(`${API_BASE_URL}/api/v1/regions`).then((res) => res.json()).catch(() => []),
           authFetch(`${API_BASE_URL}/api/v1/vendor/listings`).then((res) => res.json()).catch(() => []),
           authFetch(`${API_BASE_URL}/api/v1/coupons`).then((res) => res.json()).catch(() => []),
           authFetch(`${API_BASE_URL}/api/v1/master-products`).then((res) => res.json()).catch(() => []),
+          authFetch(`${API_BASE_URL}/api/v1/banners`).then((res) => res.json()).catch(() => []),
         ]);
         catsRes = c;
         regsRes = r;
         listingsRes = l;
         couponsRes = cp;
         masterRes = m;
+        bannersRes = bn;
       }
 
       if (Array.isArray(catsRes) && catsRes.length > 0) {
@@ -318,6 +366,12 @@ export function AdminProvider({ children }) {
           localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(couponsRes));
         } catch {}
       }
+      if (Array.isArray(bannersRes) && bannersRes.length > 0) {
+        setBanners(bannersRes);
+        try {
+          localStorage.setItem(BANNERS_STORAGE_KEY, JSON.stringify(bannersRes));
+        } catch {}
+      }
     } catch (e) {
       console.warn("Public catalog sync note:", e.message);
     } finally {
@@ -358,7 +412,7 @@ export function AdminProvider({ children }) {
 
       if (!syncRes) return;
 
-      const { drs: drsRes, vendors: vendorsRes, masterProducts: masterRes, categories: categoriesRes, regions: regionsRes, orders: ordersRes, listings: listingsRes, coupons: couponsRes, users: usersRes } = syncRes;
+      const { drs: drsRes, vendors: vendorsRes, masterProducts: masterRes, categories: categoriesRes, regions: regionsRes, orders: ordersRes, listings: listingsRes, coupons: couponsRes, users: usersRes, banners: bannersRes } = syncRes;
 
       const now = Date.now();
       for (const [key, entry] of recentEditsRef.current.entries()) {
@@ -429,6 +483,11 @@ export function AdminProvider({ children }) {
         });
         localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(formattedCoupons));
         setCoupons((prev) => (JSON.stringify(prev) === JSON.stringify(formattedCoupons) ? prev : formattedCoupons));
+      }
+
+      if (bannersRes && Array.isArray(bannersRes) && bannersRes.length > 0) {
+        localStorage.setItem(BANNERS_STORAGE_KEY, JSON.stringify(bannersRes));
+        setBanners((prev) => (JSON.stringify(prev) === JSON.stringify(bannersRes) ? prev : bannersRes));
       }
 
       if (drsRes && Array.isArray(drsRes)) {
@@ -1375,6 +1434,106 @@ export function AdminProvider({ children }) {
     }
   };
 
+  const addBanner = async (bannerData) => {
+    if (!bannerData || !bannerData.imageUrl) throw new Error("Image URL is required");
+
+    const payload = {
+      tag: bannerData.tag || "BUILD YOUR DREAM SPACE",
+      title: bannerData.title || "Quality Products. Best Prices.",
+      imageUrl: bannerData.imageUrl.trim(),
+      targetUrl: bannerData.targetUrl || "/categories",
+      isActive: bannerData.isActive !== false,
+      displayOrder: Number(bannerData.displayOrder) || (banners.length + 1),
+    };
+
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/banners`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setBanners((prev) => {
+          const updated = [...prev, saved];
+          localStorage.setItem(BANNERS_STORAGE_KEY, JSON.stringify(updated));
+          window.dispatchEvent(new Event("buildcity_banners_updated"));
+          return updated;
+        });
+        return saved;
+      }
+    } catch (err) {
+      console.warn("DB Banner save note:", err.message);
+    }
+
+    const fallbackBanner = {
+      id: "b-" + Date.now(),
+      ...payload,
+      createdAt: new Date().toISOString(),
+    };
+
+    setBanners((prev) => {
+      const updated = [...prev, fallbackBanner];
+      localStorage.setItem(BANNERS_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event("buildcity_banners_updated"));
+      return updated;
+    });
+
+    return fallbackBanner;
+  };
+
+  const updateBanner = async (id, updates) => {
+    setBanners((prev) => {
+      const updated = prev.map((b) => (b.id === id ? { ...b, ...updates } : b));
+      localStorage.setItem(BANNERS_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event("buildcity_banners_updated"));
+      return updated;
+    });
+
+    try {
+      await authFetch(`${API_BASE_URL}/api/v1/banners/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+    } catch (err) {
+      console.warn("Update banner note:", err.message);
+    }
+  };
+
+  const toggleBannerActive = (id) => {
+    let nextState = true;
+    setBanners((prev) => {
+      const item = prev.find((b) => b.id === id);
+      nextState = item ? (item.isActive === false ? true : false) : true;
+      const updated = prev.map((b) => (b.id === id ? { ...b, isActive: nextState } : b));
+      localStorage.setItem(BANNERS_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event("buildcity_banners_updated"));
+      return updated;
+    });
+
+    authFetch(`${API_BASE_URL}/api/v1/banners/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isActive: nextState }),
+    }).catch(() => {});
+  };
+
+  const removeBanner = async (id) => {
+    setBanners((prev) => {
+      const updated = prev.filter((b) => b.id !== id);
+      localStorage.setItem(BANNERS_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event("buildcity_banners_updated"));
+      return updated;
+    });
+
+    try {
+      await authFetch(`${API_BASE_URL}/api/v1/banners/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+    } catch {}
+  };
+
   const addMasterProduct = async (mpData) => {
     const catObj = categories.find((c) => c.id === mpData.categoryId) || {};
     const catName = catObj.name || mpData.categoryName || "General";
@@ -1677,6 +1836,11 @@ export function AdminProvider({ children }) {
         updateCoupon,
         toggleCouponActive,
         removeCoupon,
+        banners,
+        addBanner,
+        updateBanner,
+        toggleBannerActive,
+        removeBanner,
         addMasterProduct,
         updateMasterProduct,
         removeMasterProduct,

@@ -138,6 +138,36 @@ let couponsList = [
   { id: "cp-3", code: "WELCOME200", title: "Flat ₹200 OFF", minOrder: 1500, discountAmount: 200, expiryDate: "2026-12-31", isActive: true, desc: "Special welcome coupon for new site orders" },
 ];
 
+let bannersList = [
+  {
+    id: "b-1",
+    tag: "BUILD YOUR DREAM SPACE",
+    title: "Quality Products. Best Prices.",
+    imageUrl: "https://res.cloudinary.com/lbwxvqmg/image/upload/v1788936739/buildcitybanner.jpg",
+    targetUrl: "/categories",
+    isActive: true,
+    displayOrder: 1,
+  },
+  {
+    id: "b-2",
+    tag: "DIRECT SITE DELIVERY",
+    title: "Wholesale Rates. Zero Middlemen.",
+    imageUrl: "https://res.cloudinary.com/lbwxvqmg/image/upload/v1788938503/banner3.png",
+    targetUrl: "/categories",
+    isActive: true,
+    displayOrder: 2,
+  },
+  {
+    id: "b-3",
+    tag: "100% CERTIFIED MATERIALS",
+    title: "Lab Tested. Site Delivered.",
+    imageUrl: "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1200&q=80",
+    targetUrl: "/categories",
+    isActive: true,
+    displayOrder: 3,
+  },
+];
+
 // ⚡ Unified Public Storefront Catalog (1 Single HTTP Request for 0.05s Storefront Loading)
 app.get("/api/v1/public-catalog", async (req, res) => {
   const cacheKey = "public_catalog";
@@ -176,6 +206,7 @@ app.get("/api/v1/public-catalog", async (req, res) => {
       listings,
       coupons: coupons && coupons.length > 0 ? coupons : couponsList,
       masterProducts,
+      banners: bannersList.filter((b) => b.isActive !== false),
     };
 
     setCached(cacheKey, result, 60000); // Cache for 60s
@@ -268,6 +299,7 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       listings,
       coupons: coupons || [],
       users: users || [],
+      banners: bannersList,
     };
 
     res.json(data);
@@ -564,6 +596,70 @@ app.delete("/api/v1/coupons/:id", requireAuth, requireRole("ADMIN"), async (req,
 
   couponsList = couponsList.filter((c) => c.id !== rawId && c.code !== rawId.toUpperCase());
   res.json({ success: true, message: "Coupon deleted" });
+});
+
+// Banners Endpoints
+app.get("/api/v1/banners", async (req, res) => {
+  try {
+    const { activeOnly } = req.query;
+    let list = bannersList;
+    if (activeOnly === "true") {
+      list = list.filter((b) => b.isActive !== false);
+    }
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/v1/banners", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const { tag, title, imageUrl, targetUrl, isActive, displayOrder } = req.body;
+  if (!imageUrl || !imageUrl.trim()) {
+    return res.status(400).json({ error: "Banner Image URL is required" });
+  }
+  const newBanner = {
+    id: "b-" + Date.now(),
+    tag: tag ? tag.trim() : "BUILD YOUR DREAM SPACE",
+    title: title ? title.trim() : "Quality Products. Best Prices.",
+    imageUrl: imageUrl.trim(),
+    targetUrl: targetUrl ? targetUrl.trim() : "/categories",
+    isActive: isActive !== false,
+    displayOrder: Number(displayOrder) || (bannersList.length + 1),
+    createdAt: new Date().toISOString(),
+  };
+  bannersList.push(newBanner);
+  invalidateCache();
+  res.status(201).json(newBanner);
+});
+
+app.patch("/api/v1/banners/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const { id } = req.params;
+  const { tag, title, imageUrl, targetUrl, isActive, displayOrder } = req.body;
+  const index = bannersList.findIndex((b) => b.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: "Banner not found" });
+  }
+  const updated = {
+    ...bannersList[index],
+    ...(tag !== undefined ? { tag: tag.trim() } : {}),
+    ...(title !== undefined ? { title: title.trim() } : {}),
+    ...(imageUrl !== undefined ? { imageUrl: imageUrl.trim() } : {}),
+    ...(targetUrl !== undefined ? { targetUrl: targetUrl.trim() } : {}),
+    ...(isActive !== undefined ? { isActive: Boolean(isActive) } : {}),
+    ...(displayOrder !== undefined ? { displayOrder: Number(displayOrder) } : {}),
+    updatedAt: new Date().toISOString(),
+  };
+  bannersList[index] = updated;
+  invalidateCache();
+  res.json(updated);
+});
+
+app.delete("/api/v1/banners/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  const { id } = req.params;
+  const prevCount = bannersList.length;
+  bannersList = bannersList.filter((b) => b.id !== id);
+  invalidateCache();
+  res.json({ success: true, deleted: prevCount !== bannersList.length });
 });
 
 const { sendRealSMSOTP } = require("./smsService");

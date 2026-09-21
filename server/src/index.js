@@ -178,7 +178,7 @@ app.get("/api/v1/public-catalog", async (req, res) => {
   }
 
   try {
-    const [categories, regions, listings, coupons, masterProducts] = await Promise.all([
+    const [categories, regions, listings, coupons, masterProducts, dbBanners] = await Promise.all([
       prisma.category.findMany({ orderBy: { name: "asc" } }).catch(() => []),
       prisma.region.findMany({ orderBy: { name: "asc" } }).catch(() => []),
       prisma.vendorProduct.findMany({
@@ -198,7 +198,10 @@ app.get("/api/v1/public-catalog", async (req, res) => {
       }).catch(() => []),
       prisma.coupon.findMany({ orderBy: { createdAt: "desc" } }).catch(() => []),
       prisma.productMaster.findMany({ include: { category: true }, orderBy: { createdAt: "desc" } }).catch(() => []),
+      prisma.banner.findMany({ orderBy: { displayOrder: "asc" } }).catch(() => []),
     ]);
+
+    const finalBanners = dbBanners && dbBanners.length > 0 ? dbBanners : bannersList;
 
     const result = {
       categories,
@@ -206,11 +209,12 @@ app.get("/api/v1/public-catalog", async (req, res) => {
       listings,
       coupons: coupons && coupons.length > 0 ? coupons : couponsList,
       masterProducts,
-      banners: bannersList.filter((b) => b.isActive !== false),
+      banners: finalBanners,
     };
 
-    setCached(cacheKey, result, 60000); // Cache for 60s
+    setCached(cacheKey, result, 30000); // 30s cache
     res.setHeader("X-Cache", "MISS");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -275,6 +279,7 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
         orderBy: { submittedOn: "desc" },
       }).catch(() => []),
       prisma.coupon.findMany({ orderBy: { createdAt: "desc" } }).catch(() => []),
+      prisma.banner.findMany({ orderBy: { displayOrder: "asc" } }).catch(() => []),
     ];
 
     if (role === "ADMIN") {
@@ -287,7 +292,7 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
     }
 
     const results = await Promise.all(fetchPromises);
-    const [drs, vendors, masterProducts, categories, regions, orders, listings, coupons, users] = results;
+    const [drs, vendors, masterProducts, categories, regions, orders, listings, coupons, dbBanners, users] = results;
 
     const data = {
       drs,
@@ -299,7 +304,7 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       listings,
       coupons: coupons || [],
       users: users || [],
-      banners: bannersList,
+      banners: dbBanners && dbBanners.length > 0 ? dbBanners : bannersList,
     };
 
     res.json(data);
@@ -598,14 +603,20 @@ app.delete("/api/v1/coupons/:id", requireAuth, requireRole("ADMIN"), async (req,
   res.json({ success: true, message: "Coupon deleted" });
 });
 
-// Banners Endpoints
+// Banners Endpoints with Supabase PostgreSQL Direct Sync
 app.get("/api/v1/banners", async (req, res) => {
   try {
     const { activeOnly } = req.query;
-    let list = bannersList;
-    if (activeOnly === "true") {
-      list = list.filter((b) => b.isActive !== false);
+    const whereClause = activeOnly === "true" ? { isActive: true } : {};
+    let list = await prisma.banner.findMany({
+      where: whereClause,
+      orderBy: { displayOrder: "asc" },
+    }).catch(() => []);
+
+    if (!list || list.length === 0) {
+      list = activeOnly === "true" ? bannersList.filter((b) => b.isActive !== false) : bannersList;
     }
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.json(list);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -617,45 +628,118 @@ app.post("/api/v1/banners", requireAuth, requireRole("ADMIN"), async (req, res) 
   if (!imageUrl || !imageUrl.trim()) {
     return res.status(400).json({ error: "Banner Image URL is required" });
   }
-  const newBanner = {
-    id: "b-" + Date.now(),
-    tag: tag ? tag.trim() : "BUILD YOUR DREAM SPACE",
-    title: title ? title.trim() : "Quality Products. Best Prices.",
-    imageUrl: imageUrl.trim(),
-    targetUrl: targetUrl ? targetUrl.trim() : "/categories",
-    isActive: isActive !== false,
-    displayOrder: Number(displayOrder) || (bannersList.length + 1),
-    createdAt: new Date().toISOString(),
-  };
-  bannersList.push(newBanner);
-  invalidateCache();
-  res.status(201).json(newBanner);
+
+  const cleanOrder = Number(displayOrder) || (await prisma.banner.count().catch(() => bannersList.length)) + 1;
+
+  try {
+    const created = await prisma.banner.create({
+      data: {
+        tag: tag ? tag.trim() : "BUILD YOUR DREAM SPACE",
+        title: title ? title.trim() : "Quality Products. Best Prices.",
+        imageUrl: imageUrl.trim(),
+        targetUrl: targetUrl ? targetUrl.trim() : "/categories",
+        isActive: isActive !== false,
+        displayOrder: cleanOrder,
+      },
+    });
+
+    bannersList = bannersList.filter((b) => b.id !== created.id);
+    bannersList.push(created);
+    invalidateCache();
+
+    console.log(`✅ Banner created directly in Supabase DB: "${created.title}" (${created.id})`);
+    return res.status(201).json(created);
+  } catch (err) {
+    console.error("Create banner DB note:", err.message);
+    const newBanner = {
+      id: "b-" + Date.now(),
+      tag: tag ? tag.trim() : "BUILD YOUR DREAM SPACE",
+      title: title ? title.trim() : "Quality Products. Best Prices.",
+      imageUrl: imageUrl.trim(),
+      targetUrl: targetUrl ? targetUrl.trim() : "/categories",
+      isActive: isActive !== false,
+      displayOrder: cleanOrder,
+      createdAt: new Date().toISOString(),
+    };
+    bannersList.push(newBanner);
+    invalidateCache();
+    return res.status(201).json(newBanner);
+  }
 });
 
 app.patch("/api/v1/banners/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   const { id } = req.params;
   const { tag, title, imageUrl, targetUrl, isActive, displayOrder } = req.body;
-  const index = bannersList.findIndex((b) => b.id === id);
-  if (index === -1) {
-    return res.status(404).json({ error: "Banner not found" });
-  }
-  const updated = {
-    ...bannersList[index],
+
+  const updateData = {
     ...(tag !== undefined ? { tag: tag.trim() } : {}),
     ...(title !== undefined ? { title: title.trim() } : {}),
     ...(imageUrl !== undefined ? { imageUrl: imageUrl.trim() } : {}),
     ...(targetUrl !== undefined ? { targetUrl: targetUrl.trim() } : {}),
     ...(isActive !== undefined ? { isActive: Boolean(isActive) } : {}),
     ...(displayOrder !== undefined ? { displayOrder: Number(displayOrder) } : {}),
-    updatedAt: new Date().toISOString(),
   };
-  bannersList[index] = updated;
-  invalidateCache();
-  res.json(updated);
+
+  try {
+    // Upsert directly into Supabase DB: updates if exists, creates if missing (handles seed IDs like b-1, b-2, b-3)
+    const existing = await prisma.banner.findUnique({ where: { id } }).catch(() => null);
+
+    let result;
+    if (existing) {
+      result = await prisma.banner.update({
+        where: { id },
+        data: updateData,
+      });
+    } else {
+      const fallbackItem = bannersList.find((b) => b.id === id) || {};
+      result = await prisma.banner.create({
+        data: {
+          id,
+          tag: tag !== undefined ? tag.trim() : (fallbackItem.tag || "BUILD YOUR DREAM SPACE"),
+          title: title !== undefined ? title.trim() : (fallbackItem.title || "Quality Products. Best Prices."),
+          imageUrl: imageUrl !== undefined ? imageUrl.trim() : (fallbackItem.imageUrl || "https://res.cloudinary.com/lbwxvqmg/image/upload/v1788936739/buildcitybanner.jpg"),
+          targetUrl: targetUrl !== undefined ? targetUrl.trim() : (fallbackItem.targetUrl || "/categories"),
+          isActive: isActive !== undefined ? Boolean(isActive) : (fallbackItem.isActive !== false),
+          displayOrder: displayOrder !== undefined ? Number(displayOrder) : (fallbackItem.displayOrder || 1),
+        },
+      });
+    }
+
+    // Sync in-memory fallback list
+    bannersList = bannersList.map((b) => (b.id === id ? { ...b, ...result } : b));
+    if (!bannersList.some((b) => b.id === id)) {
+      bannersList.push(result);
+    }
+    invalidateCache();
+
+    console.log(`✅ Banner ${id} updated live in Supabase DB: isActive=${result.isActive}, title="${result.title}"`);
+    return res.json(result);
+  } catch (err) {
+    console.error("Patch banner DB error:", err.message);
+    const index = bannersList.findIndex((b) => b.id === id);
+    if (index !== -1) {
+      const updated = {
+        ...bannersList[index],
+        ...updateData,
+        updatedAt: new Date().toISOString(),
+      };
+      bannersList[index] = updated;
+      invalidateCache();
+      return res.json(updated);
+    }
+    return res.status(404).json({ error: "Banner not found" });
+  }
 });
 
 app.delete("/api/v1/banners/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   const { id } = req.params;
+  try {
+    await prisma.banner.deleteMany({ where: { id } }).catch(() => null);
+    console.log(`✅ Banner ${id} deleted from Supabase DB`);
+  } catch (err) {
+    console.error("Delete banner DB error:", err.message);
+  }
+
   const prevCount = bannersList.length;
   bannersList = bannersList.filter((b) => b.id !== id);
   invalidateCache();

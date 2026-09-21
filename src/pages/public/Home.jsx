@@ -208,6 +208,12 @@ export default function Home() {
   }, [banners]);
 
   const [slide, setSlide] = useState(0);
+
+  useEffect(() => {
+    if (slide >= activeSlides.length) {
+      setSlide(0);
+    }
+  }, [activeSlides.length, slide]);
   const [justAddedId, setJustAddedId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isScrolledDown, setIsScrolledDown] = useState(false);

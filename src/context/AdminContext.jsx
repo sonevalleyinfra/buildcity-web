@@ -367,7 +367,7 @@ export function AdminProvider({ children }) {
         } catch {}
       }
       if (Array.isArray(bannersRes) && bannersRes.length > 0) {
-        setBanners(bannersRes);
+        setBanners((prev) => (JSON.stringify(prev) === JSON.stringify(bannersRes) ? prev : bannersRes));
         try {
           localStorage.setItem(BANNERS_STORAGE_KEY, JSON.stringify(bannersRes));
         } catch {}
@@ -486,8 +486,14 @@ export function AdminProvider({ children }) {
       }
 
       if (bannersRes && Array.isArray(bannersRes) && bannersRes.length > 0) {
-        localStorage.setItem(BANNERS_STORAGE_KEY, JSON.stringify(bannersRes));
-        setBanners((prev) => (JSON.stringify(prev) === JSON.stringify(bannersRes) ? prev : bannersRes));
+        const formattedBanners = bannersRes.map((b) => {
+          let item = { ...b };
+          const recent = getRecentEdit(b.id);
+          if (recent) item = { ...item, ...recent };
+          return item;
+        });
+        localStorage.setItem(BANNERS_STORAGE_KEY, JSON.stringify(formattedBanners));
+        setBanners((prev) => (JSON.stringify(prev) === JSON.stringify(formattedBanners) ? prev : formattedBanners));
       }
 
       if (drsRes && Array.isArray(drsRes)) {
@@ -731,6 +737,7 @@ export function AdminProvider({ children }) {
     window.addEventListener("buildcity_order_placed", handleStorage);
     window.addEventListener("buildcity_products_updated", handleStorage);
     window.addEventListener("buildcity_vendors_updated", handleStorage);
+    window.addEventListener("buildcity_banners_updated", handleStorage);
 
     return () => {
       clearInterval(interval);
@@ -741,6 +748,7 @@ export function AdminProvider({ children }) {
       window.removeEventListener("buildcity_order_placed", handleStorage);
       window.removeEventListener("buildcity_products_updated", handleStorage);
       window.removeEventListener("buildcity_vendors_updated", handleStorage);
+      window.removeEventListener("buildcity_banners_updated", handleStorage);
     };
   }, [user, userRole]);
 
@@ -1455,7 +1463,7 @@ export function AdminProvider({ children }) {
       if (res.ok) {
         const saved = await res.json();
         setBanners((prev) => {
-          const updated = [...prev, saved];
+          const updated = [...prev.filter((b) => b.id !== saved.id), saved];
           localStorage.setItem(BANNERS_STORAGE_KEY, JSON.stringify(updated));
           window.dispatchEvent(new Event("buildcity_banners_updated"));
           return updated;
@@ -1483,6 +1491,8 @@ export function AdminProvider({ children }) {
   };
 
   const updateBanner = async (id, updates) => {
+    recentEditsRef.current.set(String(id), { updates, timestamp: Date.now() });
+
     setBanners((prev) => {
       const updated = prev.map((b) => (b.id === id ? { ...b, ...updates } : b));
       localStorage.setItem(BANNERS_STORAGE_KEY, JSON.stringify(updated));
@@ -1491,35 +1501,57 @@ export function AdminProvider({ children }) {
     });
 
     try {
-      await authFetch(`${API_BASE_URL}/api/v1/banners/${encodeURIComponent(id)}`, {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/banners/${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
       });
+      if (res.ok) {
+        const saved = await res.json();
+        setBanners((prev) => {
+          const updated = prev.map((b) => (b.id === saved.id ? { ...b, ...saved } : b));
+          localStorage.setItem(BANNERS_STORAGE_KEY, JSON.stringify(updated));
+          return updated;
+        });
+      }
     } catch (err) {
       console.warn("Update banner note:", err.message);
     }
   };
 
-  const toggleBannerActive = (id) => {
+  const toggleBannerActive = async (id) => {
     let nextState = true;
     setBanners((prev) => {
       const item = prev.find((b) => b.id === id);
       nextState = item ? (item.isActive === false ? true : false) : true;
+      recentEditsRef.current.set(String(id), { updates: { isActive: nextState }, timestamp: Date.now() });
       const updated = prev.map((b) => (b.id === id ? { ...b, isActive: nextState } : b));
       localStorage.setItem(BANNERS_STORAGE_KEY, JSON.stringify(updated));
       window.dispatchEvent(new Event("buildcity_banners_updated"));
       return updated;
     });
 
-    authFetch(`${API_BASE_URL}/api/v1/banners/${encodeURIComponent(id)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isActive: nextState }),
-    }).catch(() => {});
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/banners/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: nextState }),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setBanners((prev) => {
+          const updated = prev.map((b) => (b.id === saved.id ? { ...b, ...saved } : b));
+          localStorage.setItem(BANNERS_STORAGE_KEY, JSON.stringify(updated));
+          return updated;
+        });
+      }
+    } catch (err) {
+      console.warn("Toggle banner DB sync note:", err.message);
+    }
   };
 
   const removeBanner = async (id) => {
+    recentEditsRef.current.delete(String(id));
     setBanners((prev) => {
       const updated = prev.filter((b) => b.id !== id);
       localStorage.setItem(BANNERS_STORAGE_KEY, JSON.stringify(updated));

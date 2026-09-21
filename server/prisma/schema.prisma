@@ -320,3 +320,19 @@ model Review {
 
   @@map("reviews")
 }
+
+// 17. Hero Carousel Banner Entity
+model Banner {
+  id           String   @id @default(uuid())
+  tag          String?  @default("BUILD YOUR DREAM SPACE")
+  title        String   @default("Quality Products. Best Prices.")
+  imageUrl     String
+  targetUrl    String   @default("/categories")
+  isActive     Boolean  @default(true)
+  displayOrder Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("banners")
+}
+

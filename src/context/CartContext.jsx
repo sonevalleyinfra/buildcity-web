@@ -13,6 +13,7 @@ export function CartProvider({ children }) {
   const { region } = useRegion();
   const { showAlert } = useAlert();
   const [items, setItems] = useState([]);
+  const [lastAddedAt, setLastAddedAt] = useState(0);
   const isInitialCloudSyncDone = useRef(false);
 
   // Compute unique storage key for logged-in user or guest
@@ -176,6 +177,7 @@ export function CartProvider({ children }) {
 
   // Product add karte waqt base price and regional price set karein
   const addItem = (product, qty = 1) => {
+    setLastAddedAt(Date.now());
     setItems((prev) => {
       const existing = prev.find((i) => i.id === product.id);
       const base = product.basePrice || product.price;
@@ -210,7 +212,13 @@ export function CartProvider({ children }) {
 
   const updateQty = (id, qty) => {
     if (qty < 1) return;
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, qty } : i)));
+    setItems((prev) => {
+      const cur = prev.find((i) => i.id === id);
+      if (cur && qty > cur.qty) {
+        setLastAddedAt(Date.now());
+      }
+      return prev.map((i) => (i.id === id ? { ...i, qty } : i));
+    });
   };
 
   const clearCart = () => {
@@ -318,6 +326,7 @@ export function CartProvider({ children }) {
         clearCart,
         count,
         total,
+        lastAddedAt,
         subtotal,
         mrpTotal,
         cartRegionId,

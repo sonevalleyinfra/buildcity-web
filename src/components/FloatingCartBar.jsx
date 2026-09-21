@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 
 export default function FloatingCartBar() {
-  const { count, total, items } = useCart();
+  const { count, total, lastAddedAt } = useCart();
   const { pathname } = useLocation();
   const [isVisible, setIsVisible] = useState(false);
   const timerRef = useRef(null);
@@ -18,14 +18,14 @@ export default function FloatingCartBar() {
     pathname === "/login" ||
     pathname === "/register";
 
-  // Auto-hide after 7 seconds of inactivity (similar to product card stepper reverting to '+ Add')
+  // Auto-show for 7s ONLY when user actively adds/increments item in cart, then hide
   useEffect(() => {
-    if (count > 0 && !isHiddenPage) {
+    if (lastAddedAt > 0 && count > 0 && !isHiddenPage) {
       setIsVisible(true);
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
         setIsVisible(false);
-      }, 7000);
+      }, 7000); // 7s auto-hide
     } else {
       setIsVisible(false);
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -34,35 +34,13 @@ export default function FloatingCartBar() {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [count, total, items, pathname, isHiddenPage]);
+  }, [lastAddedAt, isHiddenPage]);
 
-  const handleMouseEnter = () => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    setIsVisible(true);
-  };
-
-  const handleMouseLeave = () => {
-    if (count > 0 && !isHiddenPage) {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => {
-        setIsVisible(false);
-      }, 7000);
-    }
-  };
-
-  // Hide completely if 0 items or on excluded pages
-  if (count <= 0 || isHiddenPage) return null;
+  // Hide completely if 0 items, on excluded pages, or when 7s timer expired
+  if (count <= 0 || isHiddenPage || !isVisible) return null;
 
   return (
-    <div
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      className={`fixed z-40 bottom-16 sm:bottom-6 left-0 right-0 px-3.5 sm:px-6 pointer-events-none transition-all duration-500 ease-in-out ${
-        isVisible
-          ? "opacity-100 translate-y-0"
-          : "opacity-0 translate-y-8 pointer-events-none"
-      }`}
-    >
+    <div className="fixed z-40 bottom-16 sm:bottom-6 left-0 right-0 px-3.5 sm:px-6 pointer-events-none transition-all duration-300 animate-slide-up">
       <div className="max-w-xl mx-auto pointer-events-auto">
         <Link
           to="/cart"

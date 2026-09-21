@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../../context/CartContext";
 import { useOrders } from "../../context/OrderContext";
@@ -43,21 +43,10 @@ function CartIcon() {
 export default function Orders() {
   const navigate = useNavigate();
   const { count } = useCart();
-  const { orders, fetchOrdersForCurrentRole } = useOrders();
+  const { orders } = useOrders();
   const { user } = useAuth();
   const { productsLoading } = useAdmin();
   const [tab, setTab] = useState("All");
-
-  // Real-time live status synchronization while viewing My Orders
-  useEffect(() => {
-    if (fetchOrdersForCurrentRole) fetchOrdersForCurrentRole();
-    const interval = setInterval(() => {
-      if (document.visibilityState === "visible" && fetchOrdersForCurrentRole) {
-        fetchOrdersForCurrentRole();
-      }
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [fetchOrdersForCurrentRole]);
 
   const customerPhone = (user?.phone || "").trim();
   const customerId = user?.id;

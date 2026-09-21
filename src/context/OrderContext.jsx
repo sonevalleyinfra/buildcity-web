@@ -23,13 +23,11 @@ export function OrderProvider({ children }) {
     if (!listA || !listB) return false;
     if (!Array.isArray(listA) || !Array.isArray(listB)) return false;
     if (listA.length !== listB.length) return false;
-
-    const mapA = new Map(listA.map((o) => [o?.id, o]));
-    for (let i = 0; i < listB.length; i++) {
+    for (let i = 0; i < listA.length; i++) {
+      const a = listA[i];
       const b = listB[i];
-      if (!b || !b.id) return false;
-      const a = mapA.get(b.id);
-      if (!a) return false;
+      if (!a || !b) return false;
+      if (a.id !== b.id) return false;
       if (String(a.status || "").toUpperCase() !== String(b.status || "").toUpperCase()) return false;
       const aAmt = Number(a.totalAmount ?? a.total ?? 0);
       const bAmt = Number(b.totalAmount ?? b.total ?? 0);
@@ -109,17 +107,12 @@ export function OrderProvider({ children }) {
         const res = await authFetch(`${API_BASE_URL}/api/v1/orders/me`);
         if (res.ok) {
           const data = await res.json();
-          if (Array.isArray(data)) {
+          if (Array.isArray(data) && data.length > 0) {
             const normalized = data.map(normalizeOrder);
             setOrders((prev) => {
-              const normalizedMap = new Map(normalized.map((o) => [o.id, o]));
-              const merged = [
-                ...normalized,
-                ...prev.filter((p) => !normalizedMap.has(p.id)),
-              ];
-              if (areOrdersEqual(prev, merged)) return prev;
-              try { localStorage.setItem(currentStorageKey, JSON.stringify(merged)); } catch {}
-              return merged;
+              if (areOrdersEqual(prev, normalized)) return prev;
+              try { localStorage.setItem(currentStorageKey, JSON.stringify(normalized)); } catch {}
+              return normalized;
             });
             return normalized;
           }
@@ -147,12 +140,12 @@ export function OrderProvider({ children }) {
     }
     fetchOrdersForCurrentRole();
 
-    // 1. Fast Smart Interval: Poll every 4 seconds when tab is visible to the user
+    // 1. Smart Interval: Poll only when tab is visible to the user (every 90s fallback)
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
         fetchOrdersForCurrentRole();
       }
-    }, 4000);
+    }, 90000);
 
     // 2. Instant Sync on Window Focus (when user returns to the tab)
     const handleFocus = () => {
@@ -168,30 +161,8 @@ export function OrderProvider({ children }) {
     window.addEventListener("buildcity_orders_updated", handleOrderEvent);
     window.addEventListener("buildcity_order_placed", handleOrderEvent);
 
-    // 4. Instant Cross-Tab BroadcastChannel Synchronization (0ms tab-to-tab)
-    let bc = null;
-    if (typeof BroadcastChannel !== "undefined") {
-      try {
-        bc = new BroadcastChannel("buildcity_orders_sync");
-        bc.onmessage = (event) => {
-          if (event.data?.type === "STATUS_UPDATE" && event.data?.orderId) {
-            const { orderId, newStatus } = event.data;
-            setOrders((prev) => {
-              const next = prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o));
-              try { localStorage.setItem(currentStorageKey, JSON.stringify(next)); } catch {}
-              return next;
-            });
-            fetchOrdersForCurrentRole();
-          }
-        };
-      } catch {}
-    }
-
     return () => {
       clearInterval(interval);
-      if (bc) {
-        try { bc.close(); } catch {}
-      }
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("visibilitychange", handleFocus);
       window.removeEventListener("buildcity_orders_updated", handleOrderEvent);
@@ -202,13 +173,13 @@ export function OrderProvider({ children }) {
   // Instant Cross-Tab Storage Synchronization
   useEffect(() => {
     const handleStorageChange = (e) => {
-      if (e.key && e.key.startsWith(STORAGE_KEY)) {
-        fetchOrdersForCurrentRole();
+      if (e.key === STORAGE_KEY && e.newValue) {
+        try { setOrders(JSON.parse(e.newValue)); } catch {}
       }
     };
     window.addEventListener("storage", handleStorageChange);
     return () => window.removeEventListener("storage", handleStorageChange);
-  }, [user, userRole, userIdent]);
+  }, []);
 
   // Order place - Multi-vendor isolated splitting with independent status & grouped items for same vendor
   const placeOrder = async ({ items, address, total, customerId, districtName, regionId, deliveryFee = 49 }) => {
@@ -383,15 +354,6 @@ export function OrderProvider({ children }) {
   const updateOrderStatus = async (orderId, newStatus) => {
     const currentStorageKey = getRoleStorageKey();
 
-    // Broadcast across tabs/windows immediately in real-time
-    if (typeof BroadcastChannel !== "undefined") {
-      try {
-        const bc = new BroadcastChannel("buildcity_orders_sync");
-        bc.postMessage({ type: "STATUS_UPDATE", orderId, newStatus, timestamp: Date.now() });
-        bc.close();
-      } catch {}
-    }
-
     // Optimistic local state + storage update so refreshes never see stale statuses
     setOrders((prev) => {
       const updated = prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o));
@@ -412,23 +374,14 @@ export function OrderProvider({ children }) {
           try { localStorage.setItem(currentStorageKey, JSON.stringify(next)); } catch {}
           return next;
         });
-
-        if (typeof BroadcastChannel !== "undefined") {
-          try {
-            const bc = new BroadcastChannel("buildcity_orders_sync");
-            bc.postMessage({ type: "STATUS_UPDATE", orderId, newStatus, timestamp: Date.now() });
-            bc.close();
-          } catch {}
-        }
-
-        window.dispatchEvent(new CustomEvent("buildcity_orders_updated", { detail: { orderId, status: newStatus } }));
+        window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
         return updated;
       }
     } catch (err) {
       console.warn("Update status note:", err.message);
     }
 
-    window.dispatchEvent(new CustomEvent("buildcity_orders_updated", { detail: { orderId, status: newStatus } }));
+    window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
   };
 
   const getOrder = (id) => orders.find((o) => o.id === id);

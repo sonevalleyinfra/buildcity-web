@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { useParams, Link, Navigate } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import BottomNav from "../../components/BottomNav";
@@ -24,19 +23,7 @@ const STEP_FLOW = [
 
 export default function OrderDetail() {
   const { id } = useParams();
-  const { getOrder, orders, fetchOrdersForCurrentRole } = useOrders();
-
-  // Real-time live status synchronization while customer is viewing this order
-  useEffect(() => {
-    if (fetchOrdersForCurrentRole) fetchOrdersForCurrentRole();
-    const interval = setInterval(() => {
-      if (document.visibilityState === "visible" && fetchOrdersForCurrentRole) {
-        fetchOrdersForCurrentRole();
-      }
-    }, 3500);
-    return () => clearInterval(interval);
-  }, [fetchOrdersForCurrentRole]);
-
+  const { getOrder, orders } = useOrders();
   const order = getOrder(id) || orders.find((o) => o.id === id);
 
   if (!order) return <Navigate to="/orders" replace />;

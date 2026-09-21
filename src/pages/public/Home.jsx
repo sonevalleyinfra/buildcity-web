@@ -203,7 +203,11 @@ export default function Home() {
   const navigate = useNavigate();
 
   const activeSlides = useMemo(() => {
-    const list = Array.isArray(banners) ? banners.filter((b) => b.isActive !== false) : [];
+    const list = Array.isArray(banners)
+      ? banners
+          .filter((b) => b.isActive !== false)
+          .sort((a, b) => (Number(a.displayOrder) || 0) - (Number(b.displayOrder) || 0))
+      : [];
     return list.length > 0 ? list : DEFAULT_BANNER_SLIDES;
   }, [banners]);
 
@@ -523,6 +527,32 @@ export default function Home() {
                   />
                   {/* Subtle hover brightness */}
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors" />
+
+                  {/* 🏷️ Dynamic Badge, Title & Button overlay inside exact banner screen frame */}
+                  {(b.tag || b.title) && (
+                    <div className="absolute inset-x-0 bottom-0 px-3 py-2.5 sm:px-6 sm:py-3.5 bg-gradient-to-t from-black/85 via-black/45 to-transparent flex items-center justify-between gap-2 z-10 pointer-events-none">
+                      <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
+                        {b.tag && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 sm:px-3 sm:py-1 rounded-full bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 text-slate-950 font-black text-[9px] sm:text-xs uppercase tracking-wider shadow-md shrink-0 border border-amber-200/60">
+                            <span className="text-[10px] sm:text-xs leading-none">✨</span>
+                            <span className="leading-none">{b.tag}</span>
+                          </span>
+                        )}
+                        {b.title && (
+                          <p className="text-white font-black text-xs sm:text-base md:text-lg drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] truncate max-w-[140px] sm:max-w-xs md:max-w-md leading-tight">
+                            {b.title}
+                          </p>
+                        )}
+                      </div>
+
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 sm:px-3.5 sm:py-1.5 rounded-lg sm:rounded-xl bg-white/95 hover:bg-white text-slate-950 font-black text-[10px] sm:text-xs shadow-md shrink-0 pointer-events-auto group-hover:bg-amber-400 group-hover:text-slate-950 transition-all active:scale-95">
+                        <span>{(b.tag || b.title || "").toLowerCase().includes("book") ? "Book Now" : "Explore"}</span>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0 transition-transform group-hover:translate-x-0.5">
+                          <path d="m9 18 6-6-6-6" />
+                        </svg>
+                      </span>
+                    </div>
+                  )}
                 </Link>
               </div>
             ))}
@@ -556,14 +586,14 @@ export default function Home() {
             </button>
 
             {/* Interactive Dots Indicator */}
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 sm:left-8 sm:translate-x-0 flex items-center gap-1.5 z-20 bg-black/25 backdrop-blur-xs px-2.5 py-1 rounded-full">
+            <div className="absolute top-2.5 right-2.5 sm:top-3.5 sm:right-3.5 flex items-center gap-1.5 z-20 bg-black/40 backdrop-blur-xs px-2 sm:px-2.5 py-1 rounded-full border border-white/10 shadow-sm">
               {activeSlides.map((_, i) => (
                 <button
                   key={i}
                   type="button"
                   onClick={() => setSlide(i)}
                   className={`h-1.5 rounded-full transition-all duration-300 ${
-                    slide === i ? "w-5 bg-white shadow-xs" : "w-1.5 bg-white/50 hover:bg-white/80"
+                    slide === i ? "w-4 sm:w-5 bg-white shadow-xs" : "w-1.5 bg-white/50 hover:bg-white/80"
                   }`}
                   aria-label={`Go to slide ${i + 1}`}
                 />

@@ -367,9 +367,15 @@ export function AdminProvider({ children }) {
         } catch {}
       }
       if (Array.isArray(bannersRes) && bannersRes.length > 0) {
-        setBanners((prev) => (JSON.stringify(prev) === JSON.stringify(bannersRes) ? prev : bannersRes));
+        const formattedBanners = bannersRes.map((b) => {
+          let item = { ...b };
+          const recent = getRecentEdit(b.id);
+          if (recent) item = { ...item, ...recent };
+          return item;
+        });
+        setBanners((prev) => (JSON.stringify(prev) === JSON.stringify(formattedBanners) ? prev : formattedBanners));
         try {
-          localStorage.setItem(BANNERS_STORAGE_KEY, JSON.stringify(bannersRes));
+          localStorage.setItem(BANNERS_STORAGE_KEY, JSON.stringify(formattedBanners));
         } catch {}
       }
     } catch (e) {

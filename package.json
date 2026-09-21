@@ -1,9 +1,10 @@
 {
   "name": "buildcity-web",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.2.1",
   "type": "module",
   "scripts": {
+    "start": "node server/src/index.js",
     "dev": "vite",
     "build": "vite build",
     "build:vendor": "vite build --mode vendor",

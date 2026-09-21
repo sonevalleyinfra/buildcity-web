@@ -7,5 +7,12 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     host: true,
+    proxy: {
+      '/api': {
+        target: 'https://www.buildcity.in',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
 })

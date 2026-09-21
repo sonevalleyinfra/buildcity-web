@@ -1,11 +1,12 @@
 {
   "name": "buildcity-server",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Node.js Express REST API Backend for BuildCity Multi-Vendor Marketplace",
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {
     "start": "node src/index.js",
+    "build": "prisma generate",
     "dev": "nodemon src/index.js",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",

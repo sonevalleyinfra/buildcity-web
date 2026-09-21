@@ -729,7 +729,6 @@ export function AdminProvider({ children }) {
       id: "dr-" + Date.now(),
       name: drData.name,
       phone: drData.phone.trim(),
-      password: drData.password ? drData.password.trim() : "dr123",
       regionId: drData.regionId,
       regionName: targetRegionName,
       status: "ACTIVE",
@@ -739,7 +738,10 @@ export function AdminProvider({ children }) {
     };
     setDrs((prev) => {
       const updated = [fallbackDr, ...prev];
-      try { localStorage.setItem(DRS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      try {
+        const sanitized = updated.map(({ password, ...rest }) => rest);
+        localStorage.setItem(DRS_STORAGE_KEY, JSON.stringify(sanitized));
+      } catch {}
       return updated;
     });
     return fallbackDr;
@@ -763,7 +765,10 @@ export function AdminProvider({ children }) {
             }
           : d
       );
-      try { localStorage.setItem(DRS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      try {
+        const sanitized = updated.map(({ password, ...rest }) => rest);
+        localStorage.setItem(DRS_STORAGE_KEY, JSON.stringify(sanitized));
+      } catch {}
       return updated;
     });
 
@@ -915,8 +920,9 @@ export function AdminProvider({ children }) {
           : v
       );
       try {
-        localStorage.setItem("buildcity_admin_vendors", JSON.stringify(updatedList));
-        localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(updatedList));
+        const sanitized = updatedList.map(({ password, ...rest }) => rest);
+        localStorage.setItem("buildcity_admin_vendors", JSON.stringify(sanitized));
+        localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(sanitized));
       } catch {}
       return updatedList;
     });
@@ -940,8 +946,9 @@ export function AdminProvider({ children }) {
         setVendors((prev) => {
           const freshList = prev.map((v) => (v.id === id ? { ...v, ...updatedApiV, password: vendorData.password || v.password } : v));
           try {
-            localStorage.setItem("buildcity_admin_vendors", JSON.stringify(freshList));
-            localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(freshList));
+            const sanitized = freshList.map(({ password, ...rest }) => rest);
+            localStorage.setItem("buildcity_admin_vendors", JSON.stringify(sanitized));
+            localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(sanitized));
           } catch {}
           return freshList;
         });

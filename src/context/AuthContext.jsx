@@ -315,6 +315,18 @@ export function AuthProvider({ children }) {
       token: data.token,
     };
 
+    // Defensive sanitization: ensure no password or hash is ever persisted to browser localStorage
+    delete userObj.password;
+    delete userObj.passwordHash;
+    if (userObj.vendorInfo) {
+      delete userObj.vendorInfo.password;
+      delete userObj.vendorInfo.passwordHash;
+    }
+    if (userObj.drInfo) {
+      delete userObj.drInfo.password;
+      delete userObj.drInfo.passwordHash;
+    }
+
     persist(userObj);
     return userObj;
   };

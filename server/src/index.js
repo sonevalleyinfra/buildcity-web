@@ -2887,9 +2887,52 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
     });
 
     console.log(`✅ Order ${newOrder.id} created successfully for customer ${targetCustomerId}`);
+
+    // 🔔 Send High-Priority FCM Push Notification to all involved Vendors (wakes up killed app)
+    try {
+      const { sendVendorOrderPushNotification } = require("./pushService");
+      const vendorGroups = {};
+      for (const item of (fullOrder.items || [])) {
+        const vId = item.vendorId;
+        if (!vId) continue;
+        if (!vendorGroups[vId]) {
+          vendorGroups[vId] = { count: 0, amount: 0 };
+        }
+        vendorGroups[vId].count += (item.quantity || 1);
+        vendorGroups[vId].amount += Number(item.totalPrice || item.priceAtPurchase || 0);
+      }
+
+      for (const [vendorId, vData] of Object.entries(vendorGroups)) {
+        sendVendorOrderPushNotification({
+          vendorId,
+          orderNumber: fullOrder.orderNumber || fullOrder.id,
+          amount: vData.amount,
+          itemCount: vData.count,
+          orderId: fullOrder.id,
+        }).catch((e) => console.warn("FCM push send error:", e.message));
+      }
+    } catch (pushErr) {
+      console.warn("FCM push dispatch note:", pushErr.message);
+    }
+
     res.status(201).json({ success: true, order: fullOrder });
   } catch (err) {
     console.error("Order checkout error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Vendor FCM Device Token Registration (for background push notifications when app is killed)
+app.post("/api/v1/vendor/fcm-token", async (req, res) => {
+  try {
+    const { vendorId, token } = req.body;
+    if (!vendorId || !token) {
+      return res.status(400).json({ error: "vendorId and token are required" });
+    }
+    const { saveToken } = require("./pushService");
+    saveToken(vendorId, token);
+    res.json({ success: true, message: "FCM token registered successfully" });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

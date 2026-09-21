@@ -9,6 +9,7 @@ import {
   notifyVendorNewOrder,
   requestOrderNotificationPermission,
 } from "../../utils/orderAlertSound";
+import { initVendorPushNotifications } from "../../utils/pushNotifications";
 
 // Helper for ultra-fast, zero-latency image resolution with bundled offline assets
 const resolveProductImage = (imageUrl, categoryName = "", productName = "") => {
@@ -215,10 +216,13 @@ export default function VendorDashboard() {
   const knownOrderIdsRef = useRef(new Set());
   const initialLoadDoneRef = useRef(false);
 
-  // Auto-request notification permission on mount for native sound & alerts
+  // Auto-request notification permission on mount for native sound & alerts + FCM background push
   useEffect(() => {
     requestOrderNotificationPermission().catch(() => {});
-  }, []);
+    if (vendorId) {
+      initVendorPushNotifications(vendorId).catch(() => {});
+    }
+  }, [vendorId]);
 
   // Smart Vendor Orders Sync: Instant Event Sync + Focus/Visibility Aware + Loud Alert on New Orders
   useEffect(() => {

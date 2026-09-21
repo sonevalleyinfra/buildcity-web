@@ -41,6 +41,10 @@ server/set_*
 server/.env
 server/.env.*
 !server/.env.example
+*firebase-service-account*.json
+*adminsdk*.json
+*google-services*.json
+google-services.json
 
 # AI agent directories (Never track or recreate)
 .agents

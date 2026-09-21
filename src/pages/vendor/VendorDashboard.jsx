@@ -1,10 +1,16 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import DashboardShell from "../../components/DashboardShell";
 import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useOrders } from "../../context/OrderContext";
 import { useAlert } from "../../context/AlertContext";
 import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
+import {
+  notifyVendorNewOrder,
+  requestOrderNotificationPermission,
+  playOrderAlertChime,
+  triggerOrderVibration,
+} from "../../utils/orderAlertSound";
 
 // Helper for ultra-fast, zero-latency image resolution with bundled offline assets
 const resolveProductImage = (imageUrl, categoryName = "", productName = "") => {
@@ -207,13 +213,38 @@ export default function VendorDashboard() {
   const districtName = matchedVendorObj.region?.name || matchedVendorObj.regionName || matchedVendorObj.districtName || user?.vendorInfo?.region?.name || user?.vendorInfo?.regionName || "Mirzapur";
   const vendorId = matchedVendorObj.id || user?.vendorInfo?.id || user?.vendorId || user?.id || (user?.phone ? `v-${user.phone}` : `v-${Date.now()}`);
 
-  // Smart Vendor Orders Sync: Instant Event Sync + Focus/Visibility Aware (Zero requests when tab inactive)
+  const [newOrderAlert, setNewOrderAlert] = useState(null);
+  const knownOrderIdsRef = useRef(new Set());
+  const initialLoadDoneRef = useRef(false);
+
+  // Smart Vendor Orders Sync: Instant Event Sync + Focus/Visibility Aware + Loud Alert on New Orders
   useEffect(() => {
     let isMounted = true;
     const syncVendorOrders = async () => {
       try {
         const vOrds = await fetchVendorOrders(vendorId);
         if (isMounted && Array.isArray(vOrds)) {
+          // Detect newly arrived orders for this vendor
+          if (initialLoadDoneRef.current) {
+            const newlyArrived = vOrds.filter((o) => o?.id && !knownOrderIdsRef.current.has(o.id));
+            if (newlyArrived.length > 0) {
+              const latest = newlyArrived[0];
+              // 🔔 Trigger Loud Chime Sound + Phone Vibration + Android Native Notification!
+              notifyVendorNewOrder(latest);
+              setNewOrderAlert(latest);
+              // Auto-dismiss popup banner after 14 seconds
+              setTimeout(() => {
+                setNewOrderAlert((curr) => (curr?.id === latest.id ? null : curr));
+              }, 14000);
+            }
+          }
+
+          // Register all current order IDs to known set
+          vOrds.forEach((o) => {
+            if (o?.id) knownOrderIdsRef.current.add(o.id);
+          });
+          initialLoadDoneRef.current = true;
+
           setFetchedVendorOrders((prev) => {
             if (prev.length === vOrds.length && JSON.stringify(prev) === JSON.stringify(vOrds)) {
               return prev;
@@ -232,12 +263,12 @@ export default function VendorDashboard() {
 
     syncVendorOrders();
 
-    // 1. Smart Interval: Poll only when tab is visible (every 45s instead of 8s)
+    // 1. Smart Fast Interval: Poll every 15s when tab is visibly open
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
         syncVendorOrders();
       }
-    }, 45000);
+    }, 15000);
 
     // 2. Instant Sync on Focus
     const handleFocus = () => {
@@ -806,6 +837,23 @@ export default function VendorDashboard() {
     }
   };
 
+  const handleTestAlertSound = async () => {
+    await requestOrderNotificationPermission();
+    playOrderAlertChime();
+    triggerOrderVibration();
+    const testSample = {
+      id: "TEST-" + Math.floor(1000 + Math.random() * 9000),
+      orderNumber: "TEST-" + Math.floor(100 + Math.random() * 900),
+      totalAmount: 3450,
+      items: [{ name: "Test Order Item" }],
+    };
+    notifyVendorNewOrder(testSample);
+    setNewOrderAlert(testSample);
+    setTimeout(() => {
+      setNewOrderAlert((curr) => (curr?.id === testSample.id ? null : curr));
+    }, 12000);
+  };
+
   const activeOrdersCount = vendorOrders.filter((o) => {
     const st = (o.status || "").toUpperCase();
     return st === "PENDING" || st === "PROCESSING" || st === "OUT_FOR_DELIVERY";
@@ -826,15 +874,72 @@ export default function VendorDashboard() {
       onProfileClick={() => setActiveTab("profile")}
       isProfileActive={activeTab === "profile"}
       rightContent={
-        <div className="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl bg-slate-100/90 border border-slate-200/90 text-slate-700 text-[11px] sm:text-xs font-semibold flex items-center gap-1 shrink-0">
-          <svg className="w-3 h-3 text-slate-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          <span>{districtName || "Location"}</span>
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleTestAlertSound}
+            className="px-2 py-1 sm:px-3 sm:py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300/80 text-amber-900 text-[11px] sm:text-xs font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-2xs group"
+            title="Test Loud Order Alert Sound & Vibration"
+          >
+            <span className="text-xs group-hover:scale-110 transition-transform">🔔</span>
+            <span className="hidden sm:inline">Test Alert</span>
+          </button>
+
+          <div className="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl bg-slate-100/90 border border-slate-200/90 text-slate-700 text-[11px] sm:text-xs font-semibold flex items-center gap-1 shrink-0">
+            <svg className="w-3 h-3 text-slate-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span>{districtName || "Location"}</span>
+          </div>
         </div>
       }
     >
+      {/* 🔔 Real-time Loud Order Arrival Popup Alert Card */}
+      {newOrderAlert && (
+        <div className="fixed top-4 inset-x-3 sm:inset-x-auto sm:right-6 sm:w-96 z-50">
+          <div className="bg-gradient-to-r from-navy-950 via-[#0A192F] to-slate-900 border-2 border-amber-400 text-white p-3.5 sm:p-4 rounded-2xl shadow-2xl flex items-start gap-3 backdrop-blur-md">
+            <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center text-xl shrink-0 animate-pulse shadow-md">
+              🔔
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-1">
+                <p className="text-[11px] font-black uppercase tracking-wider text-amber-400">
+                  Naya Order Aaya Hai!
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setNewOrderAlert(null)}
+                  className="text-slate-400 hover:text-white text-xs p-1"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="text-sm font-extrabold text-white mt-0.5 truncate">
+                Order #{newOrderAlert.orderNumber || (newOrderAlert.id ? String(newOrderAlert.id).substring(0, 8).toUpperCase() : "NEW")}
+              </p>
+              <p className="text-xs font-semibold text-slate-300">
+                ₹{(Number(newOrderAlert.totalAmount || newOrderAlert.total || newOrderAlert.vendorItemsTotal || 0)).toLocaleString("en-IN")} • {Array.isArray(newOrderAlert.items) ? newOrderAlert.items.length : 1} Items
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("orders");
+                  setNewOrderAlert(null);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className="mt-2 w-full py-1.5 px-3 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
+              >
+                <span>View Customer Order</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                  <path d="m9 18 6-6-6-6" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="pb-28 md:pb-8">
 
         {/* 🖥️ DESKTOP TOP NAVIGATION TABS (Visible only on md: screens and above) */}

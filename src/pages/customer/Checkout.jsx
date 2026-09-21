@@ -269,7 +269,7 @@ export default function Checkout() {
     if (hasSuspendedItems) {
       showAlert({
         title: "⚠️ Order Blocked",
-        message: "Your cart contains items from suppliers that are currently suspended or unavailable. Please return to your cart and remove them before placing an order.",
+        message: "Your cart contains items that are currently unavailable. Please return to your cart and remove them before placing an order.",
         type: "warning",
         buttonText: "Return to Cart",
       });

@@ -1,9 +1,12 @@
-﻿import { Link, useLocation } from "react-router-dom";
+import { useEffect, useState, useRef } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 
 export default function FloatingCartBar() {
-  const { count, total } = useCart();
+  const { count, total, items } = useCart();
   const { pathname } = useLocation();
+  const [isVisible, setIsVisible] = useState(false);
+  const timerRef = useRef(null);
 
   // Hide on cart, checkout, auth, or dashboard pages
   const isHiddenPage =
@@ -15,11 +18,51 @@ export default function FloatingCartBar() {
     pathname === "/login" ||
     pathname === "/register";
 
+  // Auto-hide after 7 seconds of inactivity (similar to product card stepper reverting to '+ Add')
+  useEffect(() => {
+    if (count > 0 && !isHiddenPage) {
+      setIsVisible(true);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        setIsVisible(false);
+      }, 7000);
+    } else {
+      setIsVisible(false);
+      if (timerRef.current) clearTimeout(timerRef.current);
+    }
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [count, total, items, pathname, isHiddenPage]);
+
+  const handleMouseEnter = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setIsVisible(true);
+  };
+
+  const handleMouseLeave = () => {
+    if (count > 0 && !isHiddenPage) {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        setIsVisible(false);
+      }, 7000);
+    }
+  };
+
   // Hide completely if 0 items or on excluded pages
   if (count <= 0 || isHiddenPage) return null;
 
   return (
-    <div className="fixed z-40 bottom-16 sm:bottom-6 left-0 right-0 px-3.5 sm:px-6 pointer-events-none transition-all duration-300 animate-slide-up">
+    <div
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className={`fixed z-40 bottom-16 sm:bottom-6 left-0 right-0 px-3.5 sm:px-6 pointer-events-none transition-all duration-500 ease-in-out ${
+        isVisible
+          ? "opacity-100 translate-y-0"
+          : "opacity-0 translate-y-8 pointer-events-none"
+      }`}
+    >
       <div className="max-w-xl mx-auto pointer-events-auto">
         <Link
           to="/cart"

@@ -180,7 +180,7 @@ const bannerSlides = [
     img: "https://res.cloudinary.com/lbwxvqmg/image/upload/v1788936739/buildcitybanner.jpg",
   },
   {
-    tag: "DIRECT FROM SUPPLIERS",
+    tag: "DIRECT SITE DELIVERY",
     line1: "Wholesale Rates.",
     line2: "Zero Middlemen.",
     line3: "Direct Delivery.",

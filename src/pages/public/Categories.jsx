@@ -33,7 +33,7 @@ const bannerSlides = [
     img: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1200&q=80",
   },
   {
-    tag: "DIRECT FROM SUPPLIERS",
+    tag: "DIRECT SITE DELIVERY",
     line1: "Wholesale Rates.",
     line2: "Zero Middlemen.",
     line3: "Direct Delivery.",

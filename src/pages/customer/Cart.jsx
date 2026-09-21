@@ -95,7 +95,7 @@ export default function Cart() {
       if (removedItems && removedItems.length > 0) {
         showAlert({
           title: "📍 Region Availability Notice",
-          message: `The following product(s) are not sold by any supplier in ${currentRegionName} and have been removed from your cart:\n\n• ${removedItems.join("\n• ")}`,
+          message: `The following product(s) are not available in ${currentRegionName} and have been removed from your cart:\n\n• ${removedItems.join("\n• ")}`,
           type: "warning",
           buttonText: "Understood",
         });
@@ -123,7 +123,7 @@ export default function Cart() {
     if (hasUnavailableItems) {
       showAlert({
         title: "⚠️ Unavailable Items in Cart",
-        message: "Your cart contains items from suppliers that are currently suspended or unavailable. Please remove them using the trash icon (🗑️) to proceed to checkout.",
+        message: "Your cart contains items that are currently unavailable. Please remove them using the trash icon (🗑️) to proceed to checkout.",
         type: "warning",
         buttonText: "Understood",
       });
@@ -303,7 +303,7 @@ export default function Cart() {
         <div className="flex items-center justify-between mb-5">
           <div>
             <h1 className="text-xl font-black text-navy-900 tracking-tight">Shopping Cart ({items.length} Items)</h1>
-            <p className="text-xs text-slate-500">Verified building products from district suppliers</p>
+            <p className="text-xs text-slate-500">Verified building products with direct site delivery</p>
           </div>
           {deliveryCharge === 0 && (
             <span className="text-xs font-extrabold text-green-700 bg-green-50 px-3 py-1 rounded-full border border-green-200">
@@ -546,7 +546,7 @@ export default function Cart() {
                     <span>Unavailable Items in Cart</span>
                   </p>
                   <p className="text-[11px] font-medium text-rose-700 leading-snug">
-                    Some items belong to suspended suppliers. Please remove them using the trash icon (🗑️) to proceed to checkout.
+                    Some items in your cart are currently unavailable. Please remove them using the trash icon (🗑️) to proceed to checkout.
                   </p>
                 </div>
               )}

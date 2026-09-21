@@ -1,5 +1,6 @@
 import { Capacitor } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
+import { formatShortId } from "./formatId";
 
 // AudioContext singleton for zero-latency alert sounds
 let audioCtx = null;
@@ -157,13 +158,15 @@ export async function requestOrderNotificationPermission() {
 export async function notifyVendorNewOrder(order) {
   if (!order) return;
 
-  const orderNum = order.orderNumber || (order.id ? String(order.id).substring(0, 8).toUpperCase() : "NEW");
+  const cleanOrderNum = formatShortId(order.id || order.orderNumber, "ORD");
   const amount = Number(order.totalAmount || order.total || order.vendorItemsTotal || 0);
   const itemCount = Array.isArray(order.items) ? order.items.length : 1;
   const itemsText = itemCount > 1 ? `${itemCount} items` : "1 item";
 
-  const title = "🔔 Naya Order Aaya Hai!";
-  const body = `Order #${orderNum} • ₹${amount.toLocaleString("en-IN")} (${itemsText}) • Tap to open`;
+  const title = amount > 0
+    ? `🔔 Naya Order Aaya! ₹${amount.toLocaleString("en-IN")}`
+    : `🔔 Naya Order Aaya!`;
+  const body = `Order ${cleanOrderNum} • ${itemsText} • Tap to open`;
 
   // 1. Play chime sound
   playOrderAlertChime();
@@ -183,8 +186,9 @@ export async function notifyVendorNewOrder(order) {
             title: title,
             body: body,
             channelId: "vendor_order_alerts",
-            extra: { orderId: order.id, orderNumber: orderNum },
-            smallIcon: "ic_launcher",
+            extra: { orderId: order.id, orderNumber: cleanOrderNum },
+            smallIcon: "ic_stat_order",
+            iconColor: "#EA580C",
             schedule: { at: new Date(Date.now() + 100) },
           },
         ],

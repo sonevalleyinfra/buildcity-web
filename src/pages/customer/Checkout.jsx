@@ -304,16 +304,30 @@ export default function Checkout() {
       setSuccessOrder(order);
 
       // Trigger interactive real-time individual order confirmation notification
-      const verifiedTotal = Number(order?.totalAmount || order?.total || total);
-      const formattedOrderId = formatShortId(order?.id || "ORD", "ORD");
       const customerName = targetAddr?.fullName || user?.name || "Customer";
-      addNotification({
-        id: `order_confirmed_${order?.id || Date.now()}`,
-        title: `Order ${formattedOrderId} Confirmed! 📦`,
-        message: `Thank you ${customerName}! Your order of ₹${verifiedTotal.toLocaleString("en-IN")} is confirmed and sent for dispatch.`,
-        type: "order",
-        link: `/orders/${order?.id || ""}`,
-      });
+      if (order?.isMultiVendor && Array.isArray(order.orders)) {
+        order.orders.forEach((ord) => {
+          const vTotal = Number(ord.totalAmount || ord.total || 0);
+          const fId = formatShortId(ord.id || "ORD", "ORD");
+          addNotification({
+            id: `order_confirmed_${ord.id || Math.random()}`,
+            title: `Order ${fId} Confirmed! 📦`,
+            message: `Thank you ${customerName}! Your order package of ₹${vTotal.toLocaleString("en-IN")} is placed.`,
+            type: "order",
+            link: `/orders/${ord.id || ""}`,
+          });
+        });
+      } else {
+        const verifiedTotal = Number(order?.totalAmount || order?.total || total);
+        const formattedOrderId = formatShortId(order?.id || "ORD", "ORD");
+        addNotification({
+          id: `order_confirmed_${order?.id || Date.now()}`,
+          title: `Order ${formattedOrderId} Confirmed! 📦`,
+          message: `Thank you ${customerName}! Your order of ₹${verifiedTotal.toLocaleString("en-IN")} is confirmed and sent for dispatch.`,
+          type: "order",
+          link: `/orders/${order?.id || ""}`,
+        });
+      }
     } catch (err) {
       setPlacing(false);
       showAlert({
@@ -745,17 +759,45 @@ export default function Checkout() {
               Thank You For Your Order!
             </h2>
             <p className="text-xs text-slate-500 font-medium mb-5">
-              Your construction material order has been confirmed for immediate site delivery.
+              {successOrder.isMultiVendor && Array.isArray(successOrder.orders) && successOrder.orders.length > 1
+                ? `Your order has been split into ${successOrder.orders.length} vendor dispatch packages for immediate site delivery.`
+                : "Your construction material order has been confirmed for immediate site delivery."}
             </p>
 
             {/* Order Details Card */}
             <div className="bg-slate-50/90 rounded-2xl p-4 border border-slate-200/80 text-left space-y-3 mb-6 shadow-2xs">
-              <div className="flex items-center justify-between pb-2.5 border-b border-slate-200/80">
-                <span className="text-xs font-bold text-slate-500">Order ID:</span>
-                <span className="text-xs font-black text-brand-700 font-mono bg-brand-50 border border-brand-200/60 px-2.5 py-0.5 rounded-md">
-                  {formatShortId(successOrder.id, "ORD")}
-                </span>
-              </div>
+              {successOrder.isMultiVendor && Array.isArray(successOrder.orders) && successOrder.orders.length > 1 ? (
+                <div className="space-y-2 pb-2.5 border-b border-slate-200/80">
+                  <span className="text-[10.5px] font-extrabold text-slate-500 uppercase tracking-wider block">
+                    Dispatched Packages ({successOrder.orders.length}):
+                  </span>
+                  {successOrder.orders.map((subOrd, idx) => (
+                    <div
+                      key={subOrd.id || idx}
+                      className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200/90 shadow-2xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-brand-700 font-mono bg-brand-50 border border-brand-200/60 px-2 py-0.5 rounded-md">
+                          {formatShortId(subOrd.id, "ORD")}
+                        </span>
+                        <span className="text-xs font-bold text-navy-900">
+                          {subOrd.items?.length || 1} {(subOrd.items?.length === 1 ? "item" : "items")}
+                        </span>
+                      </div>
+                      <span className="text-xs font-black text-navy-900">
+                        ₹{Number(subOrd.totalAmount || subOrd.total || 0).toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center justify-between pb-2.5 border-b border-slate-200/80">
+                  <span className="text-xs font-bold text-slate-500">Order ID:</span>
+                  <span className="text-xs font-black text-brand-700 font-mono bg-brand-50 border border-brand-200/60 px-2.5 py-0.5 rounded-md">
+                    {formatShortId(successOrder.id, "ORD")}
+                  </span>
+                </div>
+              )}
 
               <div className="flex items-center justify-between pb-2.5 border-b border-slate-200/80">
                 <span className="text-xs font-bold text-slate-500">Total Amount:</span>
@@ -785,11 +827,22 @@ export default function Checkout() {
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-3">
               <button
-                onClick={() => navigate(`/orders/${successOrder.id}`, { replace: true })}
+                onClick={() =>
+                  navigate(
+                    successOrder.isMultiVendor && Array.isArray(successOrder.orders) && successOrder.orders.length > 1
+                      ? "/orders"
+                      : `/orders/${successOrder.id}`,
+                    { replace: true }
+                  )
+                }
                 className="flex-1 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] transition-all duration-200 text-white font-black text-xs py-3.5 rounded-xl shadow-md cursor-pointer flex items-center justify-center gap-2"
               >
                 <span>🚚</span>
-                <span>Track Live Order Status</span>
+                <span>
+                  {successOrder.isMultiVendor && Array.isArray(successOrder.orders) && successOrder.orders.length > 1
+                    ? `Track All Packages (${successOrder.orders.length})`
+                    : "Track Live Order Status"}
+                </span>
               </button>
               <button
                 onClick={() => navigate("/", { replace: true })}

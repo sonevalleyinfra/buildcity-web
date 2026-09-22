@@ -2709,6 +2709,12 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       if (!liveVp && prodName) {
         liveVp = liveProducts.find((p) => p.name.toLowerCase() === prodName.toLowerCase());
       }
+      if (!liveVp && pId) {
+        liveVp = await prisma.vendorProduct.findUnique({
+          where: { id: pId },
+          include: { vendor: { select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true, status: true } } },
+        }).catch(() => null);
+      }
 
       if (!liveVp || liveVp.vendor?.status === "SUSPENDED" || liveVp.isActive === false) {
         throw new Error(`Product not available or supplier suspended: ${prodName || item.id || "Item"}`);

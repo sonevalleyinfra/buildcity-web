@@ -318,54 +318,63 @@ export default function Checkout() {
       };
     });
 
-    try {
-      const order = await placeOrder({
-        customerId: user?.id,
-        items: orderItems,
-        address: targetAddr,
-        total,
-        districtName: activeRegionName,
-        regionId: activeRegionId,
-      });
+    const immediateOrderNumber = `ORD-${Date.now().toString().slice(-6)}`;
+    const optimisticOrder = {
+      id: immediateOrderNumber,
+      orderNumber: immediateOrderNumber,
+      status: "PENDING",
+      createdAt: new Date().toISOString(),
+      totalAmount: total,
+      total,
+      deliveryFee: 49,
+      items: orderItems,
+      address: targetAddr,
+      customer: user || { name: targetAddr?.fullName || "Customer", phone: targetAddr?.phone || "" },
+      isOptimistic: true,
+    };
 
-      clearCart();
-      setPlacing(false);
-      setSuccessOrder(order);
+    // ⚡ INSTANT CHECKOUT (Sub-100ms UX): Display success screen immediately!
+    clearCart();
+    setSuccessOrder(optimisticOrder);
+    setPlacing(false);
 
-      // Trigger interactive real-time individual order confirmation notification
-      const customerName = targetAddr?.fullName || user?.name || "Customer";
-      if (order?.isMultiVendor && Array.isArray(order.orders)) {
-        order.orders.forEach((ord) => {
-          const vTotal = Number(ord.totalAmount || ord.total || 0);
-          const fId = formatShortId(ord.id || "ORD", "ORD");
-          addNotification({
-            id: `order_confirmed_${ord.id || Math.random()}`,
-            title: `Order ${fId} Confirmed! 📦`,
-            message: `Thank you ${customerName}! Your order package of ₹${vTotal.toLocaleString("en-IN")} is placed.`,
-            type: "order",
-            link: `/orders/${ord.id || ""}`,
-          });
+    // Trigger instant interactive notification
+    const customerName = targetAddr?.fullName || user?.name || "Customer";
+    addNotification({
+      id: `order_confirmed_${Date.now()}`,
+      title: `Order ${immediateOrderNumber} Confirmed! 📦`,
+      message: `Thank you ${customerName}! Your order of ₹${Number(total).toLocaleString("en-IN")} is placed and sent for dispatch.`,
+      type: "order",
+      link: `/orders`,
+    });
+
+    // Run real database write & FCM vendor push in the background
+    placeOrder({
+      customerId: user?.id,
+      items: orderItems,
+      address: targetAddr,
+      total,
+      districtName: activeRegionName,
+      regionId: activeRegionId,
+    })
+      .then((realOrder) => {
+        if (realOrder) {
+          setSuccessOrder((prev) => ({
+            ...(prev || {}),
+            ...realOrder,
+            isOptimistic: false,
+          }));
+        }
+      })
+      .catch((err) => {
+        console.error("Background order persistence note:", err.message);
+        showAlert({
+          title: "⚠️ Order Dispatch Notice",
+          message: err.message || "Failed to sync order with server.",
+          type: "warning",
+          buttonText: "Understood",
         });
-      } else {
-        const verifiedTotal = Number(order?.totalAmount || order?.total || total);
-        const formattedOrderId = formatShortId(order?.id || "ORD", "ORD");
-        addNotification({
-          id: `order_confirmed_${order?.id || Date.now()}`,
-          title: `Order ${formattedOrderId} Confirmed! 📦`,
-          message: `Thank you ${customerName}! Your order of ₹${verifiedTotal.toLocaleString("en-IN")} is confirmed and sent for dispatch.`,
-          type: "order",
-          link: `/orders/${order?.id || ""}`,
-        });
-      }
-    } catch (err) {
-      setPlacing(false);
-      showAlert({
-        title: "⚠️ Order Creation Notice",
-        message: err.message || "Failed to place order.",
-        type: "warning",
-        buttonText: "Understood",
       });
-    }
   };
 
   return (

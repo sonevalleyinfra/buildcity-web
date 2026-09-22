@@ -2675,28 +2675,69 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       }
     }
 
+    // Calculate server-validated order total, verify region availability & stock
+    let serverTotalAmount = 0;
+    const validatedItems = [];
     const targetRegionName = (req.body.districtName || req.body.address?.city || req.body.address?.district || "Varanasi").trim();
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "No items in order." });
     }
 
-    // Fast parallel item validation across catalog
-    const validationPromises = items.map(async (item) => {
+    for (const item of items) {
       const rawQty = item.quantity;
       const itemQty = Number(rawQty);
       const prodName = item.name || item.productName || item.title || "";
 
       if (!Number.isInteger(itemQty) || itemQty < 1) {
-        throw new Error(`Invalid quantity for product: ${prodName || "Item"}`);
+        return res.status(400).json({ error: `Invalid quantity for product: ${prodName || "Item"}` });
       }
 
-      // 1. Fetch live vendor product from Supabase DB with supplier info in a single call
+      // Check if product or vendor is explicitly suspended
+      if (item.id || item.productId) {
+        const checkTargetVp = await prisma.vendorProduct.findFirst({
+          where: { id: item.id || item.productId },
+          include: { vendor: true },
+        }).catch(() => null);
+
+        if (checkTargetVp) {
+          if (checkTargetVp.vendor?.status === "SUSPENDED" || checkTargetVp.isActive === false) {
+            return res.status(400).json({
+              error: `Product '${checkTargetVp.name}' cannot be purchased because the supplier '${checkTargetVp.vendor?.shopName || "Vendor"}' is currently suspended or unavailable.`,
+            });
+          }
+        }
+      }
+
+      if (item.vendorId) {
+        const checkVendor = await prisma.vendor.findFirst({
+          where: {
+            OR: [
+              { id: item.vendorId },
+              { phone: String(item.vendorId).replace(/^v-/, "") },
+            ],
+          },
+        }).catch(() => null);
+
+        if (checkVendor && checkVendor.status === "SUSPENDED") {
+          return res.status(400).json({
+            error: `Supplier '${checkVendor.shopName || "Vendor"}' is currently suspended. Order cannot be placed.`,
+          });
+        }
+      }
+
+      // Fetch live vendor product from Supabase DB (Strict Vendor Matching First, excluding SUSPENDED)
       let liveVp = null;
 
+      // 1. Check by direct vendorProduct ID
       if (item.id || item.productId) {
         liveVp = await prisma.vendorProduct.findFirst({
-          where: { id: item.id || item.productId },
+          where: {
+            id: item.id || item.productId,
+            approvalStatus: "APPROVED",
+            isActive: true,
+            vendor: { status: { not: "SUSPENDED" } },
+          },
           include: { vendor: { include: { region: true } } },
         }).catch(() => null);
       }
@@ -2756,47 +2797,60 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       }
 
       if (!liveVp || liveVp.vendor?.status === "SUSPENDED" || liveVp.isActive === false) {
-        throw new Error(`Product '${prodName || item.id || "Item"}' is not available or supplier is currently suspended.`);
+        return res.status(400).json({ error: `Product not available or supplier suspended: ${prodName || item.id || "Item"}` });
       }
 
       const verifiedPrice = Number(liveVp.price);
       if (isNaN(verifiedPrice) || verifiedPrice <= 0) {
-        throw new Error(`Invalid product price in database for ${liveVp.name}`);
+        return res.status(400).json({ error: `Invalid product price in database for ${liveVp.name}` });
       }
 
       const itemTotal = itemQty * verifiedPrice;
+      serverTotalAmount += itemTotal;
 
-      // Atomically decrement stock in DB asynchronously (non-blocking)
+      // Atomically decrement stock in DB if stock exists
       if (liveVp.stockQty && liveVp.stockQty > 0) {
-        prisma.vendorProduct.update({
+        await prisma.vendorProduct.update({
           where: { id: liveVp.id },
           data: { stockQty: { decrement: Math.min(liveVp.stockQty, itemQty) } },
         }).catch(() => null);
       }
 
-      const targetVendor = liveVp.vendor || null;
+      let targetVendor = liveVp.vendor || null;
       const finalVendorId = targetVendor?.id || liveVp.vendorId || item.vendorId || (defaultVendor ? defaultVendor.id : "v1");
 
-      return {
+      validatedItems.push({
         productName: liveVp.name || prodName,
         priceAtPurchase: verifiedPrice,
         quantity: itemQty,
         totalPrice: itemTotal,
         vendorId: finalVendorId,
-      };
-    });
-
-    let validatedItems;
-    try {
-      validatedItems = await Promise.all(validationPromises);
-    } catch (valErr) {
-      return res.status(400).json({ error: valErr.message });
+      });
     }
 
-    const serverTotalAmount = validatedItems.reduce((sum, it) => sum + it.totalPrice, 0);
+    // Robust Region resolution for accurate District Delivery Fee
+    let regForDelivery = null;
+    const reqRegionId = req.body.regionId;
 
-    // Reuse already-resolved region for accurate District Delivery Fee (zero duplicate DB calls!)
-    const calculatedDeliveryFee = reg ? Number(reg.baseDeliveryCharge || 49) : 49;
+    if (reqRegionId && reqRegionId.length > 10) {
+      regForDelivery = await prisma.region.findUnique({ where: { id: reqRegionId } }).catch(() => null);
+    }
+
+    if (!regForDelivery && targetRegionName) {
+      regForDelivery = await prisma.region.findFirst({
+        where: { name: { equals: targetRegionName, mode: "insensitive" } },
+      }).catch(() => null);
+    }
+
+    if (!regForDelivery && targetRegionName) {
+      const allRegions = await prisma.region.findMany().catch(() => []);
+      regForDelivery = allRegions.find((r) =>
+        targetRegionName.toLowerCase().includes(r.name.toLowerCase()) ||
+        r.name.toLowerCase().includes(targetRegionName.toLowerCase())
+      ) || null;
+    }
+
+    const calculatedDeliveryFee = regForDelivery ? Number(regForDelivery.baseDeliveryCharge) : 49;
     const finalOrderAmount = serverTotalAmount + calculatedDeliveryFee;
 
     const newOrder = await prisma.order.create({
@@ -2830,32 +2884,18 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       })
     );
 
-    // Construct fullOrder directly with in-memory verified data (saves ~300ms database roundtrip)
-    const fullOrder = {
-      ...newOrder,
-      items: validatedItems.map((vi, idx) => ({
-        id: `oi_${newOrder.id}_${idx}`,
-        orderId: newOrder.id,
-        ...vi,
-      })),
-      customer: targetUser ? {
-        id: targetUser.id,
-        name: targetUser.name,
-        phone: targetUser.phone,
-        email: targetUser.email,
-        role: targetUser.role,
-      } : null,
-      address: {
-        id: addressId,
-        street: req.body.address?.street || "Main Site Delivery Address",
-        city: targetRegionName,
-        region: reg,
+    const fullOrder = await prisma.order.findUnique({
+      where: { id: newOrder.id },
+      include: {
+        items: true,
+        customer: { select: { id: true, name: true, phone: true, email: true, role: true } },
+        address: { include: { region: true } },
       },
-    };
+    });
 
     console.log(`✅ Order ${newOrder.id} created successfully for customer ${targetCustomerId}`);
 
-    // Respond IMMEDIATELY to customer in under 300ms!
+    // Respond IMMEDIATELY to customer so UI displays success in under 1 second!
     res.status(201).json({ success: true, order: fullOrder });
 
     // 🔔 Send High-Priority FCM Push Notification to all involved Vendors in background

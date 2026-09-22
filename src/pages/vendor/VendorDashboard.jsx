@@ -270,18 +270,14 @@ export default function VendorDashboard() {
 
     syncVendorOrders();
 
-    // 1. Smart Fast Interval: Poll every 15s when tab is visibly open
+    // 1. Fast Background & Foreground Polling (Every 7 seconds continuously so orders are always fresh and alerts trigger)
     const interval = setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        syncVendorOrders();
-      }
-    }, 15000);
+      syncVendorOrders();
+    }, 7000);
 
-    // 2. Instant Sync on Focus
+    // 2. Instant Sync on Focus / Visibility
     const handleFocus = () => {
-      if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        syncVendorOrders();
-      }
+      syncVendorOrders();
     };
 
     // 3. Instant Event-Driven Sync
@@ -1885,7 +1881,6 @@ export default function VendorDashboard() {
               {/* 📱 MOBILE TOUCH-FRIENDLY ORDER CARDS */}
               <div className="space-y-4 md:hidden">
                 {filteredVendorOrders.map((ord) => {
-                  const orderTotal = ord.totalAmount || ord.total || 0;
                   const rawAddr = ord.address;
                   const isObj = typeof rawAddr === "object" && rawAddr !== null;
                   const isStr = typeof rawAddr === "string" && rawAddr.trim().length > 0;
@@ -1902,6 +1897,29 @@ export default function VendorDashboard() {
                   const formattedOrderId = formatShortId(ord.id || ord.orderNumber, "ORD");
                   const customerStats = getCustomerStats(ord);
                   const deliveryFee = Number(ord.deliveryCharge ?? ord.deliveryFee ?? ord.shippingFee ?? ord.deliveryAmount ?? 0);
+
+                  // Calculate Items Subtotal & Grand Total (Items + Delivery Fee)
+                  let itemsSubtotal = 0;
+                  if (Array.isArray(ord.items) && ord.items.length > 0) {
+                    itemsSubtotal = ord.items.reduce((sum, it) => {
+                      const itemQty = Number(it.quantity || it.qty || it.count || 1);
+                      const rawPrice = it.price ?? it.unitPrice ?? it.sellingPrice ?? it.rate;
+                      let line = 0;
+                      if (rawPrice !== undefined && rawPrice !== null && !isNaN(Number(rawPrice)) && Number(rawPrice) > 0) {
+                        line = Number(rawPrice) * itemQty;
+                      } else if (it.totalPrice || it.total || it.amount) {
+                        line = Number(it.totalPrice || it.total || it.amount) || 0;
+                      }
+                      return sum + line;
+                    }, 0);
+                  }
+                  if (itemsSubtotal === 0) {
+                    itemsSubtotal = Number(ord.vendorItemsTotal || ord.totalAmount || ord.total || 0);
+                  }
+                  const rawTotal = Number(ord.totalAmount || ord.total || itemsSubtotal);
+                  const grandTotal = (rawTotal > itemsSubtotal && rawTotal >= itemsSubtotal + deliveryFee)
+                    ? rawTotal
+                    : (itemsSubtotal + deliveryFee);
 
                   const orderStatusUpper = (ord.status || "PENDING").toUpperCase();
                   const isPending = orderStatusUpper === "PENDING";
@@ -1970,10 +1988,10 @@ export default function VendorDashboard() {
                             lineTotal = Number(rawPrice) * itemQty;
                           } else if (it.totalPrice || it.total || it.amount) {
                             lineTotal = Number(it.totalPrice || it.total || it.amount) || 0;
-                          } else if (Array.isArray(ord.items) && ord.items.length === 1 && orderTotal > 0) {
-                            lineTotal = orderTotal;
-                          } else if (orderTotal > 0 && ord.items.length > 0) {
-                            lineTotal = Math.round(orderTotal / ord.items.length);
+                          } else if (Array.isArray(ord.items) && ord.items.length === 1 && itemsSubtotal > 0) {
+                            lineTotal = itemsSubtotal;
+                          } else if (itemsSubtotal > 0 && ord.items.length > 0) {
+                            lineTotal = Math.round(itemsSubtotal / ord.items.length);
                           }
 
                           return (
@@ -1994,10 +2012,10 @@ export default function VendorDashboard() {
                         <div>
                           <div className="flex items-baseline gap-1">
                             <span className="text-[10px] text-slate-400 font-bold">Total:</span>
-                            <span className="text-sm font-black text-navy-900">₹{orderTotal}</span>
+                            <span className="text-sm font-black text-navy-900">₹{grandTotal.toLocaleString("en-IN")}</span>
                           </div>
                           <span className="text-[10px] text-slate-500 font-medium block">
-                            🚚 Delivery: {deliveryFee > 0 ? `₹${deliveryFee}` : "Free"}
+                            (Items: ₹{itemsSubtotal.toLocaleString("en-IN")} + 🚚 Delivery: ₹{deliveryFee})
                           </span>
                         </div>
 
@@ -2041,7 +2059,6 @@ export default function VendorDashboard() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredVendorOrders.map((ord) => {
-                      const orderTotal = ord.totalAmount || ord.total || 0;
                       const itemsSummary = Array.isArray(ord.items)
                         ? ord.items.map((i) => `${i.productName || i.name} (x${i.quantity})`).join(", ")
                         : ord.items || "Order Items";
@@ -2061,6 +2078,29 @@ export default function VendorDashboard() {
                       const formattedOrderId = formatShortId(ord.id || ord.orderNumber, "ORD");
                       const customerStats = getCustomerStats(ord);
                       const deliveryFee = Number(ord.deliveryCharge ?? ord.deliveryFee ?? ord.shippingFee ?? ord.deliveryAmount ?? 0);
+
+                      // Calculate Items Subtotal & Grand Total (Items + Delivery Fee)
+                      let itemsSubtotal = 0;
+                      if (Array.isArray(ord.items) && ord.items.length > 0) {
+                        itemsSubtotal = ord.items.reduce((sum, it) => {
+                          const itemQty = Number(it.quantity || it.qty || it.count || 1);
+                          const rawPrice = it.price ?? it.unitPrice ?? it.priceAtPurchase ?? it.sellingPrice ?? it.rate;
+                          let line = 0;
+                          if (rawPrice !== undefined && rawPrice !== null && !isNaN(Number(rawPrice)) && Number(rawPrice) > 0) {
+                            line = Number(rawPrice) * itemQty;
+                          } else if (it.totalPrice || it.total || it.amount) {
+                            line = Number(it.totalPrice || it.total || it.amount) || 0;
+                          }
+                          return sum + line;
+                        }, 0);
+                      }
+                      if (itemsSubtotal === 0) {
+                        itemsSubtotal = Number(ord.vendorItemsTotal || ord.totalAmount || ord.total || 0);
+                      }
+                      const rawTotal = Number(ord.totalAmount || ord.total || itemsSubtotal);
+                      const grandTotal = (rawTotal > itemsSubtotal && rawTotal >= itemsSubtotal + deliveryFee)
+                        ? rawTotal
+                        : (itemsSubtotal + deliveryFee);
 
                       const isPending = (ord.status || "PENDING").toUpperCase() === "PENDING";
 
@@ -2118,8 +2158,8 @@ export default function VendorDashboard() {
                                   lineTotal = Number(rawPrice) * itemQty;
                                 } else if (it.totalPrice || it.total || it.amount) {
                                   lineTotal = Number(it.totalPrice || it.total || it.amount) || 0;
-                                } else if (orderTotal > 0 && ord.items.length > 0) {
-                                  lineTotal = Math.round(orderTotal / ord.items.length);
+                                } else if (itemsSubtotal > 0 && ord.items.length > 0) {
+                                  lineTotal = Math.round(itemsSubtotal / ord.items.length);
                                 }
 
                                 return (
@@ -2142,9 +2182,9 @@ export default function VendorDashboard() {
                             </div>
                           </td>
                           <td className="py-3.5 px-4">
-                            <p className="font-black text-navy-900 text-sm">₹{orderTotal}</p>
+                            <p className="font-black text-navy-900 text-sm">₹{grandTotal.toLocaleString("en-IN")}</p>
                             <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
-                              🚚 {deliveryFee > 0 ? `₹${deliveryFee}` : "Free"}
+                              Items: ₹{itemsSubtotal.toLocaleString("en-IN")} + 🚚 {deliveryFee > 0 ? `₹${deliveryFee}` : "Free"}
                             </span>
                           </td>
                           <td className="py-3.5 px-4">

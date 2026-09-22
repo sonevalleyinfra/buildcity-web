@@ -20,11 +20,22 @@ export async function initVendorPushNotifications(vendorId) {
     }
 
     if (perm.receive === "granted") {
-      // 1. Register with FCM on Google Play Services
-      await PushNotifications.register();
-      isRegistered = true;
+      // 1. Create high-priority notification channel for Android heads-up alerts
+      try {
+        await PushNotifications.createChannel({
+          id: "vendor_order_alerts",
+          name: "Customer Order Alerts",
+          description: "Loud notifications when a new customer order arrives",
+          importance: 5,
+          visibility: 1,
+          vibration: true,
+          sound: "default",
+        });
+      } catch (chErr) {
+        console.warn("FCM channel create note:", chErr.message);
+      }
 
-      // 2. Received device token from Firebase -> send to backend API
+      // 2. Attach listeners FIRST before calling register()
       await PushNotifications.addListener("registration", async (token) => {
         if (!token?.value) return;
         console.log("📱 FCM Registration Token obtained:", token.value.substring(0, 15) + "...");
@@ -40,25 +51,25 @@ export async function initVendorPushNotifications(vendorId) {
         }
       });
 
-      // 3. Error listener
       await PushNotifications.addListener("registrationError", (err) => {
         console.warn("FCM registration error note:", err.error);
       });
 
-      // 4. Foreground push received -> play chime & vibration
       await PushNotifications.addListener("pushNotificationReceived", (notification) => {
-        console.log("🔔 Foreground Push Notification received:", notification.title);
+        console.log("🔔 Push Notification received:", notification.title);
         playOrderAlertChime();
         triggerOrderVibration();
-        // Refresh orders immediately
         window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
       });
 
-      // 5. Notification tapped by user -> navigate to orders tab
       await PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
         console.log("👉 Push notification clicked:", action.notification.data);
         window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
       });
+
+      // 3. Register with FCM on Google Play Services
+      await PushNotifications.register();
+      isRegistered = true;
     }
   } catch (err) {
     console.warn("Push notification setup note:", err.message);

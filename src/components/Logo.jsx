@@ -1,7 +1,7 @@
 export default function Logo({ variant = "dark", size = "md", iconOnly = false, hideSubtitle = false }) {
   const isLight = variant === "light";
   const primaryTextColor = isLight ? "text-white" : "text-navy-900";
-  const accentColor = isLight ? "text-amber-400" : "text-brand-500";
+  const accentColor = "text-brand-500";
   const subColor = isLight ? "text-slate-300" : "text-slate-400";
 
   const sizes = {
@@ -40,7 +40,6 @@ export default function Logo({ variant = "dark", size = "md", iconOnly = false, 
           <div className={`${s.title} ${primaryTextColor} flex items-center`}>
             <span>Build</span>
             <span className={`${accentColor} ml-0.5`}>City</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-brand-500 ml-1 inline-block animate-pulse" />
           </div>
           {!hideSubtitle && (
             <div className={`${s.sub} ${subColor} uppercase tracking-widest mt-0.5 font-bold ${size === "sm" ? "hidden sm:block" : ""}`}>

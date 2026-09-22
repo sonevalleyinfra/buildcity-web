@@ -55,14 +55,6 @@ export default function LegalPolicyPage({ defaultPolicyId }) {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => window.print()}
-              className="px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
-              title="Print Policy"
-            >
-              <span>🖨️</span>
-              <span className="hidden sm:inline">Print</span>
-            </button>
             <Link
               to="/"
               className="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs shadow-sm transition-all active:scale-95 flex items-center gap-1"

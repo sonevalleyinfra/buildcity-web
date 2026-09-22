@@ -2553,9 +2553,12 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       }
     }
 
-    // 1. Resolve or create valid User in Supabase DB (FK-Safe UUID Resolution)
+    // 1. Resolve User, Region, and Default Vendor in parallel (Zero sequential blocking!)
     let targetCustomerId = null;
     let targetUser = null;
+    let reg = null;
+    let defaultVendor = null;
+    let addressId = null;
 
     const incomingPhone = (
       req.body.phone ||
@@ -2564,27 +2567,24 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       (typeof customerId === "string" && !customerId.includes("-") ? customerId : "")
     ).replace(/\D/g, "");
 
-    // A. Check if customerId is a valid UUID in users table
-    if (customerId && customerId.length > 20 && !customerId.startsWith("cust_") && !customerId.startsWith("user_")) {
-      targetUser = await prisma.user.findUnique({ where: { id: customerId } }).catch(() => null);
-    }
-
-    // B. Check by phone number
-    if (!targetUser && incomingPhone && incomingPhone.length >= 8) {
-      targetUser = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { phone: incomingPhone },
-            { phone: { contains: incomingPhone.slice(-10) } },
-          ],
-        },
-      }).catch(() => null);
-    }
-
-    // C. If user not found, create new customer user in DB
-    if (!targetUser) {
+    const userPromise = (async () => {
+      if (customerId && customerId.length > 20 && !customerId.startsWith("cust_") && !customerId.startsWith("user_")) {
+        const u = await prisma.user.findUnique({ where: { id: customerId } }).catch(() => null);
+        if (u) return u;
+      }
+      if (incomingPhone && incomingPhone.length >= 8) {
+        const u = await prisma.user.findFirst({
+          where: {
+            OR: [
+              { phone: incomingPhone },
+              { phone: { contains: incomingPhone.slice(-10) } },
+            ],
+          },
+        }).catch(() => null);
+        if (u) return u;
+      }
       const userPhone = incomingPhone && incomingPhone.length >= 10 ? incomingPhone : `cust_${Date.now()}`;
-      targetUser = await prisma.user.create({
+      return await prisma.user.create({
         data: {
           phone: userPhone,
           name: req.body.address?.fullName || "Customer",
@@ -2594,52 +2594,45 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       }).catch(async () => {
         return await prisma.user.findFirst({ where: { role: "CUSTOMER" } }).catch(() => null);
       });
-    }
+    })();
 
-    if (!targetUser) {
-      targetUser = await prisma.user.findFirst().catch(() => null);
-    }
+    const regionPromise = (async () => {
+      if (req.body.regionId && req.body.regionId.length > 10) {
+        const r = await prisma.region.findUnique({ where: { id: req.body.regionId } }).catch(() => null);
+        if (r) return r;
+      }
+      const searchName = (req.body.districtName || req.body.address?.city || req.body.address?.district || "").trim();
+      if (searchName) {
+        const r = await prisma.region.findFirst({
+          where: { name: { equals: searchName, mode: "insensitive" } },
+        }).catch(() => null);
+        if (r) return r;
+      }
+      return await prisma.region.findFirst().catch(() => null);
+    })();
 
+    const defaultVendorPromise = prisma.vendor.findFirst().catch(() => null);
+
+    const [resolvedUser, resolvedReg, resolvedDefaultVendor] = await Promise.all([
+      userPromise,
+      regionPromise,
+      defaultVendorPromise,
+    ]);
+
+    targetUser = resolvedUser || (await prisma.user.findFirst().catch(() => null));
     targetCustomerId = targetUser?.id;
+    reg = resolvedReg;
+    defaultVendor = resolvedDefaultVendor;
 
-    // Ensure we always have a valid default Vendor for OrderItem relations
-    let defaultVendor = await prisma.vendor.findFirst().catch(() => null);
+    const targetRegionName = reg?.name || (req.body.districtName || req.body.address?.city || req.body.address?.district || "Varanasi").trim();
 
-    // Customer Address Save / Link Logic (FK-Safe UUID Resolution)
-    let addressId = null;
+    // 2. Customer Address Save / Link Logic (FK-Safe UUID Resolution)
     if (req.body.address || req.body.districtName || req.body.regionId) {
       const addrObj = req.body.address || {};
       const streetStr = typeof addrObj === "string" ? addrObj : (addrObj.street || addrObj.line || addrObj.address || "Main Site Delivery Address");
       const fullNameStr = typeof addrObj === "object" ? (addrObj.fullName || addrObj.name || "Customer") : "Customer";
       const phoneStr = typeof addrObj === "object" ? (addrObj.phone || targetUser?.phone || "") : (targetUser?.phone || "");
-
-      // Robust Region Resolution: check regionId first, then districtName, then address city
-      let reg = null;
-      if (req.body.regionId && req.body.regionId.length > 10) {
-        reg = await prisma.region.findUnique({ where: { id: req.body.regionId } }).catch(() => null);
-      }
-      if (!reg && req.body.districtName) {
-        reg = await prisma.region.findFirst({
-          where: { name: { equals: req.body.districtName.trim(), mode: "insensitive" } },
-        }).catch(() => null);
-      }
-      if (!reg && addrObj.city) {
-        reg = await prisma.region.findFirst({
-          where: { name: { equals: addrObj.city.trim(), mode: "insensitive" } },
-        }).catch(() => null);
-      }
-      if (!reg) {
-        const allRegs = await prisma.region.findMany().catch(() => []);
-        const targetSearch = (req.body.districtName || addrObj.city || "").toLowerCase().trim();
-        if (targetSearch) {
-          reg = allRegs.find((r) => targetSearch.includes(r.name.toLowerCase()) || r.name.toLowerCase().includes(targetSearch)) || null;
-        }
-      }
-      if (!reg) {
-        reg = await prisma.region.findFirst().catch(() => null);
-      }
-
-      const cityStr = reg ? reg.name : (typeof addrObj === "object" && addrObj.city ? addrObj.city : (req.body.districtName || "Varanasi"));
+      const cityStr = targetRegionName;
 
       if (reg && reg.id && targetCustomerId) {
         let existingAddress = await prisma.address.findFirst({
@@ -2675,163 +2668,130 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       }
     }
 
-    // Calculate server-validated order total, verify region availability & stock
-    let serverTotalAmount = 0;
-    const validatedItems = [];
-    const targetRegionName = (req.body.districtName || req.body.address?.city || req.body.address?.district || "Varanasi").trim();
-
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "No items in order." });
     }
 
-    for (const item of items) {
-      const rawQty = item.quantity;
-      const itemQty = Number(rawQty);
-      const prodName = item.name || item.productName || item.title || "";
+    // 3. Parallel Product Validation across all items (Super-fast sub-second execution!)
+    const validatedItems = await Promise.all(
+      items.map(async (item) => {
+        const rawQty = item.quantity;
+        const itemQty = Number(rawQty);
+        const prodName = (item.name || item.productName || item.title || "").trim();
 
-      if (!Number.isInteger(itemQty) || itemQty < 1) {
-        return res.status(400).json({ error: `Invalid quantity for product: ${prodName || "Item"}` });
-      }
-
-      // Check if product or vendor is explicitly suspended
-      if (item.id || item.productId) {
-        const checkTargetVp = await prisma.vendorProduct.findFirst({
-          where: { id: item.id || item.productId },
-          include: { vendor: true },
-        }).catch(() => null);
-
-        if (checkTargetVp) {
-          if (checkTargetVp.vendor?.status === "SUSPENDED" || checkTargetVp.isActive === false) {
-            return res.status(400).json({
-              error: `Product '${checkTargetVp.name}' cannot be purchased because the supplier '${checkTargetVp.vendor?.shopName || "Vendor"}' is currently suspended or unavailable.`,
-            });
-          }
+        if (!Number.isInteger(itemQty) || itemQty < 1) {
+          throw new Error(`Invalid quantity for product: ${prodName || "Item"}`);
         }
-      }
 
-      if (item.vendorId) {
-        const checkVendor = await prisma.vendor.findFirst({
-          where: {
-            OR: [
-              { id: item.vendorId },
-              { phone: String(item.vendorId).replace(/^v-/, "") },
-            ],
-          },
-        }).catch(() => null);
+        let liveVp = null;
 
-        if (checkVendor && checkVendor.status === "SUSPENDED") {
-          return res.status(400).json({
-            error: `Supplier '${checkVendor.shopName || "Vendor"}' is currently suspended. Order cannot be placed.`,
-          });
+        // A. Lookup by direct vendorProduct ID
+        if (item.id || item.productId) {
+          liveVp = await prisma.vendorProduct.findFirst({
+            where: {
+              id: item.id || item.productId,
+              approvalStatus: "APPROVED",
+              isActive: true,
+              vendor: { status: { not: "SUSPENDED" } },
+            },
+            include: { vendor: { include: { region: true } } },
+          }).catch(() => null);
         }
-      }
 
-      // Fetch live vendor product from Supabase DB (Strict Vendor Matching First, excluding SUSPENDED)
-      let liveVp = null;
+        // B. Lookup by Name + vendor ID / shopName
+        if (!liveVp && prodName && (item.vendorId || item.vendorName)) {
+          liveVp = await prisma.vendorProduct.findFirst({
+            where: {
+              name: { equals: prodName, mode: "insensitive" },
+              approvalStatus: "APPROVED",
+              isActive: true,
+              vendor: { status: { not: "SUSPENDED" } },
+              OR: [
+                ...(item.vendorId ? [
+                  { vendorId: item.vendorId },
+                  { vendor: { id: item.vendorId } },
+                  { vendor: { userId: item.vendorId } },
+                  { vendor: { phone: String(item.vendorId).replace(/^v-/, "") } },
+                ] : []),
+                ...(item.vendorName ? [
+                  { vendor: { shopName: { equals: item.vendorName, mode: "insensitive" } } },
+                ] : []),
+              ],
+            },
+            include: { vendor: { include: { region: true } } },
+          }).catch(() => null);
+        }
 
-      // 1. Check by direct vendorProduct ID
-      if (item.id || item.productId) {
-        liveVp = await prisma.vendorProduct.findFirst({
-          where: {
-            id: item.id || item.productId,
-            approvalStatus: "APPROVED",
-            isActive: true,
-            vendor: { status: { not: "SUSPENDED" } },
-          },
-          include: { vendor: { include: { region: true } } },
-        }).catch(() => null);
-      }
+        // C. Lookup by Name + region
+        if (!liveVp && prodName) {
+          liveVp = await prisma.vendorProduct.findFirst({
+            where: {
+              name: { equals: prodName, mode: "insensitive" },
+              approvalStatus: "APPROVED",
+              isActive: true,
+              vendor: { status: { not: "SUSPENDED" } },
+              OR: [
+                { regionName: { equals: targetRegionName, mode: "insensitive" } },
+                { vendor: { region: { name: { equals: targetRegionName, mode: "insensitive" } } } },
+              ],
+            },
+            include: { vendor: { include: { region: true } } },
+          }).catch(() => null);
+        }
 
-      // 2. Match by Name AND exact Vendor ID / Shop Name (CRITICAL for multi-vendor catalog)
-      if (!liveVp && prodName && (item.vendorId || item.vendorName)) {
-        liveVp = await prisma.vendorProduct.findFirst({
-          where: {
-            name: { equals: prodName, mode: "insensitive" },
-            approvalStatus: "APPROVED",
-            isActive: true,
-            vendor: { status: { not: "SUSPENDED" } },
-            OR: [
-              ...(item.vendorId ? [
-                { vendorId: item.vendorId },
-                { vendor: { id: item.vendorId } },
-                { vendor: { userId: item.vendorId } },
-                { vendor: { phone: item.vendorId.replace(/^v-/, "") } },
-              ] : []),
-              ...(item.vendorName ? [
-                { vendor: { shopName: { equals: item.vendorName, mode: "insensitive" } } },
-              ] : []),
-            ],
-          },
-          include: { vendor: { include: { region: true } } },
-        }).catch(() => null);
-      }
+        // D. Fallback by Name
+        if (!liveVp && prodName) {
+          liveVp = await prisma.vendorProduct.findFirst({
+            where: {
+              name: { equals: prodName, mode: "insensitive" },
+              approvalStatus: "APPROVED",
+              isActive: true,
+              vendor: { status: { not: "SUSPENDED" } },
+            },
+            include: { vendor: { include: { region: true } } },
+          }).catch(() => null);
+        }
 
-      // 3. Match by Name AND target Region
-      if (!liveVp && prodName) {
-        liveVp = await prisma.vendorProduct.findFirst({
-          where: {
-            name: { equals: prodName, mode: "insensitive" },
-            approvalStatus: "APPROVED",
-            isActive: true,
-            vendor: { status: { not: "SUSPENDED" } },
-            OR: [
-              { regionName: { equals: targetRegionName, mode: "insensitive" } },
-              { vendor: { region: { name: { equals: targetRegionName, mode: "insensitive" } } } },
-            ],
-          },
-          include: { vendor: { include: { region: true } } },
-        }).catch(() => null);
-      }
+        if (!liveVp || liveVp.vendor?.status === "SUSPENDED" || liveVp.isActive === false) {
+          throw new Error(`Product not available or supplier suspended: ${prodName || item.id || "Item"}`);
+        }
 
-      // 4. Fallback match by Name
-      if (!liveVp && prodName) {
-        liveVp = await prisma.vendorProduct.findFirst({
-          where: {
-            name: { equals: prodName, mode: "insensitive" },
-            approvalStatus: "APPROVED",
-            isActive: true,
-            vendor: { status: { not: "SUSPENDED" } },
-          },
-          include: { vendor: { include: { region: true } } },
-        }).catch(() => null);
-      }
+        const verifiedPrice = Number(liveVp.price);
+        if (isNaN(verifiedPrice) || verifiedPrice <= 0) {
+          throw new Error(`Invalid product price in database for ${liveVp.name}`);
+        }
 
-      if (!liveVp || liveVp.vendor?.status === "SUSPENDED" || liveVp.isActive === false) {
-        return res.status(400).json({ error: `Product not available or supplier suspended: ${prodName || item.id || "Item"}` });
-      }
+        const itemTotal = itemQty * verifiedPrice;
 
-      const verifiedPrice = Number(liveVp.price);
-      if (isNaN(verifiedPrice) || verifiedPrice <= 0) {
-        return res.status(400).json({ error: `Invalid product price in database for ${liveVp.name}` });
-      }
+        // Atomically decrement stock in DB asynchronously
+        if (liveVp.stockQty && liveVp.stockQty > 0) {
+          prisma.vendorProduct.update({
+            where: { id: liveVp.id },
+            data: { stockQty: { decrement: Math.min(liveVp.stockQty, itemQty) } },
+          }).catch(() => null);
+        }
 
-      const itemTotal = itemQty * verifiedPrice;
-      serverTotalAmount += itemTotal;
+        let finalVendorId = liveVp.vendorId || liveVp.vendor?.id || item.vendorId;
+        if (!finalVendorId || finalVendorId === "v1" || String(finalVendorId).startsWith("v-")) {
+          finalVendorId = defaultVendor?.id || liveVp.vendor?.id;
+        }
 
-      // Atomically decrement stock in DB asynchronously (non-blocking)
-      if (liveVp.stockQty && liveVp.stockQty > 0) {
-        prisma.vendorProduct.update({
-          where: { id: liveVp.id },
-          data: { stockQty: { decrement: Math.min(liveVp.stockQty, itemQty) } },
-        }).catch(() => null);
-      }
+        return {
+          productName: liveVp.name || prodName,
+          priceAtPurchase: verifiedPrice,
+          quantity: itemQty,
+          totalPrice: itemTotal,
+          vendorId: finalVendorId,
+          vendor: liveVp.vendor,
+        };
+      })
+    );
 
-      let targetVendor = liveVp.vendor || null;
-      const finalVendorId = targetVendor?.id || liveVp.vendorId || item.vendorId || (defaultVendor ? defaultVendor.id : "v1");
-
-      validatedItems.push({
-        productName: liveVp.name || prodName,
-        priceAtPurchase: verifiedPrice,
-        quantity: itemQty,
-        totalPrice: itemTotal,
-        vendorId: finalVendorId,
-      });
-    }
-
-    // Reuse already-resolved region for accurate District Delivery Fee (zero duplicate DB calls!)
+    const serverTotalAmount = validatedItems.reduce((acc, it) => acc + it.totalPrice, 0);
     const calculatedDeliveryFee = reg ? Number(reg.baseDeliveryCharge || 49) : 49;
     const finalOrderAmount = serverTotalAmount + calculatedDeliveryFee;
 
+    // 4. Create Order in Supabase DB
     const newOrder = await prisma.order.create({
       data: {
         customerId: targetCustomerId,
@@ -2844,32 +2804,36 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       },
     });
 
-    // Parallel insert of items using Promise.all for fast database execution
-    await Promise.all(
+    // 5. Parallel insert of items using Promise.all with full vendor relations
+    const createdItems = await Promise.all(
       validatedItems.map(async (vItem) => {
         const vId = vItem.vendorId || defaultVendor?.id;
-        if (vId) {
-          return prisma.orderItem.create({
-            data: {
-              orderId: newOrder.id,
-              productName: vItem.productName,
-              priceAtPurchase: vItem.priceAtPurchase,
-              quantity: vItem.quantity,
-              totalPrice: vItem.totalPrice,
-              vendorId: vId,
+        return prisma.orderItem.create({
+          data: {
+            orderId: newOrder.id,
+            productName: vItem.productName,
+            priceAtPurchase: vItem.priceAtPurchase,
+            quantity: vItem.quantity,
+            totalPrice: vItem.totalPrice,
+            vendorId: vId,
+          },
+          include: {
+            vendor: {
+              select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
             },
-          }).catch((e) => console.warn("OrderItem creation note:", e.message));
-        }
+          },
+        });
       })
     );
 
-    // Construct fullOrder directly with in-memory verified data (saves ~400ms database roundtrip)
+    // 6. Build response object with guaranteed real DB items
     const fullOrder = {
       ...newOrder,
-      items: validatedItems.map((vi, idx) => ({
-        id: `oi_${newOrder.id}_${idx}`,
-        orderId: newOrder.id,
-        ...vi,
+      items: createdItems.map((ci) => ({
+        ...ci,
+        price: Number(ci.priceAtPurchase),
+        totalPrice: Number(ci.totalPrice),
+        vendorName: ci.vendor?.shopName || "District Vendor",
       })),
       customer: targetUser ? {
         id: targetUser.id,
@@ -2886,13 +2850,12 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       },
     };
 
-    console.log(`✅ Order ${newOrder.id} created successfully for customer ${targetCustomerId}`);
+    console.log(`✅ Order ${newOrder.id} created successfully with ${createdItems.length} items for customer ${targetCustomerId}`);
 
-    // Respond IMMEDIATELY to customer in under 300ms!
+    // Respond IMMEDIATELY to customer in under 1 second!
     res.status(201).json({ success: true, order: fullOrder });
 
-    // 🔔 Send High-Priority FCM Push Notification to all involved Vendors in background
-    // (Wakes up killed app without adding network latency to customer response)
+    // 7. Send High-Priority FCM Push Notification in background (non-blocking)
     setImmediate(async () => {
       try {
         const { sendVendorOrderPushNotification } = require("./pushService");
@@ -2923,7 +2886,7 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error("Order checkout error:", err);
-    res.status(500).json({ error: err.message });
+    res.status(400).json({ error: err.message || "Failed to place order" });
   }
 });
 

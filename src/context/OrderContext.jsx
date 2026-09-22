@@ -274,29 +274,12 @@ export function OrderProvider({ children }) {
             totalAmount: Number(resData.order.totalAmount) || groupTotal,
             deliveryFee: Number(resData.order.deliveryFee) || groupDeliveryFee,
           });
+        } else {
+          throw new Error(resData.error || "Order placement failed on server");
         }
       } catch (err) {
-        console.warn("Order placement fallback note for vendor group:", err.message);
-      }
-
-      if (!orderSaved) {
-        // Fallback local order
-        orderSaved = normalizeOrder({
-          id: "BC" + Math.floor(10000 + Math.random() * 89999),
-          userId: customerId,
-          userPhone: address?.phone,
-          date: new Date().toISOString(),
-          status: "Pending",
-          districtName: districtName || "Varanasi",
-          regionId: regionId || "varanasi",
-          vendorId: groupVendorId,
-          vendorName: groupVendorName,
-          items: groupItems,
-          address,
-          total: groupTotal,
-          totalAmount: groupTotal,
-          deliveryFee: groupDeliveryFee,
-        });
+        console.error("Order placement error for vendor group:", err.message);
+        throw err;
       }
 
       return orderSaved;

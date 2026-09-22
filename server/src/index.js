@@ -1435,7 +1435,7 @@ app.patch("/api/v1/vendors/:id/status", requireAuth, requireRole("ADMIN", "DR"),
 });
 
 // Vendor Delete Endpoint — Admin ya DR dwara Vendor ko Supabase DB se permanent delete karne ke liye (Foreign Key cleanup ke sath)
-app.delete("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
+app.delete("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const rawId = req.params.id;
 
@@ -1454,10 +1454,37 @@ app.delete("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN"), async (req,
 
     if (vendor) {
       const targetId = vendor.id;
-      // Foreign Key constraint satisfied karne ke liye child records pehle delete karein
+      const linkedUserId = vendor.userId;
+
+      // 1. Delete FCM tokens
+      await prisma.$executeRawUnsafe(`DELETE FROM vendor_fcm_tokens WHERE vendor_id = $1`, targetId).catch(() => null);
+
+      // 2. Foreign Key constraint satisfied karne ke liye child records pehle delete karein
       await prisma.vendorProduct.deleteMany({ where: { vendorId: targetId } }).catch(() => null);
       await prisma.orderItem.deleteMany({ where: { vendorId: targetId } }).catch(() => null);
+
+      // 3. Delete Vendor record
       await prisma.vendor.delete({ where: { id: targetId } }).catch(() => null);
+
+      // 4. Delete linked User login account so no orphaned user remains
+      if (linkedUserId) {
+        await prisma.user.delete({ where: { id: linkedUserId } }).catch(() => null);
+      }
+    } else {
+      // If vendor record was already gone, check if an orphaned VENDOR user exists with this ID or phone
+      const orphanedUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { id: rawId },
+            { phone: rawId },
+          ],
+          role: "VENDOR",
+        },
+      }).catch(() => null);
+
+      if (orphanedUser) {
+        await prisma.user.delete({ where: { id: orphanedUser.id } }).catch(() => null);
+      }
     }
 
     res.json({ message: "Vendor deleted successfully from Supabase DB", id: rawId });

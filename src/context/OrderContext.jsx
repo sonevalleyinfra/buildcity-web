@@ -221,88 +221,89 @@ export function OrderProvider({ children }) {
 
     const vendorGroups = Array.from(vendorMap.values());
 
-    // 3. For each vendor group, place orders concurrently in parallel
-    const createdOrders = await Promise.all(
-      vendorGroups.map(async (groupItems, i) => {
-        const groupSubtotal = groupItems.reduce(
-          (sum, it) => sum + Number(it.price || 0) * (Number(it.quantity || 1)),
-          0
-        );
-        // Flat delivery fee per dispatch route (or 0 if total was free)
-        const groupDeliveryFee = Number(total) >= 2000 ? 0 : Number(deliveryFee || 49);
-        const groupTotal = groupSubtotal + groupDeliveryFee;
-        const groupVendorName = groupItems[0]?.vendorName || "District Vendor";
-        const groupVendorId = groupItems[0]?.vendorId || "v1";
+    // 3. For each vendor group, place a separate order
+    const createdOrders = [];
 
-        const idempotencyKey = "ord_idem_" + Date.now() + "_" + i + "_" + Math.random().toString(36).substring(2, 7);
+    for (let i = 0; i < vendorGroups.length; i++) {
+      const groupItems = vendorGroups[i];
+      const groupSubtotal = groupItems.reduce(
+        (sum, it) => sum + Number(it.price || 0) * (Number(it.quantity || 1)),
+        0
+      );
+      // Flat delivery fee per dispatch route (or 0 if total was free)
+      const groupDeliveryFee = Number(total) >= 2000 ? 0 : Number(deliveryFee || 49);
+      const groupTotal = groupSubtotal + groupDeliveryFee;
+      const groupVendorName = groupItems[0]?.vendorName || "District Vendor";
+      const groupVendorId = groupItems[0]?.vendorId || "v1";
 
-        let orderSaved = null;
+      const idempotencyKey = "ord_idem_" + Date.now() + "_" + i + "_" + Math.random().toString(36).substring(2, 7);
 
-        try {
-          const response = await authFetch(`${API_BASE_URL}/api/v1/orders/checkout`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              customerId,
-              totalAmount: groupTotal,
-              deliveryFee: groupDeliveryFee,
-              districtName: districtName || "Varanasi",
-              regionId: regionId || "varanasi",
-              address: address || { street: "Main Delivery Address", city: districtName || "Varanasi", state: "Uttar Pradesh", pincode: "221001" },
-              items: groupItems,
-              vendorId: groupVendorId,
-              vendorName: groupVendorName,
-              idempotencyKey,
-            }),
-          });
+      let orderSaved = null;
 
-          const resData = await response.json();
-          if (resData.success && resData.order) {
-            orderSaved = normalizeOrder({
-              id: resData.order.id,
-              userId: customerId || resData.order.userId || resData.order.customerId,
-              userPhone: resData.order.userPhone || address?.phone || resData.order.customer?.phone,
-              date: resData.order.createdAt || new Date().toISOString(),
-              status: resData.order.status || "Pending",
-              districtName: districtName || resData.order.districtName || resData.order.address?.city || "Varanasi",
-              regionId: regionId || resData.order.regionId || resData.order.address?.regionId || "varanasi",
-              vendorId: groupVendorId,
-              vendorName: groupVendorName,
-              items: resData.order.items && resData.order.items.length > 0 ? resData.order.items : groupItems,
-              address: resData.order.address || address,
-              customer: resData.order.customer,
-              total: Number(resData.order.totalAmount) || groupTotal,
-              totalAmount: Number(resData.order.totalAmount) || groupTotal,
-              deliveryFee: Number(resData.order.deliveryFee) || groupDeliveryFee,
-            });
-          }
-        } catch (err) {
-          console.warn("Order placement fallback note for vendor group:", err.message);
-        }
-
-        if (!orderSaved) {
-          // Fallback local order
-          orderSaved = normalizeOrder({
-            id: "BC" + Math.floor(10000 + Math.random() * 89999),
-            userId: customerId,
-            userPhone: address?.phone,
-            date: new Date().toISOString(),
-            status: "Pending",
-            districtName: districtName || "Varanasi",
-            regionId: regionId || "varanasi",
-            vendorId: groupVendorId,
-            vendorName: groupVendorName,
-            items: groupItems,
-            address,
-            total: groupTotal,
+      try {
+        const response = await authFetch(`${API_BASE_URL}/api/v1/orders/checkout`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customerId,
             totalAmount: groupTotal,
             deliveryFee: groupDeliveryFee,
+            districtName: districtName || "Varanasi",
+            regionId: regionId || "varanasi",
+            address: address || { street: "Main Delivery Address", city: districtName || "Varanasi", state: "Uttar Pradesh", pincode: "221001" },
+            items: groupItems,
+            vendorId: groupVendorId,
+            vendorName: groupVendorName,
+            idempotencyKey,
+          }),
+        });
+
+        const resData = await response.json();
+        if (resData.success && resData.order) {
+          orderSaved = normalizeOrder({
+            id: resData.order.id,
+            userId: customerId || resData.order.userId || resData.order.customerId,
+            userPhone: resData.order.userPhone || address?.phone || resData.order.customer?.phone,
+            date: resData.order.createdAt || new Date().toISOString(),
+            status: resData.order.status || "Pending",
+            districtName: districtName || resData.order.districtName || resData.order.address?.city || "Varanasi",
+            regionId: regionId || resData.order.regionId || resData.order.address?.regionId || "varanasi",
+            vendorId: groupVendorId,
+            vendorName: groupVendorName,
+            items: resData.order.items && resData.order.items.length > 0 ? resData.order.items : groupItems,
+            address: resData.order.address || address,
+            customer: resData.order.customer,
+            total: Number(resData.order.totalAmount) || groupTotal,
+            totalAmount: Number(resData.order.totalAmount) || groupTotal,
+            deliveryFee: Number(resData.order.deliveryFee) || groupDeliveryFee,
           });
         }
+      } catch (err) {
+        console.warn("Order placement fallback note for vendor group:", err.message);
+      }
 
-        return orderSaved;
-      })
-    );
+      if (!orderSaved) {
+        // Fallback local order
+        orderSaved = normalizeOrder({
+          id: "BC" + Math.floor(10000 + Math.random() * 89999),
+          userId: customerId,
+          userPhone: address?.phone,
+          date: new Date().toISOString(),
+          status: "Pending",
+          districtName: districtName || "Varanasi",
+          regionId: regionId || "varanasi",
+          vendorId: groupVendorId,
+          vendorName: groupVendorName,
+          items: groupItems,
+          address,
+          total: groupTotal,
+          totalAmount: groupTotal,
+          deliveryFee: groupDeliveryFee,
+        });
+      }
+
+      createdOrders.push(orderSaved);
+    }
 
     // 4. Update orders state synchronously & dispatch events
     setOrders((prev) => {

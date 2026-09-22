@@ -107,6 +107,8 @@ async function sendVendorOrderPushNotification({ vendorId, orderNumber, amount, 
       orderId: String(orderId || ""),
       orderNumber: String(orderNumber || ""),
       type: "NEW_ORDER",
+      title: title,
+      body: body,
     },
     android: {
       priority: "high", // ⚡ High priority wakes up sleeping/killed Android device immediately

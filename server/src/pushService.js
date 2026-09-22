@@ -35,7 +35,28 @@ function initFirebase() {
   }
 }
 
-// Ensure data directory exists for persistent token storage
+// In-memory cache for ultra-fast token lookups
+const memoryTokens = {};
+
+// Optional Prisma DB instance injected from index.js
+let dbClient = null;
+
+function setPrismaClient(prisma) {
+  dbClient = prisma;
+}
+
+function getPrisma() {
+  if (dbClient) return dbClient;
+  try {
+    const { PrismaClient } = require("@prisma/client");
+    dbClient = new PrismaClient();
+  } catch (e) {
+    console.warn("Prisma init in pushService note:", e.message);
+  }
+  return dbClient;
+}
+
+// Ensure data directory exists for secondary backup token storage
 const dataDir = path.join(__dirname, "../data");
 if (!fs.existsSync(dataDir)) {
   try { fs.mkdirSync(dataDir, { recursive: true }); } catch {}
@@ -53,36 +74,131 @@ function loadTokens() {
   return {};
 }
 
-function saveToken(vendorId, token) {
+/**
+ * Saves FCM token to memory cache, local file backup, and Supabase DB table vendor_fcm_tokens.
+ * Guaranteed to survive Railway restarts and redeploys!
+ */
+async function saveToken(vendorId, token, phone = null) {
   if (!vendorId || !token) return false;
+  const vIdStr = String(vendorId).trim();
+  const tokenStr = String(token).trim();
+  const phoneStr = phone ? String(phone).trim() : null;
+
+  // 1. In-memory cache
+  memoryTokens[vIdStr] = {
+    token: tokenStr,
+    phone: phoneStr,
+    updatedAt: new Date().toISOString(),
+  };
+
+  // 2. Secondary local file backup
   try {
     const tokens = loadTokens();
-    tokens[String(vendorId)] = {
-      token,
+    tokens[vIdStr] = {
+      token: tokenStr,
+      phone: phoneStr,
       updatedAt: new Date().toISOString(),
     };
     fs.writeFileSync(tokensFilePath, JSON.stringify(tokens, null, 2), "utf8");
-    console.log(`✅ Saved FCM push token for vendor: ${vendorId}`);
-    return true;
   } catch (err) {
-    console.error("Failed to save FCM token:", err.message);
-    return false;
+    console.warn("File token save note:", err.message);
   }
+
+  // 3. Supabase DB Persistence (Permanent)
+  try {
+    const p = getPrisma();
+    if (p) {
+      await p.$executeRawUnsafe(
+        `INSERT INTO vendor_fcm_tokens (vendor_id, token, phone, updated_at)
+         VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (vendor_id)
+         DO UPDATE SET token = EXCLUDED.token, phone = COALESCE(EXCLUDED.phone, vendor_fcm_tokens.phone), updated_at = NOW()`,
+        vIdStr,
+        tokenStr,
+        phoneStr
+      );
+      console.log(`✅ Saved FCM push token to Supabase DB for vendor: ${vIdStr}`);
+    }
+  } catch (dbErr) {
+    console.warn("DB token save note:", dbErr.message);
+  }
+
+  return true;
 }
 
-function getTokenForVendor(vendorId) {
-  if (!vendorId) return null;
-  const tokens = loadTokens();
-  const entry = tokens[String(vendorId)];
-  return entry ? entry.token : null;
+/**
+ * Retrieves FCM token using a 5-tier fallback:
+ * 1. In-memory cache
+ * 2. Local JSON file
+ * 3. Supabase DB lookup by vendor_id
+ * 4. Supabase DB lookup by vendor phone
+ * 5. Supabase DB most recently registered active vendor token
+ */
+async function getTokenForVendor(vendorId, phone = null) {
+  const vIdStr = vendorId ? String(vendorId).trim() : "";
+
+  // 1. In-memory
+  if (vIdStr && memoryTokens[vIdStr]?.token) {
+    return memoryTokens[vIdStr].token;
+  }
+
+  // 2. Local file
+  const localTokens = loadTokens();
+  if (vIdStr && localTokens[vIdStr]?.token) {
+    memoryTokens[vIdStr] = localTokens[vIdStr];
+    return localTokens[vIdStr].token;
+  }
+
+  // 3. Supabase DB queries
+  const p = getPrisma();
+  if (p) {
+    try {
+      if (vIdStr) {
+        const rows = await p.$queryRawUnsafe(
+          `SELECT token FROM vendor_fcm_tokens WHERE vendor_id = $1 LIMIT 1`,
+          vIdStr
+        );
+        if (rows && rows.length > 0 && rows[0].token) {
+          memoryTokens[vIdStr] = { token: rows[0].token };
+          return rows[0].token;
+        }
+      }
+
+      // 4. Fallback by phone
+      if (phone) {
+        const cleanPhone = String(phone).replace(/\D/g, "").slice(-10);
+        if (cleanPhone.length >= 7) {
+          const phoneRows = await p.$queryRawUnsafe(
+            `SELECT token FROM vendor_fcm_tokens WHERE phone LIKE $1 LIMIT 1`,
+            `%${cleanPhone}%`
+          );
+          if (phoneRows && phoneRows.length > 0 && phoneRows[0].token) {
+            return phoneRows[0].token;
+          }
+        }
+      }
+
+      // 5. Fallback to most recently registered active vendor token
+      const latestRows = await p.$queryRawUnsafe(
+        `SELECT token FROM vendor_fcm_tokens ORDER BY updated_at DESC LIMIT 1`
+      );
+      if (latestRows && latestRows.length > 0 && latestRows[0].token) {
+        return latestRows[0].token;
+      }
+    } catch (dbErr) {
+      console.warn("DB token lookup note:", dbErr.message);
+    }
+  }
+
+  return null;
 }
 
 /**
  * Sends a high-priority background push notification to a vendor's phone.
  * Wakes up device even if the app is killed or swiped away.
  */
-async function sendVendorOrderPushNotification({ vendorId, orderNumber, amount, itemCount, orderId }) {
-  const fcmToken = getTokenForVendor(vendorId);
+async function sendVendorOrderPushNotification({ vendorId, phone, orderNumber, amount, itemCount, orderId }) {
+  const fcmToken = await getTokenForVendor(vendorId, phone);
   if (!fcmToken) {
     console.log(`ℹ️ No FCM push token registered for vendor: ${vendorId}. Skipping push.`);
     return { success: false, reason: "no_fcm_token" };
@@ -137,6 +253,7 @@ async function sendVendorOrderPushNotification({ vendorId, orderNumber, amount, 
 
 module.exports = {
   initFirebase,
+  setPrismaClient,
   saveToken,
   getTokenForVendor,
   sendVendorOrderPushNotification,

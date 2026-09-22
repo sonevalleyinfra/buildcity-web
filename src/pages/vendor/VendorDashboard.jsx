@@ -241,10 +241,12 @@ export default function VendorDashboard() {
   // Auto-request notification permission on mount for native sound & alerts + FCM background push
   useEffect(() => {
     requestOrderNotificationPermission().catch(() => {});
-    if (vendorId) {
-      initVendorPushNotifications(vendorId).catch(() => {});
+    const activeVid = vendorId || user?.vendorInfo?.id || user?.id;
+    if (activeVid) {
+      const vPhone = user?.phone || matchedVendorObj?.phone || "";
+      initVendorPushNotifications(activeVid, { phone: vPhone }).catch(() => {});
     }
-  }, [vendorId]);
+  }, [vendorId, user?.id, user?.phone]);
 
   // Smart Vendor Orders Sync: Instant Event Sync + Focus/Visibility Aware + Loud Alert on New Orders
   useEffect(() => {

@@ -9,8 +9,22 @@ let isRegistered = false;
  * Initializes and registers FCM Push Notifications for the logged-in vendor.
  * Works even when the app is completely killed or swiped away.
  */
-export async function initVendorPushNotifications(vendorId) {
+export async function initVendorPushNotifications(vendorId, meta = {}) {
   if (!Capacitor.isNativePlatform() || !vendorId) return;
+  const phone = meta.phone || "";
+
+  // 0. If token was previously cached on device, sync immediately with backend!
+  try {
+    const cachedToken = localStorage.getItem("vendor_fcm_token");
+    if (cachedToken) {
+      fetch(`${API_BASE_URL}/api/v1/vendor/fcm-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vendorId, token: cachedToken, phone }),
+      }).catch(() => {});
+    }
+  } catch (e) {}
+
   if (isRegistered) return;
 
   try {
@@ -39,11 +53,12 @@ export async function initVendorPushNotifications(vendorId) {
       await PushNotifications.addListener("registration", async (token) => {
         if (!token?.value) return;
         console.log("📱 FCM Registration Token obtained:", token.value.substring(0, 15) + "...");
+        try { localStorage.setItem("vendor_fcm_token", token.value); } catch (e) {}
         try {
           await fetch(`${API_BASE_URL}/api/v1/vendor/fcm-token`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ vendorId, token: token.value }),
+            body: JSON.stringify({ vendorId, token: token.value, phone }),
           });
           console.log(`✅ FCM token synced with backend for vendor: ${vendorId}`);
         } catch (err) {

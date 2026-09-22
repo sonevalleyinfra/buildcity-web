@@ -209,8 +209,8 @@ export function OrderProvider({ children }) {
       } else if (!isGenericName) {
         vKey = `vname:${rawVendorName.toLowerCase()}`;
       } else {
-        // Separate unknown items so distinct items without vendor don't collapse into a single order
-        vKey = `item:${it.productId || it.id || idx}`;
+        // Group all generic/default district catalog items into 1 unified order instead of splitting!
+        vKey = "default_district_vendor";
       }
 
       if (!vendorMap.has(vKey)) {
@@ -221,11 +221,8 @@ export function OrderProvider({ children }) {
 
     const vendorGroups = Array.from(vendorMap.values());
 
-    // 3. For each vendor group, place a separate order
-    const createdOrders = [];
-
-    for (let i = 0; i < vendorGroups.length; i++) {
-      const groupItems = vendorGroups[i];
+    // 3. Place orders in parallel (Promise.all) for instant checkout response
+    const orderPromises = vendorGroups.map(async (groupItems, i) => {
       const groupSubtotal = groupItems.reduce(
         (sum, it) => sum + Number(it.price || 0) * (Number(it.quantity || 1)),
         0
@@ -302,8 +299,10 @@ export function OrderProvider({ children }) {
         });
       }
 
-      createdOrders.push(orderSaved);
-    }
+      return orderSaved;
+    });
+
+    const createdOrders = await Promise.all(orderPromises);
 
     // 4. Update orders state synchronously & dispatch events
     setOrders((prev) => {

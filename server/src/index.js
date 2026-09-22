@@ -11,6 +11,10 @@ const { issueToken, requireAuth, requireRole, requireSelfOrAdmin } = require("./
 const app = express();
 app.set("trust proxy", 1);
 const prisma = new PrismaClient();
+try {
+  const { setPrismaClient } = require("./pushService");
+  setPrismaClient(prisma);
+} catch (e) {}
 const PORT = process.env.PORT || 5000;
 
 // High-Speed Gzip/Brotli Compression (Reduces network payload & egress by 85-90%)
@@ -2861,21 +2865,24 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       },
     });
 
-    for (const vItem of validatedItems) {
-      const vId = vItem.vendorId || defaultVendor?.id;
-      if (vId) {
-        await prisma.orderItem.create({
-          data: {
-            orderId: newOrder.id,
-            productName: vItem.productName,
-            priceAtPurchase: vItem.priceAtPurchase,
-            quantity: vItem.quantity,
-            totalPrice: vItem.totalPrice,
-            vendorId: vId,
-          },
-        }).catch((e) => console.warn("OrderItem creation note:", e.message));
-      }
-    }
+    // Parallel insert of items using Promise.all for fast database execution
+    await Promise.all(
+      validatedItems.map(async (vItem) => {
+        const vId = vItem.vendorId || defaultVendor?.id;
+        if (vId) {
+          return prisma.orderItem.create({
+            data: {
+              orderId: newOrder.id,
+              productName: vItem.productName,
+              priceAtPurchase: vItem.priceAtPurchase,
+              quantity: vItem.quantity,
+              totalPrice: vItem.totalPrice,
+              vendorId: vId,
+            },
+          }).catch((e) => console.warn("OrderItem creation note:", e.message));
+        }
+      })
+    );
 
     const fullOrder = await prisma.order.findUnique({
       where: { id: newOrder.id },
@@ -2888,34 +2895,39 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
 
     console.log(`✅ Order ${newOrder.id} created successfully for customer ${targetCustomerId}`);
 
-    // 🔔 Send High-Priority FCM Push Notification to all involved Vendors (wakes up killed app)
-    try {
-      const { sendVendorOrderPushNotification } = require("./pushService");
-      const vendorGroups = {};
-      for (const item of (fullOrder.items || [])) {
-        const vId = item.vendorId;
-        if (!vId) continue;
-        if (!vendorGroups[vId]) {
-          vendorGroups[vId] = { count: 0, amount: 0 };
-        }
-        vendorGroups[vId].count += (item.quantity || 1);
-        vendorGroups[vId].amount += Number(item.totalPrice || item.priceAtPurchase || 0);
-      }
-
-      for (const [vendorId, vData] of Object.entries(vendorGroups)) {
-        sendVendorOrderPushNotification({
-          vendorId,
-          orderNumber: fullOrder.orderNumber || fullOrder.id,
-          amount: vData.amount + (Number(fullOrder.deliveryFee) || 0),
-          itemCount: vData.count,
-          orderId: fullOrder.id,
-        }).catch((e) => console.warn("FCM push send error:", e.message));
-      }
-    } catch (pushErr) {
-      console.warn("FCM push dispatch note:", pushErr.message);
-    }
-
+    // Respond IMMEDIATELY to customer so UI displays success in under 1 second!
     res.status(201).json({ success: true, order: fullOrder });
+
+    // 🔔 Send High-Priority FCM Push Notification to all involved Vendors in background
+    // (Wakes up killed app without adding network latency to customer response)
+    setImmediate(async () => {
+      try {
+        const { sendVendorOrderPushNotification } = require("./pushService");
+        const vendorGroups = {};
+        for (const item of (fullOrder.items || [])) {
+          const vId = item.vendorId;
+          if (!vId) continue;
+          if (!vendorGroups[vId]) {
+            vendorGroups[vId] = { count: 0, amount: 0 };
+          }
+          vendorGroups[vId].count += (item.quantity || 1);
+          vendorGroups[vId].amount += Number(item.totalPrice || item.priceAtPurchase || 0);
+        }
+
+        for (const [vendorId, vData] of Object.entries(vendorGroups)) {
+          await sendVendorOrderPushNotification({
+            vendorId,
+            phone: fullOrder.customer?.phone,
+            orderNumber: fullOrder.orderNumber || fullOrder.id,
+            amount: vData.amount + (Number(fullOrder.deliveryFee) || 0),
+            itemCount: vData.count,
+            orderId: fullOrder.id,
+          }).catch((e) => console.warn("FCM push send error:", e.message));
+        }
+      } catch (pushErr) {
+        console.warn("FCM push dispatch note:", pushErr.message);
+      }
+    });
   } catch (err) {
     console.error("Order checkout error:", err);
     res.status(500).json({ error: err.message });
@@ -2925,12 +2937,12 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
 // Vendor FCM Device Token Registration (for background push notifications when app is killed)
 app.post("/api/v1/vendor/fcm-token", async (req, res) => {
   try {
-    const { vendorId, token } = req.body;
+    const { vendorId, token, phone } = req.body;
     if (!vendorId || !token) {
       return res.status(400).json({ error: "vendorId and token are required" });
     }
     const { saveToken } = require("./pushService");
-    saveToken(vendorId, token);
+    await saveToken(vendorId, token, phone);
     res.json({ success: true, message: "FCM token registered successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });

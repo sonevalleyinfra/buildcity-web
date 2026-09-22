@@ -131,8 +131,9 @@ async function saveToken(vendorId, token, phone = null) {
  * 1. In-memory cache
  * 2. Local JSON file
  * 3. Supabase DB lookup by vendor_id
- * 4. Supabase DB lookup by vendor phone
- * 5. Supabase DB most recently registered active vendor token
+ * 4. Supabase DB lookup by vendor phone (exact match only)
+ * Never falls back to another vendor's device token, so one vendor's order
+ * alerts can never be delivered to a different vendor's phone.
  */
 async function getTokenForVendor(vendorId, phone = null) {
   const vIdStr = vendorId ? String(vendorId).trim() : "";
@@ -167,23 +168,15 @@ async function getTokenForVendor(vendorId, phone = null) {
       // 4. Fallback by phone
       if (phone) {
         const cleanPhone = String(phone).replace(/\D/g, "").slice(-10);
-        if (cleanPhone.length >= 7) {
+        if (cleanPhone.length === 10) {
           const phoneRows = await p.$queryRawUnsafe(
-            `SELECT token FROM vendor_fcm_tokens WHERE phone LIKE $1 LIMIT 1`,
-            `%${cleanPhone}%`
+            `SELECT token FROM vendor_fcm_tokens WHERE RIGHT(regexp_replace(phone, '\\D', '', 'g'), 10) = $1 ORDER BY updated_at DESC LIMIT 1`,
+            cleanPhone
           );
           if (phoneRows && phoneRows.length > 0 && phoneRows[0].token) {
             return phoneRows[0].token;
           }
         }
-      }
-
-      // 5. Fallback to most recently registered active vendor token
-      const latestRows = await p.$queryRawUnsafe(
-        `SELECT token FROM vendor_fcm_tokens ORDER BY updated_at DESC LIMIT 1`
-      );
-      if (latestRows && latestRows.length > 0 && latestRows[0].token) {
-        return latestRows[0].token;
       }
     } catch (dbErr) {
       console.warn("DB token lookup note:", dbErr.message);

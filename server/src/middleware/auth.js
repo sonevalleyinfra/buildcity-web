@@ -50,8 +50,8 @@ function requireAuth(req, res, next) {
 
   const token = parts[1];
 
-  jwt.verify(token, JWT_SECRET, (err, decoded) => {
-    if (err) {
+  jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] }, (err, decoded) => {
+    if (err || !decoded || !decoded.sub) {
       return res.status(401).json({ error: "Session expired. Please log in again." });
     }
 
@@ -109,7 +109,13 @@ function requireSelfOrAdmin(getTargetUserId) {
       targetId = req.params.userId || req.params.id;
     }
 
-    if (targetId && (String(targetId) === String(req.auth.userId) || String(targetId).replace(/\D/g, "") === String(req.auth.phone).replace(/\D/g, ""))) {
+    const targetDigits = targetId ? String(targetId).replace(/\D/g, "") : "";
+    const ownDigits = String(req.auth.phone || "").replace(/\D/g, "");
+    const isSelfById = targetId && String(targetId) === String(req.auth.userId);
+    // Only compare phone numbers when both sides are real 10-digit numbers (empty strings must never match)
+    const isSelfByPhone = ownDigits.length >= 10 && targetDigits.length >= 10 && targetDigits.slice(-10) === ownDigits.slice(-10);
+
+    if (isSelfById || isSelfByPhone) {
       return next();
     }
 

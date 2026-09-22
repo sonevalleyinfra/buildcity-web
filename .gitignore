@@ -50,3 +50,6 @@ google-services.json
 .agents
 .agents/*
 **/.agents
+
+# Runtime data written by the server (FCM device tokens backup)
+server/data/

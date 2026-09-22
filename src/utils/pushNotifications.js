@@ -1,6 +1,7 @@
 import { PushNotifications } from "@capacitor/push-notifications";
 import { Capacitor } from "@capacitor/core";
 import { API_BASE_URL } from "../config/api";
+import { authFetch } from "../config/authFetch";
 import { playOrderAlertChime, triggerOrderVibration } from "./orderAlertSound";
 
 let isRegistered = false;
@@ -17,7 +18,7 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
   try {
     const cachedToken = localStorage.getItem("vendor_fcm_token");
     if (cachedToken) {
-      fetch(`${API_BASE_URL}/api/v1/vendor/fcm-token`, {
+      authFetch(`${API_BASE_URL}/api/v1/vendor/fcm-token`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ vendorId, token: cachedToken, phone }),
@@ -55,7 +56,7 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
         console.log("📱 FCM Registration Token obtained:", token.value.substring(0, 15) + "...");
         try { localStorage.setItem("vendor_fcm_token", token.value); } catch (e) {}
         try {
-          await fetch(`${API_BASE_URL}/api/v1/vendor/fcm-token`, {
+          await authFetch(`${API_BASE_URL}/api/v1/vendor/fcm-token`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ vendorId, token: token.value, phone }),

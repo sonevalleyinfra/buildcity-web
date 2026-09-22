@@ -4,6 +4,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const compression = require("compression");
 const { PrismaClient } = require("@prisma/client");
 const { issueToken, requireAuth, requireRole, requireSelfOrAdmin } = require("./middleware/auth");
@@ -25,12 +26,71 @@ app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false 
 app.disable("x-powered-by");
 
 // Enable CORS & JSON Parsing
-app.use(cors());
-app.use(express.json());
+// If ALLOWED_ORIGINS is configured, only those origins (plus the Capacitor app shells) may call the API from a browser.
+// Auth uses Bearer tokens (not cookies), so an unset list falls back to open CORS without exposing credentials.
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+const nativeAppOrigins = ["capacitor://localhost", "http://localhost", "https://localhost", "ionic://localhost"];
+app.use(
+  cors(
+    allowedOrigins.length > 0
+      ? {
+          origin: (origin, cb) => {
+            if (!origin || allowedOrigins.includes(origin) || nativeAppOrigins.includes(origin)) return cb(null, true);
+            return cb(null, false);
+          },
+        }
+      : {}
+  )
+);
+app.use(express.json({ limit: "1mb" }));
 
-// Auto-Invalidate Cache on Mutations (POST, PUT, PATCH, DELETE)
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+// Deep-strip secret fields (password hashes) from every JSON response, so no endpoint can ever leak them
+function stripSecrets(value, depth = 0) {
+  if (value === null || typeof value !== "object" || depth > 12) return value;
+  if (Array.isArray(value)) return value.map((v) => stripSecrets(v, depth + 1));
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return value; // Date, Prisma Decimal, etc.
+  const out = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (k === "password") continue;
+    out[k] = stripSecrets(v, depth + 1);
+  }
+  return out;
+}
+
 app.use((req, res, next) => {
-  if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
+  const originalJson = res.json.bind(res);
+  res.json = (body) => {
+    let safeBody = stripSecrets(body);
+    // Never leak internal DB / stack error messages to clients in production
+    if (IS_PRODUCTION && res.statusCode >= 500 && safeBody && typeof safeBody === "object" && !Array.isArray(safeBody)) {
+      const { details, ...rest } = safeBody;
+      safeBody = { ...rest, error: "Something went wrong. Please try again." };
+    }
+    return originalJson(safeBody);
+  };
+  next();
+});
+
+// Auto-Invalidate Cache on Mutations (POST, PUT, PATCH, DELETE) that can affect catalog data.
+// Per-user writes (cart sync, OTP, addresses, notifications) must not wipe the shared catalog cache.
+const CACHE_NEUTRAL_PREFIXES = [
+  "/api/v1/cart",
+  "/api/v1/auth",
+  "/api/v1/addresses",
+  "/api/v1/notifications",
+  "/api/v1/reviews",
+  "/api/v1/vendor/fcm-token",
+  "/api/v1/users/preferred-region",
+  "/api/v1/users/profile",
+];
+app.use((req, res, next) => {
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method) && !CACHE_NEUTRAL_PREFIXES.some((p) => req.path.startsWith(p))) {
     invalidateCache();
     res.on("finish", () => {
       invalidateCache();
@@ -40,10 +100,15 @@ app.use((req, res, next) => {
 });
 
 // Dedicated Customer OTP Rate Limiters (DO NOT apply to Partner password login)
+const normalizePhoneKey = (req) => {
+  const digits = String(req.body?.phone || "").replace(/\D/g, "").slice(-10);
+  return digits.length === 10 ? `phone:${digits}` : `ip:${req.ip}`;
+};
+
 const otpRequestLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 5,
-  keyGenerator: (req) => String(req.body?.phone || req.ip),
+  keyGenerator: normalizePhoneKey,
   message: { error: "Too many OTP requests. Please try again after an hour." },
   standardHeaders: true,
   legacyHeaders: false,
@@ -53,8 +118,30 @@ const otpRequestLimiter = rateLimit({
 const otpVerifyLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 mins
   max: 10,
-  keyGenerator: (req) => String(req.body?.phone || req.ip),
+  keyGenerator: normalizePhoneKey,
   message: { error: "Too many attempts. Please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: false,
+});
+
+// Per-IP ceiling for OTP endpoints so one client cannot spray SMS / guesses across many phone numbers
+const otpIpLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  keyGenerator: (req) => `ip:${req.ip}`,
+  message: { error: "Too many requests from this network. Please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: false,
+});
+
+// Partner (Admin / DR / Vendor) password login brute-force protection
+const partnerLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  keyGenerator: (req) => `${normalizePhoneKey(req)}|${req.ip}`,
+  message: { error: "Too many login attempts. Please try again after 15 minutes." },
   standardHeaders: true,
   legacyHeaders: false,
   validate: false,
@@ -86,11 +173,11 @@ function invalidateCache(prefix) {
 
 // Health Check & Render Keep-Alive Endpoint (0ms response)
 app.get(["/health", "/api/v1/health"], (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString(), memoryUsage: process.memoryUsage().heapUsed });
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// Database & Environment Diagnostic Check
-app.get("/api/v1/db-check", async (req, res) => {
+// Database & Environment Diagnostic Check (Admin only — exposes infrastructure details)
+app.get("/api/v1/db-check", requireAuth, requireRole("ADMIN"), async (req, res) => {
   const hasDbUrl = !!process.env.DATABASE_URL;
   const dbHost = process.env.DATABASE_URL
     ? (process.env.DATABASE_URL.match(/@([^:/]+)/) || [])[1] || "configured"
@@ -123,18 +210,28 @@ app.get("/api/v1/db-check", async (req, res) => {
   });
 });
 
-// Automatic Self-Ping Keep-Alive to Prevent Render Free-Tier Sleep (Runs every 8 minutes)
-const RENDER_APP_URL = process.env.RENDER_EXTERNAL_URL || "https://buildcity-web.onrender.com";
-setInterval(async () => {
-  try {
-    const res = await fetch(`${RENDER_APP_URL}/health`);
-    if (res.ok) {
-      console.log(`[Keep-Alive Ping] Successfully warmed Render instance at ${new Date().toLocaleTimeString()}`);
+// Automatic Self-Ping Keep-Alive to Prevent Render Free-Tier Sleep (Runs every 8 minutes, only when hosted on Render)
+const RENDER_APP_URL = process.env.RENDER_EXTERNAL_URL;
+if (RENDER_APP_URL) {
+  setInterval(async () => {
+    try {
+      await fetch(`${RENDER_APP_URL}/health`, { signal: AbortSignal.timeout(10000) });
+    } catch (err) {
+      // silently ignore ping errors
     }
-  } catch (err) {
-    // silently catch local dev ping errors
-  }
-}, 8 * 60 * 1000);
+  }, 8 * 60 * 1000).unref();
+}
+
+// Resolve the Vendor record owned by the authenticated VENDOR token (never trust client-supplied vendor IDs)
+async function getAuthVendor(req) {
+  const userId = req.auth?.userId;
+  const cleanPhone = String(req.auth?.phone || "").replace(/\D/g, "").slice(-10);
+  const or = [];
+  if (userId) or.push({ userId });
+  if (cleanPhone.length === 10) or.push({ phone: cleanPhone });
+  if (or.length === 0) return null;
+  return prisma.vendor.findFirst({ where: { OR: or }, include: { region: true } }).catch(() => null);
+}
 
 let couponsList = [
   { id: "cp-1", code: "BUILDCITY100", title: "Flat ₹100 OFF", minOrder: 1000, discountAmount: 100, expiryDate: "2026-12-31", isActive: true, desc: "Valid on orders above ₹1,000" },
@@ -296,7 +393,21 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
     }
 
     const results = await Promise.all(fetchPromises);
-    const [drs, vendors, masterProducts, categories, regions, orders, listings, coupons, dbBanners, users] = results;
+    let [drs, vendors, masterProducts, categories, regions, orders, listings, coupons, dbBanners, users] = results;
+
+    // Vendors only get their own store, their own order lines and no staff directory
+    if (role === "VENDOR") {
+      const ownVendor = await getAuthVendor(req);
+      const ownId = ownVendor?.id || null;
+      drs = [];
+      vendors = ownId ? vendors.filter((v) => v.id === ownId) : [];
+      orders = ownId
+        ? orders
+            .map((o) => ({ ...o, items: (o.items || []).filter((it) => it.vendorId === ownId) }))
+            .filter((o) => o.items.length > 0)
+        : [];
+      users = [];
+    }
 
     const data = {
       drs,
@@ -318,10 +429,10 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
 });
 
 // Password Login Endpoint — Phone & Password Login for Admin, DR, and Vendor Partners
-app.post("/api/v1/auth/vendor/login", async (req, res) => {
+app.post("/api/v1/auth/vendor/login", partnerLoginLimiter, async (req, res) => {
   try {
-    const { phone, password } = req.body;
-    if (!phone || !password) {
+    const { phone, password } = req.body || {};
+    if (!phone || !password || typeof phone !== "string" || typeof password !== "string") {
       return res.status(400).json({ error: "Mobile number and Password are required." });
     }
 
@@ -753,9 +864,9 @@ app.delete("/api/v1/banners/:id", requireAuth, requireRole("ADMIN"), async (req,
 const { sendRealSMSOTP } = require("./smsService");
 
 // 1. AUTHENTICATION & USERS ENDPOINTS (INSTANT HIGH SPEED OPTIMIZED)
-app.post("/api/v1/auth/otp/request", otpRequestLimiter, async (req, res) => {
-  const { phone, type = "login" } = req.body;
-  if (!phone || !/^\d{10}$/.test(phone)) {
+app.post("/api/v1/auth/otp/request", otpIpLimiter, otpRequestLimiter, async (req, res) => {
+  const { phone, type = "login" } = req.body || {};
+  if (!phone || typeof phone !== "string" || !/^\d{10}$/.test(phone)) {
     return res.status(400).json({ error: "Valid 10-digit phone number required" });
   }
 
@@ -809,7 +920,7 @@ app.post("/api/v1/auth/otp/request", otpRequestLimiter, async (req, res) => {
     }
 
     // Generate 6-digit OTP code instantly
-    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    const generatedOtp = crypto.randomInt(100000, 1000000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins expiry
 
     // Save OTP record in DB asynchronously in background (Non-blocking)
@@ -837,13 +948,16 @@ app.post("/api/v1/auth/otp/request", otpRequestLimiter, async (req, res) => {
     });
   } catch (err) {
     console.error("OTP dispatch error:", err);
-    res.status(500).json({ error: "Failed to dispatch OTP", details: err.message });
+    res.status(500).json({ error: "Failed to dispatch OTP" });
   }
 });
 
-app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
-  const { phone, otp, name } = req.body;
-  if (!phone || !otp) return res.status(400).json({ error: "Phone and OTP required" });
+app.post("/api/v1/auth/otp/verify", otpIpLimiter, otpVerifyLimiter, async (req, res) => {
+  const { phone, otp, name: rawName } = req.body || {};
+  if (!phone || !otp || typeof phone !== "string" || typeof otp !== "string") {
+    return res.status(400).json({ error: "Phone and OTP required" });
+  }
+  const name = typeof rawName === "string" ? rawName.slice(0, 80) : "";
 
   try {
     const cleanPhone = phone.trim().replace(/\D/g, "").slice(-10);
@@ -861,6 +975,9 @@ app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
     if (!validRecord) {
       return res.status(401).json({ error: "Invalid or expired OTP. Please enter the exact OTP code sent to your mobile." });
     }
+
+    // One-time use: burn all outstanding OTPs for this phone so a code can never be replayed
+    await prisma.oTPVerification.deleteMany({ where: { phone: cleanPhone } }).catch(() => null);
 
     // Fast Indexed User Lookup
     let user = await prisma.user.findUnique({
@@ -913,7 +1030,7 @@ app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
     });
   } catch (err) {
     console.error("Auth verify error:", err);
-    res.status(500).json({ error: "Authentication failed", details: err.message });
+    res.status(500).json({ error: "Authentication failed" });
   }
 });
 
@@ -945,8 +1062,8 @@ app.get("/api/v1/cart", requireAuth, async (req, res) => {
 // Sync and Save Cart to Database for Logged-In User
 app.put("/api/v1/cart", requireAuth, async (req, res) => {
   try {
-    const { items } = req.body;
-    const safeItems = Array.isArray(items) ? items : [];
+    const { items } = req.body || {};
+    const safeItems = Array.isArray(items) ? items.slice(0, 200) : [];
     const updated = await prisma.user.update({
       where: { id: req.auth.userId },
       data: { cartItems: safeItems },
@@ -999,35 +1116,25 @@ app.get("/api/v1/users/by-phone/:phone", requireAuth, requireSelfOrAdmin((req) =
 });
 
 // Update Profile (Name, Email, Preferred Region) in Supabase PostgreSQL
+// Always updates the authenticated user's own profile — the phone in the body is ignored for authorization
 app.put("/api/v1/users/profile", requireAuth, async (req, res) => {
   try {
-    const { phone, name, email, preferredRegionId, preferredRegionName } = req.body;
-    if (!phone) return res.status(400).json({ error: "Phone number is required" });
+    const { name, email, preferredRegionId, preferredRegionName } = req.body || {};
 
-    let user = await prisma.user.findUnique({ where: { phone } });
+    let user = await prisma.user.findUnique({ where: { id: req.auth.userId } }).catch(() => null);
     if (!user) {
-      user = await prisma.user.create({
-        data: {
-          phone,
-          name: name || "User",
-          email,
-          preferredRegionId: preferredRegionId || null,
-          preferredRegionName: preferredRegionName || null,
-          role: "CUSTOMER",
-          tokenVersion: 1,
-        },
-      });
-    } else {
-      user = await prisma.user.update({
-        where: { phone },
-        data: {
-          name: name !== undefined ? name : user.name,
-          email: email !== undefined ? email : user.email,
-          ...(preferredRegionId ? { preferredRegionId } : {}),
-          ...(preferredRegionName ? { preferredRegionName } : {}),
-        },
-      });
+      return res.status(404).json({ error: "User not found", invalidSession: true });
     }
+
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        ...(typeof name === "string" && name.trim() ? { name: name.trim().slice(0, 80) } : {}),
+        ...(typeof email === "string" ? { email: email.trim().slice(0, 120) } : {}),
+        ...(typeof preferredRegionId === "string" && preferredRegionId ? { preferredRegionId } : {}),
+        ...(typeof preferredRegionName === "string" && preferredRegionName ? { preferredRegionName } : {}),
+      },
+    });
 
     const { password, ...safeUser } = user;
     res.json({ success: true, user: safeUser });
@@ -1629,34 +1736,38 @@ app.get("/api/v1/vendor/listings", async (req, res) => {
 
 app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
-    let { masterProductId, vendorId, vendorName, regionId, regionName, price, stockQty, addedBy } = req.body;
+    let { masterProductId, vendorId, vendorName, regionId, regionName, price, stockQty, addedBy } = req.body || {};
+    const isVendorRole = req.auth.role === "VENDOR";
 
-    let masterProd = masterProductId ? await prisma.productMaster.findUnique({ where: { id: masterProductId }, include: { category: true } }).catch(() => null) : null;
+    const masterProd = masterProductId && typeof masterProductId === "string"
+      ? await prisma.productMaster.findUnique({ where: { id: masterProductId }, include: { category: true } }).catch(() => null)
+      : null;
 
     if (!masterProd) {
-      masterProd = await prisma.productMaster.findFirst({ include: { category: true } }).catch(() => null);
+      return res.status(400).json({ error: "Valid master product is required" });
     }
 
-    if (!masterProd) {
-      const cat = await prisma.category.findFirst().catch(() => null);
-      masterProd = await prisma.productMaster.create({
-        data: {
-          name: "UltraTech Super PPC Cement",
-          categoryId: cat ? cat.id : "c1",
-          brand: "UltraTech",
-          type: "PPC Cement",
-          grade: "OPC 53 Grade",
-          unit: "50kg Bag",
-          suggestedPrice: 390,
-          imageUrl: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
-          addedBy: "Admin",
-        },
-        include: { category: true },
-      });
+    const numericPrice = Number(price);
+    if (price !== undefined && (!Number.isFinite(numericPrice) || numericPrice <= 0)) {
+      return res.status(400).json({ error: "Price must be a positive number" });
+    }
+    const numericStock = Number(stockQty);
+    if (stockQty !== undefined && (!Number.isInteger(numericStock) || numericStock < 0)) {
+      return res.status(400).json({ error: "Stock must be a whole number of 0 or more" });
     }
 
     let vendor = null;
-    if (vendorId) {
+    if (isVendorRole) {
+      // Vendors can only list products for their own store, in their own region, and always go through review
+      vendor = await getAuthVendor(req);
+      if (!vendor) {
+        return res.status(403).json({ error: "No vendor store is linked to this account" });
+      }
+      addedBy = "Vendor";
+      regionId = vendor.regionId;
+      req.body.regionName = vendor.region?.name;
+      req.body.districtName = undefined;
+    } else if (vendorId) {
       vendor = await prisma.vendor.findUnique({ where: { id: vendorId }, include: { region: true } }).catch(() => null);
     }
     if (!vendor && (vendorName || vendorId)) {
@@ -1713,28 +1824,14 @@ app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "AD
     }
 
     if (!vendor) {
-      const user = await prisma.user.create({
-        data: { phone: "98765" + Math.floor(10000 + Math.random() * 89999), name: vendorName || "Vendor Partner", role: "VENDOR" },
-      });
-      vendor = await prisma.vendor.create({
-        data: {
-          userId: user.id,
-          shopName: vendorName || "Distributor Store",
-          ownerName: "Vendor Owner",
-          phone: user.phone,
-          regionId: matchedRegion.id,
-          commissionRate: 10,
-          status: "APPROVED",
-        },
-        include: { region: true },
-      });
+      return res.status(404).json({ error: "Vendor not found" });
     }
 
     const finalRegionId = matchedRegion ? matchedRegion.id : null;
     const finalRegionName = matchedRegion ? matchedRegion.name : targetRegName;
 
-    // Sync vendor region in DB if different
-    if (vendor && matchedRegion && vendor.regionId !== matchedRegion.id) {
+    // Sync vendor region in DB if different (staff only — vendors cannot move their own store)
+    if (!isVendorRole && vendor && matchedRegion && vendor.regionId !== matchedRegion.id) {
       await prisma.vendor.update({
         where: { id: vendor.id },
         data: { regionId: matchedRegion.id },
@@ -1783,19 +1880,36 @@ app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "AD
 app.patch("/api/v1/vendor/listings/:id", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
     const rawId = req.params.id;
-    const { price, stockQty, approvalStatus, isActive } = req.body;
+    const { price, stockQty, approvalStatus, isActive } = req.body || {};
 
     let listing = await prisma.vendorProduct.findUnique({ where: { id: rawId } }).catch(() => null);
 
     if (listing) {
+      const isVendorRole = req.auth.role === "VENDOR";
+      if (isVendorRole) {
+        const ownVendor = await getAuthVendor(req);
+        if (!ownVendor || ownVendor.id !== listing.vendorId) {
+          return res.status(403).json({ error: "You do not have permission for this action" });
+        }
+      }
+
       const updateData = {};
-      if (price !== undefined && !isNaN(Number(price))) updateData.price = Number(price);
-      if (stockQty !== undefined && !isNaN(Number(stockQty))) updateData.stockQty = Number(stockQty);
-      if (approvalStatus !== undefined) {
+      if (price !== undefined && Number.isFinite(Number(price)) && Number(price) > 0) updateData.price = Number(price);
+      if (stockQty !== undefined && Number.isInteger(Number(stockQty)) && Number(stockQty) >= 0) updateData.stockQty = Number(stockQty);
+      if (approvalStatus !== undefined && !isVendorRole) {
+        if (!["PENDING_REVIEW", "APPROVED", "REJECTED"].includes(approvalStatus)) {
+          return res.status(400).json({ error: "Invalid approval status" });
+        }
         updateData.approvalStatus = approvalStatus;
         updateData.isActive = approvalStatus === "APPROVED";
       }
-      if (isActive !== undefined) updateData.isActive = isActive;
+      if (isActive !== undefined) {
+        // Vendors may pause a listing, but can only re-activate one that staff already approved
+        const wantsActive = Boolean(isActive);
+        if (!isVendorRole || !wantsActive || listing.approvalStatus === "APPROVED") {
+          updateData.isActive = wantsActive;
+        }
+      }
 
       const updatedListing = await prisma.vendorProduct.update({
         where: { id: listing.id },
@@ -1817,7 +1931,10 @@ app.patch("/api/v1/vendor/listings/:id", requireAuth, requireRole("VENDOR", "DR"
 app.patch("/api/v1/vendor/listings/:id/status", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const rawId = req.params.id;
-    const { approvalStatus } = req.body; // PENDING_REVIEW | APPROVED | REJECTED
+    const { approvalStatus } = req.body || {}; // PENDING_REVIEW | APPROVED | REJECTED
+    if (approvalStatus !== undefined && !["PENDING_REVIEW", "APPROVED", "REJECTED"].includes(approvalStatus)) {
+      return res.status(400).json({ error: "Invalid approval status" });
+    }
 
     let listing = await prisma.vendorProduct.findUnique({ where: { id: rawId } }).catch(() => null);
 
@@ -2134,7 +2251,7 @@ app.get("/api/v1/orders/me", requireAuth, async (req, res) => {
             },
           },
         },
-        customer: true,
+        customer: { select: { id: true, name: true, phone: true, email: true, role: true } },
         address: true,
       },
       orderBy: { createdAt: "desc" },
@@ -2157,8 +2274,11 @@ app.get("/api/v1/orders/me", requireAuth, async (req, res) => {
 // Customer Isolated Orders Fetch (Self or Admin by Param)
 app.get("/api/v1/orders/user/:userId", requireAuth, requireSelfOrAdmin("userId"), async (req, res) => {
   try {
-    const targetUserId = req.auth?.role === "ADMIN" ? req.params.userId : (req.auth?.userId || req.params.userId);
-    const cleanPhone = (req.auth?.phone || req.params.userId || "").replace(/\D/g, "");
+    const isAdmin = req.auth?.role === "ADMIN";
+    const targetUserId = isAdmin ? req.params.userId : req.auth.userId;
+    const phoneSource = isAdmin ? req.params.userId : req.auth?.phone;
+    const phoneDigits = String(phoneSource || "").replace(/\D/g, "");
+    const cleanPhone = phoneDigits.length >= 10 ? phoneDigits : "";
 
     const orders = await prisma.order.findMany({
       where: {
@@ -2176,7 +2296,7 @@ app.get("/api/v1/orders/user/:userId", requireAuth, requireSelfOrAdmin("userId")
             },
           },
         },
-        customer: true,
+        customer: { select: { id: true, name: true, phone: true, email: true, role: true } },
         address: true,
       },
       orderBy: { createdAt: "desc" },
@@ -2200,19 +2320,32 @@ app.get("/api/v1/orders/user/:userId", requireAuth, requireSelfOrAdmin("userId")
 app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
     const { vendorId } = req.params;
-    const cleanPhone = vendorId.replace(/^v-/, "").replace(/\D/g, "");
-    const vendor = await prisma.vendor.findFirst({
-      where: {
-        OR: [
-          { id: vendorId },
-          ...(vendorId.length > 20 ? [{ userId: vendorId }] : []),
-          ...(cleanPhone.length >= 8 ? [{ phone: { contains: cleanPhone.slice(-10) } }] : []),
-          { shopName: { equals: vendorId, mode: "insensitive" } },
-        ],
-      },
-    }).catch(() => null);
+    let vendor = null;
 
+    if (req.auth.role === "VENDOR") {
+      // Vendors always see only their own store's orders, whatever ID the client passes
+      vendor = await getAuthVendor(req);
+    } else {
+      const cleanPhone = vendorId.replace(/^v-/, "").replace(/\D/g, "");
+      vendor = await prisma.vendor.findFirst({
+        where: {
+          OR: [
+            { id: vendorId },
+            ...(vendorId.length > 20 ? [{ userId: vendorId }] : []),
+            ...(cleanPhone.length === 10 ? [{ phone: cleanPhone }] : []),
+            { shopName: { equals: vendorId, mode: "insensitive" } },
+          ],
+        },
+      }).catch(() => null);
+    }
+
+    if (!vendor) {
+      return res.json([]);
+    }
+
+    // Only load orders that actually contain this vendor's items (DB-side filter instead of scanning every order)
     const allOrders = await prisma.order.findMany({
+      where: { items: { some: { vendorId: vendor.id } } },
       include: {
         items: {
           include: {
@@ -2231,29 +2364,14 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
       return res.json([]);
     }
 
-    const vId = vendor?.id || vendorId;
-    const vUserId = vendor?.userId;
-    const vShop = (vendor?.shopName || vendorId).toLowerCase().trim();
-    const vPhone = vendor?.phone ? vendor.phone.replace(/\D/g, "") : "";
+    const vId = vendor.id;
 
     const filtered = allOrders
       .map((o) => {
         if (!o || !Array.isArray(o.items) || o.items.length === 0) return null;
 
         // Strictly retain ONLY items belonging to this vendor
-        const myItems = o.items.filter((it) => {
-          const itVendorId = it.vendorId;
-          const itVendorPhone = it.vendor?.phone ? it.vendor.phone.replace(/\D/g, "") : "";
-          const matchesId = itVendorId && (
-            itVendorId === vId ||
-            itVendorId === vendorId ||
-            (vUserId && itVendorId === vUserId) ||
-            (vPhone && itVendorPhone && (vPhone.includes(itVendorPhone) || itVendorPhone.includes(vPhone)))
-          );
-          const itShop = (it.vendor?.shopName || it.vendorName || "").toLowerCase().trim();
-          const matchesShop = vShop && itShop && (vShop.includes(itShop) || itShop.includes(vShop));
-          return matchesId || matchesShop;
-        });
+        const myItems = o.items.filter((it) => it.vendorId === vId);
 
         if (myItems.length === 0) return null;
 
@@ -2297,27 +2415,48 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
 // Update Order Status (Vendor & Admin with Auto Stock Restore on Cancel)
 app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
-    const { status } = req.body; // PENDING | PROCESSING | OUT_FOR_DELIVERY | DELIVERED | CANCELLED
+    const { status } = req.body || {}; // PENDING | PROCESSING | OUT_FOR_DELIVERY | DELIVERED | CANCELLED
+    const VALID_ORDER_STATUSES = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"];
+    if (!VALID_ORDER_STATUSES.includes(status)) {
+      return res.status(400).json({ error: "Invalid order status" });
+    }
+
     const previousOrder = await prisma.order.findUnique({
       where: { id: req.params.id },
       include: { items: true },
     }).catch(() => null);
 
+    if (!previousOrder) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    // Vendors may only update orders that contain their own items
+    if (req.auth.role === "VENDOR") {
+      const ownVendor = await getAuthVendor(req);
+      if (!ownVendor || !(previousOrder.items || []).some((it) => it.vendorId === ownVendor.id)) {
+        return res.status(403).json({ error: "You do not have permission for this action" });
+      }
+    }
+
     const updatedOrder = await prisma.order.update({
       where: { id: req.params.id },
       data: { status },
-      include: { items: true, customer: true },
+      include: { items: true, customer: { select: { id: true, name: true, phone: true, email: true, role: true } } },
     });
 
     // Restore reserved quantity back to DB inventory when order is cancelled or rejected
     if (status === "CANCELLED" && previousOrder && previousOrder.status !== "CANCELLED" && Array.isArray(previousOrder.items)) {
       for (const item of previousOrder.items) {
         try {
-          const vp = await prisma.vendorProduct.findFirst({
-            where: {
-              name: { equals: item.productName, mode: "insensitive" },
-            },
-          }).catch(() => null);
+          // Restore to the exact listing that was sold (fall back to same vendor + product name for older orders)
+          const vp = item.vendorProductId
+            ? await prisma.vendorProduct.findUnique({ where: { id: item.vendorProductId } }).catch(() => null)
+            : await prisma.vendorProduct.findFirst({
+                where: {
+                  vendorId: item.vendorId,
+                  name: { equals: item.productName, mode: "insensitive" },
+                },
+              }).catch(() => null);
 
           if (vp) {
             await prisma.vendorProduct.update({
@@ -2569,17 +2708,27 @@ app.delete("/api/v1/addresses/:id", requireAuth, async (req, res) => {
   }
 });
 
-// In-memory caches for ultra-fast checkout (eliminates 4000ms of static DB roundtrips)
-let cachedDefaultVendor = null;
-let cachedRegions = null;
-
 app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
   try {
-    const { customerId, totalAmount, deliveryFee, items, idempotencyKey } = req.body;
+    const { items, idempotencyKey: rawIdempotencyKey } = req.body || {};
+    const idempotencyKey = typeof rawIdempotencyKey === "string" && rawIdempotencyKey.trim() ? rawIdempotencyKey.trim().slice(0, 120) : null;
+
+    // The order is ALWAYS placed for the authenticated user — never for a customerId / phone sent by the client
+    const targetUser = await prisma.user.findUnique({ where: { id: req.auth.userId } }).catch(() => null);
+    if (!targetUser) {
+      return res.status(401).json({ error: "Session expired. Please log in again.", invalidSession: true });
+    }
+    const targetCustomerId = targetUser.id;
 
     if (idempotencyKey) {
-      const existingOrder = await prisma.order.findUnique({ where: { idempotencyKey }, include: { items: true, customer: true, address: true } });
+      const existingOrder = await prisma.order.findUnique({
+        where: { idempotencyKey },
+        include: { items: true, customer: { select: { id: true, name: true, phone: true, email: true, role: true } }, address: true },
+      }).catch(() => null);
       if (existingOrder) {
+        if (existingOrder.customerId !== targetCustomerId) {
+          return res.status(409).json({ error: "Duplicate order request. Please try again." });
+        }
         return res.json({ success: true, order: existingOrder, isDuplicate: true });
       }
     }
@@ -2587,22 +2736,28 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "No items in order." });
     }
-
-    // 1. Fast Cache Resolution for static entities (0ms instead of 2000ms!)
-    if (!cachedDefaultVendor) {
-      cachedDefaultVendor = await prisma.vendor.findFirst().catch(() => null);
+    if (items.length > 100) {
+      return res.status(400).json({ error: "Too many items in a single order." });
     }
-    const defaultVendor = cachedDefaultVendor;
 
+    // 1. Fast Cache Resolution for static entities (TTL cached; cleared automatically on admin mutations)
+    let defaultVendor = getCached("checkout_default_vendor");
+    if (!defaultVendor) {
+      defaultVendor = await prisma.vendor.findFirst().catch(() => null);
+      if (defaultVendor) setCached("checkout_default_vendor", defaultVendor, 5 * 60 * 1000);
+    }
+
+    let cachedRegions = getCached("checkout_regions");
     if (!cachedRegions || cachedRegions.length === 0) {
       cachedRegions = await prisma.region.findMany().catch(() => []);
+      setCached("checkout_regions", cachedRegions, 5 * 60 * 1000);
     }
 
     let reg = null;
-    if (req.body.regionId) {
+    if (typeof req.body.regionId === "string") {
       reg = cachedRegions.find((r) => r.id === req.body.regionId);
     }
-    if (!reg && req.body.districtName) {
+    if (!reg && typeof req.body.districtName === "string" && req.body.districtName.trim()) {
       const dName = req.body.districtName.trim().toLowerCase();
       reg = cachedRegions.find((r) => r.name.toLowerCase() === dName || r.name.toLowerCase().includes(dName));
     }
@@ -2610,48 +2765,12 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       reg = cachedRegions[0] || null;
     }
 
-    const targetRegionName = reg?.name || (req.body.districtName || req.body.address?.city || req.body.address?.district || "Varanasi").trim();
-
-    // 2. Resolve User, Address, and Batch Products concurrently in parallel!
-    const incomingPhone = (
-      req.body.phone ||
-      req.body.address?.phone ||
-      (typeof customerId === "string" && customerId.startsWith("cust_") ? customerId.replace("cust_", "") : "") ||
-      (typeof customerId === "string" && !customerId.includes("-") ? customerId : "")
-    ).replace(/\D/g, "");
-
-    const userPromise = (async () => {
-      if (customerId && customerId.length > 20 && !customerId.startsWith("cust_") && !customerId.startsWith("user_")) {
-        const u = await prisma.user.findUnique({ where: { id: customerId } }).catch(() => null);
-        if (u) return u;
-      }
-      if (incomingPhone && incomingPhone.length >= 8) {
-        const u = await prisma.user.findFirst({
-          where: {
-            OR: [
-              { phone: incomingPhone },
-              { phone: { contains: incomingPhone.slice(-10) } },
-            ],
-          },
-        }).catch(() => null);
-        if (u) return u;
-      }
-      const userPhone = incomingPhone && incomingPhone.length >= 10 ? incomingPhone : `cust_${Date.now()}`;
-      return await prisma.user.create({
-        data: {
-          phone: userPhone,
-          name: req.body.address?.fullName || "Customer",
-          role: "CUSTOMER",
-          tokenVersion: 1,
-        },
-      }).catch(async () => {
-        return await prisma.user.findFirst({ where: { role: "CUSTOMER" } }).catch(() => null);
-      });
-    })();
+    const fallbackCity = [req.body.districtName, req.body.address?.city, req.body.address?.district].find((v) => typeof v === "string" && v.trim());
+    const targetRegionName = reg?.name || (fallbackCity || "Varanasi").trim();
 
     // Batch query all cart products at once in 1 single fast database call!
-    const itemIds = items.map((i) => i.id || i.productId).filter(Boolean);
-    const itemNames = items.map((i) => (i.name || i.productName || "").trim()).filter(Boolean);
+    const itemIds = items.map((i) => i?.id || i?.productId).filter((v) => typeof v === "string" && v);
+    const itemNames = items.map((i) => String(i?.name || i?.productName || "").trim()).filter(Boolean);
 
     const productsPromise = prisma.vendorProduct.findMany({
       where: {
@@ -2670,18 +2789,15 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       },
     }).catch(() => []);
 
-    const [resolvedUser, liveProducts] = await Promise.all([userPromise, productsPromise]);
-
-    const targetUser = resolvedUser || (await prisma.user.findFirst().catch(() => null));
-    const targetCustomerId = targetUser?.id;
+    const liveProducts = await productsPromise;
 
     // 3. Address Save / Link Logic
     let addressId = null;
     if (req.body.address || req.body.districtName || req.body.regionId) {
       const addrObj = req.body.address || {};
-      const streetStr = typeof addrObj === "string" ? addrObj : (addrObj.street || addrObj.line || addrObj.address || "Main Site Delivery Address");
-      const fullNameStr = typeof addrObj === "object" ? (addrObj.fullName || addrObj.name || "Customer") : "Customer";
-      const phoneStr = typeof addrObj === "object" ? (addrObj.phone || targetUser?.phone || "") : (targetUser?.phone || "");
+      const streetStr = String(typeof addrObj === "string" ? addrObj : (addrObj.street || addrObj.line || addrObj.address || "Main Site Delivery Address")).slice(0, 300);
+      const fullNameStr = String(typeof addrObj === "object" ? (addrObj.fullName || addrObj.name || "Customer") : "Customer").slice(0, 80);
+      const phoneStr = String(typeof addrObj === "object" ? (addrObj.phone || targetUser?.phone || "") : (targetUser?.phone || "")).slice(0, 20);
       const cityStr = targetRegionName;
 
       if (reg && reg.id && targetCustomerId) {
@@ -2704,8 +2820,8 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
               phone: phoneStr,
               street: streetStr,
               city: cityStr,
-              state: typeof addrObj === "object" ? (addrObj.state || "Uttar Pradesh") : "Uttar Pradesh",
-              pincode: typeof addrObj === "object" ? (addrObj.pincode || "221001") : "221001",
+              state: String(typeof addrObj === "object" ? (addrObj.state || "Uttar Pradesh") : "Uttar Pradesh").slice(0, 60),
+              pincode: String(typeof addrObj === "object" ? (addrObj.pincode || "221001") : "221001").slice(0, 10),
               isDefault: false,
             },
           }).catch((err) => {
@@ -2721,13 +2837,17 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
     // 4. In-Memory Item Validation & Verification (0ms!)
     let serverTotalAmount = 0;
     const validatedItems = [];
+    const stockDecrements = [];
 
     for (const item of items) {
+      if (!item || typeof item !== "object") {
+        throw new Error("Invalid item in order.");
+      }
       const rawQty = item.quantity;
       const itemQty = Number(rawQty);
-      const prodName = (item.name || item.productName || item.title || "").trim();
+      const prodName = String(item.name || item.productName || item.title || "").trim();
 
-      if (!Number.isInteger(itemQty) || itemQty < 1) {
+      if (!Number.isInteger(itemQty) || itemQty < 1 || itemQty > 100000) {
         throw new Error(`Invalid quantity for product: ${prodName || "Item"}`);
       }
 
@@ -2736,14 +2856,14 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       if (!liveVp && prodName) {
         liveVp = liveProducts.find((p) => p.name.toLowerCase() === prodName.toLowerCase());
       }
-      if (!liveVp && pId) {
+      if (!liveVp && typeof pId === "string" && pId) {
         liveVp = await prisma.vendorProduct.findUnique({
           where: { id: pId },
           include: { vendor: { select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true, status: true } } },
         }).catch(() => null);
       }
 
-      if (!liveVp || liveVp.vendor?.status === "SUSPENDED" || liveVp.isActive === false) {
+      if (!liveVp || liveVp.vendor?.status === "SUSPENDED" || liveVp.isActive === false || liveVp.approvalStatus !== "APPROVED") {
         throw new Error(`Product not available or supplier suspended: ${prodName || item.id || "Item"}`);
       }
 
@@ -2755,12 +2875,9 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       const itemTotal = itemQty * verifiedPrice;
       serverTotalAmount += itemTotal;
 
-      // Decrement stock asynchronously in background
+      // Stock is decremented only after the order is saved, so a rejected order never eats inventory
       if (liveVp.stockQty && liveVp.stockQty > 0) {
-        prisma.vendorProduct.update({
-          where: { id: liveVp.id },
-          data: { stockQty: { decrement: Math.min(liveVp.stockQty, itemQty) } },
-        }).catch(() => null);
+        stockDecrements.push({ id: liveVp.id, qty: Math.min(liveVp.stockQty, itemQty) });
       }
 
       let finalVendorId = liveVp.vendorId || liveVp.vendor?.id || item.vendorId;
@@ -2769,6 +2886,7 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       }
 
       validatedItems.push({
+        vendorProductId: liveVp.id,
         productName: liveVp.name || prodName,
         priceAtPurchase: verifiedPrice,
         quantity: itemQty,
@@ -2793,6 +2911,7 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
         idempotencyKey,
         items: {
           create: validatedItems.map((vi) => ({
+            vendorProductId: vi.vendorProductId,
             productName: vi.productName,
             priceAtPurchase: vi.priceAtPurchase,
             quantity: vi.quantity,
@@ -2812,6 +2931,14 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       },
     });
 
+    // Decrement stock in background (non-blocking)
+    for (const dec of stockDecrements) {
+      prisma.vendorProduct.update({
+        where: { id: dec.id },
+        data: { stockQty: { decrement: dec.qty } },
+      }).catch(() => null);
+    }
+
     // 6. Build response object with guaranteed real DB items
     const fullOrder = {
       ...newOrder,
@@ -2830,7 +2957,7 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       } : null,
       address: {
         id: addressId,
-        street: req.body.address?.street || "Main Site Delivery Address",
+        street: typeof req.body.address?.street === "string" ? req.body.address.street : "Main Site Delivery Address",
         city: targetRegionName,
         region: reg,
       },
@@ -2857,9 +2984,10 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
         }
 
         for (const [vendorId, vData] of Object.entries(vendorGroups)) {
+          const vendorPhone = (fullOrder.items || []).find((it) => it.vendorId === vendorId)?.vendor?.phone;
           await sendVendorOrderPushNotification({
             vendorId,
-            phone: fullOrder.customer?.phone,
+            phone: vendorPhone,
             orderNumber: fullOrder.orderNumber || fullOrder.id,
             amount: vData.amount + (Number(fullOrder.deliveryFee) || 0),
             itemCount: vData.count,
@@ -2877,14 +3005,26 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
 });
 
 // Vendor FCM Device Token Registration (for background push notifications when app is killed)
-app.post("/api/v1/vendor/fcm-token", async (req, res) => {
+app.post("/api/v1/vendor/fcm-token", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
-    const { vendorId, token, phone } = req.body;
-    if (!vendorId || !token) {
-      return res.status(400).json({ error: "vendorId and token are required" });
+    const { vendorId, token } = req.body || {};
+    if (!token || typeof token !== "string" || token.length > 4096) {
+      return res.status(400).json({ error: "A valid token is required" });
     }
+
+    // Vendors can only register a device for their own store (prevents hijacking another vendor's order alerts)
+    let vendor = null;
+    if (req.auth.role === "VENDOR") {
+      vendor = await getAuthVendor(req);
+    } else if (typeof vendorId === "string" && vendorId) {
+      vendor = await prisma.vendor.findUnique({ where: { id: vendorId } }).catch(() => null);
+    }
+    if (!vendor) {
+      return res.status(404).json({ error: "Vendor not found" });
+    }
+
     const { saveToken } = require("./pushService");
-    await saveToken(vendorId, token, phone);
+    await saveToken(vendor.id, token, vendor.phone);
     res.json({ success: true, message: "FCM token registered successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2895,11 +3035,12 @@ app.post("/api/v1/vendor/fcm-token", async (req, res) => {
 app.get("/api/v1/reviews", async (req, res) => {
   try {
     const { productId } = req.query;
-    const whereClause = productId ? { productId } : {};
+    const whereClause = typeof productId === "string" && productId ? { productId } : {};
 
     const reviews = await prisma.review.findMany({
       where: whereClause,
       orderBy: { createdAt: "desc" },
+      take: 200,
     });
 
     res.json(reviews);
@@ -2910,17 +3051,18 @@ app.get("/api/v1/reviews", async (req, res) => {
 
 app.post("/api/v1/reviews", requireAuth, async (req, res) => {
   try {
-    const { productId, name, rating, comment } = req.body;
-    if (!productId || !comment) {
+    const { productId, name, rating, comment } = req.body || {};
+    if (!productId || !comment || typeof productId !== "string" || typeof comment !== "string" || !comment.trim()) {
       return res.status(400).json({ error: "productId and comment are required" });
     }
 
+    const numericRating = Math.round(Number(rating));
     const review = await prisma.review.create({
       data: {
-        productId,
-        name: (name || "Verified Customer").trim(),
-        rating: Number(rating) || 5,
-        comment: comment.trim(),
+        productId: productId.slice(0, 100),
+        name: (typeof name === "string" && name.trim() ? name.trim() : "Verified Customer").slice(0, 80),
+        rating: Number.isFinite(numericRating) ? Math.min(5, Math.max(1, numericRating)) : 5,
+        comment: comment.trim().slice(0, 2000),
       },
     });
 
@@ -2930,37 +3072,15 @@ app.post("/api/v1/reviews", requireAuth, async (req, res) => {
   }
 });
 
-// 12.5 CART CLOUD SYNC ENDPOINTS
-const userCartMap = new Map();
-
-app.get("/api/v1/cart", requireAuth, async (req, res) => {
-  try {
-    const userId = req.auth?.userId || req.auth?.phone;
-    const items = userCartMap.get(userId) || [];
-    res.json({ success: true, cartItems: items });
-  } catch (err) {
-    res.json({ success: true, cartItems: [] });
-  }
-});
-
-app.put("/api/v1/cart", requireAuth, async (req, res) => {
-  try {
-    const userId = req.auth?.userId || req.auth?.phone;
-    const { items } = req.body;
-    userCartMap.set(userId, Array.isArray(items) ? items : []);
-    res.json({ success: true, cartItems: userCartMap.get(userId) });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
+// 12.5 CART CLOUD SYNC ENDPOINTS (GET/PUT are defined above and persist to users.cartItems)
 app.post("/api/v1/cart", requireAuth, async (req, res) => {
   try {
-    const userId = req.auth?.userId || req.auth?.phone;
-    const { item } = req.body;
-    const current = userCartMap.get(userId) || [];
-    const updated = item ? [...current.filter(i => i.id !== item.id), item] : current;
-    userCartMap.set(userId, updated);
+    const { item } = req.body || {};
+    const user = await prisma.user.findUnique({ where: { id: req.auth.userId }, select: { cartItems: true } }).catch(() => null);
+    if (!user) return res.status(404).json({ error: "User not found", invalidSession: true, success: false });
+    const current = Array.isArray(user.cartItems) ? user.cartItems : [];
+    const updated = item && typeof item === "object" ? [...current.filter((i) => i?.id !== item.id), item].slice(0, 200) : current;
+    await prisma.user.update({ where: { id: req.auth.userId }, data: { cartItems: updated } });
     res.json({ success: true, cartItems: updated });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2969,8 +3089,7 @@ app.post("/api/v1/cart", requireAuth, async (req, res) => {
 
 app.delete("/api/v1/cart", requireAuth, async (req, res) => {
   try {
-    const userId = req.auth?.userId || req.auth?.phone;
-    userCartMap.delete(userId);
+    await prisma.user.update({ where: { id: req.auth.userId }, data: { cartItems: [] } }).catch(() => null);
     res.json({ success: true, cartItems: [] });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2999,7 +3118,7 @@ app.get("/api/v1/notifications/me", requireAuth, async (req, res) => {
 
     const rawList = await prisma.notification.findMany({
       where: whereClause,
-      include: { user: true },
+      include: { user: { select: { id: true, name: true, role: true } } },
       orderBy: { createdAt: "desc" },
       take: 60,
     }).catch(() => []);
@@ -3016,14 +3135,24 @@ app.get("/api/v1/notifications/me", requireAuth, async (req, res) => {
 app.get("/api/v1/notifications", requireAuth, async (req, res) => {
   try {
     const { userId } = req.query;
-    const whereClause = {};
-    if (userId && userId.length > 20) {
-      whereClause.userId = userId;
+    let whereClause = {};
+    if (req.auth.role === "ADMIN") {
+      if (typeof userId === "string" && userId.length > 20) {
+        whereClause.userId = userId;
+      }
+    } else {
+      // Non-admins only see their own notifications plus admin broadcasts
+      whereClause = {
+        OR: [
+          { userId: req.auth.userId },
+          { user: { role: "ADMIN" } },
+        ],
+      };
     }
 
     const rawList = await prisma.notification.findMany({
       where: whereClause,
-      include: { user: true },
+      include: { user: { select: { id: true, name: true, role: true } } },
       orderBy: { createdAt: "desc" },
       take: 60,
     }).catch(() => []);
@@ -3085,6 +3214,11 @@ app.post("/api/v1/notifications", requireAuth, requireRole("ADMIN"), async (req,
 app.patch("/api/v1/notifications/:id/read", requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    const existing = await prisma.notification.findUnique({ where: { id } }).catch(() => null);
+    // Only the owner (or an admin) can change a notification; shared broadcasts are tracked as read on the client
+    if (!existing || (existing.userId !== req.auth.userId && req.auth.role !== "ADMIN")) {
+      return res.json({ success: true });
+    }
     const notif = await prisma.notification.update({
       where: { id },
       data: { isRead: true },
@@ -3120,7 +3254,35 @@ app.delete("/api/v1/notifications/:id", requireAuth, requireRole("ADMIN"), async
   }
 });
 
+// JSON 404 for unknown API routes
+app.use("/api", (req, res) => {
+  res.status(404).json({ error: "Not found" });
+});
+
+// Central error handler (malformed JSON, oversized bodies, unexpected throws) — never leaks stack traces
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  const status = err.status || err.statusCode || 500;
+  if (status >= 500) console.error("Unhandled request error:", err);
+  res.status(status).json({ error: status >= 500 ? "Something went wrong. Please try again." : (err.expose && err.message) || "Invalid request" });
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection:", reason);
+});
+
 // Start Express Server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 BuildCity Express Gateway running live on http://localhost:${PORT}`);
 });
+
+// Graceful shutdown so in-flight requests finish and DB connections are released on redeploy
+const shutdown = (signal) => {
+  console.log(`${signal} received, shutting down gracefully...`);
+  server.close(() => {
+    prisma.$disconnect().finally(() => process.exit(0));
+  });
+  setTimeout(() => process.exit(1), 10000).unref();
+};
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

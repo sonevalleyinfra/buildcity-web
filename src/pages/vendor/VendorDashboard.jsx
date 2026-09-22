@@ -140,24 +140,62 @@ export default function VendorDashboard() {
   } = useAdmin();
   const { orders = [], fetchVendorOrders, updateOrderStatus } = useOrders();
 
+  // Logged-in Vendor Info details extraction matching DB Vendors (resolved early for 0ms cache lookups)
+  const matchedVendorObj = useMemo(() => {
+    const found = (vendors || []).find((v) => {
+      const userPhoneClean = user?.phone ? user.phone.replace(/\D/g, "") : "";
+      const vPhoneClean = v.phone ? v.phone.replace(/\D/g, "") : "";
+      const vUserPhoneClean = v.user?.phone ? v.user.phone.replace(/\D/g, "") : "";
+
+      const phoneMatches = userPhoneClean && (vPhoneClean === userPhoneClean || vUserPhoneClean === userPhoneClean);
+      const idMatches =
+        (user?.vendorInfo?.id && (v.id === user.vendorInfo.id || v.userId === user.vendorInfo.id)) ||
+        (user?.vendorId && (v.id === user.vendorId || v.userId === user.vendorId)) ||
+        (user?.id && (v.id === user.id || v.userId === user.id));
+
+      return phoneMatches || idMatches;
+    });
+    return found || user?.vendorInfo || {};
+  }, [vendors, user]);
+
+  const shopName = matchedVendorObj.shopName || user?.vendorInfo?.shopName || user?.shopName || user?.name || "Distributor Store";
+  const ownerName = matchedVendorObj.ownerName || user?.vendorInfo?.ownerName || user?.name || "Vendor Owner";
+  const vendorPhone = matchedVendorObj.phone || user?.phone || user?.vendorInfo?.phone || "9876543210";
+  const districtName = matchedVendorObj.region?.name || matchedVendorObj.regionName || matchedVendorObj.districtName || user?.vendorInfo?.region?.name || user?.vendorInfo?.regionName || "Mirzapur";
+  const vendorId = matchedVendorObj.id || user?.vendorInfo?.id || user?.vendorId || user?.id || (user?.phone ? `v-${user.phone}` : `v-${Date.now()}`);
+
   // Tabs navigation state: "orders" -> Default Open Screen, "products" -> My Shop Items, "overview" -> Store Info, "profile" -> Vendor Profile
   const [activeTab, setActiveTabState] = useState("orders");
   const [tabHistory, setTabHistory] = useState(["orders"]);
+
+  // ⚡ 0-Delay Instant Frame 1 Cache: Load previous orders immediately so screen is NEVER blank
   const [fetchedVendorOrders, setFetchedVendorOrders] = useState(() => {
     try {
-      const vKey = `buildcity_vendor_orders_${user?.vendorInfo?.id || user?.vendorId || user?.id || (user?.phone ? `v-${user.phone}` : "vnd")}`;
-      const saved = localStorage.getItem(vKey);
+      const vKey = `buildcity_vendor_orders_${vendorId}`;
+      const saved = localStorage.getItem(vKey) || localStorage.getItem("buildcity_last_vendor_orders");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
+      // Fallback: check any vendor order cache in localStorage
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("buildcity_vendor_orders_")) {
+          const val = localStorage.getItem(k);
+          if (val) {
+            const p = JSON.parse(val);
+            if (Array.isArray(p) && p.length > 0) return p;
+          }
+        }
+      }
     } catch {}
     return [];
   });
+
   const [ordersLoaded, setOrdersLoaded] = useState(() => {
     try {
-      const vKey = `buildcity_vendor_orders_${user?.vendorInfo?.id || user?.vendorId || user?.id || (user?.phone ? `v-${user.phone}` : "vnd")}`;
-      const saved = localStorage.getItem(vKey);
+      const vKey = `buildcity_vendor_orders_${vendorId}`;
+      const saved = localStorage.getItem(vKey) || localStorage.getItem("buildcity_last_vendor_orders");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return true;
@@ -191,51 +229,44 @@ export default function VendorDashboard() {
   const [isUpdatingListing, setIsUpdatingListing] = useState(false);
   const [isAddingToStore, setIsAddingToStore] = useState(false);
 
-  // Logged-in Vendor Info details extraction matching DB Vendors
-  const matchedVendorObj = (vendors || []).find((v) => {
-    const userPhoneClean = user?.phone ? user.phone.replace(/\D/g, "") : "";
-    const vPhoneClean = v.phone ? v.phone.replace(/\D/g, "") : "";
-    const vUserPhoneClean = v.user?.phone ? v.user.phone.replace(/\D/g, "") : "";
-
-    const phoneMatches = userPhoneClean && (vPhoneClean === userPhoneClean || vUserPhoneClean === userPhoneClean);
-    const idMatches =
-      (user?.vendorInfo?.id && (v.id === user.vendorInfo.id || v.userId === user.vendorInfo.id)) ||
-      (user?.vendorId && (v.id === user.vendorId || v.userId === user.vendorId)) ||
-      (user?.id && (v.id === user.id || v.userId === user.id));
-
-    return phoneMatches || idMatches;
-  }) || user?.vendorInfo || {};
-
-  const shopName = matchedVendorObj.shopName || user?.vendorInfo?.shopName || user?.shopName || user?.name || "Distributor Store";
-  const ownerName = matchedVendorObj.ownerName || user?.vendorInfo?.ownerName || user?.name || "Vendor Owner";
-  const vendorPhone = matchedVendorObj.phone || user?.phone || user?.vendorInfo?.phone || "9876543210";
-  const districtName = matchedVendorObj.region?.name || matchedVendorObj.regionName || matchedVendorObj.districtName || user?.vendorInfo?.region?.name || user?.vendorInfo?.regionName || "Mirzapur";
-  const vendorId = matchedVendorObj.id || user?.vendorInfo?.id || user?.vendorId || user?.id || (user?.phone ? `v-${user.phone}` : `v-${Date.now()}`);
-
   const [newOrderAlert, setNewOrderAlert] = useState(null);
   const [highlightedOrderId, setHighlightedOrderId] = useState(null);
+  const highlightTimerRef = useRef(null);
   const knownOrderIdsRef = useRef(new Set());
   const initialLoadDoneRef = useRef(false);
 
   const triggerOrderHighlight = (orderId) => {
     if (!orderId) return;
-    setActiveTab("orders");
+    setActiveTabState("orders");
     setOrderStatusFilter("ALL");
     setOrderSearch("");
     setHighlightedOrderId(orderId);
 
-    // Give DOM 200ms to mount/switch tabs, then smoothly scroll to order card
-    setTimeout(() => {
-      const el = document.getElementById(`vendor-order-${orderId}`) || document.getElementById(`vendor-order-row-${orderId}`);
+    // Multi-attempt smooth scroll: Tries up to 12 times (3 seconds) to ensure the card is in DOM and centered!
+    let attempts = 0;
+    const scrollInterval = setInterval(() => {
+      attempts++;
+      const el = document.getElementById(`vendor-order-${orderId}`) ||
+                 document.getElementById(`vendor-order-row-${orderId}`) ||
+                 document.querySelector(`[data-order-id="${orderId}"]`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
+        clearInterval(scrollInterval);
+      } else if (attempts >= 12) {
+        clearInterval(scrollInterval);
       }
     }, 250);
 
-    // Fade out golden glow after 6 seconds
-    setTimeout(() => {
+    // Persistent vibrant glow: Stays active for 45 seconds so vendor never misses it!
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => {
       setHighlightedOrderId((curr) => (curr === orderId ? null : curr));
-    }, 6000);
+      try {
+        if (localStorage.getItem("buildcity_pending_highlight_order") === String(orderId)) {
+          localStorage.removeItem("buildcity_pending_highlight_order");
+        }
+      } catch (_) {}
+    }, 45000);
   };
 
   // Auto-request notification permission on mount for native sound & alerts + FCM background push
@@ -284,13 +315,32 @@ export default function VendorDashboard() {
           });
           try {
             localStorage.setItem(`buildcity_vendor_orders_${vendorId}`, JSON.stringify(vOrds));
+            localStorage.setItem("buildcity_last_vendor_orders", JSON.stringify(vOrds));
           } catch {}
           setOrdersLoaded(true);
+
+          // Check if app was opened by tapping a notification
+          try {
+            const pendingHighlightId = localStorage.getItem("buildcity_pending_highlight_order");
+            const pendingHighlightTime = Number(localStorage.getItem("buildcity_pending_highlight_time") || 0);
+            if (pendingHighlightId && Date.now() - pendingHighlightTime < 300000) {
+              triggerOrderHighlight(pendingHighlightId);
+            }
+          } catch (_) {}
         }
       } catch {
         if (isMounted) setOrdersLoaded(true);
       }
     };
+
+    // On mount check for pending notification click order
+    try {
+      const pendingHighlightId = localStorage.getItem("buildcity_pending_highlight_order");
+      const pendingHighlightTime = Number(localStorage.getItem("buildcity_pending_highlight_time") || 0);
+      if (pendingHighlightId && Date.now() - pendingHighlightTime < 300000) {
+        triggerOrderHighlight(pendingHighlightId);
+      }
+    } catch (_) {}
 
     syncVendorOrders();
 
@@ -1964,15 +2014,29 @@ export default function VendorDashboard() {
                     ? "border-l-4 border-l-slate-400"
                     : "border-l-4 border-l-sky-500";
 
-                  const isHighlighted = highlightedOrderId === ord.id || (highlightedOrderId && ord.orderNumber && highlightedOrderId === ord.orderNumber);
+                  const isHighlighted = Boolean(
+                    highlightedOrderId && (
+                      highlightedOrderId === ord.id || 
+                      (ord.orderNumber && highlightedOrderId === ord.orderNumber) ||
+                      (ord.id && (String(highlightedOrderId).includes(ord.id) || String(ord.id).includes(highlightedOrderId)))
+                    )
+                  );
+
+                  const isRecentNew = 
+                    (ord.status || "PENDING").toUpperCase() === "PENDING" && 
+                    ord.createdAt && 
+                    (Date.now() - new Date(ord.createdAt).getTime() < 300000);
 
                   return (
                     <div
                       key={ord.id}
                       id={`vendor-order-${ord.id}`}
+                      data-order-id={ord.id}
                       className={`bg-white rounded-2xl p-3.5 border shadow-sm space-y-2.5 transition-all duration-500 ${
                         isHighlighted
-                          ? "border-amber-400 ring-4 ring-amber-400/90 shadow-2xl shadow-amber-400/40 scale-[1.02] bg-amber-50/20"
+                          ? "border-emerald-500 ring-4 ring-emerald-500 shadow-2xl shadow-emerald-500/40 scale-[1.02] bg-emerald-50/40 animate-pulse"
+                          : isRecentNew
+                          ? "border-amber-400 ring-2 ring-amber-400/80 shadow-md shadow-amber-300/30 bg-amber-50/20"
                           : `border-slate-200 hover:shadow-md ${statusAccentClass}`
                       }`}
                     >
@@ -1984,8 +2048,13 @@ export default function VendorDashboard() {
                               👤 {custFullName}
                             </span>
                             {isHighlighted && (
-                              <span className="inline-flex items-center gap-1 bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-[9.5px] px-2 py-0.5 rounded-full shadow-md animate-pulse">
-                                <span>✨ JUST ARRIVED</span>
+                              <span className="inline-flex items-center gap-1 bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-black text-[9.5px] px-2.5 py-0.5 rounded-full shadow-md animate-pulse">
+                                <span>🔥 NEW INCOMING ORDER</span>
+                              </span>
+                            )}
+                            {!isHighlighted && isRecentNew && (
+                              <span className="inline-flex items-center gap-1 bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-[9px] px-2 py-0.5 rounded-full shadow-sm animate-pulse">
+                                <span>⚡ NEW ORDER</span>
                               </span>
                             )}
                             {customerStats.isRepeat && (
@@ -2143,16 +2212,29 @@ export default function VendorDashboard() {
                         ? rawTotal
                         : (itemsSubtotal + deliveryFee);
 
-                      const isHighlighted = highlightedOrderId === ord.id || (highlightedOrderId && ord.orderNumber && highlightedOrderId === ord.orderNumber);
+                      const isHighlighted = Boolean(
+                        highlightedOrderId && (
+                          highlightedOrderId === ord.id || 
+                          (ord.orderNumber && highlightedOrderId === ord.orderNumber) ||
+                          (ord.id && (String(highlightedOrderId).includes(ord.id) || String(ord.id).includes(highlightedOrderId)))
+                        )
+                      );
+                      const isRecentNew = 
+                        (ord.status || "PENDING").toUpperCase() === "PENDING" && 
+                        ord.createdAt && 
+                        (Date.now() - new Date(ord.createdAt).getTime() < 300000);
                       const isPending = (ord.status || "PENDING").toUpperCase() === "PENDING";
 
                       return (
                         <tr
                           key={ord.id}
                           id={`vendor-order-row-${ord.id}`}
+                          data-order-id={ord.id}
                           className={`transition-all duration-500 ${
                             isHighlighted
-                              ? "bg-amber-100/90 ring-4 ring-amber-400 border-l-4 border-l-amber-500 shadow-md scale-[1.005]"
+                              ? "bg-emerald-100/90 ring-4 ring-emerald-500 border-l-4 border-l-emerald-600 shadow-xl scale-[1.005]"
+                              : isRecentNew
+                              ? "bg-amber-100/70 border-l-4 border-l-amber-500 shadow-sm"
                               : isPending
                               ? "bg-amber-50/40 hover:bg-amber-50/70 border-l-4 border-l-amber-500"
                               : "hover:bg-slate-50/80"
@@ -2162,11 +2244,16 @@ export default function VendorDashboard() {
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-extrabold text-brand-700 tracking-wide text-xs block">{formattedOrderId}</span>
                               {isHighlighted && (
-                                <span className="inline-flex items-center gap-1 bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-[9px] px-2 py-0.5 rounded-full shadow-md animate-pulse">
-                                  <span>✨ JUST ARRIVED</span>
+                                <span className="inline-flex items-center gap-1 bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-black text-[9px] px-2.5 py-0.5 rounded-full shadow-md animate-pulse">
+                                  <span>🔥 NEW INCOMING ORDER</span>
                                 </span>
                               )}
-                              {isPending && !isHighlighted && (
+                              {!isHighlighted && isRecentNew && (
+                                <span className="inline-flex items-center gap-1 bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-[9px] px-2 py-0.5 rounded-full shadow-sm animate-pulse">
+                                  <span>⚡ NEW</span>
+                                </span>
+                              )}
+                              {isPending && !isHighlighted && !isRecentNew && (
                                 <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-500 text-white animate-pulse">
                                   NEW
                                 </span>

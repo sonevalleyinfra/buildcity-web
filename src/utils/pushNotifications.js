@@ -79,11 +79,16 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
 
       await PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
         console.log("👉 Push notification clicked:", action.notification.data);
-        window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
-        const orderId = action.notification?.data?.orderId || action.notification?.data?.id;
+        const data = action.notification?.data || {};
+        const orderId = data.orderId || data.id || data.orderNumber;
         if (orderId) {
-          window.dispatchEvent(new CustomEvent("buildcity_order_highlight", { detail: { orderId } }));
+          try {
+            localStorage.setItem("buildcity_pending_highlight_order", String(orderId));
+            localStorage.setItem("buildcity_pending_highlight_time", Date.now().toString());
+          } catch (_) {}
+          window.dispatchEvent(new CustomEvent("buildcity_order_highlight", { detail: { orderId: String(orderId) } }));
         }
+        window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
       });
 
       // 3. Register with FCM on Google Play Services

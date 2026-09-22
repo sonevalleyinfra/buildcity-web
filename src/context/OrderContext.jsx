@@ -200,8 +200,8 @@ export function OrderProvider({ children }) {
       const rawVendorId = it.vendorId ? String(it.vendorId).trim() : "";
       const rawVendorName = it.vendorName ? String(it.vendorName).trim() : "";
 
-      const isGenericId = !rawVendorId || rawVendorId === "v1" || rawVendorId === "default";
-      const isGenericName = !rawVendorName || rawVendorName.toLowerCase() === "district vendor" || rawVendorName.toLowerCase() === "vendor";
+      const isGenericId = !rawVendorId || rawVendorId === "v1" || rawVendorId === "default" || rawVendorId.startsWith("v-") || rawVendorId.startsWith("vendor_default");
+      const isGenericName = !rawVendorName || rawVendorName.toLowerCase() === "district vendor" || rawVendorName.toLowerCase() === "vendor" || rawVendorName.toLowerCase().includes("default");
 
       let vKey = "";
       if (!isGenericId) {

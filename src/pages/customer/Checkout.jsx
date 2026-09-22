@@ -297,7 +297,7 @@ export default function Checkout() {
         catalogProd?.vendorId ||
         catalogProd?.vendor?.id ||
         catalogProd?.vendorInfo?.id ||
-        (pId ? `v-${pId}` : "v1");
+        "v1";
 
       const resolvedVendorName =
         i.vendorName ||

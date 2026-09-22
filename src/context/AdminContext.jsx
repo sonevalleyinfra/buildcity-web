@@ -919,6 +919,8 @@ export function AdminProvider({ children }) {
           shopName: vendorData.shopName,
           ownerName: vendorData.ownerName,
           phone: vendorData.phone,
+          password: vendorData.password,
+          status: vendorData.status || "APPROVED",
           regionId: vendorData.regionId,
           regionName: targetRegionName,
           districtName: targetRegionName,

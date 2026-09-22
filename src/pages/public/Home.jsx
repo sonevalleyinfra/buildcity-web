@@ -9,6 +9,7 @@ import Logo from "../../components/Logo";
 import RegionPicker from "../../components/RegionPicker";
 import NotificationPanel from "../../components/NotificationPanel";
 import ProductCard from "../../components/ProductCard";
+import Footer from "../../components/Footer";
 
 const categoryTiles = [
   {
@@ -807,6 +808,9 @@ export default function Home() {
           </div>
         </section>
       </main>
+
+      {/* 🏛️ 4-SECTION COMPREHENSIVE FOOTER */}
+      <Footer />
 
       {/* 🟢 8. FLOATING WHATSAPP & PHONE CALL ACTION BUTTONS */}
       <div className="fixed bottom-32 sm:bottom-24 right-3.5 sm:right-5 z-40 flex flex-col gap-2">

@@ -27,6 +27,7 @@ import Addresses from "./pages/customer/Addresses";
 import VendorDashboard from "./pages/vendor/VendorDashboard";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import DrDashboard from "./pages/dr/DrDashboard";
+import LegalPolicyPage from "./pages/public/LegalPolicyPage";
 
 import BottomNav from "./components/BottomNav";
 
@@ -157,6 +158,19 @@ export default function App() {
                   <Route path="/product/:id" element={<ProductDetail />} />
                   <Route path="/search" element={<SearchResults />} />
                   <Route path="/cart" element={<Cart />} />
+
+                  {/* Public Legal & Compliance Routes (Play Store & Statutory Compliant) */}
+                  <Route path="/privacy" element={<LegalPolicyPage defaultPolicyId="privacy" />} />
+                  <Route path="/privacy-policy" element={<LegalPolicyPage defaultPolicyId="privacy" />} />
+                  <Route path="/terms" element={<LegalPolicyPage defaultPolicyId="terms" />} />
+                  <Route path="/terms-and-conditions" element={<LegalPolicyPage defaultPolicyId="terms" />} />
+                  <Route path="/refund" element={<LegalPolicyPage defaultPolicyId="refund" />} />
+                  <Route path="/refund-policy" element={<LegalPolicyPage defaultPolicyId="refund" />} />
+                  <Route path="/return-and-refund-policy" element={<LegalPolicyPage defaultPolicyId="refund" />} />
+                  <Route path="/shipping" element={<LegalPolicyPage defaultPolicyId="shipping" />} />
+                  <Route path="/shipping-policy" element={<LegalPolicyPage defaultPolicyId="shipping" />} />
+                  <Route path="/shipping-and-delivery-policy" element={<LegalPolicyPage defaultPolicyId="shipping" />} />
+                  <Route path="/policy/:policy" element={<LegalPolicyPage />} />
 
                   {/* Protected Customer Routes (Login Required) */}
                   <Route

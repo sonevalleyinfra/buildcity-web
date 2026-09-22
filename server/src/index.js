@@ -2856,6 +2856,10 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
         status: "PENDING",
         idempotencyKey,
       },
+      include: {
+        customer: { select: { id: true, name: true, phone: true, email: true, role: true } },
+        address: { include: { region: true } },
+      },
     });
 
     // Parallel insertion of order items (all items save concurrently with safe .catch protection)
@@ -2879,14 +2883,10 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       })
     );
 
-    const fullOrder = await prisma.order.findUnique({
-      where: { id: newOrder.id },
-      include: {
-        items: true,
-        customer: { select: { id: true, name: true, phone: true, email: true, role: true } },
-        address: { include: { region: true } },
-      },
-    });
+    const fullOrder = {
+      ...newOrder,
+      items: validatedItems,
+    };
 
     console.log(`✅ Order ${newOrder.id} created successfully for customer ${targetCustomerId}`);
 

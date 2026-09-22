@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import Logo from "../../components/Logo";
 import { POLICIES, COMPANY_CONTACT } from "../../data/legalPolicies";
 
 export default function LegalPolicyPage({ defaultPolicyId }) {
@@ -44,14 +45,8 @@ export default function LegalPolicyPage({ defaultPolicyId }) {
       <header className="sticky top-0 z-30 bg-[#07132B] text-white border-b border-slate-800 shadow-md">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link
-              to="/"
-              className="inline-flex items-center gap-2 text-white font-black text-lg tracking-tight hover:text-amber-400 transition-colors"
-            >
-              <div className="w-8 h-8 rounded-lg bg-amber-400 text-slate-950 font-black flex items-center justify-center text-sm shadow-sm">
-                BC
-              </div>
-              <span>BuildCity</span>
+            <Link to="/" className="active:scale-95 transition-transform flex items-center">
+              <Logo variant="light" size="sm" />
             </Link>
             <span className="hidden sm:inline-block text-slate-500 font-light">|</span>
             <span className="hidden sm:inline-block text-xs font-semibold text-slate-300 uppercase tracking-wider">
@@ -62,7 +57,7 @@ export default function LegalPolicyPage({ defaultPolicyId }) {
           <div className="flex items-center gap-2">
             <button
               onClick={() => window.print()}
-              className="px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
               title="Print Policy"
             >
               <span>🖨️</span>
@@ -70,7 +65,7 @@ export default function LegalPolicyPage({ defaultPolicyId }) {
             </button>
             <Link
               to="/"
-              className="px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-sm transition-all active:scale-95 flex items-center gap-1"
+              className="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs shadow-sm transition-all active:scale-95 flex items-center gap-1"
             >
               <span>← Back to Store</span>
             </Link>
@@ -140,7 +135,7 @@ export default function LegalPolicyPage({ defaultPolicyId }) {
               {currentPolicy.sections.map((sec, idx) => (
                 <section key={idx} className="space-y-2">
                   <h2 className="text-base sm:text-lg font-bold text-navy-900 flex items-center gap-2">
-                    <span className="w-1.5 h-4.5 bg-amber-400 rounded-full shrink-0" />
+                    <span className="w-1.5 h-4.5 bg-brand-500 rounded-full shrink-0" />
                     <span>{sec.heading}</span>
                   </h2>
                   <div className="text-slate-600 text-xs sm:text-sm leading-relaxed whitespace-pre-line pl-3.5 border-l-2 border-slate-100 font-normal">
@@ -171,11 +166,11 @@ export default function LegalPolicyPage({ defaultPolicyId }) {
           <aside className="lg:col-span-4 space-y-5">
             {/* 👮 Grievance Officer Card */}
             <div className="bg-gradient-to-br from-[#07132B] via-[#0B1E40] to-[#07132B] text-white rounded-3xl p-6 shadow-md border border-slate-800 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
+              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
               
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-lg">⚖️</span>
-                <span className="text-xs font-black uppercase tracking-wider text-amber-400">
+                <span className="text-xs font-black uppercase tracking-wider text-sky-400">
                   Statutory Redressal
                 </span>
               </div>
@@ -199,7 +194,7 @@ export default function LegalPolicyPage({ defaultPolicyId }) {
                   <span className="text-slate-400 text-[10px] uppercase font-bold block">Direct Contact</span>
                   <a
                     href={`tel:${COMPANY_CONTACT.grievanceOfficer.contact}`}
-                    className="font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1"
+                    className="font-bold text-sky-400 hover:text-sky-300 flex items-center gap-1"
                   >
                     <span>📞</span>
                     <span>+91 {COMPANY_CONTACT.grievanceOfficer.contact}</span>
@@ -210,7 +205,7 @@ export default function LegalPolicyPage({ defaultPolicyId }) {
                   <span className="text-slate-400 text-[10px] uppercase font-bold block">Official Email</span>
                   <a
                     href={`mailto:${COMPANY_CONTACT.grievanceOfficer.email}`}
-                    className="font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1"
+                    className="font-bold text-sky-400 hover:text-sky-300 flex items-center gap-1"
                   >
                     <span>✉️</span>
                     <span>{COMPANY_CONTACT.grievanceOfficer.email}</span>

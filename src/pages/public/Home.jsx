@@ -392,7 +392,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-28 font-sans w-full max-w-full [overflow-x:clip]">
+    <div className="min-h-screen bg-[#F8FAFC] font-sans w-full max-w-full [overflow-x:clip]">
       {/* 🖥️ Desktop Navbar */}
       <div className="hidden lg:block">
         <Navbar />

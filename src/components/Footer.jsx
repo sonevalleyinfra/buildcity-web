@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import Logo from "./Logo";
 import { COMPANY_CONTACT } from "../data/legalPolicies";
 
 export default function Footer() {
@@ -19,12 +20,12 @@ export default function Footer() {
   ];
 
   return (
-    <footer className="bg-[#07132B] text-slate-300 pt-12 pb-24 sm:pb-12 border-t border-slate-800 relative z-20">
+    <footer className="bg-[#07132B] text-slate-300 pt-10 pb-20 sm:pb-6 border-t border-slate-800 relative z-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* 🏆 Top Trust Highlights Strip */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pb-10 mb-10 border-b border-slate-800/80">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pb-8 mb-8 border-b border-slate-800/80">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-400/10 border border-amber-400/20 text-amber-400 flex items-center justify-center text-lg shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center text-lg shrink-0">
               🛡️
             </div>
             <div>
@@ -34,7 +35,7 @@ export default function Footer() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-400/10 border border-emerald-400/20 text-emerald-400 flex items-center justify-center text-lg shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg shrink-0">
               🚚
             </div>
             <div>
@@ -44,7 +45,7 @@ export default function Footer() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-sky-400/10 border border-sky-400/20 text-sky-400 flex items-center justify-center text-lg shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400 flex items-center justify-center text-lg shrink-0">
               💵
             </div>
             <div>
@@ -54,7 +55,7 @@ export default function Footer() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-400/10 border border-purple-400/20 text-purple-400 flex items-center justify-center text-lg shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center text-lg shrink-0">
               📍
             </div>
             <div>
@@ -65,22 +66,19 @@ export default function Footer() {
         </div>
 
         {/* 🏛️ 4-Section Main Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-8 lg:gap-10 pb-10">
-          {/* Section 1: About BuildCity (4 Cols) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-8 lg:gap-10 pb-8">
+          {/* Section 1: Universal Brand Logo & Tagline (4 Cols) */}
           <div className="lg:col-span-4 space-y-4">
-            <Link to="/" className="inline-flex items-center gap-2 text-white font-black text-xl tracking-tight">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 text-slate-950 font-black flex items-center justify-center text-base shadow-md">
-                BC
-              </div>
-              <span className="text-white">BuildCity</span>
+            <Link to="/" className="inline-block active:scale-95 transition-transform">
+              <Logo variant="light" size="md" />
             </Link>
 
             <p className="text-xs sm:text-sm text-slate-400 leading-relaxed font-normal">
               {COMPANY_CONTACT.tagline}. Connecting contractors, builders, retailers, and individual customers with certified local material distributors.
             </p>
 
-            <div className="pt-2 flex items-center gap-2 text-xs">
-              <span className="px-2.5 py-1 rounded-md bg-slate-800 text-amber-300 font-bold border border-slate-700">
+            <div className="pt-1 flex items-center gap-2 text-xs">
+              <span className="px-2.5 py-1 rounded-md bg-slate-800 text-slate-200 font-bold border border-slate-700">
                 B2B & B2C
               </span>
               <span className="px-2.5 py-1 rounded-md bg-slate-800 text-emerald-300 font-bold border border-slate-700">
@@ -91,7 +89,7 @@ export default function Footer() {
 
           {/* Section 2: Policies & Legal (3 Cols) */}
           <div className="lg:col-span-3 space-y-3">
-            <h3 className="text-xs font-black uppercase tracking-widest text-amber-400">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-white">
               Policies & Legal
             </h3>
             <ul className="space-y-2 text-xs">
@@ -99,7 +97,7 @@ export default function Footer() {
                 <li key={idx}>
                   <Link
                     to={item.path}
-                    className="text-slate-300 hover:text-amber-400 transition-colors flex items-center gap-2 py-0.5"
+                    className="text-slate-400 hover:text-white transition-colors flex items-center gap-2 py-0.5"
                   >
                     <span>{item.icon}</span>
                     <span>{item.name}</span>
@@ -111,15 +109,15 @@ export default function Footer() {
 
           {/* Section 3: Popular Building Materials (2 Cols) */}
           <div className="lg:col-span-2 space-y-3">
-            <h3 className="text-xs font-black uppercase tracking-widest text-amber-400">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-white">
               Materials
             </h3>
             <ul className="space-y-2 text-xs">
               {materialsList.map((m, idx) => (
                 <li key={idx}>
                   <Link
-                    to={`/categories`}
-                    className="text-slate-300 hover:text-white transition-colors block py-0.5"
+                    to="/categories"
+                    className="text-slate-400 hover:text-white transition-colors block py-0.5"
                   >
                     {m.name}
                   </Link>
@@ -130,7 +128,7 @@ export default function Footer() {
 
           {/* Section 4: Grievance Officer & Contact (3 Cols) */}
           <div className="lg:col-span-3 space-y-3">
-            <h3 className="text-xs font-black uppercase tracking-widest text-amber-400">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-white">
               Grievance & Contact
             </h3>
             <div className="bg-slate-900/90 rounded-2xl p-3.5 border border-slate-800 space-y-2 text-xs">
@@ -145,7 +143,7 @@ export default function Footer() {
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Direct Contact:</span>
                 <a
                   href={`tel:${COMPANY_CONTACT.grievanceOfficer.contact}`}
-                  className="font-bold text-amber-400 hover:underline flex items-center gap-1 mt-0.5"
+                  className="font-bold text-sky-400 hover:text-sky-300 hover:underline flex items-center gap-1 mt-0.5"
                 >
                   <span>📞</span>
                   <span>+91 {COMPANY_CONTACT.grievanceOfficer.contact}</span>
@@ -156,7 +154,7 @@ export default function Footer() {
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Official Support Email:</span>
                 <a
                   href={`mailto:${COMPANY_CONTACT.email}`}
-                  className="font-bold text-amber-400 hover:underline flex items-center gap-1 mt-0.5 truncate"
+                  className="font-bold text-sky-400 hover:text-sky-300 hover:underline flex items-center gap-1 mt-0.5 truncate"
                 >
                   <span>✉️</span>
                   <span>{COMPANY_CONTACT.email}</span>
@@ -174,22 +172,22 @@ export default function Footer() {
         </div>
 
         {/* 🔒 Bottom Copyright & Legal Strip */}
-        <div className="pt-8 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 text-center sm:text-left">
+        <div className="pt-6 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400 text-center sm:text-left">
           <p>© {new Date().getFullYear()} BuildCity. All rights reserved. Governed by the applicable laws of India.</p>
           <div className="flex items-center gap-4 text-[11px]">
-            <Link to="/privacy" className="hover:text-slate-300 transition-colors">
+            <Link to="/privacy" className="hover:text-white transition-colors">
               Privacy
             </Link>
             <span>•</span>
-            <Link to="/terms" className="hover:text-slate-300 transition-colors">
+            <Link to="/terms" className="hover:text-white transition-colors">
               Terms
             </Link>
             <span>•</span>
-            <Link to="/refund" className="hover:text-slate-300 transition-colors">
+            <Link to="/refund" className="hover:text-white transition-colors">
               Refunds
             </Link>
             <span>•</span>
-            <Link to="/shipping" className="hover:text-slate-300 transition-colors">
+            <Link to="/shipping" className="hover:text-white transition-colors">
               Shipping
             </Link>
           </div>

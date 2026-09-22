@@ -2689,39 +2689,6 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
         return res.status(400).json({ error: `Invalid quantity for product: ${prodName || "Item"}` });
       }
 
-      // Check if product or vendor is explicitly suspended
-      if (item.id || item.productId) {
-        const checkTargetVp = await prisma.vendorProduct.findFirst({
-          where: { id: item.id || item.productId },
-          include: { vendor: true },
-        }).catch(() => null);
-
-        if (checkTargetVp) {
-          if (checkTargetVp.vendor?.status === "SUSPENDED" || checkTargetVp.isActive === false) {
-            return res.status(400).json({
-              error: `Product '${checkTargetVp.name}' cannot be purchased because the supplier '${checkTargetVp.vendor?.shopName || "Vendor"}' is currently suspended or unavailable.`,
-            });
-          }
-        }
-      }
-
-      if (item.vendorId) {
-        const checkVendor = await prisma.vendor.findFirst({
-          where: {
-            OR: [
-              { id: item.vendorId },
-              { phone: String(item.vendorId).replace(/^v-/, "") },
-            ],
-          },
-        }).catch(() => null);
-
-        if (checkVendor && checkVendor.status === "SUSPENDED") {
-          return res.status(400).json({
-            error: `Supplier '${checkVendor.shopName || "Vendor"}' is currently suspended. Order cannot be placed.`,
-          });
-        }
-      }
-
       // Fetch live vendor product from Supabase DB (Strict Vendor Matching First, excluding SUSPENDED)
       let liveVp = null;
 
@@ -2736,6 +2703,36 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
           },
           include: { vendor: { include: { region: true } } },
         }).catch(() => null);
+
+        // If not found as active/approved, check if suspended for helpful error
+        if (!liveVp) {
+          const checkSuspended = await prisma.vendorProduct.findFirst({
+            where: { id: item.id || item.productId },
+            include: { vendor: true },
+          }).catch(() => null);
+          if (checkSuspended && (checkSuspended.vendor?.status === "SUSPENDED" || checkSuspended.isActive === false)) {
+            return res.status(400).json({
+              error: `Product '${checkSuspended.name}' cannot be purchased because the supplier '${checkSuspended.vendor?.shopName || "Vendor"}' is currently suspended or unavailable.`,
+            });
+          }
+        }
+      }
+
+      if (item.vendorId && !liveVp) {
+        const checkVendor = await prisma.vendor.findFirst({
+          where: {
+            OR: [
+              { id: item.vendorId },
+              { phone: String(item.vendorId).replace(/^v-/, "") },
+            ],
+          },
+        }).catch(() => null);
+
+        if (checkVendor && checkVendor.status === "SUSPENDED") {
+          return res.status(400).json({
+            error: `Supplier '${checkVendor.shopName || "Vendor"}' is currently suspended. Order cannot be placed.`,
+          });
+        }
       }
 
       // 2. Match by Name AND exact Vendor ID / Shop Name (CRITICAL for multi-vendor catalog)
@@ -2806,7 +2803,7 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
 
       // Atomically decrement stock in DB if stock exists
       if (liveVp.stockQty && liveVp.stockQty > 0) {
-        await prisma.vendorProduct.update({
+        prisma.vendorProduct.update({
           where: { id: liveVp.id },
           data: { stockQty: { decrement: Math.min(liveVp.stockQty, itemQty) } },
         }).catch(() => null);
@@ -2824,11 +2821,11 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       });
     }
 
-    // Robust Region resolution for accurate District Delivery Fee
-    let regForDelivery = null;
+    // Reuse resolved region for delivery charge (zero extra DB queries)
+    let regForDelivery = reg;
     const reqRegionId = req.body.regionId;
 
-    if (reqRegionId && reqRegionId.length > 10) {
+    if (!regForDelivery && reqRegionId && reqRegionId.length > 10) {
       regForDelivery = await prisma.region.findUnique({ where: { id: reqRegionId } }).catch(() => null);
     }
 
@@ -2861,10 +2858,12 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       },
     });
 
-    for (const vItem of validatedItems) {
-      const vId = vItem.vendorId || defaultVendor?.id;
-      if (vId) {
-        await prisma.orderItem.create({
+    // Parallel insertion of order items (all items save concurrently with safe .catch protection)
+    await Promise.all(
+      validatedItems.map((vItem) => {
+        const vId = vItem.vendorId || defaultVendor?.id;
+        if (!vId) return Promise.resolve(null);
+        return prisma.orderItem.create({
           data: {
             orderId: newOrder.id,
             productName: vItem.productName,
@@ -2873,9 +2872,12 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
             totalPrice: vItem.totalPrice,
             vendorId: vId,
           },
-        }).catch((e) => console.warn("OrderItem creation note:", e.message));
-      }
-    }
+        }).catch((e) => {
+          console.warn("OrderItem creation note:", e.message);
+          return null;
+        });
+      })
+    );
 
     const fullOrder = await prisma.order.findUnique({
       where: { id: newOrder.id },
@@ -2888,34 +2890,37 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
 
     console.log(`✅ Order ${newOrder.id} created successfully for customer ${targetCustomerId}`);
 
-    // 🔔 Send High-Priority FCM Push Notification to all involved Vendors (wakes up killed app)
-    try {
-      const { sendVendorOrderPushNotification } = require("./pushService");
-      const vendorGroups = {};
-      for (const item of (fullOrder.items || [])) {
-        const vId = item.vendorId;
-        if (!vId) continue;
-        if (!vendorGroups[vId]) {
-          vendorGroups[vId] = { count: 0, amount: 0 };
-        }
-        vendorGroups[vId].count += (item.quantity || 1);
-        vendorGroups[vId].amount += Number(item.totalPrice || item.priceAtPurchase || 0);
-      }
-
-      for (const [vendorId, vData] of Object.entries(vendorGroups)) {
-        sendVendorOrderPushNotification({
-          vendorId,
-          orderNumber: fullOrder.orderNumber || fullOrder.id,
-          amount: vData.amount + (Number(fullOrder.deliveryFee) || 0),
-          itemCount: vData.count,
-          orderId: fullOrder.id,
-        }).catch((e) => console.warn("FCM push send error:", e.message));
-      }
-    } catch (pushErr) {
-      console.warn("FCM push dispatch note:", pushErr.message);
-    }
-
+    // ⚡ Send response to customer immediately (0.2s instant checkout screen)
     res.status(201).json({ success: true, order: fullOrder });
+
+    // 🔔 Send High-Priority FCM Push Notification in background (non-blocking)
+    setImmediate(async () => {
+      try {
+        const { sendVendorOrderPushNotification } = require("./pushService");
+        const vendorGroups = {};
+        for (const item of (fullOrder.items || [])) {
+          const vId = item.vendorId;
+          if (!vId) continue;
+          if (!vendorGroups[vId]) {
+            vendorGroups[vId] = { count: 0, amount: 0 };
+          }
+          vendorGroups[vId].count += (item.quantity || 1);
+          vendorGroups[vId].amount += Number(item.totalPrice || item.priceAtPurchase || 0);
+        }
+
+        for (const [vendorId, vData] of Object.entries(vendorGroups)) {
+          sendVendorOrderPushNotification({
+            vendorId,
+            orderNumber: fullOrder.orderNumber || fullOrder.id,
+            amount: vData.amount + (Number(fullOrder.deliveryFee) || 0),
+            itemCount: vData.count,
+            orderId: fullOrder.id,
+          }).catch((e) => console.warn("FCM push send error:", e.message));
+        }
+      } catch (pushErr) {
+        console.warn("FCM push dispatch note:", pushErr.message);
+      }
+    });
   } catch (err) {
     console.error("Order checkout error:", err);
     res.status(500).json({ error: err.message });

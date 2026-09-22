@@ -65,6 +65,10 @@ export async function initVendorPushNotifications(vendorId) {
       await PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
         console.log("👉 Push notification clicked:", action.notification.data);
         window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
+        const orderId = action.notification?.data?.orderId || action.notification?.data?.id;
+        if (orderId) {
+          window.dispatchEvent(new CustomEvent("buildcity_order_highlight", { detail: { orderId } }));
+        }
       });
 
       // 3. Register with FCM on Google Play Services

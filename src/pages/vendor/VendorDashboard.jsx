@@ -213,8 +213,30 @@ export default function VendorDashboard() {
   const vendorId = matchedVendorObj.id || user?.vendorInfo?.id || user?.vendorId || user?.id || (user?.phone ? `v-${user.phone}` : `v-${Date.now()}`);
 
   const [newOrderAlert, setNewOrderAlert] = useState(null);
+  const [highlightedOrderId, setHighlightedOrderId] = useState(null);
   const knownOrderIdsRef = useRef(new Set());
   const initialLoadDoneRef = useRef(false);
+
+  const triggerOrderHighlight = (orderId) => {
+    if (!orderId) return;
+    setActiveTab("orders");
+    setOrderStatusFilter("ALL");
+    setOrderSearch("");
+    setHighlightedOrderId(orderId);
+
+    // Give DOM 200ms to mount/switch tabs, then smoothly scroll to order card
+    setTimeout(() => {
+      const el = document.getElementById(`vendor-order-${orderId}`) || document.getElementById(`vendor-order-row-${orderId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 250);
+
+    // Fade out golden glow after 6 seconds
+    setTimeout(() => {
+      setHighlightedOrderId((curr) => (curr === orderId ? null : curr));
+    }, 6000);
+  };
 
   // Auto-request notification permission on mount for native sound & alerts + FCM background push
   useEffect(() => {
@@ -280,12 +302,17 @@ export default function VendorDashboard() {
       syncVendorOrders();
     };
 
-    // 3. Instant Event-Driven Sync
+    // 3. Instant Event-Driven Sync & Push Notification Click Auto-Scroll
     const handleOrderEvent = () => syncVendorOrders();
+    const handleHighlightEvent = (e) => {
+      const oId = e.detail?.orderId;
+      if (oId) triggerOrderHighlight(oId);
+    };
     window.addEventListener("focus", handleFocus);
     window.addEventListener("visibilitychange", handleFocus);
     window.addEventListener("buildcity_orders_updated", handleOrderEvent);
     window.addEventListener("buildcity_order_placed", handleOrderEvent);
+    window.addEventListener("buildcity_order_highlight", handleHighlightEvent);
 
     return () => {
       isMounted = false;
@@ -294,6 +321,7 @@ export default function VendorDashboard() {
       window.removeEventListener("visibilitychange", handleFocus);
       window.removeEventListener("buildcity_orders_updated", handleOrderEvent);
       window.removeEventListener("buildcity_order_placed", handleOrderEvent);
+      window.removeEventListener("buildcity_order_highlight", handleHighlightEvent);
     };
   }, [vendorId, shopName]);
 
@@ -869,7 +897,7 @@ export default function VendorDashboard() {
         </div>
       }
     >
-      {/* 🔔 Real-time Loud Order Arrival Popup Alert Card */}
+      {/* 🔔 Real-time Order Arrival Floating Card */}
       {newOrderAlert && (
         <div className="fixed top-4 inset-x-3 sm:inset-x-auto sm:right-6 sm:w-96 z-50 animate-in fade-in slide-in-from-top-4 duration-300">
           <div className="bg-gradient-to-r from-navy-950 via-[#0A192F] to-slate-900 border-2 border-amber-400 text-white p-3.5 sm:p-4 rounded-2xl shadow-2xl flex items-start gap-3 backdrop-blur-md">
@@ -879,12 +907,12 @@ export default function VendorDashboard() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-1">
                 <p className="text-[11px] font-black uppercase tracking-wider text-amber-400">
-                  Naya Order Aaya Hai!
+                  New Order Received!
                 </p>
                 <button
                   type="button"
                   onClick={() => setNewOrderAlert(null)}
-                  className="text-slate-400 hover:text-white text-xs p-1"
+                  className="text-slate-400 hover:text-white text-xs p-1 cursor-pointer"
                 >
                   ✕
                 </button>
@@ -898,13 +926,12 @@ export default function VendorDashboard() {
               <button
                 type="button"
                 onClick={() => {
-                  setActiveTab("orders");
+                  triggerOrderHighlight(newOrderAlert.id || newOrderAlert.orderNumber);
                   setNewOrderAlert(null);
-                  window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
                 className="mt-2 w-full py-1.5 px-3 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
               >
-                <span>View Customer Order</span>
+                <span>View Order Details</span>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                   <path d="m9 18 6-6-6-6" />
                 </svg>
@@ -1935,18 +1962,30 @@ export default function VendorDashboard() {
                     ? "border-l-4 border-l-slate-400"
                     : "border-l-4 border-l-sky-500";
 
+                  const isHighlighted = highlightedOrderId === ord.id || (highlightedOrderId && ord.orderNumber && highlightedOrderId === ord.orderNumber);
+
                   return (
                     <div
                       key={ord.id}
-                      className={`bg-white rounded-2xl p-3.5 border border-slate-200 shadow-sm hover:shadow-md ${statusAccentClass} space-y-2.5 transition-all`}
+                      id={`vendor-order-${ord.id}`}
+                      className={`bg-white rounded-2xl p-3.5 border shadow-sm space-y-2.5 transition-all duration-500 ${
+                        isHighlighted
+                          ? "border-amber-400 ring-4 ring-amber-400/90 shadow-2xl shadow-amber-400/40 scale-[1.02] bg-amber-50/20"
+                          : `border-slate-200 hover:shadow-md ${statusAccentClass}`
+                      }`}
                     >
-                      {/* Top Row: Customer Info, Date & Call Button */}
+                      {/* Top Row: Customer Info, Date, Just Arrived Badge & Call Button */}
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-extrabold text-navy-950 text-xs truncate">
                               👤 {custFullName}
                             </span>
+                            {isHighlighted && (
+                              <span className="inline-flex items-center gap-1 bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-[9.5px] px-2 py-0.5 rounded-full shadow-md animate-pulse">
+                                <span>✨ JUST ARRIVED</span>
+                              </span>
+                            )}
                             {customerStats.isRepeat && (
                               <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-300/90 px-1.5 py-0.2 rounded text-[9px] font-black">
                                 <span>👑 Repeat ({customerStats.orderCount})</span>
@@ -2102,21 +2141,30 @@ export default function VendorDashboard() {
                         ? rawTotal
                         : (itemsSubtotal + deliveryFee);
 
+                      const isHighlighted = highlightedOrderId === ord.id || (highlightedOrderId && ord.orderNumber && highlightedOrderId === ord.orderNumber);
                       const isPending = (ord.status || "PENDING").toUpperCase() === "PENDING";
 
                       return (
                         <tr
                           key={ord.id}
-                          className={`transition-colors ${
-                            isPending
+                          id={`vendor-order-row-${ord.id}`}
+                          className={`transition-all duration-500 ${
+                            isHighlighted
+                              ? "bg-amber-100/90 ring-4 ring-amber-400 border-l-4 border-l-amber-500 shadow-md scale-[1.005]"
+                              : isPending
                               ? "bg-amber-50/40 hover:bg-amber-50/70 border-l-4 border-l-amber-500"
                               : "hover:bg-slate-50/80"
                           }`}
                         >
                           <td className="py-3.5 px-4">
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-extrabold text-brand-700 tracking-wide text-xs block">{formattedOrderId}</span>
-                              {isPending && (
+                              {isHighlighted && (
+                                <span className="inline-flex items-center gap-1 bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-[9px] px-2 py-0.5 rounded-full shadow-md animate-pulse">
+                                  <span>✨ JUST ARRIVED</span>
+                                </span>
+                              )}
+                              {isPending && !isHighlighted && (
                                 <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-500 text-white animate-pulse">
                                   NEW
                                 </span>

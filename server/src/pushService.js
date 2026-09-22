@@ -94,8 +94,8 @@ async function sendVendorOrderPushNotification({ vendorId, orderNumber, amount, 
 
   const cleanOrderNum = String(orderNumber).replace(/^#/g, "").slice(-4).toUpperCase();
   const amtNum = Number(amount || 0);
-  const title = amtNum > 0 ? `🔔 Naya Order Aaya! ₹${amtNum.toLocaleString("en-IN")}` : `🔔 Naya Order Aaya!`;
-  const body = `Order #ORD-*${cleanOrderNum} • ${itemCount || 1} items • Tap to open`;
+  const title = amtNum > 0 ? `New Order Received • ₹${amtNum.toLocaleString("en-IN")}` : `New Order Received`;
+  const body = `Order #ORD-*${cleanOrderNum} (${itemCount || 1} items) • Tap to review`;
 
   const message = {
     token: fcmToken,

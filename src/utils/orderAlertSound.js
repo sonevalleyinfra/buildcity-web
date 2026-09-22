@@ -164,9 +164,9 @@ export async function notifyVendorNewOrder(order) {
   const itemsText = itemCount > 1 ? `${itemCount} items` : "1 item";
 
   const title = amount > 0
-    ? `🔔 Naya Order Aaya! ₹${amount.toLocaleString("en-IN")}`
-    : `🔔 Naya Order Aaya!`;
-  const body = `Order ${cleanOrderNum} • ${itemsText} • Tap to open`;
+    ? `New Order Received • ₹${amount.toLocaleString("en-IN")}`
+    : `New Order Received`;
+  const body = `Order ${cleanOrderNum} (${itemsText}) • Tap to review`;
 
   // 1. Play chime sound
   playOrderAlertChime();
@@ -205,4 +205,14 @@ export async function notifyVendorNewOrder(order) {
       });
     } catch {}
   }
+}
+
+// Listen for native notification clicks to auto-scroll & highlight order
+if (typeof window !== "undefined" && Capacitor.isNativePlatform()) {
+  LocalNotifications.addListener("localNotificationActionPerformed", (action) => {
+    const orderId = action.notification?.extra?.orderId;
+    if (orderId) {
+      window.dispatchEvent(new CustomEvent("buildcity_order_highlight", { detail: { orderId } }));
+    }
+  }).catch(() => {});
 }

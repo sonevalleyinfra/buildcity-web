@@ -362,8 +362,6 @@ export function OrderProvider({ children }) {
     } catch (err) {
       console.warn("Update status note:", err.message);
     }
-
-    window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
   };
 
   const getOrder = (id) => orders.find((o) => o.id === id);

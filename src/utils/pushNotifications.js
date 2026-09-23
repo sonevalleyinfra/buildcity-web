@@ -15,7 +15,7 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
 
   // 0. If token was previously cached on device, sync immediately with backend!
   try {
-    const cachedToken = localStorage.getItem("vendor_fcm_token");
+    const cachedToken = localStorage.getItem("buildcity_permanent_device_token") || localStorage.getItem("vendor_fcm_token");
     if (cachedToken) {
       fetch(`${API_BASE_URL}/api/v1/vendor/fcm-token`, {
         method: "POST",
@@ -53,7 +53,10 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
       await PushNotifications.addListener("registration", async (token) => {
         if (!token?.value) return;
         console.log("📱 FCM Registration Token obtained:", token.value.substring(0, 15) + "...");
-        try { localStorage.setItem("vendor_fcm_token", token.value); } catch (e) {}
+        try {
+          localStorage.setItem("vendor_fcm_token", token.value);
+          localStorage.setItem("buildcity_permanent_device_token", token.value);
+        } catch (e) {}
         try {
           await fetch(`${API_BASE_URL}/api/v1/vendor/fcm-token`, {
             method: "POST",
@@ -106,7 +109,7 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
  */
 export async function unregisterVendorPushNotifications(vendorId) {
   try {
-    const cachedToken = localStorage.getItem("vendor_fcm_token");
+    const cachedToken = localStorage.getItem("buildcity_permanent_device_token") || localStorage.getItem("vendor_fcm_token");
     if (cachedToken || vendorId) {
       await fetch(`${API_BASE_URL}/api/v1/vendor/fcm-token/deregister`, {
         method: "POST",
@@ -118,6 +121,8 @@ export async function unregisterVendorPushNotifications(vendorId) {
 
   try {
     localStorage.removeItem("vendor_fcm_token");
+    // Note: We deliberately KEEP buildcity_permanent_device_token so that
+    // the next vendor logging into this physical phone gets instant 0ms token sync!
   } catch (e) {}
 
   isRegistered = false;

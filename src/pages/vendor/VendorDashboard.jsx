@@ -234,6 +234,7 @@ export default function VendorDashboard() {
   const highlightTimerRef = useRef(null);
   const knownOrderIdsRef = useRef(new Set());
   const initialLoadDoneRef = useRef(false);
+  const optimisticStatusMapRef = useRef(new Map());
 
   const triggerOrderHighlight = (orderId) => {
     if (!orderId) return;
@@ -307,15 +308,32 @@ export default function VendorDashboard() {
           });
           initialLoadDoneRef.current = true;
 
+          // Prune optimistic map entries older than 20 seconds
+          const now = Date.now();
+          for (const [id, data] of optimisticStatusMapRef.current.entries()) {
+            if (now - data.timestamp > 20000) {
+              optimisticStatusMapRef.current.delete(id);
+            }
+          }
+
+          // Protect active optimistic status changes from being overwritten by stale background polling
+          const cleanVOrds = vOrds.map((o) => {
+            if (o?.id && optimisticStatusMapRef.current.has(o.id)) {
+              const opt = optimisticStatusMapRef.current.get(o.id);
+              return { ...o, status: opt.status };
+            }
+            return o;
+          });
+
           setFetchedVendorOrders((prev) => {
-            if (prev.length === vOrds.length && JSON.stringify(prev) === JSON.stringify(vOrds)) {
+            if (prev.length === cleanVOrds.length && JSON.stringify(prev) === JSON.stringify(cleanVOrds)) {
               return prev;
             }
-            return vOrds;
+            return cleanVOrds;
           });
           try {
-            localStorage.setItem(`buildcity_vendor_orders_${vendorId}`, JSON.stringify(vOrds));
-            localStorage.setItem("buildcity_last_vendor_orders", JSON.stringify(vOrds));
+            localStorage.setItem(`buildcity_vendor_orders_${vendorId}`, JSON.stringify(cleanVOrds));
+            localStorage.setItem("buildcity_last_vendor_orders", JSON.stringify(cleanVOrds));
           } catch {}
           setOrdersLoaded(true);
 
@@ -900,6 +918,9 @@ export default function VendorDashboard() {
     if (!orderId || !newStatus) return;
     setUpdatingOrderId(orderId);
 
+    // Save to optimistic map with timestamp so background sync won't revert it
+    optimisticStatusMapRef.current.set(orderId, { status: newStatus, timestamp: Date.now() });
+
     // 1. Instant optimistic state + localStorage update so refresh never shows stale status!
     setFetchedVendorOrders((prev) => {
       const updated = prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o));
@@ -913,6 +934,7 @@ export default function VendorDashboard() {
       await updateOrderStatus(orderId, newStatus);
     } catch (err) {
       console.warn("Status change error:", err);
+      optimisticStatusMapRef.current.delete(orderId);
       showAlert({
         title: "Status Update Error",
         message: err.message || "Failed to update order status.",
@@ -2133,23 +2155,22 @@ export default function VendorDashboard() {
                         </div>
 
                         <div className="flex items-center gap-1.5">
-                          {updatingOrderId === ord.id ? (
-                            <div className="flex items-center gap-1.5 px-2 py-1 bg-brand-50 border border-brand-200 rounded-lg text-brand-700 font-extrabold text-[11px] shadow-2xs animate-pulse">
-                              <span className="w-3 h-3 border-2 border-brand-600 border-t-transparent rounded-full animate-spin shrink-0" />
-                              <span>Updating...</span>
-                            </div>
-                          ) : (
-                            <select
-                              value={ord.status || "PENDING"}
-                              onChange={(e) => handleStatusChange(ord.id, e.target.value)}
-                              className="bg-slate-50 hover:bg-slate-100 border border-slate-200 font-extrabold text-[11px] text-navy-900 rounded-lg px-2 py-1 outline-none focus:border-brand-500 cursor-pointer shadow-2xs transition-colors"
-                            >
-                              <option value="PENDING">⏳ PENDING</option>
-                              <option value="PROCESSING">⚙️ PROCESSING</option>
-                              <option value="OUT_FOR_DELIVERY">🚚 OUT FOR DELIVERY</option>
-                              <option value="DELIVERED">✅ DELIVERED</option>
-                              <option value="CANCELLED">❌ CANCELLED</option>
-                            </select>
+                          <select
+                            disabled={updatingOrderId === ord.id}
+                            value={ord.status || "PENDING"}
+                            onChange={(e) => handleStatusChange(ord.id, e.target.value)}
+                            className={`bg-slate-50 hover:bg-slate-100 border border-slate-200 font-extrabold text-[11px] text-navy-900 rounded-lg px-2 py-1 outline-none focus:border-brand-500 cursor-pointer shadow-2xs transition-all ${
+                              updatingOrderId === ord.id ? "opacity-60 cursor-wait" : ""
+                            }`}
+                          >
+                            <option value="PENDING">⏳ PENDING</option>
+                            <option value="PROCESSING">⚙️ PROCESSING</option>
+                            <option value="OUT_FOR_DELIVERY">🚚 OUT FOR DELIVERY</option>
+                            <option value="DELIVERED">✅ DELIVERED</option>
+                            <option value="CANCELLED">❌ CANCELLED</option>
+                          </select>
+                          {updatingOrderId === ord.id && (
+                            <span className="w-3.5 h-3.5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin shrink-0" />
                           )}
                         </div>
                       </div>
@@ -2328,16 +2349,14 @@ export default function VendorDashboard() {
                             </span>
                           </td>
                           <td className="py-3.5 px-4">
-                            {updatingOrderId === ord.id ? (
-                              <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-brand-50 border border-brand-200 rounded-lg text-brand-700 font-extrabold text-xs shadow-2xs animate-pulse">
-                                <span className="w-3 h-3 border-2 border-brand-600 border-t-transparent rounded-full animate-spin shrink-0" />
-                                <span>Updating...</span>
-                              </div>
-                            ) : (
+                            <div className="flex items-center gap-1.5">
                               <select
+                                disabled={updatingOrderId === ord.id}
                                 value={ord.status || "PENDING"}
                                 onChange={(e) => handleStatusChange(ord.id, e.target.value)}
-                                className="bg-slate-50 hover:bg-slate-100 border border-slate-200 font-bold text-xs text-navy-900 rounded-lg px-2.5 py-1.5 outline-none focus:border-brand-500 cursor-pointer shadow-2xs transition-colors"
+                                className={`bg-slate-50 hover:bg-slate-100 border border-slate-200 font-bold text-xs text-navy-900 rounded-lg px-2.5 py-1.5 outline-none focus:border-brand-500 cursor-pointer shadow-2xs transition-all ${
+                                  updatingOrderId === ord.id ? "opacity-60 cursor-wait" : ""
+                                }`}
                               >
                                 <option value="PENDING">⏳ PENDING</option>
                                 <option value="PROCESSING">⚙️ PROCESSING</option>
@@ -2345,7 +2364,10 @@ export default function VendorDashboard() {
                                 <option value="DELIVERED">✅ DELIVERED</option>
                                 <option value="CANCELLED">❌ CANCELLED</option>
                               </select>
-                            )}
+                              {updatingOrderId === ord.id && (
+                                <span className="w-3.5 h-3.5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );

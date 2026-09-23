@@ -202,7 +202,13 @@ const loadInitialProducts = () => {
     const saved = localStorage.getItem(PRODUCTS_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((p) => ({
+          ...p,
+          approvalStatus: p.approvalStatus === "REJECTED" ? "REJECTED" : "APPROVED",
+          isActive: p.approvalStatus !== "REJECTED" && p.isActive !== false,
+        }));
+      }
     }
   } catch {}
   return [];
@@ -329,7 +335,9 @@ export function AdminProvider({ children }) {
           const isVendorSuspended = l.vendor?.status === "SUSPENDED";
           const resolvedRegionName = l.regionName || l.districtName || l.vendor?.region?.name || "Mirzapur";
           const resolvedRegionId = l.regionId || l.vendor?.regionId || l.vendor?.region?.id || "mirzapur";
-          const isListingApproved = l.approvalStatus === "APPROVED" || !l.approvalStatus || l.approvalStatus === "";
+          const isExplicitlyRejected = l.approvalStatus === "REJECTED";
+          const resolvedApproval = isExplicitlyRejected ? "REJECTED" : "APPROVED";
+          const resolvedIsActive = !isExplicitlyRejected && !isVendorSuspended && l.isActive !== false;
           const matchedMaster = masterList.find((m) => m.id === l.masterProductId) || {};
 
           return {
@@ -351,8 +359,8 @@ export function AdminProvider({ children }) {
             price: Number(l.price) || 100,
             stockQty: Number(l.stockQty) || 100,
             imageUrl: l.imageUrl || l.masterProduct?.imageUrl || matchedMaster.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80",
-            approvalStatus: l.approvalStatus || "APPROVED",
-            isActive: isListingApproved && l.isActive !== false && !isVendorSuspended,
+            approvalStatus: resolvedApproval,
+            isActive: resolvedIsActive,
             isVendorSuspended: Boolean(isVendorSuspended),
             addedBy: l.addedBy || "Vendor",
           };
@@ -1755,11 +1763,31 @@ export function AdminProvider({ children }) {
       const res = await authFetch(`${API_BASE_URL}/api/v1/vendor/listings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ masterProductId, vendorId, vendorName, regionId: validUuidRegionId, regionName: regName, districtName: regName, price, mrp, stockQty, addedBy }),
+        body: JSON.stringify({
+          masterProductId,
+          vendorId,
+          vendorName,
+          regionId: validUuidRegionId,
+          regionName: regName,
+          districtName: regName,
+          price,
+          mrp,
+          stockQty,
+          addedBy,
+          approvalStatus: "APPROVED",
+          isActive: true,
+        }),
       });
       if (res.ok) {
         const createdItem = await res.json().catch(() => null);
         if (createdItem && createdItem.id) {
+          // Send server status patch to guarantee backend marks it APPROVED
+          authFetch(`${API_BASE_URL}/api/v1/vendor/listings/${createdItem.id}/status`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ approvalStatus: "APPROVED" }),
+          }).catch(() => null);
+
           const resolvedItem = {
             ...optimisticListing,
             ...createdItem,

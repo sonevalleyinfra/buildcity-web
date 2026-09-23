@@ -747,45 +747,6 @@ export default function VendorDashboard() {
     setVendorStockQty(100);
   };
 
-  const handleQuickAddMasterProduct = async (mp) => {
-    if (!mp || isAddingToStore) return;
-    setIsAddingToStore(true);
-    try {
-      const mrp = Number(mp.suggestedPrice) || 390;
-      const defaultDisc = 10;
-      const calcSelling = Math.round(mrp * (1 - defaultDisc / 100));
-
-      await assignMasterProductToVendor({
-        masterProductId: mp.id,
-        vendorId: vendorId,
-        vendorName: shopName,
-        regionId: matchedVendorObj.regionId || user?.vendorInfo?.regionId,
-        regionName: districtName || matchedVendorObj.regionName || "Mirzapur",
-        districtName: districtName || matchedVendorObj.regionName || "Mirzapur",
-        price: calcSelling,
-        mrp: mrp,
-        stockQty: 100,
-        addedBy: `Vendor (${shopName})`,
-      });
-
-      setSelectedMasterProd(null);
-      showAlert({
-        title: "✅ Added to Your Store",
-        message: `"${mp.name}" has been successfully added to your store!\n\nSelling Price: ₹${calcSelling} (10% OFF)\nStock: 100\nThis product is now live in your store!`,
-        type: "success",
-        buttonText: "Awesome",
-      });
-    } catch (err) {
-      showAlert({
-        title: "Error",
-        message: err.message || "Failed to add product to store.",
-        type: "warning",
-      });
-    } finally {
-      setIsAddingToStore(false);
-    }
-  };
-
   const handleSellingPriceChange = (val) => {
     setVendorSellingPrice(val);
     const numPrice = Number(val) || 0;
@@ -1597,13 +1558,11 @@ export default function VendorDashboard() {
 
                           {/* Top-Right Approval Status Pill */}
                           <span className={`absolute top-1 right-1 text-[8px] font-bold px-1.5 py-0.2 rounded leading-none shadow-2xs ${
-                            p.approvalStatus === "PENDING_REVIEW"
-                              ? "bg-amber-100 text-amber-800 border border-amber-200"
-                              : p.approvalStatus === "REJECTED"
+                            p.approvalStatus === "REJECTED"
                               ? "bg-rose-100 text-rose-800 border border-rose-200"
                               : "bg-emerald-50 text-emerald-700 border border-emerald-200"
                           }`}>
-                            {p.approvalStatus === "PENDING_REVIEW" ? "Review" : p.approvalStatus === "REJECTED" ? "Rejected" : "Live"}
+                            {p.approvalStatus === "REJECTED" ? "Rejected" : "Live"}
                           </span>
 
                           {/* Bottom-Right Unit Pill */}
@@ -1712,11 +1671,7 @@ export default function VendorDashboard() {
                           </span>
                         </td>
                         <td className="py-3.5 px-4">
-                          {p.approvalStatus === "PENDING_REVIEW" ? (
-                            <span className="bg-amber-50 text-amber-700 border border-amber-200/80 px-2.5 py-1 rounded-full text-[11px] font-bold block w-fit">
-                              ⏳ Under Review
-                            </span>
-                          ) : p.approvalStatus === "REJECTED" ? (
+                          {p.approvalStatus === "REJECTED" ? (
                             <span className="bg-rose-50 text-rose-700 border border-rose-200/80 px-2.5 py-1 rounded-full text-[11px] font-bold block w-fit">
                               🔴 Rejected
                             </span>
@@ -2681,24 +2636,13 @@ export default function VendorDashboard() {
                                   Close ▲
                                 </button>
                               ) : (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleQuickAddMasterProduct(mp)}
-                                    disabled={isAddingToStore}
-                                    className="bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1"
-                                    title={`Instantly add at ₹${Math.round((Number(mp.suggestedPrice) || 390) * 0.9)}`}
-                                  >
-                                    <span>⚡ Quick Add</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenMasterProductSelect(mp)}
-                                    className="bg-brand-500 hover:bg-brand-600 active:scale-[0.98] text-white font-bold text-[11px] sm:text-xs px-3 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
-                                  >
-                                    + Add to Store
-                                  </button>
-                                </>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenMasterProductSelect(mp)}
+                                  className="bg-brand-500 hover:bg-brand-600 active:scale-[0.98] text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1"
+                                >
+                                  + Add to Store
+                                </button>
                               )}
                             </div>
                           </div>

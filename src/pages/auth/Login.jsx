@@ -4,7 +4,9 @@ import AuthLayout from "../../layouts/AuthLayout";
 import Button from "../../components/Button";
 import { useAuth } from "../../context/AuthContext";
 
-const isVendorApp = import.meta.env.VITE_APP_MODE === "vendor";
+import { Capacitor } from "@capacitor/core";
+
+const isVendorApp = import.meta.env.VITE_APP_MODE === "vendor" || Capacitor.isNativePlatform();
 
 // Login Page component — User / Vendor / DR / Admin ka universal login screen
 export default function Login() {

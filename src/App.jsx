@@ -31,7 +31,7 @@ import LegalPolicyPage from "./pages/public/LegalPolicyPage";
 
 import BottomNav from "./components/BottomNav";
 
-const isVendorApp = import.meta.env.VITE_APP_MODE === "vendor";
+const isVendorApp = import.meta.env.VITE_APP_MODE === "vendor" || Capacitor.isNativePlatform();
 
 function NativeBackButtonHandler() {
   const navigate = useNavigate();
@@ -76,7 +76,8 @@ function VendorRoot() {
     return Capacitor.isNativePlatform() ? <SplashScreen minDuration={800} /> : null;
   }
 
-  if (user?.role === "vendor") {
+  const role = (user?.role || "").toLowerCase();
+  if (role === "vendor" || user?.vendorInfo || user?.vendorId) {
     return <Navigate to="/vendor/dashboard" replace />;
   }
 
@@ -86,12 +87,13 @@ function VendorRoot() {
 function CatchAll() {
   const { user, loading } = useAuth();
   if (loading) return null;
+  const role = (user?.role || "").toLowerCase();
   const target =
-    user?.role === "admin"
+    role === "admin"
       ? "/admin/dashboard"
-      : user?.role === "dr"
+      : role === "dr"
       ? "/dr/dashboard"
-      : user?.role === "vendor"
+      : role === "vendor" || user?.vendorInfo || user?.vendorId
       ? "/vendor/dashboard"
       : isVendorApp
       ? "/login"
@@ -153,11 +155,11 @@ export default function App() {
 
                   {/* Public Storefront or Dedicated Vendor Root */}
                   <Route path="/" element={isVendorApp ? <VendorRoot /> : <Home />} />
-                  <Route path="/category/:slug" element={<CategoryListing />} />
-                  <Route path="/categories" element={<Categories />} />
-                  <Route path="/product/:id" element={<ProductDetail />} />
-                  <Route path="/search" element={<SearchResults />} />
-                  <Route path="/cart" element={<Cart />} />
+                  <Route path="/category/:slug" element={isVendorApp ? <VendorRoot /> : <CategoryListing />} />
+                  <Route path="/categories" element={isVendorApp ? <VendorRoot /> : <Categories />} />
+                  <Route path="/product/:id" element={isVendorApp ? <VendorRoot /> : <ProductDetail />} />
+                  <Route path="/search" element={isVendorApp ? <VendorRoot /> : <SearchResults />} />
+                  <Route path="/cart" element={isVendorApp ? <VendorRoot /> : <Cart />} />
 
                   {/* Public Legal & Compliance Routes (Play Store & Statutory Compliant) */}
                   <Route path="/privacy" element={<LegalPolicyPage defaultPolicyId="privacy" />} />

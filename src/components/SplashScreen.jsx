@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
+import { Capacitor } from "@capacitor/core";
 
-const isVendorApp = import.meta.env.VITE_APP_MODE === "vendor";
+const isVendorApp = import.meta.env.VITE_APP_MODE === "vendor" || Capacitor.isNativePlatform();
 
 export default function SplashScreen({ minDuration = 1400, onFinished }) {
   const [visible, setVisible] = useState(true);

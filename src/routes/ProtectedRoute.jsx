@@ -15,17 +15,23 @@ export default function ProtectedRoute({ children, role }) {
     return <Navigate to={`/login?redirect=${redirectParam}`} replace />;
   }
 
-  if (role && user.role !== role) {
-    // logged in, but galat role pe  -> usko uske home par bhej doe access nahi 
-    const home =
-      user.role === "admin"
-        ? "/admin/dashboard"
-        : user.role === "dr"
-        ? "/dr/dashboard"
-        : user.role === "vendor"
-        ? "/vendor/dashboard"
-        : "/";
-    return <Navigate to={home} replace />;
+  const userRole = (user?.role || "").toLowerCase();
+  const targetRole = (role || "").toLowerCase();
+
+  if (role) {
+    const isVendorMatch = targetRole === "vendor" && (userRole === "vendor" || !!user.vendorInfo || !!user.vendorId);
+    if (!isVendorMatch && userRole !== targetRole) {
+      // logged in, but galat role pe -> redirect to rightful dashboard
+      const home =
+        userRole === "admin"
+          ? "/admin/dashboard"
+          : userRole === "dr"
+          ? "/dr/dashboard"
+          : (userRole === "vendor" || user.vendorInfo || user.vendorId)
+          ? "/vendor/dashboard"
+          : "/";
+      return <Navigate to={home} replace />;
+    }
   }
 
   return children;

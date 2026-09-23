@@ -107,7 +107,7 @@ export function OrderProvider({ children }) {
         const res = await authFetch(`${API_BASE_URL}/api/v1/orders/me`);
         if (res.ok) {
           const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
+          if (Array.isArray(data)) {
             const normalized = data.map(normalizeOrder);
             setOrders((prev) => {
               if (areOrdersEqual(prev, normalized)) return prev;

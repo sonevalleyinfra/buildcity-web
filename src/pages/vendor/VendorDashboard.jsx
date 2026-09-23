@@ -556,6 +556,7 @@ export default function VendorDashboard() {
   const [orderStatusFilter, setOrderStatusFilter] = useState("ALL");
   const [orderSearch, setOrderSearch] = useState("");
   const [updatingOrderId, setUpdatingOrderId] = useState(null);
+  const [statusTransition, setStatusTransition] = useState(null); // { orderId, targetStatus }
 
   // Current vendor ki dukan par list huye products filter karo (Flexible DB Match)
   const vendorProducts = products.filter((p) => {
@@ -647,17 +648,25 @@ export default function VendorDashboard() {
   // Active Orders (Pending, Processing, Out for Delivery) vs Completed Orders (Delivered, Cancelled)
   const activeOrders = useMemo(() => {
     return vendorOrders.filter((o) => {
+      // Keep order visible on Active tab while its 2.5s loading transition is ongoing
+      if (statusTransition?.orderId === o.id && orderSectionTab === "ACTIVE") {
+        return true;
+      }
       const st = (o.status || "PENDING").toUpperCase();
       return st === "PENDING" || st === "PROCESSING" || st === "OUT_FOR_DELIVERY";
     });
-  }, [vendorOrders]);
+  }, [vendorOrders, statusTransition, orderSectionTab]);
 
   const completedOrders = useMemo(() => {
     return vendorOrders.filter((o) => {
+      // Keep order visible on Completed tab while its 2.5s loading transition is ongoing
+      if (statusTransition?.orderId === o.id && orderSectionTab === "COMPLETED") {
+        return true;
+      }
       const st = (o.status || "").toUpperCase();
       return st === "DELIVERED" || st === "CANCELLED";
     });
-  }, [vendorOrders]);
+  }, [vendorOrders, statusTransition, orderSectionTab]);
 
   const pendingOrdersCount = vendorOrders.filter((o) => (o.status || "PENDING").toUpperCase() === "PENDING").length;
 
@@ -667,6 +676,9 @@ export default function VendorDashboard() {
     const baseOrders = orderSectionTab === "ACTIVE" ? activeOrders : completedOrders;
 
     const filtered = baseOrders.filter((ord) => {
+      // If currently undergoing status transition, keep visible so vendor clearly sees it moving!
+      if (statusTransition?.orderId === ord.id) return true;
+
       // Status / Repeat Buyer Filter within the active tab
       if (orderStatusFilter === "REPEAT_BUYERS") {
         if (!getCustomerStats(ord).isRepeat) return false;
@@ -916,6 +928,7 @@ export default function VendorDashboard() {
   // Live Status Change handler with real-time loading feedback & instant synchronous persistence
   const handleStatusChange = async (orderId, newStatus) => {
     if (!orderId || !newStatus) return;
+    setStatusTransition({ orderId, targetStatus: newStatus });
     setUpdatingOrderId(orderId);
 
     // Save to optimistic map with timestamp so background sync won't revert it
@@ -930,6 +943,7 @@ export default function VendorDashboard() {
       return updated;
     });
 
+    const startTime = Date.now();
     try {
       await updateOrderStatus(orderId, newStatus);
     } catch (err) {
@@ -941,7 +955,14 @@ export default function VendorDashboard() {
         type: "warning",
       });
     } finally {
+      // 2.4 second loading window so vendor clearly sees the order moving to its new status
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, 2400 - elapsed);
+      if (remaining > 0) {
+        await new Promise((resolve) => setTimeout(resolve, remaining));
+      }
       setUpdatingOrderId(null);
+      setStatusTransition(null);
     }
   };
 
@@ -2155,22 +2176,34 @@ export default function VendorDashboard() {
                         </div>
 
                         <div className="flex items-center gap-1.5">
-                          <select
-                            disabled={updatingOrderId === ord.id}
-                            value={ord.status || "PENDING"}
-                            onChange={(e) => handleStatusChange(ord.id, e.target.value)}
-                            className={`bg-slate-50 hover:bg-slate-100 border border-slate-200 font-extrabold text-[11px] text-navy-900 rounded-lg px-2 py-1 outline-none focus:border-brand-500 cursor-pointer shadow-2xs transition-all ${
-                              updatingOrderId === ord.id ? "opacity-60 cursor-wait" : ""
-                            }`}
-                          >
-                            <option value="PENDING">⏳ PENDING</option>
-                            <option value="PROCESSING">⚙️ PROCESSING</option>
-                            <option value="OUT_FOR_DELIVERY">🚚 OUT FOR DELIVERY</option>
-                            <option value="DELIVERED">✅ DELIVERED</option>
-                            <option value="CANCELLED">❌ CANCELLED</option>
-                          </select>
-                          {updatingOrderId === ord.id && (
-                            <span className="w-3.5 h-3.5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                          {statusTransition?.orderId === ord.id ? (
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-300 rounded-lg text-amber-900 font-extrabold text-[11px] shadow-xs animate-pulse">
+                              <span className="w-3 h-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                              <span>
+                                {statusTransition.targetStatus === "DELIVERED"
+                                  ? "Moving to Delivered..."
+                                  : statusTransition.targetStatus === "PROCESSING"
+                                  ? "Moving to Processing..."
+                                  : statusTransition.targetStatus === "OUT_FOR_DELIVERY"
+                                  ? "Moving to Out for Delivery..."
+                                  : statusTransition.targetStatus === "CANCELLED"
+                                  ? "Moving to Cancelled..."
+                                  : "Moving to " + statusTransition.targetStatus + "..."}
+                              </span>
+                            </div>
+                          ) : (
+                            <select
+                              disabled={updatingOrderId === ord.id}
+                              value={ord.status || "PENDING"}
+                              onChange={(e) => handleStatusChange(ord.id, e.target.value)}
+                              className="bg-slate-50 hover:bg-slate-100 border border-slate-200 font-extrabold text-[11px] text-navy-900 rounded-lg px-2 py-1 outline-none focus:border-brand-500 cursor-pointer shadow-2xs transition-all"
+                            >
+                              <option value="PENDING">⏳ PENDING</option>
+                              <option value="PROCESSING">⚙️ PROCESSING</option>
+                              <option value="OUT_FOR_DELIVERY">🚚 OUT FOR DELIVERY</option>
+                              <option value="DELIVERED">✅ DELIVERED</option>
+                              <option value="CANCELLED">❌ CANCELLED</option>
+                            </select>
                           )}
                         </div>
                       </div>
@@ -2350,22 +2383,34 @@ export default function VendorDashboard() {
                           </td>
                           <td className="py-3.5 px-4">
                             <div className="flex items-center gap-1.5">
-                              <select
-                                disabled={updatingOrderId === ord.id}
-                                value={ord.status || "PENDING"}
-                                onChange={(e) => handleStatusChange(ord.id, e.target.value)}
-                                className={`bg-slate-50 hover:bg-slate-100 border border-slate-200 font-bold text-xs text-navy-900 rounded-lg px-2.5 py-1.5 outline-none focus:border-brand-500 cursor-pointer shadow-2xs transition-all ${
-                                  updatingOrderId === ord.id ? "opacity-60 cursor-wait" : ""
-                                }`}
-                              >
-                                <option value="PENDING">⏳ PENDING</option>
-                                <option value="PROCESSING">⚙️ PROCESSING</option>
-                                <option value="OUT_FOR_DELIVERY">🚚 OUT FOR DELIVERY</option>
-                                <option value="DELIVERED">✅ DELIVERED</option>
-                                <option value="CANCELLED">❌ CANCELLED</option>
-                              </select>
-                              {updatingOrderId === ord.id && (
-                                <span className="w-3.5 h-3.5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                              {statusTransition?.orderId === ord.id ? (
+                                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-300 rounded-lg text-amber-900 font-extrabold text-xs shadow-xs animate-pulse">
+                                  <span className="w-3.5 h-3.5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                                  <span>
+                                    {statusTransition.targetStatus === "DELIVERED"
+                                      ? "Moving to Delivered..."
+                                      : statusTransition.targetStatus === "PROCESSING"
+                                      ? "Moving to Processing..."
+                                      : statusTransition.targetStatus === "OUT_FOR_DELIVERY"
+                                      ? "Moving to Out for Delivery..."
+                                      : statusTransition.targetStatus === "CANCELLED"
+                                      ? "Moving to Cancelled..."
+                                      : "Moving to " + statusTransition.targetStatus + "..."}
+                                  </span>
+                                </div>
+                              ) : (
+                                <select
+                                  disabled={updatingOrderId === ord.id}
+                                  value={ord.status || "PENDING"}
+                                  onChange={(e) => handleStatusChange(ord.id, e.target.value)}
+                                  className="bg-slate-50 hover:bg-slate-100 border border-slate-200 font-bold text-xs text-navy-900 rounded-lg px-2.5 py-1.5 outline-none focus:border-brand-500 cursor-pointer shadow-2xs transition-all"
+                                >
+                                  <option value="PENDING">⏳ PENDING</option>
+                                  <option value="PROCESSING">⚙️ PROCESSING</option>
+                                  <option value="OUT_FOR_DELIVERY">🚚 OUT FOR DELIVERY</option>
+                                  <option value="DELIVERED">✅ DELIVERED</option>
+                                  <option value="CANCELLED">❌ CANCELLED</option>
+                                </select>
                               )}
                             </div>
                           </td>

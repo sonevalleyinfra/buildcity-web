@@ -324,31 +324,33 @@ export function AdminProvider({ children }) {
         } catch {}
       }
       if (Array.isArray(listingsRes)) {
+        const masterList = Array.isArray(masterRes) && masterRes.length > 0 ? masterRes : masterProducts;
         const formattedListings = listingsRes.map((l) => {
           const isVendorSuspended = l.vendor?.status === "SUSPENDED";
           const resolvedRegionName = l.regionName || l.districtName || l.vendor?.region?.name || "Mirzapur";
           const resolvedRegionId = l.regionId || l.vendor?.regionId || l.vendor?.region?.id || "mirzapur";
           const isListingApproved = l.approvalStatus === "APPROVED" || !l.approvalStatus || l.approvalStatus === "";
+          const matchedMaster = masterList.find((m) => m.id === l.masterProductId) || {};
 
           return {
             id: l.id,
             masterProductId: l.masterProductId,
-            name: l.name || l.masterProduct?.name || "Product",
-            categoryId: l.categoryId || l.masterProduct?.categoryId,
-            categoryName: l.categoryName || l.masterProduct?.category?.name || "Material",
-            brand: l.brand || l.masterProduct?.brand || "Generic",
-            type: l.type || l.masterProduct?.type || "Standard",
-            grade: l.grade || l.masterProduct?.grade || "Standard Grade",
-            unit: l.unit || l.masterProduct?.unit || "Unit",
+            name: l.name || l.masterProduct?.name || matchedMaster.name || "Product",
+            categoryId: l.categoryId || l.masterProduct?.categoryId || matchedMaster.categoryId,
+            categoryName: l.categoryName || l.masterProduct?.category?.name || matchedMaster.categoryName || "Material",
+            brand: l.brand || l.masterProduct?.brand || matchedMaster.brand || "Generic",
+            type: l.type || l.masterProduct?.type || matchedMaster.type || "Standard",
+            grade: l.grade || l.masterProduct?.grade || matchedMaster.grade || "Standard Grade",
+            unit: l.unit || l.masterProduct?.unit || matchedMaster.unit || "Unit",
             vendorId: l.vendorId,
             vendorName: l.vendor?.shopName || l.vendorName || "District Vendor",
             regionId: resolvedRegionId,
             regionName: resolvedRegionName,
             districtName: resolvedRegionName,
-            mrp: Number(l.mrp || l.masterProduct?.suggestedPrice || Math.round((Number(l.price) || 100) * 1.2)),
+            mrp: Number(l.mrp || l.masterProduct?.suggestedPrice || matchedMaster.suggestedPrice || Math.round((Number(l.price) || 100) * 1.2)),
             price: Number(l.price) || 100,
             stockQty: Number(l.stockQty) || 100,
-            imageUrl: l.imageUrl || l.masterProduct?.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80",
+            imageUrl: l.imageUrl || l.masterProduct?.imageUrl || matchedMaster.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80",
             approvalStatus: l.approvalStatus || "APPROVED",
             isActive: isListingApproved && l.isActive !== false && !isVendorSuspended,
             isVendorSuspended: Boolean(isVendorSuspended),
@@ -1657,13 +1659,24 @@ export function AdminProvider({ children }) {
       return updated;
     });
 
-    if (!isNaN(targetPrice) && targetPrice > 0) {
-      setProducts((prev) => {
-        const updated = prev.map((p) => (p.masterProductId === id || p.id === id ? { ...p, price: targetPrice, suggestedPrice: targetPrice } : p));
-        try { localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
-        return updated;
+    setProducts((prev) => {
+      const updated = prev.map((p) => {
+        if (p.masterProductId === id || p.id === id) {
+          return {
+            ...p,
+            ...(updates.imageUrl ? { imageUrl: updates.imageUrl } : {}),
+            ...(updates.name ? { name: updates.name } : {}),
+            ...(updates.brand ? { brand: updates.brand } : {}),
+            ...(updates.grade ? { grade: updates.grade } : {}),
+            ...(updates.unit ? { unit: updates.unit } : {}),
+            ...(!isNaN(targetPrice) && targetPrice > 0 ? { price: targetPrice, suggestedPrice: targetPrice } : {}),
+          };
+        }
+        return p;
       });
-    }
+      try { localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
 
     try {
       const res = await authFetch(`${API_BASE_URL}/api/v1/master-products/${id}`, {
@@ -1729,9 +1742,9 @@ export function AdminProvider({ children }) {
       mrp: Number(mrp) || Number(mp?.suggestedPrice) || Math.round((Number(price) || 100) * 1.2),
       price: Number(price) || (mp ? mp.suggestedPrice : 100),
       stockQty: Number(stockQty) || 100,
-      imageUrl: mp ? mp.imageUrl : "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
-      isActive: (addedBy === "Admin" || addedBy === "DR") ? true : false,
-      approvalStatus: (addedBy === "Admin" || addedBy === "DR") ? "APPROVED" : "PENDING_REVIEW",
+      imageUrl: (mp && mp.imageUrl) ? mp.imageUrl : "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+      isActive: true,
+      approvalStatus: "APPROVED",
       addedBy: addedBy || "Vendor",
     };
 
@@ -1751,6 +1764,9 @@ export function AdminProvider({ children }) {
             ...optimisticListing,
             ...createdItem,
             id: createdItem.id,
+            imageUrl: createdItem.imageUrl || mp?.imageUrl || optimisticListing.imageUrl,
+            isActive: true,
+            approvalStatus: "APPROVED",
             mrp: Number(createdItem.mrp || mrp || optimisticListing.mrp),
             price: Number(createdItem.price || price),
             stockQty: Number(createdItem.stockQty !== undefined ? createdItem.stockQty : stockQty),

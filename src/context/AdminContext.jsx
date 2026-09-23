@@ -60,96 +60,13 @@ const seedCategories = [
   { id: "c1", name: "Cement", productCount: 120, isActive: true },
   { id: "c2", name: "Paints", productCount: 150, isActive: true },
   { id: "c3", name: "Steel", productCount: 100, isActive: true },
-  { id: "c4", name: "Tiles", productCount: 95, isActive: true },
-  { id: "c5", name: "Plumbing", productCount: 80, isActive: true },
-  { id: "c6", name: "Electrical", productCount: 120, isActive: true },
+  { id: "c4", name: "Plumbing", productCount: 80, isActive: true },
+  { id: "c5", name: "Electrical", productCount: 120, isActive: true },
 ];
 
 const seedRegions = [];
 
-const seedMasterProducts = [
-  // 1. Cement (2 Real Market Products)
-  {
-    id: "mp-cement-ultratech",
-    name: "UltraTech Super Cement (PPC)",
-    categoryId: "c1",
-    categoryName: "Cement",
-    brand: "UltraTech",
-    type: "Portland Pozzolana Cement (PPC)",
-    grade: "PPC Super Grade",
-    unit: "50kg Bag",
-    suggestedPrice: 395,
-    imageUrl: "/categories/cement.png",
-    addedBy: "Admin",
-  },
-  {
-    id: "mp-cement-ambuja",
-    name: "Ambuja Plus Cool & Strong Cement",
-    categoryId: "c1",
-    categoryName: "Cement",
-    brand: "Ambuja",
-    type: "Special Composite Cement",
-    grade: "High Strength OPC/PPC",
-    unit: "50kg Bag",
-    suggestedPrice: 410,
-    imageUrl: "/categories/cement.png",
-    addedBy: "Admin",
-  },
-  // 2. Paints (2 Real Market Products)
-  {
-    id: "mp-paint-asian",
-    name: "Asian Paints Apex WeatherProof Exterior Emulsion",
-    categoryId: "c2",
-    categoryName: "Paints",
-    brand: "Asian Paints",
-    type: "Exterior Acrylic Emulsion",
-    grade: "WeatherGuard Silicone Sheen",
-    unit: "20 Litre Bucket",
-    suggestedPrice: 4850,
-    imageUrl: "/categories/paints.png",
-    addedBy: "Admin",
-  },
-  {
-    id: "mp-paint-berger",
-    name: "Berger Walmasta Anti-Fungal Exterior Emulsion",
-    categoryId: "c2",
-    categoryName: "Paints",
-    brand: "Berger",
-    type: "Water-Based Exterior Paint",
-    grade: "Anti-Fungal Matt Finish",
-    unit: "20 Litre Bucket",
-    suggestedPrice: 3250,
-    imageUrl: "/categories/paints.png",
-    addedBy: "Admin",
-  },
-  // 3. Tiles (2 Real Market Products)
-  {
-    id: "mp-tile-kajaria",
-    name: "Kajaria Double Charge Vitrified Floor Tiles (2x2 ft)",
-    categoryId: "c4",
-    categoryName: "Tiles",
-    brand: "Kajaria",
-    type: "Double Charge Vitrified Tile",
-    grade: "Nano Polish Glossy",
-    unit: "Box (4 Tiles / 15.5 Sq.Ft)",
-    suggestedPrice: 860,
-    imageUrl: "/categories/tiles.png",
-    addedBy: "Admin",
-  },
-  {
-    id: "mp-tile-somany",
-    name: "Somany Slip-Shield Glazed Porcelain Floor & Wall Tiles",
-    categoryId: "c4",
-    categoryName: "Tiles",
-    brand: "Somany",
-    type: "Glazed Vitrified (GVT)",
-    grade: "Matte Carving Anti-Skid",
-    unit: "Box (6 Tiles / 11.6 Sq.Ft)",
-    suggestedPrice: 640,
-    imageUrl: "/categories/tiles.png",
-    addedBy: "Admin",
-  },
-];
+const seedMasterProducts = [];
 const seedProducts = [];
 const seedUsers = [];
 
@@ -164,12 +81,7 @@ const loadInitialCategories = () => {
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const map = new Map(parsed.map((c) => [c.name.toLowerCase().trim(), c]));
-        seedCategories.forEach((sc) => {
-          const key = sc.name.toLowerCase().trim();
-          if (!map.has(key)) map.set(key, sc);
-        });
-        return Array.from(map.values());
+        return Array.from(new Map(parsed.map((c) => [c.name.toLowerCase().trim(), c])).values());
       }
     }
   } catch {}
@@ -301,18 +213,10 @@ const loadInitialMasterProducts = () => {
     const saved = localStorage.getItem(MASTER_PRODUCTS_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const combined = [...parsed];
-        seedMasterProducts.forEach((sp) => {
-          if (!combined.some((m) => m.name.toLowerCase().trim() === sp.name.toLowerCase().trim() || m.id === sp.id)) {
-            combined.push(sp);
-          }
-        });
-        return combined;
-      }
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch {}
-  return seedMasterProducts;
+  return [];
 };
 
 const loadInitialOrders = () => {
@@ -409,20 +313,14 @@ export function AdminProvider({ children }) {
       if (Array.isArray(regsRes) && regsRes.length > 0) {
         setRegions(regsRes);
       }
-      if (Array.isArray(masterRes)) {
+      if (Array.isArray(masterRes) && masterRes.length > 0) {
         const formattedMaster = masterRes.map((mp) => ({
           ...mp,
           categoryName: mp.category?.name || mp.categoryName || "General",
         }));
-        const combined = [...formattedMaster];
-        seedMasterProducts.forEach((sp) => {
-          if (!combined.some((m) => m.name.toLowerCase().trim() === sp.name.toLowerCase().trim() || m.id === sp.id)) {
-            combined.push(sp);
-          }
-        });
-        setMasterProducts(combined);
+        setMasterProducts(formattedMaster);
         try {
-          localStorage.setItem(MASTER_PRODUCTS_STORAGE_KEY, JSON.stringify(combined));
+          localStorage.setItem(MASTER_PRODUCTS_STORAGE_KEY, JSON.stringify(formattedMaster));
         } catch {}
       }
       if (Array.isArray(listingsRes)) {

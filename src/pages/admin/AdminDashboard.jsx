@@ -379,7 +379,7 @@ export default function AdminDashboard() {
     brand: "",
     type: "",
     grade: "",
-    unit: "50kg Bag",
+    unit: "",
     price: "",
     stockQty: "",
   });
@@ -544,14 +544,13 @@ export default function AdminDashboard() {
         categoryId: productForm.categoryId,
         brand: productForm.brand.trim() || "Generic",
         type: productForm.type.trim() || "Standard",
-        grade: productForm.grade.trim() || "Standard Grade",
-        unit: productForm.unit.trim() || "Piece",
+        unit: (productForm.unit || "").trim() || "50kg Bag",
         suggestedPrice: Number(productForm.price || productForm.suggestedPrice) || 100,
         imageUrl: productForm.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
         addedBy: "Admin",
       });
 
-      setProductForm({ name: "", categoryId: "", brand: "", type: "", grade: "", unit: "50kg Bag", price: "", stockQty: "" });
+      setProductForm({ name: "", categoryId: "", brand: "", type: "", grade: "", unit: "", price: "", stockQty: "" });
       setShowProductForm(false);
       showAlert({ title: "Master Product Created", message: `Master product "${productForm.name.trim()}" saved to Database successfully!`, type: "success" });
     } catch (err) {
@@ -1466,7 +1465,19 @@ export default function AdminDashboard() {
                     <select
                       required
                       value={productForm.categoryId}
-                      onChange={(e) => setProductForm({ ...productForm, categoryId: e.target.value })}
+                      onChange={(e) => {
+                        const catId = e.target.value;
+                        const cat = categories.find((c) => c.id === catId);
+                        const catName = (cat?.name || "").toLowerCase();
+                        let defaultUnit = productForm.unit;
+                        if (!productForm.unit || productForm.unit === "50kg Bag" || productForm.unit === "Piece") {
+                          if (catName.includes("cement")) defaultUnit = "50kg Bag";
+                          else if (catName.includes("paint")) defaultUnit = "20 Litre Bucket";
+                          else if (catName.includes("tile")) defaultUnit = "Box";
+                          else if (catName.includes("steel") || catName.includes("rebar")) defaultUnit = "Ton";
+                        }
+                        setProductForm({ ...productForm, categoryId: catId, unit: defaultUnit });
+                      }}
                       className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-medium"
                     >
                       <option value="">-- Select Category --</option>
@@ -1505,8 +1516,46 @@ export default function AdminDashboard() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-navy-900 mb-1">Unit Packaging</label>
-                    <input type="text" placeholder="e.g. 50kg Bag / Piece" value={productForm.unit || "50kg Bag"} onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })} className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-medium" />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-navy-900">Unit Packaging</label>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setProductForm((f) => ({ ...f, unit: "50kg Bag" }))}
+                          className="text-[9px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-1.5 py-0.5 rounded cursor-pointer"
+                        >
+                          Bag
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setProductForm((f) => ({ ...f, unit: "20 Litre Bucket" }))}
+                          className="text-[9px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-1.5 py-0.5 rounded cursor-pointer"
+                        >
+                          Bucket
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setProductForm((f) => ({ ...f, unit: "Box" }))}
+                          className="text-[9px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-1.5 py-0.5 rounded cursor-pointer"
+                        >
+                          Box
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setProductForm((f) => ({ ...f, unit: "Piece" }))}
+                          className="text-[9px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-1.5 py-0.5 rounded cursor-pointer"
+                        >
+                          Piece
+                        </button>
+                      </div>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="e.g. 50kg Bag, 20L Bucket, Box, Ton"
+                      value={productForm.unit !== undefined ? productForm.unit : ""}
+                      onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })}
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-medium focus:border-brand-500"
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-navy-900 mb-1">Suggested Price (₹) *</label>
@@ -3179,15 +3228,27 @@ export default function AdminDashboard() {
                   />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">Suggested Price (₹) *</label>
-                <input
-                  type="number"
-                  required
-                  value={editingProduct.suggestedPrice || editingProduct.price}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, suggestedPrice: e.target.value, price: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-navy-900 mb-1">Suggested Price (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    value={editingProduct.suggestedPrice || editingProduct.price}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, suggestedPrice: e.target.value, price: e.target.value })}
+                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-navy-900 mb-1">Unit Packaging</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 50kg Bag, Box, 20L"
+                    value={editingProduct.unit !== undefined ? editingProduct.unit : ""}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, unit: e.target.value })}
+                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-bold text-navy-900 mb-1">Product Image URL</label>

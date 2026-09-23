@@ -404,7 +404,9 @@ export default function AdminDashboard() {
         setDeletingVendorId(v.id);
         try {
           await removeVendor(v.id);
-          showAlert({ title: "Vendor Deleted", message: `Vendor "${v.shopName}" removed successfully.`, type: "success" });
+          showAlert({ title: "Vendor Deleted", message: `Vendor "${v.shopName}" removed successfully from database.`, type: "success" });
+        } catch (err) {
+          showAlert({ title: "Delete Failed", message: err.message || "Failed to delete vendor. Please try again or suspend the vendor instead.", type: "error" });
         } finally {
           setDeletingVendorId(null);
         }

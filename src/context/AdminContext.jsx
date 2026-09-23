@@ -1078,19 +1078,30 @@ export function AdminProvider({ children }) {
   };
 
   const removeVendor = async (id) => {
-    setVendors((prev) => prev.filter((v) => v.id !== id));
     try {
       const res = await authFetch(`${API_BASE_URL}/api/v1/vendors/${id}`, {
         method: "DELETE",
       });
       if (res.ok) {
+        setVendors((prev) => {
+          const updated = prev.filter((v) => v.id !== id);
+          try {
+            localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
         await fetchCloudData();
+        return { success: true };
       } else {
         const errData = await res.json().catch(() => ({}));
         console.warn("Delete vendor warning:", errData);
+        await fetchCloudData();
+        throw new Error(errData.error || "Failed to delete vendor from database");
       }
     } catch (err) {
       console.warn("Delete vendor network error:", err.message);
+      await fetchCloudData();
+      throw err;
     }
   };
 

@@ -649,11 +649,14 @@ export default function DrDashboard() {
       onConfirm: async () => {
         setDeletingVendorId(v.id);
         try {
-          setDirectVendors((prev) => prev.filter((item) => item.id !== v.id));
           await removeVendor(v.id);
+          setDirectVendors((prev) => prev.filter((item) => item.id !== v.id));
           await fetchLiveVendorsDirect();
           window.dispatchEvent(new CustomEvent("buildcity_vendors_updated"));
-          showAlert({ title: "Vendor Deleted", message: `Vendor "${v.shopName}" removed successfully.`, type: "success" });
+          showAlert({ title: "Vendor Deleted", message: `Vendor "${v.shopName}" removed successfully from database.`, type: "success" });
+        } catch (err) {
+          await fetchLiveVendorsDirect();
+          showAlert({ title: "Delete Failed", message: err.message || "Failed to delete vendor from database. Try suspending instead.", type: "error" });
         } finally {
           setDeletingVendorId(null);
         }

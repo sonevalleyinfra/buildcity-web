@@ -287,14 +287,14 @@ export function AuthProvider({ children }) {
     return userObj;
   };
 
-  const vendorLogin = async ({ phone, password }) => {
+  const vendorLogin = async ({ phone, password, fcmToken }) => {
     const cleanPhone = phone.trim().replace(/\D/g, "");
     const cleanPassword = password.trim();
 
     const response = await authFetch(`/api/v1/auth/vendor/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: cleanPhone, password: cleanPassword }),
+      body: JSON.stringify({ phone: cleanPhone, password: cleanPassword, fcmToken }),
     });
 
     const data = await response.json();

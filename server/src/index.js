@@ -320,7 +320,7 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
 // Password Login Endpoint — Phone & Password Login for Admin, DR, and Vendor Partners
 app.post("/api/v1/auth/vendor/login", async (req, res) => {
   try {
-    const { phone, password } = req.body;
+    const { phone, password, fcmToken } = req.body;
     if (!phone || !password) {
       return res.status(400).json({ error: "Mobile number and Password are required." });
     }
@@ -467,6 +467,21 @@ app.post("/api/v1/auth/vendor/login", async (req, res) => {
       tokenVersion: resUser.tokenVersion || 1,
     };
     const token = issueToken(vendorUserObj);
+
+    // ⚡ Atomic FCM Device Token Registration directly during login:
+    // Guarantees the token is saved in DB BEFORE the login response returns!
+    if (fcmToken) {
+      try {
+        const { saveToken } = require("./pushService");
+        const vId = vendor?.id || vendor?.userId || resUser.id;
+        if (vId) {
+          await saveToken(vId, fcmToken, cleanPhone);
+          console.log(`✅ Atomic FCM device token saved during login for vendor ${vId}`);
+        }
+      } catch (fcmErr) {
+        console.warn("Login FCM save note:", fcmErr.message);
+      }
+    }
 
     res.json({
       success: true,

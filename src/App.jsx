@@ -130,8 +130,13 @@ import ErrorBoundary from "./components/ErrorBoundary";
 
 import FirstTimeLocationModal from "./components/FirstTimeLocationModal";
 import FloatingCartBar from "./components/FloatingCartBar";
+import { preRegisterDeviceTokenOnBoot } from "./utils/pushNotifications";
 
 export default function App() {
+  useEffect(() => {
+    preRegisterDeviceTokenOnBoot().catch(() => {});
+  }, []);
+
   return (
     <ErrorBoundary>
       {Capacitor.isNativePlatform() && <SplashScreen minDuration={1200} />}

@@ -5,7 +5,7 @@ import Button from "../../components/Button";
 import { useAuth } from "../../context/AuthContext";
 
 import { Capacitor } from "@capacitor/core";
-import { initVendorPushNotifications } from "../../utils/pushNotifications";
+import { initVendorPushNotifications, getDeviceFcmToken } from "../../utils/pushNotifications";
 
 const isVendorApp = import.meta.env.VITE_APP_MODE === "vendor" || Capacitor.isNativePlatform();
 
@@ -170,7 +170,21 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const userObj = await vendorLogin({ phone: phone.trim(), password: password.trim() });
+      // ⚡ Grab or await device FCM token so it is sent directly in the login API call!
+      let fcmToken = null;
+      try {
+        fcmToken = localStorage.getItem("buildcity_permanent_device_token") || localStorage.getItem("vendor_fcm_token");
+        if (!fcmToken && Capacitor.isNativePlatform()) {
+          fcmToken = await getDeviceFcmToken(1500);
+        }
+      } catch (_) {}
+
+      const userObj = await vendorLogin({
+        phone: phone.trim(),
+        password: password.trim(),
+        fcmToken,
+      });
+
       const vid = userObj?.vendorInfo?.id || userObj?.vendorId || userObj?.id;
       if (vid) {
         initVendorPushNotifications(vid, { phone: phone.trim() }).catch(() => {});

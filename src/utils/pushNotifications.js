@@ -8,6 +8,97 @@ let isRegistered = false;
 let currentRegisteredVendorId = null;
 
 /**
+ * Proactively registers and obtains the FCM device token on native app boot.
+ * Does NOT wait for user to log in! This guarantees the token is already in memory/localStorage
+ * before the user even enters their credentials.
+ */
+export async function preRegisterDeviceTokenOnBoot() {
+  if (!Capacitor.isNativePlatform()) return;
+
+  try {
+    let perm = await PushNotifications.checkPermissions();
+    if (perm.receive !== "granted") {
+      perm = await PushNotifications.requestPermissions();
+    }
+
+    if (perm.receive === "granted") {
+      try {
+        await PushNotifications.createChannel({
+          id: "vendor_order_alerts",
+          name: "Customer Order Alerts",
+          description: "Loud notifications when a new customer order arrives",
+          importance: 5,
+          visibility: 1,
+          vibration: true,
+          sound: "default",
+        });
+      } catch (_) {}
+
+      try {
+        await LocalNotifications.createChannel({
+          id: "vendor_order_alerts",
+          name: "Customer Order Alerts",
+          description: "Loud notifications when a new customer order arrives",
+          importance: 5,
+          visibility: 1,
+          vibration: true,
+          sound: "default",
+        });
+      } catch (_) {}
+
+      await PushNotifications.addListener("registration", (token) => {
+        if (!token?.value) return;
+        console.log("📱 Device FCM Token ready on boot:", token.value.substring(0, 15) + "...");
+        try {
+          localStorage.setItem("vendor_fcm_token", token.value);
+          localStorage.setItem("buildcity_permanent_device_token", token.value);
+        } catch (_) {}
+      });
+
+      await PushNotifications.register();
+    }
+  } catch (err) {
+    console.warn("Boot push registration note:", err.message);
+  }
+}
+
+/**
+ * Gets cached token or waits up to maxWaitMs for registration event
+ */
+export async function getDeviceFcmToken(maxWaitMs = 2000) {
+  try {
+    const cached = localStorage.getItem("buildcity_permanent_device_token") || localStorage.getItem("vendor_fcm_token");
+    if (cached) return cached;
+  } catch (_) {}
+
+  if (!Capacitor.isNativePlatform()) return null;
+
+  return new Promise((resolve) => {
+    let resolved = false;
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        resolve(localStorage.getItem("buildcity_permanent_device_token") || null);
+      }
+    }, maxWaitMs);
+
+    PushNotifications.addListener("registration", (token) => {
+      if (!resolved && token?.value) {
+        resolved = true;
+        clearTimeout(timeout);
+        try {
+          localStorage.setItem("vendor_fcm_token", token.value);
+          localStorage.setItem("buildcity_permanent_device_token", token.value);
+        } catch (_) {}
+        resolve(token.value);
+      }
+    }).catch(() => {});
+
+    PushNotifications.register().catch(() => {});
+  });
+}
+
+/**
  * Initializes and registers FCM Push Notifications for the logged-in vendor.
  * Works even when the app is completely killed or swiped away.
  */

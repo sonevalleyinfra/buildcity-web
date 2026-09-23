@@ -103,9 +103,20 @@ export const POLICIES = {
           "Payment information is processed securely through authorized payment gateways. BuildCity does not unnecessarily store sensitive payment credentials such as debit/credit card CVVs, passwords, or banking PINs.",
       },
       {
-        heading: "Your Privacy Rights",
+        heading: "Your Privacy Rights & Choices",
         content:
           "You may contact us at any time to request review, correction, or update of your personal information, subject to applicable regulatory requirements.",
+      },
+      {
+        heading: "Account and Associated Data Deletion Policy",
+        content:
+          "BuildCity provides all users and partner vendors with complete control over their personal data.\n\n" +
+          "• How to Request Account Deletion:\n" +
+          "Users and vendors can request permanent deletion of their BuildCity account and associated data by sending an email from their registered email address or mobile number to infor@buildcity.in with the subject line 'Account Deletion Request' or by contacting our Grievance Officer at +91 6291782061.\n\n" +
+          "• Types of Data That Will Be Deleted:\n" +
+          "Upon verification, we will permanently purge your login credentials, user profile information (name, email, phone number), uploaded store listings, product catalogues, and personal preferences from our active systems within 30 days.\n\n" +
+          "• Data Retention Period & Exceptions:\n" +
+          "Completed commercial order invoices, payment transaction receipts, and GST/statutory compliance logs will be retained for the minimum statutory period strictly required under applicable Indian laws, tax regulations, and accounting standards.",
       },
       {
         heading: "Contact for Privacy Matters",

@@ -104,20 +104,47 @@ async function saveToken(vendorId, token, phone = null) {
     console.warn("File token save note:", err.message);
   }
 
-  // 3. Supabase DB Persistence (Permanent)
+  // 3. Supabase DB Persistence with vendor ID cross-linking
   try {
     const p = getPrisma();
     if (p) {
-      await p.$executeRawUnsafe(
-        `INSERT INTO vendor_fcm_tokens (vendor_id, token, phone, updated_at)
-         VALUES ($1, $2, $3, NOW())
-         ON CONFLICT (vendor_id)
-         DO UPDATE SET token = EXCLUDED.token, phone = COALESCE(EXCLUDED.phone, vendor_fcm_tokens.phone), updated_at = NOW()`,
-        vIdStr,
-        tokenStr,
-        phoneStr
-      );
-      console.log(`✅ Saved FCM push token to Supabase DB for vendor: ${vIdStr}`);
+      // Find linked vendor record to save token for both vendor.id and vendor.userId
+      const cleanPhone = (phoneStr || "").replace(/\D/g, "").slice(-10);
+      const vRec = await p.vendor.findFirst({
+        where: {
+          OR: [
+            { id: vIdStr },
+            { userId: vIdStr },
+            ...(cleanPhone.length >= 7 ? [{ phone: { contains: cleanPhone } }] : []),
+          ],
+        },
+        select: { id: true, userId: true, phone: true },
+      }).catch(() => null);
+
+      const idsToSave = new Set([vIdStr]);
+      if (vRec?.id) idsToSave.add(vRec.id);
+      if (vRec?.userId) idsToSave.add(vRec.userId);
+
+      const targetPhone = phoneStr || vRec?.phone || null;
+
+      for (const saveId of idsToSave) {
+        memoryTokens[saveId] = {
+          token: tokenStr,
+          phone: targetPhone,
+          updatedAt: new Date().toISOString(),
+        };
+
+        await p.$executeRawUnsafe(
+          `INSERT INTO vendor_fcm_tokens (vendor_id, token, phone, updated_at)
+           VALUES ($1, $2, $3, NOW())
+           ON CONFLICT (vendor_id)
+           DO UPDATE SET token = EXCLUDED.token, phone = COALESCE(EXCLUDED.phone, vendor_fcm_tokens.phone), updated_at = NOW()`,
+          saveId,
+          tokenStr,
+          targetPhone
+        ).catch(() => null);
+      }
+      console.log(`✅ Saved FCM push token to Supabase DB for vendor: ${[...idsToSave].join(", ")}`);
     }
   } catch (dbErr) {
     console.warn("DB token save note:", dbErr.message);
@@ -127,32 +154,29 @@ async function saveToken(vendorId, token, phone = null) {
 }
 
 /**
- * Retrieves FCM token using a 5-tier fallback:
- * 1. In-memory cache
- * 2. Local JSON file
- * 3. Supabase DB lookup by vendor_id
- * 4. Supabase DB lookup by vendor phone
- * 5. Supabase DB most recently registered active vendor token
+ * Retrieves FCM token strictly for the designated vendor.
+ * NEVER falls back to other random vendors!
  */
 async function getTokenForVendor(vendorId, phone = null) {
   const vIdStr = vendorId ? String(vendorId).trim() : "";
+  const phoneStr = phone ? String(phone).trim() : null;
 
-  // 1. In-memory
+  // 1. Direct in-memory cache lookup
   if (vIdStr && memoryTokens[vIdStr]?.token) {
     return memoryTokens[vIdStr].token;
   }
 
-  // 2. Local file
+  // 2. Direct local file lookup
   const localTokens = loadTokens();
   if (vIdStr && localTokens[vIdStr]?.token) {
     memoryTokens[vIdStr] = localTokens[vIdStr];
     return localTokens[vIdStr].token;
   }
 
-  // 3. Supabase DB queries
   const p = getPrisma();
   if (p) {
     try {
+      // 3. Direct DB lookup by vendor_id
       if (vIdStr) {
         const rows = await p.$queryRawUnsafe(
           `SELECT token FROM vendor_fcm_tokens WHERE vendor_id = $1 LIMIT 1`,
@@ -164,13 +188,45 @@ async function getTokenForVendor(vendorId, phone = null) {
         }
       }
 
-      // 4. Fallback by phone
-      if (phone) {
-        const cleanPhone = String(phone).replace(/\D/g, "").slice(-10);
-        if (cleanPhone.length >= 7) {
+      // 4. Resolve vendor record to check candidate IDs (vendor.id, vendor.userId) and vendor phone
+      const cleanPhone = (phoneStr || "").replace(/\D/g, "").slice(-10);
+      const vendorRecord = await p.vendor.findFirst({
+        where: {
+          OR: [
+            ...(vIdStr ? [{ id: vIdStr }, { userId: vIdStr }] : []),
+            ...(cleanPhone.length >= 7 ? [{ phone: { contains: cleanPhone } }] : []),
+          ],
+        },
+        select: { id: true, userId: true, phone: true },
+      }).catch(() => null);
+
+      if (vendorRecord) {
+        const candidateIds = [vendorRecord.id, vendorRecord.userId].filter(Boolean);
+        const candidatePhone = (vendorRecord.phone || "").replace(/\D/g, "").slice(-10);
+
+        // Check memory / local with linked IDs
+        for (const cId of candidateIds) {
+          if (memoryTokens[cId]?.token) return memoryTokens[cId].token;
+          if (localTokens[cId]?.token) return localTokens[cId].token;
+        }
+
+        // Check DB for any linked candidateId
+        for (const cId of candidateIds) {
+          const linkedRows = await p.$queryRawUnsafe(
+            `SELECT token FROM vendor_fcm_tokens WHERE vendor_id = $1 LIMIT 1`,
+            cId
+          );
+          if (linkedRows && linkedRows.length > 0 && linkedRows[0].token) {
+            memoryTokens[vIdStr] = { token: linkedRows[0].token };
+            return linkedRows[0].token;
+          }
+        }
+
+        // Check DB for vendor's registered phone
+        if (candidatePhone.length >= 7) {
           const phoneRows = await p.$queryRawUnsafe(
             `SELECT token FROM vendor_fcm_tokens WHERE phone LIKE $1 LIMIT 1`,
-            `%${cleanPhone}%`
+            `%${candidatePhone}%`
           );
           if (phoneRows && phoneRows.length > 0 && phoneRows[0].token) {
             return phoneRows[0].token;
@@ -178,18 +234,23 @@ async function getTokenForVendor(vendorId, phone = null) {
         }
       }
 
-      // 5. Fallback to most recently registered active vendor token
-      const latestRows = await p.$queryRawUnsafe(
-        `SELECT token FROM vendor_fcm_tokens ORDER BY updated_at DESC LIMIT 1`
-      );
-      if (latestRows && latestRows.length > 0 && latestRows[0].token) {
-        return latestRows[0].token;
+      // 5. Fallback strictly by vendor phone passed in
+      if (cleanPhone.length >= 7) {
+        const phoneRows = await p.$queryRawUnsafe(
+          `SELECT token FROM vendor_fcm_tokens WHERE phone LIKE $1 LIMIT 1`,
+          `%${cleanPhone}%`
+        );
+        if (phoneRows && phoneRows.length > 0 && phoneRows[0].token) {
+          return phoneRows[0].token;
+        }
       }
     } catch (dbErr) {
       console.warn("DB token lookup note:", dbErr.message);
     }
   }
 
+  // ⚠️ CRITICAL: Strictly return null if THIS specific vendor has no registered device.
+  // NEVER send push to random vendors!
   return null;
 }
 

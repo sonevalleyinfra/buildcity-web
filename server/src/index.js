@@ -2851,16 +2851,23 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
           const vId = item.vendorId;
           if (!vId) continue;
           if (!vendorGroups[vId]) {
-            vendorGroups[vId] = { count: 0, amount: 0 };
+            vendorGroups[vId] = {
+              count: 0,
+              amount: 0,
+              phone: item.vendor?.phone || null,
+            };
           }
           vendorGroups[vId].count += (item.quantity || 1);
           vendorGroups[vId].amount += Number(item.totalPrice || item.priceAtPurchase || 0);
+          if (!vendorGroups[vId].phone && item.vendor?.phone) {
+            vendorGroups[vId].phone = item.vendor.phone;
+          }
         }
 
         for (const [vendorId, vData] of Object.entries(vendorGroups)) {
           await sendVendorOrderPushNotification({
             vendorId,
-            phone: fullOrder.customer?.phone,
+            phone: vData.phone,
             orderNumber: fullOrder.orderNumber || fullOrder.id,
             amount: vData.amount + (Number(fullOrder.deliveryFee) || 0),
             itemCount: vData.count,

@@ -56,6 +56,24 @@ function getPrisma() {
   return dbClient;
 }
 
+let tableChecked = false;
+async function ensureTokenTable(p) {
+  if (tableChecked || !p) return;
+  try {
+    await p.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS vendor_fcm_tokens (
+        vendor_id TEXT PRIMARY KEY,
+        token TEXT NOT NULL,
+        phone TEXT,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `);
+    tableChecked = true;
+  } catch (e) {
+    console.warn("Table ensure note:", e.message);
+  }
+}
+
 // Ensure data directory exists for secondary backup token storage
 const dataDir = path.join(__dirname, "../data");
 if (!fs.existsSync(dataDir)) {
@@ -108,6 +126,7 @@ async function saveToken(vendorId, token, phone = null) {
   try {
     const p = getPrisma();
     if (p) {
+      await ensureTokenTable(p);
       // Find linked vendor record to save token for both vendor.id and vendor.userId
       const cleanPhone = (phoneStr || "").replace(/\D/g, "").slice(-10);
       const vRec = await p.vendor.findFirst({
@@ -227,6 +246,7 @@ async function removeToken(vendorId, token = null) {
   const p = getPrisma();
   if (p) {
     try {
+      await ensureTokenTable(p);
       if (tokenStr) {
         await p.$executeRawUnsafe(`DELETE FROM vendor_fcm_tokens WHERE token = $1`, tokenStr).catch(() => null);
       }
@@ -271,6 +291,7 @@ async function getTokenForVendor(vendorId, phone = null) {
   const p = getPrisma();
   if (p) {
     try {
+      await ensureTokenTable(p);
       // 3. Direct DB lookup by vendor_id
       if (vIdStr) {
         const rows = await p.$queryRawUnsafe(

@@ -5,6 +5,7 @@ import Button from "../../components/Button";
 import { useAuth } from "../../context/AuthContext";
 
 import { Capacitor } from "@capacitor/core";
+import { initVendorPushNotifications } from "../../utils/pushNotifications";
 
 const isVendorApp = import.meta.env.VITE_APP_MODE === "vendor" || Capacitor.isNativePlatform();
 
@@ -170,6 +171,10 @@ export default function Login() {
     setLoading(true);
     try {
       const userObj = await vendorLogin({ phone: phone.trim(), password: password.trim() });
+      const vid = userObj?.vendorInfo?.id || userObj?.vendorId || userObj?.id;
+      if (vid) {
+        initVendorPushNotifications(vid, { phone: phone.trim() }).catch(() => {});
+      }
       const home =
         userObj.role === "admin"
           ? "/admin/dashboard"

@@ -171,23 +171,57 @@ export default function VendorDashboard() {
   // ⚡ 0-Delay Instant Frame 1 Cache: Load previous orders immediately so screen is NEVER blank
   const [fetchedVendorOrders, setFetchedVendorOrders] = useState(() => {
     try {
+      // Check if app was opened via push notification with a pending incoming order
+      let instantStub = null;
+      try {
+        const pendingHighlightId = localStorage.getItem("buildcity_pending_highlight_order");
+        const instantOrderStr = localStorage.getItem("buildcity_instant_incoming_order");
+        if (pendingHighlightId && instantOrderStr) {
+          const instantData = JSON.parse(instantOrderStr);
+          if (instantData && (String(instantData.orderId) === String(pendingHighlightId) || String(instantData.id) === String(pendingHighlightId))) {
+            instantStub = {
+              id: String(pendingHighlightId),
+              orderNumber: String(instantData.orderNumber || pendingHighlightId),
+              status: "PENDING",
+              totalAmount: Number(instantData.amount || 0),
+              total: Number(instantData.amount || 0),
+              createdAt: new Date().toISOString(),
+              items: [],
+              customer: { name: "Customer", phone: "" },
+              address: { street: "Site Delivery Address" },
+              _isInstantStub: true,
+            };
+          }
+        }
+      } catch (_) {}
+
       const vKey = `buildcity_vendor_orders_${vendorId}`;
       const saved = localStorage.getItem(vKey) || localStorage.getItem("buildcity_last_vendor_orders");
+      let list = [];
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
       }
-      // Fallback: check any vendor order cache in localStorage
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith("buildcity_vendor_orders_")) {
-          const val = localStorage.getItem(k);
-          if (val) {
-            const p = JSON.parse(val);
-            if (Array.isArray(p) && p.length > 0) return p;
+      if (list.length === 0) {
+        // Fallback: check any vendor order cache in localStorage
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith("buildcity_vendor_orders_")) {
+            const val = localStorage.getItem(k);
+            if (val) {
+              const p = JSON.parse(val);
+              if (Array.isArray(p) && p.length > 0) { list = p; break; }
+            }
           }
         }
       }
+      if (instantStub) {
+        const exists = list.some((o) => String(o.id) === String(instantStub.id) || String(o.orderNumber) === String(instantStub.id));
+        if (!exists) {
+          return [instantStub, ...list];
+        }
+      }
+      return list;
     } catch {}
     return [];
   });
@@ -258,7 +292,7 @@ export default function VendorDashboard() {
       }
     }, 250);
 
-    // Persistent vibrant glow: Stays active for 45 seconds so vendor never misses it!
+    // ⏱️ Auto-dismiss highlight glow and badge strictly after 5 seconds!
     if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
     highlightTimerRef.current = setTimeout(() => {
       setHighlightedOrderId((curr) => (curr === orderId ? null : curr));
@@ -266,8 +300,9 @@ export default function VendorDashboard() {
         if (localStorage.getItem("buildcity_pending_highlight_order") === String(orderId)) {
           localStorage.removeItem("buildcity_pending_highlight_order");
         }
+        localStorage.removeItem("buildcity_instant_incoming_order");
       } catch (_) {}
-    }, 45000);
+    }, 5000);
   };
 
   // Auto-request notification permission on mount for native sound & alerts + FCM background push
@@ -295,10 +330,10 @@ export default function VendorDashboard() {
               // 🔔 Trigger Loud Chime Sound + Phone Vibration + Android Native Notification!
               notifyVendorNewOrder(latest);
               setNewOrderAlert(latest);
-              // Auto-dismiss popup banner after 14 seconds
+              // Auto-dismiss popup banner strictly after 5 seconds
               setTimeout(() => {
                 setNewOrderAlert((curr) => (curr?.id === latest.id ? null : curr));
-              }, 14000);
+              }, 5000);
             }
           }
 
@@ -376,7 +411,37 @@ export default function VendorDashboard() {
     const handleOrderEvent = () => syncVendorOrders();
     const handleHighlightEvent = (e) => {
       const oId = e.detail?.orderId;
-      if (oId) triggerOrderHighlight(oId);
+      if (oId) {
+        // ⚡ INSTANT OPTIMISTIC INJECTION: If this order is not yet in fetchedVendorOrders, inject it immediately!
+        try {
+          const instantOrderStr = localStorage.getItem("buildcity_instant_incoming_order");
+          if (instantOrderStr) {
+            const instantData = JSON.parse(instantOrderStr);
+            if (instantData && (String(instantData.orderId) === String(oId) || String(instantData.id) === String(oId))) {
+              setFetchedVendorOrders((prev) => {
+                const exists = prev.some((o) => String(o.id) === String(oId) || String(o.orderNumber) === String(oId));
+                if (!exists) {
+                  const stub = {
+                    id: String(oId),
+                    orderNumber: String(instantData.orderNumber || oId),
+                    status: "PENDING",
+                    totalAmount: Number(instantData.amount || 0),
+                    total: Number(instantData.amount || 0),
+                    createdAt: new Date().toISOString(),
+                    items: [],
+                    customer: { name: "Customer", phone: "" },
+                    address: { street: "Site Delivery Address" },
+                    _isInstantStub: true,
+                  };
+                  return [stub, ...prev];
+                }
+                return prev;
+              });
+            }
+          }
+        } catch (_) {}
+        triggerOrderHighlight(oId);
+      }
     };
     window.addEventListener("focus", handleFocus);
     window.addEventListener("visibilitychange", handleFocus);
@@ -2084,8 +2149,6 @@ export default function VendorDashboard() {
                           ? "border-amber-400 ring-2 ring-amber-400/80 shadow-md bg-amber-50/30"
                           : isHighlighted
                           ? "border-emerald-500 ring-4 ring-emerald-500 shadow-2xl shadow-emerald-500/40 scale-[1.02] bg-emerald-50/40 animate-pulse"
-                          : isRecentNew
-                          ? "border-amber-400 ring-2 ring-amber-400/80 shadow-md shadow-amber-300/30 bg-amber-50/20"
                           : `border-slate-200 hover:shadow-md ${statusAccentClass}`
                       }`}
                     >
@@ -2098,12 +2161,7 @@ export default function VendorDashboard() {
                             </span>
                             {isHighlighted && (
                               <span className="inline-flex items-center gap-1 bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-black text-[9.5px] px-2.5 py-0.5 rounded-full shadow-md animate-pulse">
-                                <span>🔥 NEW INCOMING ORDER</span>
-                              </span>
-                            )}
-                            {!isHighlighted && isRecentNew && (
-                              <span className="inline-flex items-center gap-1 bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-[9px] px-2 py-0.5 rounded-full shadow-sm animate-pulse">
-                                <span>⚡ NEW ORDER</span>
+                                <span>⚡ New Order</span>
                               </span>
                             )}
                             {customerStats.isRepeat && (
@@ -2293,8 +2351,6 @@ export default function VendorDashboard() {
                           className={`transition-all duration-500 ${
                             isHighlighted
                               ? "bg-emerald-100/90 ring-4 ring-emerald-500 border-l-4 border-l-emerald-600 shadow-xl scale-[1.005]"
-                              : isRecentNew
-                              ? "bg-amber-100/70 border-l-4 border-l-amber-500 shadow-sm"
                               : isPending
                               ? "bg-amber-50/40 hover:bg-amber-50/70 border-l-4 border-l-amber-500"
                               : "hover:bg-slate-50/80"
@@ -2305,16 +2361,11 @@ export default function VendorDashboard() {
                               <span className="font-extrabold text-brand-700 tracking-wide text-xs block">{formattedOrderId}</span>
                               {isHighlighted && (
                                 <span className="inline-flex items-center gap-1 bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-black text-[9px] px-2.5 py-0.5 rounded-full shadow-md animate-pulse">
-                                  <span>🔥 NEW INCOMING ORDER</span>
+                                  <span>⚡ New Order</span>
                                 </span>
                               )}
-                              {!isHighlighted && isRecentNew && (
-                                <span className="inline-flex items-center gap-1 bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-[9px] px-2 py-0.5 rounded-full shadow-sm animate-pulse">
-                                  <span>⚡ NEW</span>
-                                </span>
-                              )}
-                              {isPending && !isHighlighted && !isRecentNew && (
-                                <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-500 text-white animate-pulse">
+                              {isPending && !isHighlighted && (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-500 text-white">
                                   NEW
                                 </span>
                               )}

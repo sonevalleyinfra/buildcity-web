@@ -1,9 +1,11 @@
 import { PushNotifications } from "@capacitor/push-notifications";
+import { LocalNotifications } from "@capacitor/local-notifications";
 import { Capacitor } from "@capacitor/core";
 import { API_BASE_URL } from "../config/api";
 import { playOrderAlertChime, triggerOrderVibration } from "./orderAlertSound";
 
 let isRegistered = false;
+let currentRegisteredVendorId = null;
 
 /**
  * Initializes and registers FCM Push Notifications for the logged-in vendor.
@@ -25,7 +27,8 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
     }
   } catch (e) {}
 
-  if (isRegistered) return;
+  if (isRegistered && currentRegisteredVendorId === vendorId) return;
+  currentRegisteredVendorId = vendorId;
 
   try {
     let perm = await PushNotifications.checkPermissions();
@@ -48,6 +51,19 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
       } catch (chErr) {
         console.warn("FCM channel create note:", chErr.message);
       }
+
+      // Also ensure LocalNotifications channel exists
+      try {
+        await LocalNotifications.createChannel({
+          id: "vendor_order_alerts",
+          name: "Customer Order Alerts",
+          description: "Loud notifications when a new customer order arrives",
+          importance: 5,
+          visibility: 1,
+          vibration: true,
+          sound: "default",
+        });
+      } catch (_) {}
 
       // 2. Attach listeners FIRST before calling register()
       await PushNotifications.addListener("registration", async (token) => {
@@ -73,21 +89,69 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
         console.warn("FCM registration error note:", err.error);
       });
 
-      await PushNotifications.addListener("pushNotificationReceived", (notification) => {
-        console.log("🔔 Push Notification received:", notification.title);
+      // ⚡ Foreground notification received: Play loud sound + vibrate + show Android system heads-up alert!
+      await PushNotifications.addListener("pushNotificationReceived", async (notification) => {
+        console.log("🔔 Push Notification received (Foreground):", notification.title);
         playOrderAlertChime();
         triggerOrderVibration();
-        window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
-      });
 
-      await PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
-        console.log("👉 Push notification clicked:", action.notification.data);
-        const data = action.notification?.data || {};
+        const data = notification.data || {};
         const orderId = data.orderId || data.id || data.orderNumber;
+        const cleanOrderNumber = data.orderNumber || orderId;
+
+        // Schedule high-priority heads-up notification in Android notification drawer
+        try {
+          const notifId = (Date.now() % 100000) + Math.floor(Math.random() * 100);
+          await LocalNotifications.schedule({
+            notifications: [
+              {
+                id: notifId,
+                title: notification.title || "New Order Received!",
+                body: notification.body || (cleanOrderNumber ? `Order #${cleanOrderNumber} received • Tap to review` : "Tap to review incoming order"),
+                channelId: "vendor_order_alerts",
+                extra: { ...data, orderId, orderNumber: cleanOrderNumber },
+                smallIcon: "ic_stat_order",
+                iconColor: "#EA580C",
+              },
+            ],
+          });
+        } catch (localErr) {
+          console.warn("Local notification drop note:", localErr.message);
+        }
+
+        // Cache instant incoming order payload for 0ms render
         if (orderId) {
           try {
             localStorage.setItem("buildcity_pending_highlight_order", String(orderId));
             localStorage.setItem("buildcity_pending_highlight_time", Date.now().toString());
+            localStorage.setItem("buildcity_instant_incoming_order", JSON.stringify({
+              orderId: String(orderId),
+              orderNumber: String(cleanOrderNumber || orderId),
+              amount: data.amount || 0,
+              itemCount: data.itemCount || 1,
+            }));
+          } catch (_) {}
+          window.dispatchEvent(new CustomEvent("buildcity_order_highlight", { detail: { orderId: String(orderId) } }));
+        }
+        window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
+      });
+
+      // ⚡ User clicked notification (App opened / resumed from background or killed state)
+      await PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
+        console.log("👉 Push notification clicked:", action.notification?.data);
+        const data = action.notification?.data || {};
+        const orderId = data.orderId || data.id || data.orderNumber;
+        const cleanOrderNumber = data.orderNumber || orderId;
+        if (orderId) {
+          try {
+            localStorage.setItem("buildcity_pending_highlight_order", String(orderId));
+            localStorage.setItem("buildcity_pending_highlight_time", Date.now().toString());
+            localStorage.setItem("buildcity_instant_incoming_order", JSON.stringify({
+              orderId: String(orderId),
+              orderNumber: String(cleanOrderNumber || orderId),
+              amount: data.amount || 0,
+              itemCount: data.itemCount || 1,
+            }));
           } catch (_) {}
           window.dispatchEvent(new CustomEvent("buildcity_order_highlight", { detail: { orderId: String(orderId) } }));
         }
@@ -126,5 +190,6 @@ export async function unregisterVendorPushNotifications(vendorId) {
   } catch (e) {}
 
   isRegistered = false;
+  currentRegisteredVendorId = null;
   console.log(`🔒 Vendor FCM token successfully unlinked on logout for vendor: ${vendorId || "current"}`);
 }

@@ -1455,24 +1455,29 @@ app.delete("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), async
     if (vendor) {
       const targetId = vendor.id;
       const linkedUserId = vendor.userId;
+      const vendorPhone = vendor.phone;
 
       // 1. Delete FCM tokens
       await prisma.$executeRawUnsafe(`DELETE FROM vendor_fcm_tokens WHERE vendor_id = $1`, targetId).catch(() => null);
 
       // 2. Foreign Key constraint satisfied karne ke liye child records pehle delete karein
       await prisma.vendorProduct.deleteMany({ where: { vendorId: targetId } }).catch(() => null);
-      await prisma.orderItem.deleteMany({ where: { vendorId: targetId } }).catch(() => null);
 
       // 3. Delete Vendor record
       await prisma.vendor.delete({ where: { id: targetId } }).catch(() => null);
 
-      // 4. Delete linked User login account so no orphaned user remains
-      if (linkedUserId) {
-        await prisma.user.delete({ where: { id: linkedUserId } }).catch(() => null);
-      }
+      // 4. Delete linked User login account(s) by BOTH ID and Phone so no orphaned user can ever remain in users table
+      await prisma.user.deleteMany({
+        where: {
+          OR: [
+            ...(linkedUserId ? [{ id: linkedUserId }] : []),
+            ...(vendorPhone ? [{ phone: vendorPhone, role: "VENDOR" }] : []),
+          ],
+        },
+      }).catch(() => null);
     } else {
       // If vendor record was already gone, check if an orphaned VENDOR user exists with this ID or phone
-      const orphanedUser = await prisma.user.findFirst({
+      await prisma.user.deleteMany({
         where: {
           OR: [
             { id: rawId },
@@ -1481,13 +1486,9 @@ app.delete("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), async
           role: "VENDOR",
         },
       }).catch(() => null);
-
-      if (orphanedUser) {
-        await prisma.user.delete({ where: { id: orphanedUser.id } }).catch(() => null);
-      }
     }
 
-    res.json({ message: "Vendor deleted successfully from Supabase DB", id: rawId });
+    res.json({ message: "Vendor and associated user login deleted successfully from Supabase DB", id: rawId });
   } catch (err) {
     console.error("Delete vendor endpoint error:", err);
     res.status(500).json({ error: err.message });

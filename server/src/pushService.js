@@ -144,10 +144,105 @@ async function saveToken(vendorId, token, phone = null) {
           targetPhone
         ).catch(() => null);
       }
+
+      // ⚠️ IMPORTANT: If this physical device token was previously registered to ANY other vendor (e.g. Vendor A logged out or switched accounts on this phone),
+      // delete that old mapping immediately so Vendor A will NEVER receive alerts on this device!
+      await p.$executeRawUnsafe(
+        `DELETE FROM vendor_fcm_tokens WHERE token = $1 AND vendor_id != ALL($2::text[])`,
+        tokenStr,
+        [...idsToSave]
+      ).catch(() => null);
+
+      // Clean memoryTokens & local file for old vendors that had this device token
+      for (const [k, val] of Object.entries(memoryTokens)) {
+        if (val?.token === tokenStr && !idsToSave.has(k)) {
+          delete memoryTokens[k];
+        }
+      }
+      try {
+        const tokens = loadTokens();
+        let changed = false;
+        for (const [k, val] of Object.entries(tokens)) {
+          if (val?.token === tokenStr && !idsToSave.has(k)) {
+            delete tokens[k];
+            changed = true;
+          }
+        }
+        if (changed) {
+          fs.writeFileSync(tokensFilePath, JSON.stringify(tokens, null, 2), "utf8");
+        }
+      } catch (_) {}
+
       console.log(`✅ Saved FCM push token to Supabase DB for vendor: ${[...idsToSave].join(", ")}`);
     }
   } catch (dbErr) {
     console.warn("DB token save note:", dbErr.message);
+  }
+
+  return true;
+}
+
+/**
+ * Removes / unregisters an FCM token when a vendor logs out.
+ * Ensures the logged-out vendor will NEVER receive order alerts on this device!
+ */
+async function removeToken(vendorId, token = null) {
+  const vIdStr = vendorId ? String(vendorId).trim() : "";
+  const tokenStr = token ? String(token).trim() : "";
+
+  // 1. In-memory cleanup
+  if (vIdStr && memoryTokens[vIdStr]) {
+    delete memoryTokens[vIdStr];
+  }
+  if (tokenStr) {
+    for (const [k, val] of Object.entries(memoryTokens)) {
+      if (val?.token === tokenStr) delete memoryTokens[k];
+    }
+  }
+
+  // 2. Local file cleanup
+  try {
+    const tokens = loadTokens();
+    let changed = false;
+    if (vIdStr && tokens[vIdStr]) {
+      delete tokens[vIdStr];
+      changed = true;
+    }
+    if (tokenStr) {
+      for (const [k, val] of Object.entries(tokens)) {
+        if (val?.token === tokenStr) {
+          delete tokens[k];
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      fs.writeFileSync(tokensFilePath, JSON.stringify(tokens, null, 2), "utf8");
+    }
+  } catch (err) {
+    console.warn("File token delete note:", err.message);
+  }
+
+  // 3. Database cleanup
+  const p = getPrisma();
+  if (p) {
+    try {
+      if (tokenStr) {
+        await p.$executeRawUnsafe(`DELETE FROM vendor_fcm_tokens WHERE token = $1`, tokenStr).catch(() => null);
+      }
+      if (vIdStr) {
+        await p.$executeRawUnsafe(`DELETE FROM vendor_fcm_tokens WHERE vendor_id = $1`, vIdStr).catch(() => null);
+        const vRec = await p.vendor.findFirst({
+          where: { OR: [{ id: vIdStr }, { userId: vIdStr }] },
+          select: { id: true, userId: true },
+        }).catch(() => null);
+        if (vRec?.id) await p.$executeRawUnsafe(`DELETE FROM vendor_fcm_tokens WHERE vendor_id = $1`, vRec.id).catch(() => null);
+        if (vRec?.userId) await p.$executeRawUnsafe(`DELETE FROM vendor_fcm_tokens WHERE vendor_id = $1`, vRec.userId).catch(() => null);
+      }
+      console.log(`✅ Successfully unlinked FCM push token on logout for vendor: ${vIdStr || tokenStr}`);
+    } catch (dbErr) {
+      console.warn("DB token delete note:", dbErr.message);
+    }
   }
 
   return true;
@@ -316,6 +411,7 @@ module.exports = {
   initFirebase,
   setPrismaClient,
   saveToken,
+  removeToken,
   getTokenForVendor,
   sendVendorOrderPushNotification,
 };

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { API_BASE_URL } from "../config/api";
 import { authFetch, saveToken, clearToken } from "../config/authFetch";
+import { unregisterVendorPushNotifications } from "../utils/pushNotifications";
 
 // AuthContext setup — User authentication state, Mobile OTP verification, Supabase DB sync aur role-based routing handle karta hai
 const AuthContext = createContext(null);
@@ -332,9 +333,26 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
+    if (user) {
+      const vId = user.vendorInfo?.id || user.vendorId || user.id;
+      unregisterVendorPushNotifications(vId).catch(() => {});
+    }
     setUser(null);
     clearToken();
     localStorage.removeItem(STORAGE_KEY);
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (
+          k &&
+          (k.startsWith("buildcity_vendor_orders_") ||
+            k === "buildcity_last_vendor_orders" ||
+            k === "vendor_fcm_token")
+        ) {
+          localStorage.removeItem(k);
+        }
+      }
+    } catch (_) {}
   };
 
   return (

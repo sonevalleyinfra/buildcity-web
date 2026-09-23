@@ -99,3 +99,27 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
     console.warn("Push notification setup note:", err.message);
   }
 }
+
+/**
+ * Cleanly unlinks and unregisters the FCM Push Token from the vendor on logout.
+ * Ensures the logged-out vendor will NEVER receive notifications on this phone!
+ */
+export async function unregisterVendorPushNotifications(vendorId) {
+  try {
+    const cachedToken = localStorage.getItem("vendor_fcm_token");
+    if (cachedToken || vendorId) {
+      await fetch(`${API_BASE_URL}/api/v1/vendor/fcm-token/deregister`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vendorId, token: cachedToken }),
+      }).catch(() => {});
+    }
+  } catch (e) {}
+
+  try {
+    localStorage.removeItem("vendor_fcm_token");
+  } catch (e) {}
+
+  isRegistered = false;
+  console.log(`🔒 Vendor FCM token successfully unlinked on logout for vendor: ${vendorId || "current"}`);
+}

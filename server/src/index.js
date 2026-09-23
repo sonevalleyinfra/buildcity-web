@@ -2899,6 +2899,29 @@ app.post("/api/v1/vendor/fcm-token", async (req, res) => {
   }
 });
 
+// Vendor FCM Device Token Deregistration (Called when vendor logs out)
+app.delete("/api/v1/vendor/fcm-token", async (req, res) => {
+  try {
+    const { vendorId, token } = req.body || {};
+    const { removeToken } = require("./pushService");
+    await removeToken(vendorId, token);
+    res.json({ success: true, message: "FCM token removed successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/v1/vendor/fcm-token/deregister", async (req, res) => {
+  try {
+    const { vendorId, token } = req.body || {};
+    const { removeToken } = require("./pushService");
+    await removeToken(vendorId, token);
+    res.json({ success: true, message: "FCM token removed successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 12. PRODUCT REVIEWS ENDPOINTS (Supabase DB Persistence)
 app.get("/api/v1/reviews", async (req, res) => {
   try {

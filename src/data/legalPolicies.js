@@ -5,7 +5,7 @@ export const COMPANY_CONTACT = {
   companyName: "BuildCity",
   tagline: "India's Leading B2B & B2C Construction & Building Materials Platform",
   website: "https://www.buildcity.in/",
-  email: "infor@buildcity.in",
+  email: "sonevalleyinfra@gmail.com",
   address: "Ganeshpuri Colony, Suswahi, Chitaipur",
   city: "Varanasi",
   state: "Uttar Pradesh",
@@ -13,7 +13,7 @@ export const COMPANY_CONTACT = {
     name: "Aishwarya",
     designation: "Grievance Officer",
     contact: "6291782061",
-    email: "infor@buildcity.in",
+    email: "sonevalleyinfra@gmail.com",
   },
   supportPhone: "6291782061",
   supportWhatsApp: "919956886527",
@@ -112,7 +112,7 @@ export const POLICIES = {
         content:
           "BuildCity provides all users and partner vendors with complete control over their personal data.\n\n" +
           "• How to Request Account Deletion:\n" +
-          "Users and vendors can request permanent deletion of their BuildCity account and associated data by sending an email from their registered email address or mobile number to infor@buildcity.in with the subject line 'Account Deletion Request' or by contacting our Grievance Officer at +91 6291782061.\n\n" +
+          "Users and vendors can request permanent deletion of their BuildCity account and associated data by sending an email from their registered email address or mobile number to sonevalleyinfra@gmail.com with the subject line 'Account Deletion Request' or by contacting our Grievance Officer at +91 6291782061.\n\n" +
           "• Types of Data That Will Be Deleted:\n" +
           "Upon verification, we will permanently purge your login credentials, user profile information (name, email, phone number), uploaded store listings, product catalogues, and personal preferences from our active systems within 30 days.\n\n" +
           "• Data Retention Period & Exceptions:\n" +
@@ -121,7 +121,7 @@ export const POLICIES = {
       {
         heading: "Contact for Privacy Matters",
         content:
-          "For any privacy-related queries or grievances, contact:\nBuildCity Customer Support\nEmail: infor@buildcity.in\nPhone: 6291782061\nAddress: Ganeshpuri Colony, Suswahi, Chitaipur",
+          "For any privacy-related queries or grievances, contact:\nBuildCity Customer Support\nEmail: sonevalleyinfra@gmail.com\nPhone: 6291782061\nAddress: Ganeshpuri Colony, Suswahi, Chitaipur",
       },
     ],
   },
@@ -201,12 +201,12 @@ export const POLICIES = {
       {
         heading: "14. Grievance Redressal Officer",
         content:
-          "In accordance with the Information Technology Act and rules made thereunder, the contact details of the Grievance Officer are provided below:\n• Name: Aishwarya\n• Designation: Grievance Officer\n• Contact Phone: 6291782061\n• Official Email: infor@buildcity.in",
+          "In accordance with the Information Technology Act and rules made thereunder, the contact details of the Grievance Officer are provided below:\n• Name: Aishwarya\n• Designation: Grievance Officer\n• Contact Phone: 6291782061\n• Official Email: sonevalleyinfra@gmail.com",
       },
       {
         heading: "15. Contact Information",
         content:
-          "BuildCity Corporate Office\nWebsite: https://www.buildcity.in/\nAddress: Ganeshpuri Colony, Suswahi, Chitaipur\nEmail: infor@buildcity.in\n\nBy registering, accessing, or using BuildCity, all users agree to these Terms & Conditions.",
+          "BuildCity Corporate Office\nWebsite: https://www.buildcity.in/\nAddress: Ganeshpuri Colony, Suswahi, Chitaipur\nEmail: sonevalleyinfra@gmail.com\n\nBy registering, accessing, or using BuildCity, all users agree to these Terms & Conditions.",
       },
     ],
   },
@@ -261,7 +261,7 @@ export const POLICIES = {
       {
         heading: "9. Contact Us & Policy Updates",
         content:
-          "For any questions or concerns regarding delivery or this Shipping Policy, please contact:\nBuildCity Support\nWebsite: www.buildcity.in\nAddress: Ganeshpuri Colony, Suswahi, Chitaipur.\nEmail: infor@buildcity.in\nGrievance Officer: Aishwarya\nContact: 6291782061.\n\nPolicy Updates: BuildCity may update or modify this Shipping Policy from time to time. Any updated version will be made available through the BuildCity website or application.",
+          "For any questions or concerns regarding delivery or this Shipping Policy, please contact:\nBuildCity Support\nWebsite: www.buildcity.in\nAddress: Ganeshpuri Colony, Suswahi, Chitaipur.\nEmail: sonevalleyinfra@gmail.com\nGrievance Officer: Aishwarya\nContact: 6291782061.\n\nPolicy Updates: BuildCity may update or modify this Shipping Policy from time to time. Any updated version will be made available through the BuildCity website or application.",
       },
     ],
   },

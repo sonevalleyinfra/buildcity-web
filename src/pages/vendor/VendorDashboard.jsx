@@ -928,24 +928,31 @@ export default function VendorDashboard() {
   // Live Status Change handler with real-time loading feedback & instant synchronous persistence
   const handleStatusChange = async (orderId, newStatus) => {
     if (!orderId || !newStatus) return;
-    setStatusTransition({ orderId, targetStatus: newStatus });
-    setUpdatingOrderId(orderId);
-
-    // Save to optimistic map with timestamp so background sync won't revert it
-    optimisticStatusMapRef.current.set(orderId, { status: newStatus, timestamp: Date.now() });
-
-    // 1. Instant optimistic state + localStorage update so refresh never shows stale status!
-    setFetchedVendorOrders((prev) => {
-      const updated = prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o));
-      try {
-        localStorage.setItem(`buildcity_vendor_orders_${vendorId}`, JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
+    const cleanId = String(orderId);
+    setStatusTransition({ orderId: cleanId, targetStatus: newStatus });
+    setUpdatingOrderId(cleanId);
 
     const startTime = Date.now();
     try {
+      // 1. Send status update to server in background
       await updateOrderStatus(orderId, newStatus);
+
+      // 2. Enforce 2.5 seconds visible loading window on the CURRENT status card so vendor clearly sees it loading
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, 2500 - elapsed);
+      if (remaining > 0) {
+        await new Promise((resolve) => setTimeout(resolve, remaining));
+      }
+
+      // 3. NOW update local state so the order smoothly moves to its new status / tab!
+      optimisticStatusMapRef.current.set(orderId, { status: newStatus, timestamp: Date.now() });
+      setFetchedVendorOrders((prev) => {
+        const updated = prev.map((o) => (String(o.id) === cleanId ? { ...o, status: newStatus } : o));
+        try {
+          localStorage.setItem(`buildcity_vendor_orders_${vendorId}`, JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
     } catch (err) {
       console.warn("Status change error:", err);
       optimisticStatusMapRef.current.delete(orderId);
@@ -955,12 +962,6 @@ export default function VendorDashboard() {
         type: "warning",
       });
     } finally {
-      // 2.4 second loading window so vendor clearly sees the order moving to its new status
-      const elapsed = Date.now() - startTime;
-      const remaining = Math.max(0, 2400 - elapsed);
-      if (remaining > 0) {
-        await new Promise((resolve) => setTimeout(resolve, remaining));
-      }
       setUpdatingOrderId(null);
       setStatusTransition(null);
     }
@@ -2079,7 +2080,9 @@ export default function VendorDashboard() {
                       id={`vendor-order-${ord.id}`}
                       data-order-id={ord.id}
                       className={`bg-white rounded-2xl p-3.5 border shadow-sm space-y-2.5 transition-all duration-500 ${
-                        isHighlighted
+                        String(statusTransition?.orderId) === String(ord.id)
+                          ? "border-amber-400 ring-2 ring-amber-400/80 shadow-md bg-amber-50/30"
+                          : isHighlighted
                           ? "border-emerald-500 ring-4 ring-emerald-500 shadow-2xl shadow-emerald-500/40 scale-[1.02] bg-emerald-50/40 animate-pulse"
                           : isRecentNew
                           ? "border-amber-400 ring-2 ring-amber-400/80 shadow-md shadow-amber-300/30 bg-amber-50/20"
@@ -2176,7 +2179,7 @@ export default function VendorDashboard() {
                         </div>
 
                         <div className="flex items-center gap-1.5">
-                          {statusTransition?.orderId === ord.id ? (
+                          {statusTransition && String(statusTransition.orderId) === String(ord.id) ? (
                             <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-300 rounded-lg text-amber-900 font-extrabold text-[11px] shadow-xs animate-pulse">
                               <span className="w-3 h-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin shrink-0" />
                               <span>
@@ -2193,7 +2196,7 @@ export default function VendorDashboard() {
                             </div>
                           ) : (
                             <select
-                              disabled={updatingOrderId === ord.id}
+                              disabled={Boolean(updatingOrderId && String(updatingOrderId) === String(ord.id))}
                               value={ord.status || "PENDING"}
                               onChange={(e) => handleStatusChange(ord.id, e.target.value)}
                               className="bg-slate-50 hover:bg-slate-100 border border-slate-200 font-extrabold text-[11px] text-navy-900 rounded-lg px-2 py-1 outline-none focus:border-brand-500 cursor-pointer shadow-2xs transition-all"
@@ -2383,7 +2386,7 @@ export default function VendorDashboard() {
                           </td>
                           <td className="py-3.5 px-4">
                             <div className="flex items-center gap-1.5">
-                              {statusTransition?.orderId === ord.id ? (
+                              {statusTransition && String(statusTransition.orderId) === String(ord.id) ? (
                                 <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-300 rounded-lg text-amber-900 font-extrabold text-xs shadow-xs animate-pulse">
                                   <span className="w-3.5 h-3.5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin shrink-0" />
                                   <span>
@@ -2400,7 +2403,7 @@ export default function VendorDashboard() {
                                 </div>
                               ) : (
                                 <select
-                                  disabled={updatingOrderId === ord.id}
+                                  disabled={Boolean(updatingOrderId && String(updatingOrderId) === String(ord.id))}
                                   value={ord.status || "PENDING"}
                                   onChange={(e) => handleStatusChange(ord.id, e.target.value)}
                                   className="bg-slate-50 hover:bg-slate-100 border border-slate-200 font-bold text-xs text-navy-900 rounded-lg px-2.5 py-1.5 outline-none focus:border-brand-500 cursor-pointer shadow-2xs transition-all"

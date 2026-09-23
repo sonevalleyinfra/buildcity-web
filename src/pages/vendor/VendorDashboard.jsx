@@ -799,10 +799,10 @@ export default function VendorDashboard() {
 
       setSelectedMasterProd(null);
       showAlert({
-        title: "✅ Added to Your Store",
-        message: `"${prodName}" has been successfully added to your store!\n\nSelling Price: ₹${targetPrice} (${targetDisc}% OFF)\nStock: ${vendorStockQty}\nThis product is now live in your store!`,
+        title: "✅ Submitted for Review",
+        message: `"${prodName}" has been submitted for review!\n\nStatus: ⏳ Under Admin & DR Review\nSelling Price: ₹${targetPrice} (${targetDisc}% OFF)\nStock: ${vendorStockQty}\nOnce approved by Admin or DR, this product will go live on the customer store.`,
         type: "success",
-        buttonText: "Awesome",
+        buttonText: "Understood",
       });
     } catch (err) {
       showAlert({
@@ -1558,11 +1558,13 @@ export default function VendorDashboard() {
 
                           {/* Top-Right Approval Status Pill */}
                           <span className={`absolute top-1 right-1 text-[8px] font-bold px-1.5 py-0.2 rounded leading-none shadow-2xs ${
-                            p.approvalStatus === "REJECTED"
+                            p.approvalStatus === "PENDING_REVIEW"
+                              ? "bg-amber-100 text-amber-800 border border-amber-200"
+                              : p.approvalStatus === "REJECTED"
                               ? "bg-rose-100 text-rose-800 border border-rose-200"
                               : "bg-emerald-50 text-emerald-700 border border-emerald-200"
                           }`}>
-                            {p.approvalStatus === "REJECTED" ? "Rejected" : "Live"}
+                            {p.approvalStatus === "PENDING_REVIEW" ? "Review" : p.approvalStatus === "REJECTED" ? "Rejected" : "Live"}
                           </span>
 
                           {/* Bottom-Right Unit Pill */}
@@ -1671,7 +1673,11 @@ export default function VendorDashboard() {
                           </span>
                         </td>
                         <td className="py-3.5 px-4">
-                          {p.approvalStatus === "REJECTED" ? (
+                          {p.approvalStatus === "PENDING_REVIEW" ? (
+                            <span className="bg-amber-50 text-amber-700 border border-amber-200/80 px-2.5 py-1 rounded-full text-[11px] font-bold block w-fit">
+                              ⏳ Under Review
+                            </span>
+                          ) : p.approvalStatus === "REJECTED" ? (
                             <span className="bg-rose-50 text-rose-700 border border-rose-200/80 px-2.5 py-1 rounded-full text-[11px] font-bold block w-fit">
                               🔴 Rejected
                             </span>

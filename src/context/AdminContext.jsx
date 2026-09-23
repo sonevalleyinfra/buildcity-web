@@ -202,13 +202,7 @@ const loadInitialProducts = () => {
     const saved = localStorage.getItem(PRODUCTS_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((p) => ({
-          ...p,
-          approvalStatus: p.approvalStatus === "REJECTED" ? "REJECTED" : "APPROVED",
-          isActive: p.approvalStatus !== "REJECTED" && p.isActive !== false,
-        }));
-      }
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch {}
   return [];
@@ -335,9 +329,10 @@ export function AdminProvider({ children }) {
           const isVendorSuspended = l.vendor?.status === "SUSPENDED";
           const resolvedRegionName = l.regionName || l.districtName || l.vendor?.region?.name || "Mirzapur";
           const resolvedRegionId = l.regionId || l.vendor?.regionId || l.vendor?.region?.id || "mirzapur";
-          const isExplicitlyRejected = l.approvalStatus === "REJECTED";
-          const resolvedApproval = isExplicitlyRejected ? "REJECTED" : "APPROVED";
-          const resolvedIsActive = !isExplicitlyRejected && !isVendorSuspended && l.isActive !== false;
+          const rawStatus = (l.approvalStatus || "").toUpperCase().trim();
+          const isListingApproved = rawStatus === "APPROVED";
+          const resolvedApproval = rawStatus === "REJECTED" ? "REJECTED" : isListingApproved ? "APPROVED" : "PENDING_REVIEW";
+          const resolvedIsActive = isListingApproved && !isVendorSuspended && l.isActive !== false;
           const matchedMaster = masterList.find((m) => m.id === l.masterProductId) || {};
 
           return {
@@ -1751,12 +1746,12 @@ export function AdminProvider({ children }) {
       price: Number(price) || (mp ? mp.suggestedPrice : 100),
       stockQty: Number(stockQty) || 100,
       imageUrl: (mp && mp.imageUrl) ? mp.imageUrl : "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
-      isActive: true,
-      approvalStatus: "APPROVED",
+      isActive: (addedBy === "Admin" || addedBy === "DR") ? true : false,
+      approvalStatus: (addedBy === "Admin" || addedBy === "DR") ? "APPROVED" : "PENDING_REVIEW",
       addedBy: addedBy || "Vendor",
     };
 
-    // 1. Instant Optimistic UI update: Show in vendor dashboard immediately (0ms)
+    // 1. Instant Optimistic UI update: Show in vendor dashboard consistently (0ms, no flicker)
     setProducts((prev) => [optimisticListing, ...prev]);
 
     try {
@@ -1774,27 +1769,20 @@ export function AdminProvider({ children }) {
           mrp,
           stockQty,
           addedBy,
-          approvalStatus: "APPROVED",
-          isActive: true,
+          approvalStatus: optimisticListing.approvalStatus,
+          isActive: optimisticListing.isActive,
         }),
       });
       if (res.ok) {
         const createdItem = await res.json().catch(() => null);
         if (createdItem && createdItem.id) {
-          // Send server status patch to guarantee backend marks it APPROVED
-          authFetch(`${API_BASE_URL}/api/v1/vendor/listings/${createdItem.id}/status`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ approvalStatus: "APPROVED" }),
-          }).catch(() => null);
-
           const resolvedItem = {
             ...optimisticListing,
             ...createdItem,
             id: createdItem.id,
             imageUrl: createdItem.imageUrl || mp?.imageUrl || optimisticListing.imageUrl,
-            isActive: true,
-            approvalStatus: "APPROVED",
+            isActive: createdItem.isActive !== undefined ? createdItem.isActive : optimisticListing.isActive,
+            approvalStatus: createdItem.approvalStatus || optimisticListing.approvalStatus,
             mrp: Number(createdItem.mrp || mrp || optimisticListing.mrp),
             price: Number(createdItem.price || price),
             stockQty: Number(createdItem.stockQty !== undefined ? createdItem.stockQty : stockQty),

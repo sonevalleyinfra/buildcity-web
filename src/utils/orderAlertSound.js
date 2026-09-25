@@ -113,12 +113,13 @@ export async function initNotificationChannel() {
   try {
     if (!notificationChannelCreated) {
       await LocalNotifications.createChannel({
-        id: "vendor_order_alerts",
+        id: "vendor_order_alerts_v2",
         name: "Customer Order Alerts",
         description: "Loud notifications when a new customer order arrives",
         importance: 5, // High priority heads-up notification
         visibility: 1,
         vibration: true,
+        sound: "default",
       });
       notificationChannelCreated = true;
     }
@@ -185,7 +186,8 @@ export async function notifyVendorNewOrder(order) {
             id: notifId,
             title: title,
             body: body,
-            channelId: "vendor_order_alerts",
+            channelId: "vendor_order_alerts_v2",
+            sound: "default",
             extra: { orderId: order.id, orderNumber: cleanOrderNum },
             smallIcon: "ic_stat_order",
             iconColor: "#EA580C",

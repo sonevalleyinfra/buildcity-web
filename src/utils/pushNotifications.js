@@ -24,7 +24,7 @@ export async function preRegisterDeviceTokenOnBoot() {
     if (perm.receive === "granted") {
       try {
         await PushNotifications.createChannel({
-          id: "vendor_order_alerts",
+          id: "vendor_order_alerts_v2",
           name: "Customer Order Alerts",
           description: "Loud notifications when a new customer order arrives",
           importance: 5,
@@ -36,7 +36,7 @@ export async function preRegisterDeviceTokenOnBoot() {
 
       try {
         await LocalNotifications.createChannel({
-          id: "vendor_order_alerts",
+          id: "vendor_order_alerts_v2",
           name: "Customer Order Alerts",
           description: "Loud notifications when a new customer order arrives",
           importance: 5,
@@ -131,7 +131,7 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
       // 1. Create high-priority notification channel for Android heads-up alerts
       try {
         await PushNotifications.createChannel({
-          id: "vendor_order_alerts",
+          id: "vendor_order_alerts_v2",
           name: "Customer Order Alerts",
           description: "Loud notifications when a new customer order arrives",
           importance: 5,
@@ -146,7 +146,7 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
       // Also ensure LocalNotifications channel exists
       try {
         await LocalNotifications.createChannel({
-          id: "vendor_order_alerts",
+          id: "vendor_order_alerts_v2",
           name: "Customer Order Alerts",
           description: "Loud notifications when a new customer order arrives",
           importance: 5,
@@ -199,7 +199,7 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
                 id: notifId,
                 title: notification.title || "New Order Received!",
                 body: notification.body || (cleanOrderNumber ? `Order #${cleanOrderNumber} received • Tap to review` : "Tap to review incoming order"),
-                channelId: "vendor_order_alerts",
+                channelId: "vendor_order_alerts_v2",
                 sound: "default",
                 extra: { ...data, orderId, orderNumber: cleanOrderNumber },
                 smallIcon: "ic_stat_order",

@@ -1,5 +1,6 @@
 const admin = require("firebase-admin");
 const { cert } = require("firebase-admin/app");
+const { getMessaging } = require("firebase-admin/messaging");
 const path = require("path");
 const fs = require("fs");
 
@@ -395,7 +396,6 @@ async function sendVendorOrderPushNotification({ vendorId, phone, orderNumber, a
     notification: {
       title,
       body,
-      sound: "default",
     },
     data: {
       orderId: String(orderId || ""),
@@ -420,7 +420,8 @@ async function sendVendorOrderPushNotification({ vendorId, phone, orderNumber, a
   };
 
   try {
-    const response = await admin.messaging().send(message);
+    const messaging = typeof admin.messaging === "function" ? admin.messaging() : getMessaging();
+    const response = await messaging.send(message);
     console.log(`✅ FCM Push Notification successfully delivered to vendor ${vendorId}:`, response);
     return { success: true, messageId: response };
   } catch (err) {

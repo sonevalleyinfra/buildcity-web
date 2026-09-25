@@ -1,5 +1,5 @@
 {
-  "appId": "com.buildcity.app",
+  "appId": "com.buildcity.vendor",
   "appName": "BuildCity",
   "webDir": "dist",
   "server": {

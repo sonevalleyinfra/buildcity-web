@@ -296,7 +296,16 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
     }
 
     const results = await Promise.all(fetchPromises);
-    const [drs, vendors, masterProducts, categories, regions, orders, listings, coupons, dbBanners, users] = results;
+    const [drs, vendors, masterProducts, categories, regions, allOrders, listings, coupons, dbBanners, users] = results;
+
+    // Partners only receive orders that belong entirely to their own shop
+    let orders = allOrders;
+    if (role === "VENDOR") {
+      const myVendorIds = await resolveCallerVendorIds(req.auth);
+      orders = (allOrders || []).filter((o) =>
+        (o.items || []).length > 0 && o.items.every((it) => myVendorIds.includes(it.vendorId))
+      );
+    }
 
     const data = {
       drs,
@@ -2245,23 +2254,49 @@ app.get("/api/v1/orders/user/:userId", requireAuth, requireSelfOrAdmin("userId")
   }
 });
 
+const ORDER_STATUSES = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"];
+
+// Vendor shop IDs owned by the logged-in partner (matched by linked user account or registered mobile)
+async function resolveCallerVendorIds(auth) {
+  const last10 = String(auth?.phone || "").replace(/\D/g, "").slice(-10);
+  const or = [];
+  if (auth?.userId) or.push({ userId: auth.userId });
+  if (last10.length === 10) or.push({ phone: { endsWith: last10 } });
+  if (or.length === 0) return [];
+  const vendors = await prisma.vendor.findMany({ where: { OR: or }, select: { id: true } }).catch(() => []);
+  return vendors.map((v) => v.id);
+}
+
 // Strict Vendor Isolated Orders Fetch
 app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
     const { vendorId } = req.params;
-    const cleanPhone = vendorId.replace(/^v-/, "").replace(/\D/g, "");
-    const vendor = await prisma.vendor.findFirst({
-      where: {
-        OR: [
-          { id: vendorId },
-          ...(vendorId.length > 20 ? [{ userId: vendorId }] : []),
-          ...(cleanPhone.length >= 8 ? [{ phone: { contains: cleanPhone.slice(-10) } }] : []),
-          { shopName: { equals: vendorId, mode: "insensitive" } },
-        ],
-      },
-    }).catch(() => null);
+    let vendorIds;
 
-    const allOrders = await prisma.order.findMany({
+    if (req.auth.role === "VENDOR") {
+      // Partners only ever see their own shop's orders, whatever ID is in the URL
+      vendorIds = await resolveCallerVendorIds(req.auth);
+    } else {
+      const cleanPhone = vendorId.replace(/^v-/, "").replace(/\D/g, "");
+      const vendor = await prisma.vendor.findFirst({
+        where: {
+          OR: [
+            { id: vendorId },
+            ...(vendorId.length > 20 ? [{ userId: vendorId }] : []),
+            ...(cleanPhone.length >= 8 ? [{ phone: { contains: cleanPhone.slice(-10) } }] : []),
+            { shopName: { equals: vendorId, mode: "insensitive" } },
+          ],
+        },
+      }).catch(() => null);
+      vendorIds = vendor ? [vendor.id] : [];
+    }
+
+    if (vendorIds.length === 0) {
+      return res.json([]);
+    }
+
+    const vendorOrders = await prisma.order.findMany({
+      where: { items: { some: { vendorId: { in: vendorIds } } } },
       include: {
         items: {
           include: {
@@ -2276,33 +2311,12 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
       orderBy: { createdAt: "desc" },
     });
 
-    if (!allOrders || allOrders.length === 0) {
-      return res.json([]);
-    }
-
-    const vId = vendor?.id || vendorId;
-    const vUserId = vendor?.userId;
-    const vShop = (vendor?.shopName || vendorId).toLowerCase().trim();
-    const vPhone = vendor?.phone ? vendor.phone.replace(/\D/g, "") : "";
-
-    const filtered = allOrders
+    const filtered = vendorOrders
       .map((o) => {
         if (!o || !Array.isArray(o.items) || o.items.length === 0) return null;
 
         // Strictly retain ONLY items belonging to this vendor
-        const myItems = o.items.filter((it) => {
-          const itVendorId = it.vendorId;
-          const itVendorPhone = it.vendor?.phone ? it.vendor.phone.replace(/\D/g, "") : "";
-          const matchesId = itVendorId && (
-            itVendorId === vId ||
-            itVendorId === vendorId ||
-            (vUserId && itVendorId === vUserId) ||
-            (vPhone && itVendorPhone && (vPhone.includes(itVendorPhone) || itVendorPhone.includes(vPhone)))
-          );
-          const itShop = (it.vendor?.shopName || it.vendorName || "").toLowerCase().trim();
-          const matchesShop = vShop && itShop && (vShop.includes(itShop) || itShop.includes(vShop));
-          return matchesId || matchesShop;
-        });
+        const myItems = o.items.filter((it) => vendorIds.includes(it.vendorId));
 
         if (myItems.length === 0) return null;
 
@@ -2326,7 +2340,7 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
             productName: it.productName || it.name,
             price: Number(it.priceAtPurchase || it.price || 0),
             totalPrice: Number(it.totalPrice || (Number(it.priceAtPurchase || it.price || 0) * Number(it.quantity || 1))),
-            vendorName: it.vendor?.shopName || it.vendorName || vendor?.shopName || "District Vendor",
+            vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
           })),
           totalAmount: vendorTotal,
           total: vendorTotal,
@@ -2347,10 +2361,32 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
 app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
     const { status } = req.body; // PENDING | PROCESSING | OUT_FOR_DELIVERY | DELIVERED | CANCELLED
+    if (!ORDER_STATUSES.includes(status)) {
+      return res.status(400).json({ error: "Invalid order status." });
+    }
+
     const previousOrder = await prisma.order.findUnique({
       where: { id: req.params.id },
       include: { items: true },
-    }).catch(() => null);
+    });
+    if (!previousOrder) {
+      return res.status(404).json({ error: "Order not found." });
+    }
+
+    // Vendors may only move orders whose items all belong to their own shop
+    if (req.auth.role === "VENDOR") {
+      const myVendorIds = await resolveCallerVendorIds(req.auth);
+      const ownsEveryItem = previousOrder.items.length > 0 &&
+        previousOrder.items.every((it) => myVendorIds.includes(it.vendorId));
+      if (!ownsEveryItem) {
+        const ownsSomeItem = previousOrder.items.some((it) => myVendorIds.includes(it.vendorId));
+        return res.status(403).json({
+          error: ownsSomeItem
+            ? "This order is shared with another shop. Please ask your District Representative to update it."
+            : "You do not have permission to update this order.",
+        });
+      }
+    }
 
     const updatedOrder = await prisma.order.update({
       where: { id: req.params.id },
@@ -2358,15 +2394,18 @@ app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", 
       include: { items: true, customer: true },
     });
 
-    // Restore reserved quantity back to DB inventory when order is cancelled or rejected
-    if (status === "CANCELLED" && previousOrder && previousOrder.status !== "CANCELLED" && Array.isArray(previousOrder.items)) {
+    // Restore reserved quantity back to the same vendor's listing when order is cancelled or rejected
+    if (status === "CANCELLED" && previousOrder.status !== "CANCELLED") {
       for (const item of previousOrder.items) {
         try {
-          const vp = await prisma.vendorProduct.findFirst({
-            where: {
-              name: { equals: item.productName, mode: "insensitive" },
-            },
-          }).catch(() => null);
+          const vp = item.vendorProductId
+            ? await prisma.vendorProduct.findUnique({ where: { id: item.vendorProductId } }).catch(() => null)
+            : await prisma.vendorProduct.findFirst({
+              where: {
+                vendorId: item.vendorId,
+                name: { equals: item.productName, mode: "insensitive" },
+              },
+            }).catch(() => null);
 
           if (vp) {
             await prisma.vendorProduct.update({
@@ -2627,9 +2666,14 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
     const { customerId, totalAmount, deliveryFee, items, idempotencyKey } = req.body;
 
     if (idempotencyKey) {
-      const existingOrder = await prisma.order.findUnique({ where: { idempotencyKey }, include: { items: true, customer: true, address: true } });
-      if (existingOrder) {
-        return res.json({ success: true, order: existingOrder, isDuplicate: true });
+      // A split checkout stores the key on its first order and "<key>__vN" on the rest
+      const existingOrders = await prisma.order.findMany({
+        where: { OR: [{ idempotencyKey }, { idempotencyKey: { startsWith: `${idempotencyKey}__v` } }] },
+        include: { items: true, customer: true, address: true },
+        orderBy: { createdAt: "asc" },
+      });
+      if (existingOrders.length > 0) {
+        return res.json({ success: true, order: existingOrders[0], orders: existingOrders, isDuplicate: true });
       }
     }
 
@@ -2818,6 +2862,7 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       }
 
       validatedItems.push({
+        vendorProductId: liveVp.id,
         productName: liveVp.name || prodName,
         priceAtPurchase: verifiedPrice,
         quantity: itemQty,
@@ -2828,41 +2873,53 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
     }
 
     const calculatedDeliveryFee = reg ? Number(reg.baseDeliveryCharge || 49) : 49;
-    const finalOrderAmount = serverTotalAmount + calculatedDeliveryFee;
 
-    // 5. Single Atomic Nested Write (Order + OrderItems created in 1 single query!)
-    const newOrder = await prisma.order.create({
-      data: {
-        customerId: targetCustomerId,
-        addressId,
-        totalAmount: finalOrderAmount,
-        deliveryFee: calculatedDeliveryFee,
-        paymentMode: "COD",
-        status: "PENDING",
-        idempotencyKey,
-        items: {
-          create: validatedItems.map((vi) => ({
-            productName: vi.productName,
-            priceAtPurchase: vi.priceAtPurchase,
-            quantity: vi.quantity,
-            totalPrice: vi.totalPrice,
-            vendorId: vi.vendorId,
-          })),
-        },
-      },
-      include: {
-        items: {
-          include: {
-            vendor: {
-              select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
+    // 5. One order per vendor: each shop accepts, dispatches and delivers its own order,
+    // so a status change by one vendor can never close another vendor's items.
+    const vendorGroups = new Map();
+    for (const vi of validatedItems) {
+      if (!vendorGroups.has(vi.vendorId)) vendorGroups.set(vi.vendorId, []);
+      vendorGroups.get(vi.vendorId).push(vi);
+    }
+
+    const createdOrders = await prisma.$transaction(
+      Array.from(vendorGroups.values()).map((groupItems, idx) => {
+        const groupSubtotal = groupItems.reduce((sum, vi) => sum + vi.totalPrice, 0);
+        return prisma.order.create({
+          data: {
+            customerId: targetCustomerId,
+            addressId,
+            totalAmount: groupSubtotal + calculatedDeliveryFee,
+            deliveryFee: calculatedDeliveryFee,
+            paymentMode: "COD",
+            status: "PENDING",
+            idempotencyKey: idempotencyKey ? (idx === 0 ? idempotencyKey : `${idempotencyKey}__v${idx + 1}`) : undefined,
+            items: {
+              create: groupItems.map((vi) => ({
+                vendorProductId: vi.vendorProductId,
+                productName: vi.productName,
+                priceAtPurchase: vi.priceAtPurchase,
+                quantity: vi.quantity,
+                totalPrice: vi.totalPrice,
+                vendorId: vi.vendorId,
+              })),
             },
           },
-        },
-      },
-    });
+          include: {
+            items: {
+              include: {
+                vendor: {
+                  select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
+                },
+              },
+            },
+          },
+        });
+      })
+    );
 
-    // 6. Build response object with guaranteed real DB items
-    const fullOrder = {
+    // 6. Build response objects with guaranteed real DB items
+    const fullOrders = createdOrders.map((newOrder) => ({
       ...newOrder,
       items: (newOrder.items || []).map((ci) => ({
         ...ci,
@@ -2883,42 +2940,26 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
         city: targetRegionName,
         region: reg,
       },
-    };
+    }));
 
-    console.log(`✅ Order ${newOrder.id} created successfully with ${newOrder.items.length} items for customer ${targetCustomerId}`);
+    console.log(`✅ ${fullOrders.length} order(s) created (${fullOrders.map((o) => o.id).join(", ")}) for customer ${targetCustomerId}`);
 
     // Respond IMMEDIATELY to customer
-    res.status(201).json({ success: true, order: fullOrder });
+    res.status(201).json({ success: true, order: fullOrders[0], orders: fullOrders });
 
     // 7. Send High-Priority FCM Push Notification in background (non-blocking)
     setImmediate(async () => {
       try {
         const { sendVendorOrderPushNotification } = require("./pushService");
-        const vendorGroups = {};
-        for (const item of (fullOrder.items || [])) {
-          const vId = item.vendorId;
-          if (!vId) continue;
-          if (!vendorGroups[vId]) {
-            vendorGroups[vId] = {
-              count: 0,
-              amount: 0,
-              phone: item.vendor?.phone || null,
-            };
-          }
-          vendorGroups[vId].count += (item.quantity || 1);
-          vendorGroups[vId].amount += Number(item.totalPrice || item.priceAtPurchase || 0);
-          if (!vendorGroups[vId].phone && item.vendor?.phone) {
-            vendorGroups[vId].phone = item.vendor.phone;
-          }
-        }
-
-        for (const [vendorId, vData] of Object.entries(vendorGroups)) {
+        for (const fullOrder of fullOrders) {
+          const firstItem = fullOrder.items[0];
+          if (!firstItem?.vendorId) continue;
           await sendVendorOrderPushNotification({
-            vendorId,
-            phone: vData.phone,
+            vendorId: firstItem.vendorId,
+            phone: firstItem.vendor?.phone || null,
             orderNumber: fullOrder.orderNumber || fullOrder.id,
-            amount: vData.amount + (Number(fullOrder.deliveryFee) || 0),
-            itemCount: vData.count,
+            amount: Number(fullOrder.totalAmount) || 0,
+            itemCount: fullOrder.items.reduce((sum, it) => sum + (it.quantity || 1), 0),
             orderId: fullOrder.id,
           }).catch((e) => console.warn("FCM push send error:", e.message));
         }

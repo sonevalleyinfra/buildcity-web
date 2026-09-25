@@ -31,7 +31,7 @@ import LegalPolicyPage from "./pages/public/LegalPolicyPage";
 
 import BottomNav from "./components/BottomNav";
 
-const isVendorApp = import.meta.env.VITE_APP_MODE === "vendor" || Capacitor.isNativePlatform();
+const isVendorApp = import.meta.env.VITE_APP_MODE === "vendor";
 
 function NativeBackButtonHandler() {
   const navigate = useNavigate();

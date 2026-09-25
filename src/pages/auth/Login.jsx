@@ -7,7 +7,7 @@ import { useAuth } from "../../context/AuthContext";
 import { Capacitor } from "@capacitor/core";
 import { initVendorPushNotifications, getDeviceFcmToken } from "../../utils/pushNotifications";
 
-const isVendorApp = import.meta.env.VITE_APP_MODE === "vendor" || Capacitor.isNativePlatform();
+const isVendorApp = import.meta.env.VITE_APP_MODE === "vendor";
 
 // Login Page component — User / Vendor / DR / Admin ka universal login screen
 export default function Login() {
@@ -88,7 +88,12 @@ export default function Login() {
     }
 
     if (isPartnerPhone) {
-      setError("⚠️ Partner Account Detected! Vendors, DRs, and Admins must log in using 'Partner Login (Password)'.");
+      if (isVendorApp) {
+        setMode("vendor");
+        setError("Please enter your password to login.");
+      } else {
+        setError("⚠️ This number is registered as a Partner account. Please use the BuildCity Partner app.");
+      }
       return;
     }
 
@@ -204,29 +209,7 @@ export default function Login() {
     }
   };
 
-  const footerVendorAction = isVendorApp ? null : mode === "standard" ? (
-    <button
-      type="button"
-      onClick={() => {
-        setMode("vendor");
-        setError("");
-      }}
-      className="text-xs font-extrabold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-4 py-2.5 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs active:scale-[0.98]"
-    >
-      <span>🏬 Partner Login (Password) →</span>
-    </button>
-  ) : (
-    <button
-      type="button"
-      onClick={() => {
-        setMode("standard");
-        setError("");
-      }}
-      className="text-xs font-bold text-slate-500 hover:text-navy-900 transition-all cursor-pointer inline-flex items-center gap-1"
-    >
-      <span>← Back to Customer Login (OTP)</span>
-    </button>
-  );
+  const footerVendorAction = null;
 
   return (
     <AuthLayout footerRight={footerVendorAction}>

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useRef } from "react";
 import { useAuth } from "./AuthContext";
 import { authFetch } from "../config/authFetch";
 import { API_BASE_URL } from "../config/api";
+import { ordersPageQuery, readOrdersPage } from "../utils/orderPagination";
 
 const areVendorsEqual = (listA, listB) => {
   if (listA === listB) return true;
@@ -239,6 +240,11 @@ export function AdminProvider({ children }) {
   const [drs, setDrs] = useState(loadInitialDrs);
   const [vendors, setVendors] = useState(loadInitialVendors);
   const [users, setUsers] = useState(loadInitialUsers);
+  // Server-side totals and pagination cursors from /cloud-sync
+  const [ordersSummary, setOrdersSummary] = useState(null);
+  const [usersPage, setUsersPage] = useState(null);
+  const [loadingMoreUsers, setLoadingMoreUsers] = useState(false);
+  const olderUsersLoadedRef = useRef(false);
   const [orders, setOrders] = useState(loadInitialOrders);
   const [categories, setCategories] = useState(loadInitialCategories);
   const [regions, setRegions] = useState(loadInitialRegions);
@@ -427,6 +433,7 @@ export function AdminProvider({ children }) {
       if (!syncRes) return;
 
       const { drs: drsRes, vendors: vendorsRes, masterProducts: masterRes, categories: categoriesRes, regions: regionsRes, orders: ordersRes, listings: listingsRes, coupons: couponsRes, users: usersRes, banners: bannersRes } = syncRes;
+      if (syncRes.ordersSummary) setOrdersSummary(syncRes.ordersSummary);
 
       const now = Date.now();
       for (const [key, entry] of recentEditsRef.current.entries()) {
@@ -485,7 +492,16 @@ export function AdminProvider({ children }) {
 
       if (usersRes && Array.isArray(usersRes) && usersRes.length > 0) {
         localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(usersRes));
-        setUsers((prev) => (JSON.stringify(prev) === JSON.stringify(usersRes) ? prev : usersRes));
+        if (olderUsersLoadedRef.current) {
+          // Keep the older pages the admin already loaded; refresh only the newest page
+          setUsers((prev) => {
+            const freshIds = new Set(usersRes.map((u) => u.id));
+            return [...usersRes, ...(prev || []).filter((u) => !freshIds.has(u.id))];
+          });
+        } else {
+          setUsers((prev) => (JSON.stringify(prev) === JSON.stringify(usersRes) ? prev : usersRes));
+          if (syncRes.usersPage) setUsersPage(syncRes.usersPage);
+        }
       }
 
       if (couponsRes && Array.isArray(couponsRes)) {
@@ -644,7 +660,10 @@ export function AdminProvider({ children }) {
 
       let fetchedOrders = ordersRes;
       if (!Array.isArray(fetchedOrders) || fetchedOrders.length === 0) {
-        fetchedOrders = await authFetch(`${API_BASE_URL}/api/v1/orders`).then((r) => r.json()).catch(() => []);
+        fetchedOrders = await authFetch(`${API_BASE_URL}/api/v1/orders${ordersPageQuery(null)}`)
+          .then((r) => r.json())
+          .then((data) => readOrdersPage(data).orders)
+          .catch(() => []);
       }
       if (Array.isArray(fetchedOrders) && fetchedOrders.length > 0) {
         // Don't persist here: the formatted orders are already stored above. Writing a second,
@@ -1886,15 +1905,41 @@ export function AdminProvider({ children }) {
     }
   };
 
+  // Appends the next page of users (Admin → Customers tab)
+  const loadMoreUsers = async () => {
+    if (!usersPage?.nextCursor || loadingMoreUsers) return;
+    setLoadingMoreUsers(true);
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/users?limit=100&cursor=${encodeURIComponent(usersPage.nextCursor)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const older = Array.isArray(data?.users) ? data.users : [];
+      olderUsersLoadedRef.current = true;
+      setUsers((prev) => {
+        const known = new Set((prev || []).map((u) => u.id));
+        return [...(prev || []), ...older.filter((u) => !known.has(u.id))];
+      });
+      setUsersPage((prev) => ({ ...(prev || {}), nextCursor: data.nextCursor || null, hasMore: Boolean(data.hasMore) }));
+    } catch (err) {
+      console.warn("Load more users note:", err.message);
+    } finally {
+      setLoadingMoreUsers(false);
+    }
+  };
+
+  // Orders are paginated, so platform totals come from the server summary when available
+  const platformSummary = ordersSummary?.revenueBasis === "all_orders_total" ? ordersSummary : null;
   const stats = {
-    totalRevenue: orders.reduce((sum, o) => sum + (Number(o.totalAmount || o.total || o.amount) || 0), 0),
+    totalRevenue: platformSummary
+      ? platformSummary.totalRevenue
+      : orders.reduce((sum, o) => sum + (Number(o.totalAmount || o.total || o.amount) || 0), 0),
     approvedVendors: vendors.filter((v) => v.status === "APPROVED").length,
     pendingVendors: vendors.filter((v) => v.status === "PENDING").length,
     activeVendors: vendors.filter((v) => v.status === "APPROVED").length,
     activeDrs: drs.filter((d) => d.status === "ACTIVE").length,
     totalMasterProducts: masterProducts.length,
     totalListings: products.length,
-    totalOrders: orders.length,
+    totalOrders: platformSummary ? platformSummary.totalOrders : orders.length,
   };
 
   const updateOrderStatus = async (orderId, newStatus) => {
@@ -1919,6 +1964,10 @@ export function AdminProvider({ children }) {
         drs,
         vendors,
         users,
+        usersPage,
+        loadingMoreUsers,
+        loadMoreUsers,
+        ordersSummary,
         orders,
         categories,
         regions,

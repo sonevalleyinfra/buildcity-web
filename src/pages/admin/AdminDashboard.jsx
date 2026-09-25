@@ -6,6 +6,7 @@ import { useOrders } from "../../context/OrderContext";
 import { useAlert } from "../../context/AlertContext";
 import { useNotifications } from "../../context/NotificationContext";
 import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
+import LoadMoreButton from "../../components/LoadMoreButton";
 
 const PRESET_IMAGES = [
   { label: "Cement Bag", url: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80" },
@@ -59,6 +60,10 @@ export default function AdminDashboard() {
     products = [],
     productsLoading,
     stats,
+    usersPage,
+    loadingMoreUsers,
+    loadMoreUsers,
+    ordersSummary: syncOrdersSummary,
     addDr,
     updateDr,
     removeDr,
@@ -93,7 +98,14 @@ export default function AdminDashboard() {
     fetchCloudData,
   } = useAdmin();
 
-  const { orders: contextOrders = [], fetchAllOrders } = useOrders() || {};
+  const {
+    orders: contextOrders = [],
+    fetchAllOrders,
+    hasMoreOrders,
+    loadingMoreOrders,
+    loadMoreOrders,
+    ordersSummary: contextOrdersSummary,
+  } = useOrders() || {};
 
   // Smart Real-time Sync for Super Admin: Instant Event Sync + Focus/Visibility Aware (Zero waste on inactive tabs)
   useEffect(() => {
@@ -145,11 +157,13 @@ export default function AdminDashboard() {
     (a, b) => new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0)
   );
 
-  // Live total revenue calculated accurately across all platform orders
-  const liveTotalRevenue = displayOrders.reduce(
-    (sum, o) => sum + (Number(o.totalAmount || o.total || o.amount) || 0),
-    0
-  );
+  // Orders are paginated: platform-wide totals come from the server summary (exact across all pages)
+  const platformSummary = [contextOrdersSummary, syncOrdersSummary].find((s) => s?.revenueBasis === "all_orders_total");
+  const totalOrdersCount = platformSummary ? platformSummary.totalOrders : displayOrders.length;
+  const liveTotalRevenue = platformSummary
+    ? platformSummary.totalRevenue
+    : displayOrders.reduce((sum, o) => sum + (Number(o.totalAmount || o.total || o.amount) || 0), 0);
+  const totalCustomersCount = usersPage?.customers ?? users.filter((u) => !u.role || u.role === "CUSTOMER").length;
 
   // Tab State: Overview, District Reps, Vendors, Products, Listings, Orders, Categories, Regions
   const [tab, setTab] = useState("Overview");
@@ -763,7 +777,7 @@ export default function AdminDashboard() {
                     <span>{t.label}</span>
                     {t.id === "Users" && (
                       <span className="bg-brand-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-2xs">
-                        {users.filter((u) => !u.role || u.role === "CUSTOMER").length}
+                        {totalCustomersCount}
                       </span>
                     )}
                     {t.id === "Listings" && pendingCount > 0 && (
@@ -807,7 +821,7 @@ export default function AdminDashboard() {
                 <p className="text-xs font-semibold text-slate-500 tracking-tight">Total Revenue</p>
                 <p className="text-2xl font-black text-navy-900 tracking-tight mt-1">₹{Number(liveTotalRevenue || 0).toLocaleString("en-IN")}</p>
                 <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold inline-block mt-1">
-                  From {displayOrders.length} platform orders
+                  From {totalOrdersCount} platform orders
                 </span>
               </div>
               <div className="bg-white border border-slate-200/90 rounded-2xl p-4.5 shadow-2xs hover:shadow-md hover:border-brand-300 transition-all duration-200 relative overflow-hidden group">
@@ -896,7 +910,7 @@ export default function AdminDashboard() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs">
                     <p className="text-[11px] font-bold text-slate-500">Total Registered Customers</p>
-                    <p className="text-xl font-black text-navy-900 mt-0.5 tabular-nums">{customerUsers.length}</p>
+                    <p className="text-xl font-black text-navy-900 mt-0.5 tabular-nums">{totalCustomersCount}</p>
                   </div>
                   <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3.5 shadow-2xs">
                     <p className="text-[11px] font-bold text-emerald-800">📍 Saved Site Delivery Addresses</p>
@@ -1039,6 +1053,12 @@ export default function AdminDashboard() {
                   </tbody>
                 </table>
               </div>
+              <LoadMoreButton
+                hasMore={Boolean(usersPage?.hasMore)}
+                loading={loadingMoreUsers}
+                onClick={loadMoreUsers}
+                label="Load more customers"
+              />
             </div>
           </div>
         )}
@@ -1890,7 +1910,7 @@ export default function AdminDashboard() {
                 <h2 className="text-base font-extrabold text-navy-900 flex items-center gap-2">
                   <span>🛒 All Platform Customer Orders</span>
                   <span className="bg-brand-50 text-brand-700 border border-brand-200 text-xs font-extrabold px-2.5 py-0.5 rounded-full">
-                    {displayOrders.length} Total Orders
+                    {totalOrdersCount} Total Orders
                   </span>
                 </h2>
                 <p className="text-xs text-slate-500">Super Admin Overview: Real-time tracking of all construction material orders across all district vendors.</p>
@@ -2024,6 +2044,13 @@ export default function AdminDashboard() {
                 </table>
               </div>
             )}
+            <LoadMoreButton
+              hasMore={hasMoreOrders}
+              loading={loadingMoreOrders}
+              onClick={loadMoreOrders}
+              shown={displayOrders.length}
+              total={totalOrdersCount}
+            />
           </div>
         )}
 

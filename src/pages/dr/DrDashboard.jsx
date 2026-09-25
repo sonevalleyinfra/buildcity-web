@@ -7,6 +7,8 @@ import { useAlert } from "../../context/AlertContext";
 import { API_BASE_URL } from "../../config/api";
 import { authFetch } from "../../config/authFetch";
 import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
+import { mergeOrderLists, ordersPageQuery, readOrdersPage } from "../../utils/orderPagination";
+import LoadMoreButton from "../../components/LoadMoreButton";
 
 const PRESET_IMAGES = [
   { label: "Cement Bag", url: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80" },
@@ -171,6 +173,14 @@ export default function DrDashboard() {
     return [];
   });
 
+  // District orders are paginated (newest page + every open order; older pages on demand)
+  const [directOrdersCursor, setDirectOrdersCursor] = useState(null);
+  const [directHasMore, setDirectHasMore] = useState(false);
+  const [loadingMoreDirect, setLoadingMoreDirect] = useState(false);
+  const [districtSummary, setDistrictSummary] = useState(null);
+  const olderDirectLoadedRef = useRef(false);
+  const districtRegionParamRef = useRef("");
+
   // Direct live vendors state from DB with zero-flicker persistent cache
   const [directVendors, setDirectVendors] = useState(() => {
     try {
@@ -197,22 +207,57 @@ export default function DrDashboard() {
 
   // Fetch live orders directly from DB endpoint (/api/v1/orders) with deep equality guard
   const fetchLiveOrdersDirect = async () => {
+    const regionParam = districtRegionParamRef.current;
+    const regionQuery = regionParam ? `&regionId=${encodeURIComponent(regionParam)}` : "";
     try {
-      const res = await authFetch(`${API_BASE_URL}/api/v1/orders`);
+      // Exact district totals for the counters, independent of loaded pages
+      if (regionParam) {
+        authFetch(`${API_BASE_URL}/api/v1/orders/summary?regionId=${encodeURIComponent(regionParam)}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((summary) => { if (summary) setDistrictSummary(summary); })
+          .catch(() => {});
+      }
+
+      const res = await authFetch(`${API_BASE_URL}/api/v1/orders${ordersPageQuery(null, regionQuery)}`);
       if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          setDirectOrders((prev) => {
-            if (areOrdersEqual(prev, data)) return prev;
-            try {
-              localStorage.setItem("buildcity_dr_live_orders", JSON.stringify(data));
-            } catch {}
-            return data;
-          });
+        const page = readOrdersPage(await res.json());
+        const keepOlderPages = olderDirectLoadedRef.current;
+        setDirectOrders((prev) => {
+          const next = keepOlderPages ? mergeOrderLists(page.orders, prev) : page.orders;
+          if (areOrdersEqual(prev, next)) return prev;
+          try {
+            localStorage.setItem("buildcity_dr_live_orders", JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+        if (!keepOlderPages) {
+          setDirectOrdersCursor(page.nextCursor);
+          setDirectHasMore(page.hasMore);
         }
       }
     } catch (err) {
       console.warn("Live direct orders sync note:", err.message);
+    }
+  };
+
+  // Appends the next (older) page of district orders
+  const loadMoreDistrictOrders = async () => {
+    if (!directOrdersCursor || loadingMoreDirect) return;
+    const regionParam = districtRegionParamRef.current;
+    const regionQuery = regionParam ? `&regionId=${encodeURIComponent(regionParam)}` : "";
+    setLoadingMoreDirect(true);
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/orders${ordersPageQuery(directOrdersCursor, regionQuery)}`);
+      if (!res.ok) return;
+      const page = readOrdersPage(await res.json());
+      olderDirectLoadedRef.current = true;
+      setDirectOrders((prev) => mergeOrderLists(prev, page.orders));
+      setDirectOrdersCursor(page.nextCursor);
+      setDirectHasMore(page.hasMore);
+    } catch (err) {
+      console.warn("Load more district orders note:", err.message);
+    } finally {
+      setLoadingMoreDirect(false);
     }
   };
 
@@ -565,6 +610,23 @@ export default function DrDashboard() {
   // DR Assigned Region Orders Filter (Strict 1-to-1 region matching: only orders in DR's region)
   const currentDrCanonical = getCanonicalDistrict(districtName);
 
+  // Every region record belonging to this DR's district (names are matched canonically client-side)
+  const districtRegionParam = useMemo(() => {
+    const ids = (regions || [])
+      .filter((r) => r?.id && getCanonicalDistrict(r.name) === currentDrCanonical)
+      .map((r) => r.id);
+    if (ids.length === 0 && drRegionId) ids.push(drRegionId);
+    return ids.sort().join(",");
+  }, [regions, currentDrCanonical, drRegionId]);
+  districtRegionParamRef.current = districtRegionParam;
+
+  // Once the district is known, restart district paging scoped to it
+  useEffect(() => {
+    if (!districtRegionParam) return;
+    olderDirectLoadedRef.current = false;
+    fetchLiveOrdersDirect();
+  }, [districtRegionParam]);
+
   const districtOrders = useMemo(() => {
     return (orders || []).filter((o) => {
       if (!o) return false;
@@ -574,6 +636,9 @@ export default function DrDashboard() {
   }, [orders, currentDrCanonical, regions]);
 
   // Filtered district orders by search and status filter
+  // Exact district total from the server; falls back to loaded orders until it arrives
+  const districtOrdersCount = districtSummary ? districtSummary.totalOrders : districtOrders.length;
+
   const filteredDistrictOrders = useMemo(() => {
     return districtOrders.filter((ord) => {
       if (!ord) return false;
@@ -860,7 +925,7 @@ export default function DrDashboard() {
             </div>
             <div className="bg-white/10 rounded-xl p-3.5 backdrop-blur-xs border border-white/10">
               <p className="text-[11px] text-slate-300 font-medium">District Orders</p>
-              <p className="text-lg font-black mt-0.5 tracking-tight">{districtOrders.length}</p>
+              <p className="text-lg font-black mt-0.5 tracking-tight">{districtOrdersCount}</p>
             </div>
             <div className="bg-white/10 rounded-xl p-3.5 backdrop-blur-xs border border-white/10">
               <p className="text-[11px] text-slate-300 font-medium">District Products</p>
@@ -925,7 +990,7 @@ export default function DrDashboard() {
                   : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
               }`}
             >
-              🛍️ District Orders ({districtOrders.length})
+              🛍️ District Orders ({districtOrdersCount})
             </button>
           </div>
 
@@ -1589,7 +1654,7 @@ export default function DrDashboard() {
               <h2 className="text-base font-extrabold text-navy-900 flex items-center gap-2">
                 <span>🛒 Customer Orders in {districtName} District</span>
                 <span className="bg-brand-50 text-brand-700 border border-brand-200 text-xs font-extrabold px-2.5 py-0.5 rounded-full">
-                  {districtOrders.length} District Orders
+                  {districtOrdersCount} District Orders
                 </span>
               </h2>
               <p className="text-xs text-slate-500">Live real-time tracking of marketplace orders placed for delivery within {districtName} jurisdiction.</p>
@@ -1598,9 +1663,11 @@ export default function DrDashboard() {
             {/* Status Filter Pills */}
             <div className="flex flex-wrap gap-1.5 bg-slate-100 p-1 rounded-xl w-fit text-xs font-bold">
               {["ALL", "PENDING", "PROCESSING", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"].map((st) => {
-                const count = st === "ALL"
-                  ? districtOrders.length
-                  : districtOrders.filter((o) => (o.status || "PENDING").toUpperCase() === st).length;
+                const count = districtSummary
+                  ? (st === "ALL" ? districtSummary.totalOrders : districtSummary.byStatus?.[st] || 0)
+                  : st === "ALL"
+                    ? districtOrders.length
+                    : districtOrders.filter((o) => (o.status || "PENDING").toUpperCase() === st).length;
                 return (
                   <button
                     key={st}
@@ -1727,6 +1794,13 @@ export default function DrDashboard() {
               </table>
             </div>
           )}
+          <LoadMoreButton
+            hasMore={directHasMore}
+            loading={loadingMoreDirect}
+            onClick={loadMoreDistrictOrders}
+            shown={districtOrders.length}
+            total={districtOrdersCount}
+          />
         </div>
       )}
       </main>

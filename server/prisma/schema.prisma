@@ -62,6 +62,7 @@ model User {
   auditLogs  AuditLog[]
   notifications Notification[]
 
+  @@index([createdAt, id])
   @@map("users")
 }
 
@@ -256,6 +257,7 @@ model Order {
   items OrderItem[]
 
   @@index([customerId, createdAt])
+  @@index([createdAt, id])
   @@map("orders")
 }
 

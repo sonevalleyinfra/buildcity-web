@@ -58,6 +58,113 @@ function sendServerError(res, err, label = "Request") {
 
 const SAFE_USER_SELECT = { id: true, name: true, phone: true, email: true, role: true };
 
+// ---------------------------------------------------------------------------
+// Pagination (keyset / cursor based: stable while new orders keep arriving)
+// ---------------------------------------------------------------------------
+const PAGE_DEFAULT_LIMIT = 50;
+const PAGE_MAX_LIMIT = 100;
+// Requests without ?limit/?cursor keep the legacy plain-array response (installed APKs ship a
+// frozen frontend), but are capped so a single call can never read an unbounded table.
+const LEGACY_LIST_CAP = 500;
+const NEWEST_FIRST = [{ createdAt: "desc" }, { id: "desc" }];
+const CLOSED_ORDER_STATUSES = ["DELIVERED", "CANCELLED"];
+const MAX_OPEN_ORDERS_INCLUDED = 200;
+
+// Returns { take, cursor } when the client asked for pagination, or null for a legacy request
+function getPageParams(req) {
+  const { limit, cursor } = req.query;
+  if (limit === undefined && cursor === undefined) return null;
+  const take = Math.min(Math.max(parseInt(limit, 10) || PAGE_DEFAULT_LIMIT, 1), PAGE_MAX_LIMIT);
+  return { take, cursor: typeof cursor === "string" && cursor ? cursor : null };
+}
+
+// Fetches one newest-first page from a Prisma model; reads one extra row to know if more exist
+async function findPage(model, args, page) {
+  const rows = await model.findMany({
+    ...args,
+    orderBy: NEWEST_FIRST,
+    take: page.take + 1,
+    ...(page.cursor ? { cursor: { id: page.cursor }, skip: 1 } : {}),
+  });
+  const hasMore = rows.length > page.take;
+  const items = hasMore ? rows.slice(0, page.take) : rows;
+  return { items, hasMore, nextCursor: hasMore ? items[items.length - 1].id : null };
+}
+
+// Lists orders for `where`: a paginated envelope when requested, else the capped legacy array.
+// With ?includeOpen=1 the first page also carries every still-open order (even older ones),
+// so pending work can never hide on a later page.
+async function listOrders(req, where, args) {
+  const page = getPageParams(req);
+  if (!page) {
+    const orders = await prisma.order.findMany({ ...args, where, orderBy: NEWEST_FIRST, take: LEGACY_LIST_CAP });
+    return { legacy: true, orders };
+  }
+
+  const result = await findPage(prisma.order, { ...args, where }, page);
+  let orders = result.items;
+  if (!page.cursor && req.query.includeOpen === "1" && result.hasMore) {
+    const oldestOnPage = orders[orders.length - 1];
+    const olderOpen = await prisma.order.findMany({
+      ...args,
+      where: {
+        AND: [
+          where || {},
+          { status: { notIn: CLOSED_ORDER_STATUSES } },
+          { createdAt: { lte: oldestOnPage.createdAt } },
+          { id: { notIn: orders.map((o) => o.id) } },
+        ],
+      },
+      orderBy: NEWEST_FIRST,
+      take: MAX_OPEN_ORDERS_INCLUDED,
+    });
+    orders = orders.concat(olderOpen);
+  }
+  return { legacy: false, orders, nextCursor: result.nextCursor, hasMore: result.hasMore };
+}
+
+function sendOrderList(res, list, orders) {
+  if (list.legacy) return res.json(orders);
+  return res.json({ orders, nextCursor: list.nextCursor, hasMore: list.hasMore });
+}
+
+// Orders that belong to a district: delivery address in the region, or (no address) a vendor there.
+// Accepts one region id or a comma-separated list (a district can span duplicate region records).
+function orderRegionWhere(regionIdParam) {
+  if (!regionIdParam || typeof regionIdParam !== "string") return {};
+  const regionIds = regionIdParam.split(",").map((id) => id.trim()).filter(Boolean).slice(0, 20);
+  if (regionIds.length === 0) return {};
+  return {
+    OR: [
+      { address: { regionId: { in: regionIds } } },
+      { addressId: null, items: { some: { vendor: { regionId: { in: regionIds } } } } },
+    ],
+  };
+}
+
+// Exact totals for dashboards, independent of how many pages the client has loaded
+async function computeOrdersSummary(where, { vendorId } = {}) {
+  const [totalOrders, byStatusRows, revenue] = await Promise.all([
+    prisma.order.count({ where }),
+    prisma.order.groupBy({ by: ["status"], where, _count: { _all: true } }),
+    vendorId
+      // Vendor revenue = their item subtotals on delivered orders (matches the vendor dashboard)
+      ? prisma.orderItem.aggregate({ where: { vendorId, order: { status: "DELIVERED" } }, _sum: { totalPrice: true } })
+      : prisma.order.aggregate({ where, _sum: { totalAmount: true } }),
+  ]);
+  const byStatus = Object.fromEntries(byStatusRows.map((r) => [r.status, r._count._all]));
+  const openOrders = Object.entries(byStatus)
+    .filter(([status]) => !CLOSED_ORDER_STATUSES.includes(status))
+    .reduce((sum, [, n]) => sum + n, 0);
+  return {
+    totalOrders,
+    openOrders,
+    byStatus,
+    totalRevenue: Number(vendorId ? revenue._sum.totalPrice || 0 : revenue._sum.totalAmount || 0),
+    revenueBasis: vendorId ? "delivered_vendor_items" : "all_orders_total",
+  };
+}
+
 // Resolves the Vendor row owned by the authenticated VENDOR (token sub is the vendor's user id)
 // (falls back to the phone in the signed token for legacy vendor rows without a linked user)
 async function resolveOwnVendor(req) {
@@ -302,6 +409,9 @@ app.get("/api/v1/public-catalog", async (req, res) => {
 });
 
 const CLOUD_SYNC_CACHE_TTL_MS = 15000;
+const SYNC_ORDERS_PAGE_SIZE = 50;
+const SYNC_USERS_PAGE_SIZE = 100;
+const SYNC_USER_SELECT = { id: true, name: true, phone: true, email: true, role: true, status: true, productCount: true, createdAt: true };
 
 // Single Unified Cloud Sync Endpoint (100% Real-time Live DB query for Staff and Partners)
 app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"), async (req, res) => {
@@ -331,6 +441,8 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       return res.json(cached);
     }
 
+    const ordersScope = isVendor ? { items: { some: { vendorId: ownVendor.id } } } : {};
+
     const fetchPromises = [
       isVendor ? Promise.resolve([]) : prisma.dR.findMany({
         include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
@@ -344,31 +456,22 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       prisma.productMaster.findMany({ include: { category: true }, orderBy: { createdAt: "desc" } }).catch(() => []),
       prisma.category.findMany().catch(() => []),
       prisma.region.findMany({ orderBy: { name: "asc" } }).catch(() => []),
-      prisma.order.findMany({
-        where: isVendor ? { items: { some: { vendorId: ownVendor.id } } } : undefined,
-        include: {
-          items: {
-            include: {
-              vendor: {
-                select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true, region: true },
-              },
-            },
-          },
-          customer: { select: { id: true, name: true, phone: true, email: true, role: true } },
-          address: { include: { region: true } },
-        },
-        orderBy: { createdAt: "desc" },
-      }).then((list) =>
-        (list || []).map((o) => ({
+      // Orders: newest page plus every still-open order; older ones load via GET /orders?cursor=
+      listOrders(
+        { query: { limit: String(SYNC_ORDERS_PAGE_SIZE), includeOpen: "1" } },
+        ordersScope,
+        { include: STAFF_ORDER_INCLUDE }
+      ).then((list) => ({
+        nextCursor: list.nextCursor,
+        hasMore: list.hasMore,
+        orders: withVendorNames(list.orders).map((o) => ({
           ...o,
-          items: (o.items || [])
-            .filter((it) => !isVendor || it.vendorId === ownVendor.id)
-            .map((it) => ({
-              ...it,
-              vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
-            })),
-        }))
-      ).catch(() => []),
+          items: o.items.filter((it) => !isVendor || it.vendorId === ownVendor.id),
+        })),
+      })).catch((err) => {
+        console.error("Cloud sync orders error:", err);
+        return { orders: [], nextCursor: null, hasMore: false };
+      }),
       prisma.vendorProduct.findMany({
         include: {
           vendor: {
@@ -388,17 +491,29 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       prisma.banner.findMany({ orderBy: { displayOrder: "asc" } }).catch(() => []),
     ];
 
+    fetchPromises.push(
+      computeOrdersSummary(ordersScope, isVendor ? { vendorId: ownVendor.id } : {}).catch((err) => {
+        console.error("Cloud sync summary error:", err);
+        return null;
+      })
+    );
+
     if (role === "ADMIN") {
       fetchPromises.push(
-        prisma.user.findMany({
-          orderBy: { createdAt: "desc" },
-          select: { id: true, name: true, phone: true, email: true, role: true, status: true, productCount: true, createdAt: true },
-        }).catch(() => [])
+        Promise.all([
+          findPage(prisma.user, { select: SYNC_USER_SELECT }, { take: SYNC_USERS_PAGE_SIZE, cursor: null }),
+          prisma.user.count(),
+          prisma.user.count({ where: { role: "CUSTOMER" } }),
+        ]).catch((err) => {
+          console.error("Cloud sync users error:", err);
+          return [{ items: [], nextCursor: null, hasMore: false }, 0, 0];
+        })
       );
     }
 
     const results = await Promise.all(fetchPromises);
-    const [drs, vendors, masterProducts, categories, regions, orders, listings, coupons, dbBanners, users] = results;
+    const [drs, vendors, masterProducts, categories, regions, ordersPage, listings, coupons, dbBanners, ordersSummary, usersResult] = results;
+    const [usersPage, usersTotal, customersTotal] = usersResult || [null, 0, 0];
 
     const data = {
       drs,
@@ -406,10 +521,13 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       masterProducts,
       categories,
       regions,
-      orders,
+      orders: ordersPage.orders,
+      ordersPage: { nextCursor: ordersPage.nextCursor, hasMore: ordersPage.hasMore, pageSize: SYNC_ORDERS_PAGE_SIZE },
+      ordersSummary,
       listings,
       coupons: coupons || [],
-      users: users || [],
+      users: usersPage ? usersPage.items : [],
+      usersPage: usersPage ? { nextCursor: usersPage.nextCursor, hasMore: usersPage.hasMore, total: usersTotal, customers: customersTotal } : null,
       banners: dbBanners && dbBanners.length > 0 ? dbBanners : bannersList,
     };
 
@@ -1161,10 +1279,11 @@ app.put("/api/v1/users/profile", requireAuth, async (req, res) => {
   }
 });
 
+// Supports ?limit=&cursor= (paginated envelope); without them returns the capped legacy array
 app.get("/api/v1/users", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
-    const users = await prisma.user.findMany({
-      orderBy: { createdAt: "desc" },
+    const page = getPageParams(req);
+    const args = {
       include: {
         addresses: true,
         orders: {
@@ -1178,13 +1297,19 @@ app.get("/api/v1/users", requireAuth, requireRole("ADMIN"), async (req, res) => 
           },
         },
       },
-    });
+    };
 
-    const sanitizedUsers = users.map((u) => {
+    const stripPassword = (list) => list.map((u) => {
       const { password, ...safeUser } = u;
       return safeUser;
     });
-    res.json(sanitizedUsers);
+
+    if (!page) {
+      const users = await prisma.user.findMany({ ...args, orderBy: NEWEST_FIRST, take: LEGACY_LIST_CAP });
+      return res.json(stripPassword(users));
+    }
+    const result = await findPage(prisma.user, args, page);
+    res.json({ users: stripPassword(result.items), nextCursor: result.nextCursor, hasMore: result.hasMore });
   } catch (err) {
     sendServerError(res, err);
   }
@@ -2242,115 +2367,101 @@ app.delete("/api/v1/regions/:id", requireAuth, requireRole("ADMIN"), async (req,
 });
 
 // 7. ORDERS & CHECKOUT ENDPOINTS (With Vendor Isolation & Status Updates)
+const STAFF_ORDER_INCLUDE = {
+  items: {
+    include: {
+      vendor: {
+        select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true, region: true },
+      },
+    },
+  },
+  customer: { select: SAFE_USER_SELECT },
+  address: { include: { region: true } },
+};
+
+const CUSTOMER_ORDER_INCLUDE = {
+  items: {
+    include: {
+      vendor: {
+        select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
+      },
+    },
+  },
+  customer: { select: SAFE_USER_SELECT },
+  address: true,
+};
+
+const withVendorNames = (orders) =>
+  (orders || []).map((o) => ({
+    ...o,
+    items: (o.items || []).map((it) => ({
+      ...it,
+      vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
+    })),
+  }));
+
+// Orders a customer can see: placed by them, or delivered to their phone number
+function customerOrdersWhere(userId, phone) {
+  const cleanPhone = String(phone || "").replace(/\D/g, "").slice(-10);
+  return {
+    OR: [
+      ...(userId ? [{ customerId: userId }] : []),
+      ...(cleanPhone ? [{ customer: { phone: { contains: cleanPhone } } }] : []),
+      ...(cleanPhone ? [{ address: { phone: { contains: cleanPhone } } }] : []),
+    ],
+  };
+}
+
+// All orders (Admin / DR). Supports ?limit=&cursor=&includeOpen=1 and ?regionId= for a district.
 app.get("/api/v1/orders", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
-    const orders = await prisma.order.findMany({
-      include: {
-        items: {
-          include: {
-            vendor: {
-              select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true, region: true },
-            },
-          },
-        },
-        customer: { select: { id: true, name: true, phone: true, email: true, role: true } },
-        address: { include: { region: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    const formatted = (orders || []).map((o) => ({
-      ...o,
-      items: (o.items || []).map((it) => ({
-        ...it,
-        vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
-      })),
-    }));
-    res.json(formatted);
+    const list = await listOrders(req, orderRegionWhere(req.query.regionId), { include: STAFF_ORDER_INCLUDE });
+    sendOrderList(res, list, withVendorNames(list.orders));
   } catch (err) {
     sendServerError(res, err);
   }
 });
 
-// Customer Isolated Orders Fetch (Self by Token or Admin)
-app.get("/api/v1/orders/me", requireAuth, async (req, res) => {
+// Exact order totals for the caller's scope (dashboard headline numbers, independent of paging)
+app.get("/api/v1/orders/summary", requireAuth, async (req, res) => {
   try {
-    const targetUserId = req.auth?.userId;
-    const cleanPhone = (req.auth?.phone || "").replace(/\D/g, "");
-
-    const orders = await prisma.order.findMany({
-      where: {
-        OR: [
-          ...(targetUserId ? [{ customerId: targetUserId }] : []),
-          ...(cleanPhone ? [{ customer: { phone: { contains: cleanPhone.slice(-10) } } }] : []),
-          ...(cleanPhone ? [{ address: { phone: { contains: cleanPhone.slice(-10) } } }] : []),
-        ],
-      },
-      include: {
-        items: {
-          include: {
-            vendor: {
-              select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
-            },
-          },
-        },
-        customer: true,
-        address: true,
-      },
-      orderBy: { createdAt: "desc" },
-    }).catch(() => []);
-
-    const formatted = (orders || []).map((o) => ({
-      ...o,
-      items: (o.items || []).map((it) => ({
-        ...it,
-        vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
-      })),
-    }));
-
-    res.json(formatted);
+    const role = req.auth.role;
+    if (role === "ADMIN" || role === "DR") {
+      return res.json(await computeOrdersSummary(orderRegionWhere(req.query.regionId)));
+    }
+    if (role === "VENDOR") {
+      const own = await resolveOwnVendor(req);
+      if (!own) return res.status(403).json({ error: "Vendor profile not found for this account" });
+      return res.json(await computeOrdersSummary({ items: { some: { vendorId: own.id } } }, { vendorId: own.id }));
+    }
+    res.json(await computeOrdersSummary(customerOrdersWhere(req.auth.userId, req.auth.phone)));
   } catch (err) {
+    sendServerError(res, err, "Orders summary");
+  }
+});
+
+// Customer Isolated Orders Fetch (Self by Token)
+app.get("/api/v1/orders/me", requireAuth, async (req, res) => {
+  const paginated = !!getPageParams(req);
+  try {
+    const list = await listOrders(req, customerOrdersWhere(req.auth?.userId, req.auth?.phone), { include: CUSTOMER_ORDER_INCLUDE });
+    sendOrderList(res, list, withVendorNames(list.orders));
+  } catch (err) {
+    if (paginated) return sendServerError(res, err, "My orders");
     res.json([]);
   }
 });
 
 // Customer Isolated Orders Fetch (Self or Admin by Param)
 app.get("/api/v1/orders/user/:userId", requireAuth, requireSelfOrAdmin("userId"), async (req, res) => {
+  const paginated = !!getPageParams(req);
   try {
     const targetUserId = req.auth?.role === "ADMIN" ? req.params.userId : (req.auth?.userId || req.params.userId);
-    const cleanPhone = (req.auth?.phone || req.params.userId || "").replace(/\D/g, "");
-
-    const orders = await prisma.order.findMany({
-      where: {
-        OR: [
-          { customerId: targetUserId },
-          ...(cleanPhone ? [{ customer: { phone: { contains: cleanPhone.slice(-10) } } }] : []),
-          ...(cleanPhone ? [{ address: { phone: { contains: cleanPhone.slice(-10) } } }] : []),
-        ],
-      },
-      include: {
-        items: {
-          include: {
-            vendor: {
-              select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
-            },
-          },
-        },
-        customer: true,
-        address: true,
-      },
-      orderBy: { createdAt: "desc" },
-    }).catch(() => []);
-
-    const formatted = (orders || []).map((o) => ({
-      ...o,
-      items: (o.items || []).map((it) => ({
-        ...it,
-        vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
-      })),
-    }));
-
-    res.json(formatted);
+    const phone = req.auth?.phone || req.params.userId || "";
+    const list = await listOrders(req, customerOrdersWhere(targetUserId, phone), { include: CUSTOMER_ORDER_INCLUDE });
+    sendOrderList(res, list, withVendorNames(list.orders));
   } catch (err) {
+    if (paginated) return sendServerError(res, err, "User orders");
     res.json([]);
   }
 });
@@ -2378,12 +2489,11 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
     }
 
     if (!vendor) {
-      return res.json([]);
+      return res.json(getPageParams(req) ? { orders: [], nextCursor: null, hasMore: false } : []);
     }
 
     // Filter in the database instead of loading every order into memory
-    const vendorOrders = await prisma.order.findMany({
-      where: { items: { some: { vendorId: vendor.id } } },
+    const list = await listOrders(req, { items: { some: { vendorId: vendor.id } } }, {
       include: {
         items: {
           where: { vendorId: vendor.id },
@@ -2397,10 +2507,9 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
         customer: { select: SAFE_USER_SELECT },
         address: { include: { region: true } },
       },
-      orderBy: { createdAt: "desc" },
     });
 
-    const formatted = vendorOrders.map(({ _count, ...o }) => {
+    const formatted = list.orders.map(({ _count, ...o }) => {
       const myItems = o.items || [];
       const vendorSubtotal = myItems.reduce((acc, it) => acc + Number(it.priceAtPurchase || 0) * Number(it.quantity || 1), 0);
       const allItemsCount = _count?.items ?? myItems.length;
@@ -2425,7 +2534,7 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
       };
     });
 
-    res.json(formatted);
+    sendOrderList(res, list, formatted);
   } catch (err) {
     sendServerError(res, err, "Vendor orders");
   }

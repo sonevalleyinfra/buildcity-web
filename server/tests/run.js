@@ -42,7 +42,7 @@ async function waitForHealth() {
   let failed = false;
   try {
     await waitForHealth();
-    for (const suite of ["security.test.js", "smoke.test.js"]) {
+    for (const suite of ["security.test.js", "smoke.test.js", "pagination.test.js"]) {
       console.log(`\n=== ${suite} ===`);
       try {
         execFileSync("node", [path.join(__dirname, suite)], { env, stdio: "inherit" });

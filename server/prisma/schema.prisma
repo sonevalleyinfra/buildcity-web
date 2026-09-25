@@ -74,6 +74,7 @@ model OTPVerification {
   expiresAt DateTime
   createdAt DateTime @default(now())
 
+  @@index([phone, createdAt])
   @@map("otp_verifications")
 }
 
@@ -106,6 +107,8 @@ model DR {
   status      String   @default("ACTIVE")
   joinedOn    DateTime @default(now())
 
+  @@index([userId])
+  @@index([phone])
   @@map("district_representatives")
 }
 
@@ -128,6 +131,8 @@ model Vendor {
   vendorProducts VendorProduct[]
   orderItems     OrderItem[]
 
+  @@index([userId])
+  @@index([phone])
   @@map("vendors")
 }
 
@@ -202,6 +207,9 @@ model VendorProduct {
 
   orderItems OrderItem[]
 
+  @@index([vendorId])
+  @@index([masterProductId])
+  @@index([approvalStatus, isActive])
   @@map("vendor_products")
 }
 
@@ -223,6 +231,7 @@ model Address {
 
   orders Order[]
 
+  @@index([userId])
   @@map("addresses")
 }
 
@@ -246,6 +255,7 @@ model Order {
 
   items OrderItem[]
 
+  @@index([customerId, createdAt])
   @@map("orders")
 }
 
@@ -265,6 +275,8 @@ model OrderItem {
   quantity        Int
   totalPrice      Decimal
 
+  @@index([orderId])
+  @@index([vendorId])
   @@map("order_items")
 }
 
@@ -291,6 +303,7 @@ model Notification {
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
+  @@index([userId, createdAt])
   @@map("notifications")
 }
 
@@ -318,6 +331,7 @@ model Review {
   comment   String
   createdAt DateTime @default(now())
 
+  @@index([productId])
   @@map("reviews")
 }
 

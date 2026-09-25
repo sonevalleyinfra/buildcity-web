@@ -50,18 +50,39 @@ function requireAuth(req, res, next) {
 
   const token = parts[1];
 
-  jwt.verify(token, JWT_SECRET, (err, decoded) => {
-    if (err) {
+  jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] }, (err, decoded) => {
+    if (err || !decoded?.sub) {
       return res.status(401).json({ error: "Session expired. Please log in again." });
     }
 
-    req.auth = {
-      userId: decoded.sub,
-      phone: decoded.phone,
-      role: (decoded.role || "CUSTOMER").toUpperCase(),
-      tokenVersion: decoded.tv || 1,
-    };
+    req.auth = toAuthContext(decoded);
+    next();
+  });
+}
 
+function toAuthContext(decoded) {
+  return {
+    userId: decoded.sub,
+    phone: decoded.phone,
+    role: (decoded.role || "CUSTOMER").toUpperCase(),
+    tokenVersion: decoded.tv || 1,
+  };
+}
+
+/**
+ * Middleware: Populates req.auth when a valid Bearer token is present, but never rejects the request
+ */
+function optionalAuth(req, res, next) {
+  const authHeader = req.headers["authorization"];
+  const parts = typeof authHeader === "string" ? authHeader.trim().split(" ") : [];
+  if (parts.length !== 2 || parts[0].toLowerCase() !== "bearer") {
+    return next();
+  }
+
+  jwt.verify(parts[1], JWT_SECRET, { algorithms: ["HS256"] }, (err, decoded) => {
+    if (!err && decoded?.sub) {
+      req.auth = toAuthContext(decoded);
+    }
     next();
   });
 }
@@ -109,7 +130,9 @@ function requireSelfOrAdmin(getTargetUserId) {
       targetId = req.params.userId || req.params.id;
     }
 
-    if (targetId && (String(targetId) === String(req.auth.userId) || String(targetId).replace(/\D/g, "") === String(req.auth.phone).replace(/\D/g, ""))) {
+    const targetDigits = String(targetId || "").replace(/\D/g, "");
+    const ownDigits = String(req.auth.phone || "").replace(/\D/g, "");
+    if (targetId && (String(targetId) === String(req.auth.userId) || (ownDigits.length >= 10 && targetDigits === ownDigits))) {
       return next();
     }
 
@@ -120,6 +143,7 @@ function requireSelfOrAdmin(getTargetUserId) {
 module.exports = {
   issueToken,
   requireAuth,
+  optionalAuth,
   requireRole,
   requireSelfOrAdmin,
 };

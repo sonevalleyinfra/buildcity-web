@@ -134,7 +134,9 @@ import { preRegisterDeviceTokenOnBoot } from "./utils/pushNotifications";
 
 export default function App() {
   useEffect(() => {
-    preRegisterDeviceTokenOnBoot().catch(() => {});
+    if (isVendorApp) {
+      preRegisterDeviceTokenOnBoot().catch(() => {});
+    }
   }, []);
 
   return (

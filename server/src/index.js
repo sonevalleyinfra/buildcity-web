@@ -305,6 +305,11 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
     let orders = allOrders;
     let visibleDrs = drs;
     let visibleVendors = vendors;
+    if (role === "DR") {
+      // DRs see their own district's team and shops
+      visibleDrs = (drs || []).filter((d) => drRegionIds.includes(d.regionId));
+      visibleVendors = (vendors || []).filter((v) => drRegionIds.includes(v.regionId));
+    }
     if (role === "VENDOR") {
       const myVendorIds = await resolveCallerVendorIds(req.auth);
       orders = (allOrders || []).filter((o) =>
@@ -1263,7 +1268,9 @@ app.delete("/api/v1/drs/:id", requireAuth, requireRole("ADMIN"), async (req, res
 // 3. VENDOR ENDPOINTS
 app.get("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
+    const where = req.auth.role === "DR" ? { regionId: { in: await resolveCallerDrRegionIds(req.auth) } } : undefined;
     const vendors = await prisma.vendor.findMany({
+      where,
       include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
       orderBy: { joinedOn: "desc" },
     });
@@ -1296,6 +1303,14 @@ app.post("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req,
       }).catch(() => null);
     }
 
+    // DRs can only onboard shops into their own district
+    if (req.auth.role === "DR") {
+      const drRegionIds = await resolveCallerDrRegionIds(req.auth);
+      if (!validRegion || !drRegionIds.includes(validRegion.id)) {
+        return res.status(403).json({ error: "You can only add vendors in your own district." });
+      }
+    }
+
     // 3. Create real Region record in DB if not existing
     if (!validRegion) {
       validRegion = await prisma.region.create({
@@ -1316,6 +1331,9 @@ app.post("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req,
     }
 
     let user = await prisma.user.findUnique({ where: { phone: cleanPhone || phone } }).catch(() => null);
+    if (user && (user.role === "ADMIN" || user.role === "DR")) {
+      return res.status(409).json({ error: "This mobile number belongs to a staff account and cannot be registered as a vendor." });
+    }
     if (!user) {
       user = await prisma.user.create({
         data: { phone: cleanPhone || phone, name: ownerName || shopName, password: vendorHashedPassword, role: "VENDOR", tokenVersion: 1 },
@@ -1365,6 +1383,13 @@ const handleUpdateVendor = async (req, res) => {
       vendor = await prisma.vendor.findFirst({
         where: { OR: [{ id: rawId }, { phone: rawId }] },
       }).catch(() => null);
+    }
+
+    if (vendor && req.auth.role === "DR") {
+      const drRegionIds = await resolveCallerDrRegionIds(req.auth);
+      if (!drRegionIds.includes(vendor.regionId) || (regionId && !drRegionIds.includes(regionId))) {
+        return res.status(403).json({ error: "You can only manage vendors in your own district." });
+      }
     }
 
     if (vendor) {
@@ -1446,6 +1471,10 @@ app.patch("/api/v1/vendors/:id/status", requireAuth, requireRole("ADMIN", "DR"),
       }).catch(() => null);
     }
 
+    if (vendor && req.auth.role === "DR" && !(await drCanManageVendor(req.auth, vendor))) {
+      return res.status(403).json({ error: "You can only manage vendors in your own district." });
+    }
+
     if (vendor) {
       const updatedVendor = await prisma.vendor.update({
         where: { id: vendor.id },
@@ -1490,6 +1519,13 @@ app.delete("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), async
           ],
         },
       }).catch(() => null);
+    }
+
+    if (req.auth.role === "DR") {
+      if (!vendor) return res.status(404).json({ error: "Vendor not found" });
+      if (!(await drCanManageVendor(req.auth, vendor))) {
+        return res.status(403).json({ error: "You can only manage vendors in your own district." });
+      }
     }
 
     if (vendor) {
@@ -1721,6 +1757,26 @@ app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "AD
       }).catch(() => null);
     }
 
+    if (req.auth.role === "VENDOR") {
+      // Partners can only list products in their own shop
+      const myVendorIds = await resolveCallerVendorIds(req.auth);
+      if (!vendor || !myVendorIds.includes(vendor.id)) {
+        vendor = myVendorIds.length > 0
+          ? await prisma.vendor.findUnique({ where: { id: myVendorIds[0] }, include: { region: true } }).catch(() => null)
+          : null;
+      }
+      if (!vendor) {
+        return res.status(403).json({ error: "No shop is linked to this account." });
+      }
+    } else if (req.auth.role === "DR") {
+      if (!vendor) {
+        return res.status(404).json({ error: "Vendor not found." });
+      }
+      if (!(await drCanManageVendor(req.auth, vendor))) {
+        return res.status(403).json({ error: "You can only add listings for vendors in your own district." });
+      }
+    }
+
     let targetRegName = req.body.regionName || req.body.districtName || vendor?.region?.name;
     
     // If regionId is passed as seed string ("r2" or "r1"), map to real names
@@ -1731,9 +1787,9 @@ app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "AD
 
     if (!targetRegName) targetRegName = "Mirzapur";
 
-    // Find matching region in DB (by UUID or name)
-    let matchedRegion = null;
-    if (regionId && regionId.length > 10) {
+    // Find matching region in DB (by UUID or name); vendor and DR listings always live in the shop's own district
+    let matchedRegion = req.auth.role === "ADMIN" ? null : vendor.region;
+    if (!matchedRegion && regionId && regionId.length > 10) {
       matchedRegion = await prisma.region.findUnique({ where: { id: regionId } }).catch(() => null);
     }
 
@@ -1790,7 +1846,8 @@ app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "AD
       }).catch(() => null);
     }
 
-    const isAutoApproved = addedBy === "Admin" || addedBy === "DR";
+    // Vendors can never approve their own listings; they always go to DR/Admin review
+    const isAutoApproved = req.auth.role !== "VENDOR" && (addedBy === "Admin" || addedBy === "DR");
 
     const newListing = await prisma.vendorProduct.create({
       data: {
@@ -1836,15 +1893,27 @@ app.patch("/api/v1/vendor/listings/:id", requireAuth, requireRole("VENDOR", "DR"
 
     let listing = await prisma.vendorProduct.findUnique({ where: { id: rawId } }).catch(() => null);
 
+    if (listing && req.auth.role === "VENDOR") {
+      const myVendorIds = await resolveCallerVendorIds(req.auth);
+      if (!myVendorIds.includes(listing.vendorId)) {
+        return res.status(403).json({ error: "You can only edit your own shop's listings." });
+      }
+    } else if (listing && req.auth.role === "DR" && !(await drCanManageVendor(req.auth, listing.vendorId))) {
+      return res.status(403).json({ error: "You can only manage listings for vendors in your own district." });
+    }
+
     if (listing) {
       const updateData = {};
       if (price !== undefined && !isNaN(Number(price))) updateData.price = Number(price);
       if (stockQty !== undefined && !isNaN(Number(stockQty))) updateData.stockQty = Number(stockQty);
-      if (approvalStatus !== undefined) {
-        updateData.approvalStatus = approvalStatus;
-        updateData.isActive = approvalStatus === "APPROVED";
+      // Approval and visibility are decided by DR/Admin review, never by the vendor
+      if (req.auth.role !== "VENDOR") {
+        if (approvalStatus !== undefined) {
+          updateData.approvalStatus = approvalStatus;
+          updateData.isActive = approvalStatus === "APPROVED";
+        }
+        if (isActive !== undefined) updateData.isActive = isActive;
       }
-      if (isActive !== undefined) updateData.isActive = isActive;
 
       const updatedListing = await prisma.vendorProduct.update({
         where: { id: listing.id },
@@ -1874,6 +1943,10 @@ app.patch("/api/v1/vendor/listings/:id/status", requireAuth, requireRole("ADMIN"
       listing = await prisma.vendorProduct.findFirst({
         where: { id: rawId },
       }).catch(() => null);
+    }
+
+    if (listing && req.auth.role === "DR" && !(await drCanManageVendor(req.auth, listing.vendorId))) {
+      return res.status(403).json({ error: "You can only review listings for vendors in your own district." });
     }
 
     if (listing) {
@@ -2315,6 +2388,16 @@ async function resolveCallerDrRegionIds(auth) {
     }
   }
   return Array.from(regionIds);
+}
+
+// DRs may only manage shops (and their listings) in their own district
+async function drCanManageVendor(auth, vendorOrId) {
+  const vendor = typeof vendorOrId === "string"
+    ? await prisma.vendor.findUnique({ where: { id: vendorOrId }, select: { regionId: true } }).catch(() => null)
+    : vendorOrId;
+  if (!vendor?.regionId) return false;
+  const drRegionIds = await resolveCallerDrRegionIds(auth);
+  return drRegionIds.includes(vendor.regionId);
 }
 
 // Orders delivered to, or fulfilled by a shop in, one of the given regions

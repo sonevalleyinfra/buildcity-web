@@ -407,7 +407,7 @@ async function sendVendorOrderPushNotification({ vendorId, phone, orderNumber, a
     android: {
       priority: "high", // ⚡ High priority wakes up sleeping/killed Android device immediately
       notification: {
-        channelId: "vendor_order_alerts_v2",
+        channelId: "vendor_order_alerts",
         icon: "ic_stat_order",
         color: "#EA580C",
         sound: "default",

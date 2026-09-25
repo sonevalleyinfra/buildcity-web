@@ -395,6 +395,7 @@ async function sendVendorOrderPushNotification({ vendorId, phone, orderNumber, a
     notification: {
       title,
       body,
+      sound: "default",
     },
     data: {
       orderId: String(orderId || ""),

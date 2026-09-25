@@ -200,6 +200,7 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
                 title: notification.title || "New Order Received!",
                 body: notification.body || (cleanOrderNumber ? `Order #${cleanOrderNumber} received • Tap to review` : "Tap to review incoming order"),
                 channelId: "vendor_order_alerts",
+                sound: "default",
                 extra: { ...data, orderId, orderNumber: cleanOrderNumber },
                 smallIcon: "ic_stat_order",
                 iconColor: "#EA580C",

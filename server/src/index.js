@@ -26,7 +26,22 @@ app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false 
 app.disable("x-powered-by");
 
 // Enable CORS & JSON Parsing
-app.use(cors());
+// If ALLOWED_ORIGINS is configured, only those origins (plus the Capacitor app shells) may call the API from a browser.
+// Auth uses Bearer tokens (not cookies), so an unset list falls back to open CORS without exposing credentials.
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+const nativeAppOrigins = ["capacitor://localhost", "http://localhost", "https://localhost", "ionic://localhost"];
+app.use(
+  cors(
+    allowedOrigins.length > 0
+      ? {
+          origin: (origin, cb) => cb(null, !origin || allowedOrigins.includes(origin) || nativeAppOrigins.includes(origin)),
+        }
+      : {}
+  )
+);
 app.use(express.json());
 
 // Defense-in-depth: never serialize password hashes in any API response,
@@ -176,6 +191,61 @@ async function resolveOwnVendor(req) {
   const cleanPhone = String(req.auth?.phone || "").replace(/\D/g, "");
   if (cleanPhone.length !== 10) return null;
   return prisma.vendor.findFirst({ where: { phone: cleanPhone } }).catch(() => null);
+}
+
+// Same district aliases as the DR dashboard, so "Banaras" and "Varanasi" region rows count as one district
+const DISTRICT_ALIASES = {
+  varanasi: ["varanasi", "varnasi", "banaras", "kashi", "vns"],
+  mirzapur: ["mirzapur", "mzp"],
+  prayagraj: ["prayagraj", "allahabad"],
+  jaunpur: ["jaunpur"],
+};
+function canonicalDistrict(name) {
+  const clean = String(name || "").toLowerCase().trim();
+  if (!clean) return "";
+  for (const [district, aliases] of Object.entries(DISTRICT_ALIASES)) {
+    if (aliases.some((alias) => clean.includes(alias))) return district;
+  }
+  return clean;
+}
+
+// Region IDs covering the logged-in DR's assigned district(s)
+async function resolveCallerDrRegionIds(auth) {
+  const last10 = String(auth?.phone || "").replace(/\D/g, "").slice(-10);
+  const or = [];
+  if (auth?.userId) or.push({ id: auth.userId }, { userId: auth.userId });
+  if (last10.length === 10) or.push({ phone: { endsWith: last10 } });
+  if (or.length === 0) return [];
+  const drs = await prisma.dR.findMany({ where: { OR: or }, include: { region: true } }).catch(() => []);
+  const regionIds = new Set(drs.map((d) => d.regionId).filter(Boolean));
+  const districts = new Set(drs.map((d) => canonicalDistrict(d.region?.name)).filter(Boolean));
+  if (districts.size > 0) {
+    const regions = await prisma.region.findMany({ select: { id: true, name: true } }).catch(() => []);
+    for (const r of regions) {
+      if (districts.has(canonicalDistrict(r.name))) regionIds.add(r.id);
+    }
+  }
+  return Array.from(regionIds);
+}
+
+// DRs may only manage shops (and their listings) in their own district
+async function drCanManageVendor(auth, vendorOrId) {
+  const vendor = typeof vendorOrId === "string"
+    ? await prisma.vendor.findUnique({ where: { id: vendorOrId }, select: { regionId: true } }).catch(() => null)
+    : vendorOrId;
+  if (!vendor?.regionId) return false;
+  const drRegionIds = await resolveCallerDrRegionIds(auth);
+  return drRegionIds.includes(vendor.regionId);
+}
+
+// Orders a DR may access: delivered into, or fulfilled by a shop in, one of the given regions
+function ordersInRegionsWhere(regionIds) {
+  return {
+    OR: [
+      { address: { regionId: { in: regionIds } } },
+      { items: { some: { vendor: { regionId: { in: regionIds } } } } },
+    ],
+  };
 }
 
 // Auto-Invalidate Catalog Cache on Mutations (POST, PUT, PATCH, DELETE).
@@ -430,26 +500,31 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       }
     }
     const isVendor = role === "VENDOR";
+    // DRs get only their own district's team, shops and orders
+    const drRegionIds = role === "DR" ? await resolveCallerDrRegionIds(req.auth) : null;
 
     // Short per-role cache: a full sync reads almost every table, so many open dashboards (or a
     // client refresh bug) must not translate 1:1 into database egress. Any catalog/order mutation
     // clears the cache (see invalidateCache middleware), so staff still see changes immediately.
-    const cacheKey = `cloud_sync_${role}_${ownVendor ? ownVendor.id : ""}`;
+    const cacheKey = `cloud_sync_${role}_${ownVendor ? ownVendor.id : ""}_${drRegionIds ? [...drRegionIds].sort().join(",") : ""}`;
     const cached = getCached(cacheKey);
     if (cached) {
       res.setHeader("X-Cache", "HIT");
       return res.json(cached);
     }
 
-    const ordersScope = isVendor ? { items: { some: { vendorId: ownVendor.id } } } : {};
+    const ordersScope = isVendor
+      ? { items: { some: { vendorId: ownVendor.id } } }
+      : drRegionIds ? ordersInRegionsWhere(drRegionIds) : {};
 
     const fetchPromises = [
       isVendor ? Promise.resolve([]) : prisma.dR.findMany({
+        where: drRegionIds ? { regionId: { in: drRegionIds } } : undefined,
         include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
         orderBy: { joinedOn: "desc" },
       }).then(list => list.map(d => { const { password, ...safe } = d; return safe; })).catch(() => []),
       prisma.vendor.findMany({
-        where: isVendor ? { id: ownVendor.id } : undefined,
+        where: isVendor ? { id: ownVendor.id } : drRegionIds ? { regionId: { in: drRegionIds } } : undefined,
         include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
         orderBy: { joinedOn: "desc" },
       }).then(list => list.map(v => { const { password, ...safe } = v; return safe; })).catch(() => []),
@@ -1478,7 +1553,9 @@ app.delete("/api/v1/drs/:id", requireAuth, requireRole("ADMIN"), async (req, res
 // 3. VENDOR ENDPOINTS
 app.get("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
+    const where = req.auth.role === "DR" ? { regionId: { in: await resolveCallerDrRegionIds(req.auth) } } : undefined;
     const vendors = await prisma.vendor.findMany({
+      where,
       include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
       orderBy: { joinedOn: "desc" },
     });
@@ -1511,6 +1588,14 @@ app.post("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req,
       }).catch(() => null);
     }
 
+    // DRs can only onboard shops into their own district
+    if (req.auth.role === "DR") {
+      const drRegionIds = await resolveCallerDrRegionIds(req.auth);
+      if (!validRegion || !drRegionIds.includes(validRegion.id)) {
+        return res.status(403).json({ error: "You can only add vendors in your own district." });
+      }
+    }
+
     // 3. Create real Region record in DB if not existing
     if (!validRegion) {
       validRegion = await prisma.region.create({
@@ -1530,6 +1615,9 @@ app.post("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req,
     }
 
     let user = await prisma.user.findUnique({ where: { phone: cleanPhone || phone } }).catch(() => null);
+    if (user && (user.role === "ADMIN" || user.role === "DR")) {
+      return res.status(409).json({ error: "This mobile number belongs to a staff account and cannot be registered as a vendor." });
+    }
     if (!user) {
       user = await prisma.user.create({
         data: { phone: cleanPhone || phone, name: ownerName || shopName, password: vendorHashedPassword, role: "VENDOR", tokenVersion: 1 },
@@ -1579,6 +1667,13 @@ const handleUpdateVendor = async (req, res) => {
       vendor = await prisma.vendor.findFirst({
         where: { OR: [{ id: rawId }, { phone: rawId }] },
       }).catch(() => null);
+    }
+
+    if (vendor && req.auth.role === "DR") {
+      const drRegionIds = await resolveCallerDrRegionIds(req.auth);
+      if (!drRegionIds.includes(vendor.regionId) || (regionId && !drRegionIds.includes(regionId))) {
+        return res.status(403).json({ error: "You can only manage vendors in your own district." });
+      }
     }
 
     if (vendor) {
@@ -1660,6 +1755,10 @@ app.patch("/api/v1/vendors/:id/status", requireAuth, requireRole("ADMIN", "DR"),
       }).catch(() => null);
     }
 
+    if (vendor && req.auth.role === "DR" && !(await drCanManageVendor(req.auth, vendor))) {
+      return res.status(403).json({ error: "You can only manage vendors in your own district." });
+    }
+
     if (vendor) {
       const updatedVendor = await prisma.vendor.update({
         where: { id: vendor.id },
@@ -1704,6 +1803,13 @@ app.delete("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), async
           ],
         },
       }).catch(() => null);
+    }
+
+    if (req.auth.role === "DR") {
+      if (!vendor) return res.status(404).json({ error: "Vendor not found" });
+      if (!(await drCanManageVendor(req.auth, vendor))) {
+        return res.status(403).json({ error: "You can only manage vendors in your own district." });
+      }
     }
 
     if (vendor) {
@@ -1924,6 +2030,15 @@ app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "AD
       }).catch(() => null);
     }
 
+    if (req.auth.role === "DR") {
+      if (!vendor) {
+        return res.status(404).json({ error: "Vendor not found." });
+      }
+      if (!(await drCanManageVendor(req.auth, vendor))) {
+        return res.status(403).json({ error: "You can only add listings for vendors in your own district." });
+      }
+    }
+
     let targetRegName = req.body.regionName || req.body.districtName || vendor?.region?.name;
     
     // If regionId is passed as seed string ("r2" or "r1"), map to real names
@@ -1934,9 +2049,9 @@ app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "AD
 
     if (!targetRegName) targetRegName = "Mirzapur";
 
-    // Find matching region in DB (by UUID or name)
-    let matchedRegion = null;
-    if (regionId && regionId.length > 10) {
+    // Find matching region in DB (by UUID or name); vendor and DR listings always live in the shop's own district
+    let matchedRegion = req.auth.role === "ADMIN" ? null : vendor.region;
+    if (!matchedRegion && regionId && regionId.length > 10) {
       matchedRegion = await prisma.region.findUnique({ where: { id: regionId } }).catch(() => null);
     }
 
@@ -2030,6 +2145,10 @@ app.patch("/api/v1/vendor/listings/:id", requireAuth, requireRole("VENDOR", "DR"
 
     let listing = await prisma.vendorProduct.findUnique({ where: { id: rawId } }).catch(() => null);
 
+    if (listing && req.auth.role === "DR" && !(await drCanManageVendor(req.auth, listing.vendorId))) {
+      return res.status(403).json({ error: "You can only manage listings for vendors in your own district." });
+    }
+
     if (listing) {
       const isVendorRole = req.auth.role === "VENDOR";
       if (isVendorRole) {
@@ -2093,6 +2212,10 @@ app.patch("/api/v1/vendor/listings/:id/status", requireAuth, requireRole("ADMIN"
       listing = await prisma.vendorProduct.findFirst({
         where: { id: rawId },
       }).catch(() => null);
+    }
+
+    if (listing && req.auth.role === "DR" && !(await drCanManageVendor(req.auth, listing.vendorId))) {
+      return res.status(403).json({ error: "You can only review listings for vendors in your own district." });
     }
 
     if (listing) {
@@ -2415,7 +2538,16 @@ function customerOrdersWhere(userId, phone) {
 // All orders (Admin / DR). Supports ?limit=&cursor=&includeOpen=1 and ?regionId= for a district.
 app.get("/api/v1/orders", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
-    const list = await listOrders(req, orderRegionWhere(req.query.regionId), { include: STAFF_ORDER_INCLUDE });
+    let where = orderRegionWhere(req.query.regionId);
+    if (req.auth.role === "DR") {
+      // DRs only ever see orders in their own district
+      const drRegionIds = await resolveCallerDrRegionIds(req.auth);
+      if (drRegionIds.length === 0) {
+        return res.json(getPageParams(req) ? { orders: [], nextCursor: null, hasMore: false } : []);
+      }
+      where = { AND: [where, ordersInRegionsWhere(drRegionIds)] };
+    }
+    const list = await listOrders(req, where, { include: STAFF_ORDER_INCLUDE });
     sendOrderList(res, list, withVendorNames(list.orders));
   } catch (err) {
     sendServerError(res, err);
@@ -2426,8 +2558,12 @@ app.get("/api/v1/orders", requireAuth, requireRole("ADMIN", "DR"), async (req, r
 app.get("/api/v1/orders/summary", requireAuth, async (req, res) => {
   try {
     const role = req.auth.role;
-    if (role === "ADMIN" || role === "DR") {
+    if (role === "ADMIN") {
       return res.json(await computeOrdersSummary(orderRegionWhere(req.query.regionId)));
+    }
+    if (role === "DR") {
+      const drRegionIds = await resolveCallerDrRegionIds(req.auth);
+      return res.json(await computeOrdersSummary({ AND: [orderRegionWhere(req.query.regionId), ordersInRegionsWhere(drRegionIds)] }));
     }
     if (role === "VENDOR") {
       const own = await resolveOwnVendor(req);
@@ -2488,7 +2624,7 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
       }).catch(() => null);
     }
 
-    if (!vendor) {
+    if (!vendor || (req.auth.role === "DR" && !(await drCanManageVendor(req.auth, vendor)))) {
       return res.json(getPageParams(req) ? { orders: [], nextCursor: null, hasMore: false } : []);
     }
 
@@ -2559,11 +2695,28 @@ app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", 
       return res.status(404).json({ error: "Order not found" });
     }
 
-    // Vendors may only update orders that contain their own items
+    // Vendors may only update orders whose items all belong to their own shop
     if (req.auth.role === "VENDOR") {
       const own = await resolveOwnVendor(req);
-      if (!own || !previousOrder.items.some((it) => it.vendorId === own.id)) {
-        return res.status(403).json({ error: "You do not have permission for this action" });
+      const ownsEveryItem = !!own && previousOrder.items.length > 0 && previousOrder.items.every((it) => it.vendorId === own.id);
+      if (!ownsEveryItem) {
+        const ownsSomeItem = !!own && previousOrder.items.some((it) => it.vendorId === own.id);
+        return res.status(403).json({
+          error: ownsSomeItem
+            ? "This order is shared with another shop. Please ask your District Representative to update it."
+            : "You do not have permission for this action",
+        });
+      }
+    }
+
+    // DRs may only update orders in their own district
+    if (req.auth.role === "DR") {
+      const drRegionIds = await resolveCallerDrRegionIds(req.auth);
+      const inDistrict = drRegionIds.length > 0 && (await prisma.order.count({
+        where: { AND: [{ id: previousOrder.id }, ordersInRegionsWhere(drRegionIds)] },
+      })) > 0;
+      if (!inDistrict) {
+        return res.status(403).json({ error: "This order is outside your district." });
       }
     }
 
@@ -2861,15 +3014,18 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
     const targetCustomerId = targetUser.id;
 
     if (idempotencyKey) {
-      const existingOrder = await prisma.order.findUnique({
-        where: { idempotencyKey: String(idempotencyKey) },
+      // A split checkout stores the key on its first order and "<key>__vN" on the rest
+      const key = String(idempotencyKey);
+      const existingOrders = await prisma.order.findMany({
+        where: { OR: [{ idempotencyKey: key }, { idempotencyKey: { startsWith: `${key}__v` } }] },
         include: { items: true, customer: { select: SAFE_USER_SELECT }, address: true },
+        orderBy: { createdAt: "asc" },
       });
-      if (existingOrder) {
-        if (existingOrder.customerId !== targetCustomerId) {
+      if (existingOrders.length > 0) {
+        if (existingOrders.some((o) => o.customerId !== targetCustomerId)) {
           return res.status(409).json({ error: "Duplicate order request. Please refresh and try again." });
         }
-        return res.json({ success: true, order: existingOrder, isDuplicate: true });
+        return res.json({ success: true, order: existingOrders[0], orders: existingOrders, isDuplicate: true });
       }
     }
 
@@ -2916,7 +3072,6 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
     }).catch(() => []);
 
     // 3. Validate every item BEFORE any write, so a bad item can't leave partial side effects
-    let serverTotalAmount = 0;
     const validatedItems = [];
     const stockRequested = new Map();
 
@@ -2944,7 +3099,6 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       }
 
       const itemTotal = itemQty * verifiedPrice;
-      serverTotalAmount += itemTotal;
       stockRequested.set(liveVp.id, (stockRequested.get(liveVp.id) || 0) + itemQty);
 
       validatedItems.push({
@@ -3002,10 +3156,50 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
     }
 
     const calculatedDeliveryFee = reg ? Number(reg.baseDeliveryCharge || 49) : 49;
-    const finalOrderAmount = serverTotalAmount + calculatedDeliveryFee;
 
-    // 5. Order + OrderItems + stock decrements commit atomically.
+    // 5. One order per vendor: each shop accepts, dispatches and delivers its own order,
+    // so a status change by one vendor can never close another vendor's items.
+    // All orders, their items and the stock decrements commit atomically.
     // Stock is decremented only while enough remains, so it can never go negative.
+    const vendorGroups = new Map();
+    for (const vi of validatedItems) {
+      if (!vendorGroups.has(vi.vendorId)) vendorGroups.set(vi.vendorId, []);
+      vendorGroups.get(vi.vendorId).push(vi);
+    }
+
+    const orderCreates = Array.from(vendorGroups.values()).map((groupItems, idx) =>
+      prisma.order.create({
+        data: {
+          customerId: targetCustomerId,
+          addressId,
+          totalAmount: groupItems.reduce((sum, vi) => sum + vi.totalPrice, 0) + calculatedDeliveryFee,
+          deliveryFee: calculatedDeliveryFee,
+          paymentMode: "COD",
+          status: "PENDING",
+          idempotencyKey: idempotencyKey ? (idx === 0 ? String(idempotencyKey) : `${idempotencyKey}__v${idx + 1}`) : null,
+          items: {
+            create: groupItems.map((vi) => ({
+              vendorProductId: vi.vendorProductId,
+              productName: vi.productName,
+              priceAtPurchase: vi.priceAtPurchase,
+              quantity: vi.quantity,
+              totalPrice: vi.totalPrice,
+              vendorId: vi.vendorId,
+            })),
+          },
+        },
+        include: {
+          items: {
+            include: {
+              vendor: {
+                select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
+              },
+            },
+          },
+        },
+      })
+    );
+
     const stockOps = [...stockRequested.entries()].map(([vpId, qty]) => {
       const vp = liveProducts.find((p) => p.id === vpId);
       const dec = Math.min(Number(vp?.stockQty || 0), qty);
@@ -3014,41 +3208,10 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
         : null;
     }).filter(Boolean);
 
-    let newOrder;
+    let createdOrders;
     try {
-      [newOrder] = await prisma.$transaction([
-        prisma.order.create({
-          data: {
-            customerId: targetCustomerId,
-            addressId,
-            totalAmount: finalOrderAmount,
-            deliveryFee: calculatedDeliveryFee,
-            paymentMode: "COD",
-            status: "PENDING",
-            idempotencyKey: idempotencyKey ? String(idempotencyKey) : null,
-            items: {
-              create: validatedItems.map((vi) => ({
-                vendorProductId: vi.vendorProductId,
-                productName: vi.productName,
-                priceAtPurchase: vi.priceAtPurchase,
-                quantity: vi.quantity,
-                totalPrice: vi.totalPrice,
-                vendorId: vi.vendorId,
-              })),
-            },
-          },
-          include: {
-            items: {
-              include: {
-                vendor: {
-                  select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
-                },
-              },
-            },
-          },
-        }),
-        ...stockOps,
-      ]);
+      const results = await prisma.$transaction([...orderCreates, ...stockOps]);
+      createdOrders = results.slice(0, orderCreates.length);
     } catch (txErr) {
       // Concurrent retry with the same idempotency key: the other request won
       if (txErr.code === "P2002" && idempotencyKey) {
@@ -3057,8 +3220,8 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       throw txErr;
     }
 
-    // 6. Build response object with guaranteed real DB items
-    const fullOrder = {
+    // 6. Build response objects with guaranteed real DB items
+    const fullOrders = createdOrders.map((newOrder) => ({
       ...newOrder,
       items: (newOrder.items || []).map((ci) => ({
         ...ci,
@@ -3079,42 +3242,26 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
         city: targetRegionName,
         region: reg,
       },
-    };
+    }));
 
-    console.log(`✅ Order ${newOrder.id} created successfully with ${newOrder.items.length} items for customer ${targetCustomerId}`);
+    console.log(`✅ ${fullOrders.length} order(s) created (${fullOrders.map((o) => o.id).join(", ")}) for customer ${targetCustomerId}`);
 
     // Respond IMMEDIATELY to customer
-    res.status(201).json({ success: true, order: fullOrder });
+    res.status(201).json({ success: true, order: fullOrders[0], orders: fullOrders });
 
-    // 7. Send High-Priority FCM Push Notification in background (non-blocking)
+    // 7. Send High-Priority FCM Push Notification to each vendor in background (non-blocking)
     setImmediate(async () => {
       try {
         const { sendVendorOrderPushNotification } = require("./pushService");
-        const vendorGroups = {};
-        for (const item of (fullOrder.items || [])) {
-          const vId = item.vendorId;
-          if (!vId) continue;
-          if (!vendorGroups[vId]) {
-            vendorGroups[vId] = {
-              count: 0,
-              amount: 0,
-              phone: item.vendor?.phone || null,
-            };
-          }
-          vendorGroups[vId].count += (item.quantity || 1);
-          vendorGroups[vId].amount += Number(item.totalPrice || item.priceAtPurchase || 0);
-          if (!vendorGroups[vId].phone && item.vendor?.phone) {
-            vendorGroups[vId].phone = item.vendor.phone;
-          }
-        }
-
-        for (const [vendorId, vData] of Object.entries(vendorGroups)) {
+        for (const fullOrder of fullOrders) {
+          const firstItem = fullOrder.items[0];
+          if (!firstItem?.vendorId) continue;
           await sendVendorOrderPushNotification({
-            vendorId,
-            phone: vData.phone,
+            vendorId: firstItem.vendorId,
+            phone: firstItem.vendor?.phone || null,
             orderNumber: fullOrder.orderNumber || fullOrder.id,
-            amount: vData.amount + (Number(fullOrder.deliveryFee) || 0),
-            itemCount: vData.count,
+            amount: Number(fullOrder.totalAmount) || 0,
+            itemCount: fullOrder.items.reduce((sum, it) => sum + (it.quantity || 1), 0),
             orderId: fullOrder.id,
           }).catch((e) => console.warn("FCM push send error:", e.message));
         }

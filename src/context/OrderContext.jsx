@@ -280,7 +280,7 @@ export function OrderProvider({ children }) {
 
       const idempotencyKey = "ord_idem_" + Date.now() + "_" + i + "_" + Math.random().toString(36).substring(2, 7);
 
-      let orderSaved = null;
+      let ordersSaved = [];
 
       try {
         const response = await authFetch(`${API_BASE_URL}/api/v1/orders/checkout`, {
@@ -302,23 +302,25 @@ export function OrderProvider({ children }) {
 
         const resData = await response.json();
         if (resData.success && resData.order) {
-          orderSaved = normalizeOrder({
-            id: resData.order.id,
-            userId: customerId || resData.order.userId || resData.order.customerId,
-            userPhone: resData.order.userPhone || address?.phone || resData.order.customer?.phone,
-            date: resData.order.createdAt || new Date().toISOString(),
-            status: resData.order.status || "Pending",
-            districtName: districtName || resData.order.districtName || resData.order.address?.city || "Varanasi",
-            regionId: regionId || resData.order.regionId || resData.order.address?.regionId || "varanasi",
-            vendorId: groupVendorId,
-            vendorName: groupVendorName,
-            items: resData.order.items && resData.order.items.length > 0 ? resData.order.items : groupItems,
-            address: resData.order.address || address,
-            customer: resData.order.customer,
-            total: Number(resData.order.totalAmount) || groupTotal,
-            totalAmount: Number(resData.order.totalAmount) || groupTotal,
-            deliveryFee: Number(resData.order.deliveryFee) || groupDeliveryFee,
-          });
+          // Server creates one order per vendor, so a single checkout call can return several orders
+          const serverOrders = Array.isArray(resData.orders) && resData.orders.length > 0 ? resData.orders : [resData.order];
+          ordersSaved = serverOrders.map((so) => normalizeOrder({
+            id: so.id,
+            userId: customerId || so.userId || so.customerId,
+            userPhone: so.userPhone || address?.phone || so.customer?.phone,
+            date: so.createdAt || new Date().toISOString(),
+            status: so.status || "Pending",
+            districtName: districtName || so.districtName || so.address?.city || "Varanasi",
+            regionId: regionId || so.regionId || so.address?.regionId || "varanasi",
+            vendorId: so.items?.[0]?.vendorId || groupVendorId,
+            vendorName: so.items?.[0]?.vendorName || groupVendorName,
+            items: so.items && so.items.length > 0 ? so.items : groupItems,
+            address: so.address || address,
+            customer: so.customer,
+            total: Number(so.totalAmount) || groupTotal,
+            totalAmount: Number(so.totalAmount) || groupTotal,
+            deliveryFee: Number(so.deliveryFee) || groupDeliveryFee,
+          }));
         } else {
           throw new Error(resData.error || "Order placement failed on server");
         }
@@ -327,10 +329,10 @@ export function OrderProvider({ children }) {
         throw err;
       }
 
-      return orderSaved;
+      return ordersSaved;
     });
 
-    const createdOrders = await Promise.all(orderPromises);
+    const createdOrders = (await Promise.all(orderPromises)).flat();
 
     // 4. Update orders state synchronously & dispatch events
     setOrders((prev) => {
@@ -382,6 +384,7 @@ export function OrderProvider({ children }) {
   // Update Order Status in Supabase Cloud DB with instant synchronous cache persistence
   const updateOrderStatus = async (orderId, newStatus) => {
     const currentStorageKey = getRoleStorageKey();
+    const previousStatus = orders.find((o) => o.id === orderId)?.status;
 
     // Optimistic local state + storage update so refreshes never see stale statuses
     setOrders((prev) => {
@@ -390,25 +393,37 @@ export function OrderProvider({ children }) {
       return updated;
     });
 
+    let res;
     try {
-      const res = await authFetch(`${API_BASE_URL}/api/v1/orders/${orderId}/status`, {
+      res = await authFetch(`${API_BASE_URL}/api/v1/orders/${orderId}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-      if (res.ok) {
-        const updated = await res.json();
-        setOrders((prev) => {
-          const next = prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o));
-          try { localStorage.setItem(currentStorageKey, JSON.stringify(next)); } catch {}
-          return next;
-        });
-        window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
-        return updated;
-      }
     } catch (err) {
       console.warn("Update status note:", err.message);
+      return;
     }
+
+    if (res.ok) {
+      const updated = await res.json();
+      setOrders((prev) => {
+        const next = prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o));
+        try { localStorage.setItem(currentStorageKey, JSON.stringify(next)); } catch {}
+        return next;
+      });
+      window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
+      return updated;
+    }
+
+    // Server refused the change (e.g. not this vendor's order): undo the optimistic update and surface why
+    const errData = await res.json().catch(() => ({}));
+    setOrders((prev) => {
+      const next = prev.map((o) => (o.id === orderId && previousStatus !== undefined ? { ...o, status: previousStatus } : o));
+      try { localStorage.setItem(currentStorageKey, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    throw new Error(errData.error || "Failed to update order status.");
   };
 
   const getOrder = (id) => orders.find((o) => o.id === id);

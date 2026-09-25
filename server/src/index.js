@@ -233,6 +233,7 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
   res.setHeader("Expires", "0");
 
   try {
+    const drRegionIds = role === "DR" ? await resolveCallerDrRegionIds(req.auth) : null;
     const fetchPromises = [
       prisma.dR.findMany({
         include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
@@ -246,6 +247,7 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       prisma.category.findMany().catch(() => []),
       prisma.region.findMany({ orderBy: { name: "asc" } }).catch(() => []),
       prisma.order.findMany({
+        where: drRegionIds ? ordersInRegionsWhere(drRegionIds) : undefined,
         include: {
           items: {
             include: {
@@ -298,18 +300,23 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
     const results = await Promise.all(fetchPromises);
     const [drs, vendors, masterProducts, categories, regions, allOrders, listings, coupons, dbBanners, users] = results;
 
-    // Partners only receive orders that belong entirely to their own shop
+    // Partners only receive their own shop profile and orders that belong entirely to their shop;
+    // other partners' and DRs' contact details stay with staff
     let orders = allOrders;
+    let visibleDrs = drs;
+    let visibleVendors = vendors;
     if (role === "VENDOR") {
       const myVendorIds = await resolveCallerVendorIds(req.auth);
       orders = (allOrders || []).filter((o) =>
         (o.items || []).length > 0 && o.items.every((it) => myVendorIds.includes(it.vendorId))
       );
+      visibleDrs = [];
+      visibleVendors = (vendors || []).filter((v) => myVendorIds.includes(v.id));
     }
 
     const data = {
-      drs,
-      vendors,
+      drs: visibleDrs,
+      vendors: visibleVendors,
       masterProducts,
       categories,
       regions,
@@ -2143,7 +2150,15 @@ app.delete("/api/v1/regions/:id", requireAuth, requireRole("ADMIN"), async (req,
 // 7. ORDERS & CHECKOUT ENDPOINTS (With Vendor Isolation & Status Updates)
 app.get("/api/v1/orders", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
+    let where;
+    if (req.auth.role === "DR") {
+      const drRegionIds = await resolveCallerDrRegionIds(req.auth);
+      if (drRegionIds.length === 0) return res.json([]);
+      where = ordersInRegionsWhere(drRegionIds);
+    }
+
     const orders = await prisma.order.findMany({
+      where,
       include: {
         items: {
           include: {
@@ -2267,6 +2282,51 @@ async function resolveCallerVendorIds(auth) {
   return vendors.map((v) => v.id);
 }
 
+// Same district aliases as the DR dashboard, so "Banaras" and "Varanasi" region rows count as one district
+const DISTRICT_ALIASES = {
+  varanasi: ["varanasi", "varnasi", "banaras", "kashi", "vns"],
+  mirzapur: ["mirzapur", "mzp"],
+  prayagraj: ["prayagraj", "allahabad"],
+  jaunpur: ["jaunpur"],
+};
+function canonicalDistrict(name) {
+  const clean = String(name || "").toLowerCase().trim();
+  if (!clean) return "";
+  for (const [district, aliases] of Object.entries(DISTRICT_ALIASES)) {
+    if (aliases.some((alias) => clean.includes(alias))) return district;
+  }
+  return clean;
+}
+
+// Region IDs covering the logged-in DR's assigned district(s)
+async function resolveCallerDrRegionIds(auth) {
+  const last10 = String(auth?.phone || "").replace(/\D/g, "").slice(-10);
+  const or = [];
+  if (auth?.userId) or.push({ id: auth.userId }, { userId: auth.userId });
+  if (last10.length === 10) or.push({ phone: { endsWith: last10 } });
+  if (or.length === 0) return [];
+  const drs = await prisma.dR.findMany({ where: { OR: or }, include: { region: true } }).catch(() => []);
+  const regionIds = new Set(drs.map((d) => d.regionId).filter(Boolean));
+  const districts = new Set(drs.map((d) => canonicalDistrict(d.region?.name)).filter(Boolean));
+  if (districts.size > 0) {
+    const regions = await prisma.region.findMany({ select: { id: true, name: true } }).catch(() => []);
+    for (const r of regions) {
+      if (districts.has(canonicalDistrict(r.name))) regionIds.add(r.id);
+    }
+  }
+  return Array.from(regionIds);
+}
+
+// Orders delivered to, or fulfilled by a shop in, one of the given regions
+function ordersInRegionsWhere(regionIds) {
+  return {
+    OR: [
+      { address: { regionId: { in: regionIds } } },
+      { items: { some: { vendor: { regionId: { in: regionIds } } } } },
+    ],
+  };
+}
+
 // Strict Vendor Isolated Orders Fetch
 app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
@@ -2289,6 +2349,10 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
         },
       }).catch(() => null);
       vendorIds = vendor ? [vendor.id] : [];
+      if (vendor && req.auth.role === "DR") {
+        const drRegionIds = await resolveCallerDrRegionIds(req.auth);
+        if (!drRegionIds.includes(vendor.regionId)) vendorIds = [];
+      }
     }
 
     if (vendorIds.length === 0) {
@@ -2385,6 +2449,17 @@ app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", 
             ? "This order is shared with another shop. Please ask your District Representative to update it."
             : "You do not have permission to update this order.",
         });
+      }
+    }
+
+    // DRs may only update orders in their own district
+    if (req.auth.role === "DR") {
+      const drRegionIds = await resolveCallerDrRegionIds(req.auth);
+      const inDistrict = drRegionIds.length > 0 && (await prisma.order.count({
+        where: { id: previousOrder.id, ...ordersInRegionsWhere(drRegionIds) },
+      })) > 0;
+      if (!inDistrict) {
+        return res.status(403).json({ error: "This order is outside your district." });
       }
     }
 

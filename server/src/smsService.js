@@ -7,21 +7,17 @@ const http = require("http");
 const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 50, timeout: 5000 });
 const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 50, timeout: 5000, rejectUnauthorized: false });
 
-const username = process.env.SMS_USERNAME || process.env.ARADHYA_SMS_USERNAME;
-const apikey = process.env.SMS_APIKEY || process.env.ARADHYA_SMS_APIKEY;
-
-if (!username || !apikey) {
-  console.warn("⚠️ [SMS Gateway] Warning: SMS_USERNAME and SMS_APIKEY not set in environment variables. Real SMS sending will be simulated/logged.");
-}
+const username = process.env.SMS_USERNAME || process.env.ARADHYA_SMS_USERNAME || "sonevalley";
+const apikey = process.env.SMS_APIKEY || process.env.ARADHYA_SMS_APIKEY || "A79D5-10E6B";
 
 async function sendRealSMSOTP(phone, otpCode) {
   const cleanMobile = (phone || "").toString().trim().replace(/\D/g, "").slice(-10);
 
-  const currentUsername = (process.env.SMS_USERNAME || process.env.ARADHYA_SMS_USERNAME || "").trim();
-  const currentApikey = (process.env.SMS_APIKEY || process.env.ARADHYA_SMS_APIKEY || "").trim();
-  const sender = (process.env.SMS_SENDER || process.env.ARADHYA_SMS_SENDER || "").trim();
-  const templateId = (process.env.SMS_TEMPLATE_ID || process.env.ARADHYA_SMS_TEMPLATE_ID || "").trim();
-  const peid = (process.env.SMS_PEID || process.env.ARADHYA_SMS_PE_ID || "").trim();
+  const currentUsername = (process.env.SMS_USERNAME || process.env.ARADHYA_SMS_USERNAME || "sonevalley").trim();
+  const currentApikey = (process.env.SMS_APIKEY || process.env.ARADHYA_SMS_APIKEY || "A79D5-10E6B").trim();
+  const sender = (process.env.SMS_SENDER || process.env.ARADHYA_SMS_SENDER || "SNVLY").trim();
+  const templateId = (process.env.SMS_TEMPLATE_ID || process.env.ARADHYA_SMS_TEMPLATE_ID || "1707175298595096991").trim();
+  const peid = (process.env.SMS_PEID || process.env.ARADHYA_SMS_PE_ID || "1701175266640135857").trim();
   const route = (process.env.SMS_ROUTE || process.env.ARADHYA_SMS_ROUTE || "TRANS").trim().toUpperCase();
 
   const message = `Dear user, Thankyou for visiting Sonevalley. Your OTP for login is ${otpCode}. Please do not share this OTP with anyone.\nRegards SNVLY`;
@@ -98,7 +94,7 @@ async function sendRealSMSOTP(phone, otpCode) {
       const edgeRes = await fetch(`https://buildcity-web-part-2.vercel.app/api/sms?${queryParams}`, {
         method: "GET",
         headers: { "User-Agent": "BuildCity-Core/2.0", "Accept": "*/*" },
-        signal: AbortSignal.timeout(4000),
+        signal: AbortSignal.timeout(6000),
       });
       const edgeText = await edgeRes.text();
       let edgeData = null;
@@ -111,7 +107,7 @@ async function sendRealSMSOTP(phone, otpCode) {
           (typeof edgeText === "string" && edgeText.toLowerCase().includes("successfully")));
 
       if (isSuccess) {
-        console.log(`[SMS Fast Relay] Delivered | HTTP ${edgeRes.status}`);
+        console.log(`[SMS Fast Relay] Delivered | HTTP ${edgeRes.status} | ${edgeText}`);
         return { success: true, status: edgeRes.status, message: edgeData?.message || edgeText, data: edgeData, gateway: "AradhyaSMS" };
       }
       throw new Error(edgeText || "Relay non-success");

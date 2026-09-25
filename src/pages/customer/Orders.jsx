@@ -8,6 +8,7 @@ import Navbar from "../../components/Navbar";
 import RegionPicker from "../../components/RegionPicker";
 import NotificationPanel from "../../components/NotificationPanel";
 import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
+import LoadMoreButton from "../../components/LoadMoreButton";
 
 const TABS = ["All", "Pending", "Processing", "Out for Delivery", "Delivered", "Cancelled"];
 
@@ -43,7 +44,7 @@ function CartIcon() {
 export default function Orders() {
   const navigate = useNavigate();
   const { count } = useCart();
-  const { orders } = useOrders();
+  const { orders, hasMoreOrders, loadingMoreOrders, loadMoreOrders } = useOrders();
   const { user } = useAuth();
   const { productsLoading } = useAdmin();
   const [tab, setTab] = useState("All");
@@ -243,6 +244,11 @@ export default function Orders() {
             })}
           </div>
         )}
+        <LoadMoreButton
+          hasMore={hasMoreOrders}
+          loading={loadingMoreOrders}
+          onClick={loadMoreOrders}
+        />
       </main>
     </div>
   );

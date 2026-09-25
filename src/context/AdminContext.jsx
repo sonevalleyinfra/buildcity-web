@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useRef } from "react";
 import { useAuth } from "./AuthContext";
 import { authFetch } from "../config/authFetch";
 import { API_BASE_URL } from "../config/api";
+import { ordersPageQuery, readOrdersPage } from "../utils/orderPagination";
 
 const areVendorsEqual = (listA, listB) => {
   if (listA === listB) return true;
@@ -185,6 +186,8 @@ const USERS_STORAGE_KEY = "buildcity_admin_users";
 const PRODUCTS_STORAGE_KEY = "buildcity_admin_products";
 const MASTER_PRODUCTS_STORAGE_KEY = "buildcity_admin_master_products";
 const ORDERS_STORAGE_KEY = "buildcity_admin_orders";
+// Minimum gap between syncs triggered by focus / window events (explicit refreshes are not throttled)
+const EVENT_SYNC_MIN_INTERVAL_MS = 5000;
 
 const loadInitialUsers = () => {
   try {
@@ -237,6 +240,11 @@ export function AdminProvider({ children }) {
   const [drs, setDrs] = useState(loadInitialDrs);
   const [vendors, setVendors] = useState(loadInitialVendors);
   const [users, setUsers] = useState(loadInitialUsers);
+  // Server-side totals and pagination cursors from /cloud-sync
+  const [ordersSummary, setOrdersSummary] = useState(null);
+  const [usersPage, setUsersPage] = useState(null);
+  const [loadingMoreUsers, setLoadingMoreUsers] = useState(false);
+  const olderUsersLoadedRef = useRef(false);
   const [orders, setOrders] = useState(loadInitialOrders);
   const [categories, setCategories] = useState(loadInitialCategories);
   const [regions, setRegions] = useState(loadInitialRegions);
@@ -246,6 +254,7 @@ export function AdminProvider({ children }) {
   const [products, setProducts] = useState(loadInitialProducts);
   const [productsLoading, setProductsLoading] = useState(true);
   const isFetchingRef = useRef(false);
+  const lastEventSyncRef = useRef(0);
   const recentEditsRef = useRef(new Map());
 
   const markRecentEdit = (id, updates) => {
@@ -424,6 +433,7 @@ export function AdminProvider({ children }) {
       if (!syncRes) return;
 
       const { drs: drsRes, vendors: vendorsRes, masterProducts: masterRes, categories: categoriesRes, regions: regionsRes, orders: ordersRes, listings: listingsRes, coupons: couponsRes, users: usersRes, banners: bannersRes } = syncRes;
+      if (syncRes.ordersSummary) setOrdersSummary(syncRes.ordersSummary);
 
       const now = Date.now();
       for (const [key, entry] of recentEditsRef.current.entries()) {
@@ -482,7 +492,16 @@ export function AdminProvider({ children }) {
 
       if (usersRes && Array.isArray(usersRes) && usersRes.length > 0) {
         localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(usersRes));
-        setUsers((prev) => (JSON.stringify(prev) === JSON.stringify(usersRes) ? prev : usersRes));
+        if (olderUsersLoadedRef.current) {
+          // Keep the older pages the admin already loaded; refresh only the newest page
+          setUsers((prev) => {
+            const freshIds = new Set(usersRes.map((u) => u.id));
+            return [...usersRes, ...(prev || []).filter((u) => !freshIds.has(u.id))];
+          });
+        } else {
+          setUsers((prev) => (JSON.stringify(prev) === JSON.stringify(usersRes) ? prev : usersRes));
+          if (syncRes.usersPage) setUsersPage(syncRes.usersPage);
+        }
       }
 
       if (couponsRes && Array.isArray(couponsRes)) {
@@ -641,10 +660,15 @@ export function AdminProvider({ children }) {
 
       let fetchedOrders = ordersRes;
       if (!Array.isArray(fetchedOrders) || fetchedOrders.length === 0) {
-        fetchedOrders = await authFetch(`${API_BASE_URL}/api/v1/orders`).then((r) => r.json()).catch(() => []);
+        fetchedOrders = await authFetch(`${API_BASE_URL}/api/v1/orders${ordersPageQuery(null)}`)
+          .then((r) => r.json())
+          .then((data) => readOrdersPage(data).orders)
+          .catch(() => []);
       }
       if (Array.isArray(fetchedOrders) && fetchedOrders.length > 0) {
-        localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(fetchedOrders));
+        // Don't persist here: the formatted orders are already stored above. Writing a second,
+        // differently-shaped copy made the value change on every sync and triggered an endless
+        // cross-tab `storage` event -> cloud-sync loop.
         setOrders((prev) => (JSON.stringify(prev) === JSON.stringify(fetchedOrders) ? prev : fetchedOrders));
       }
 
@@ -723,6 +747,7 @@ export function AdminProvider({ children }) {
 
   // Smart Real-time Sync: Instant Event Sync + Focus/Visibility Aware Refresh (Zero waste when tab is inactive)
   useEffect(() => {
+    lastEventSyncRef.current = Date.now();
     fetchCloudData();
 
     // 1. Smart Interval: Long idle fallback (every 10m instead of 60s, saving 90% egress)
@@ -735,13 +760,35 @@ export function AdminProvider({ children }) {
     // 2. Instant Sync on Window Focus (when user switches back to this tab)
     const handleFocus = () => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        fetchCloudData();
+        handleStorage();
       }
     };
 
-    // 3. Instant Event-Driven Sync (0ms delay when order placed, status changed, or cross-tab update)
-    const handleStorage = () => fetchCloudData();
-    window.addEventListener("storage", handleStorage);
+    // 3. Event-Driven Sync (order placed, status changed, catalog edited).
+    // Throttled so bursts of events (or a misbehaving listener) can't hammer the database.
+    let trailingSyncTimer = null;
+    const handleStorage = () => {
+      const wait = lastEventSyncRef.current + EVENT_SYNC_MIN_INTERVAL_MS - Date.now();
+      if (wait > 0) {
+        // Collapse the burst into one sync at the end of the window (never drop the update)
+        if (!trailingSyncTimer) {
+          trailingSyncTimer = setTimeout(() => {
+            trailingSyncTimer = null;
+            handleStorage();
+          }, wait);
+        }
+        return;
+      }
+      lastEventSyncRef.current = Date.now();
+      fetchCloudData();
+    };
+
+    // Cross-tab: only a login/logout in another tab needs a resync. Data keys written by a sync
+    // itself must be ignored, otherwise two open tabs keep re-triggering each other.
+    const handleCrossTabStorage = (e) => {
+      if (e.key === "buildcity_auth" || e.key === "buildcity_token") handleStorage();
+    };
+    window.addEventListener("storage", handleCrossTabStorage);
     window.addEventListener("focus", handleFocus);
     window.addEventListener("visibilitychange", handleFocus);
     window.addEventListener("buildcity_orders_updated", handleStorage);
@@ -752,7 +799,8 @@ export function AdminProvider({ children }) {
 
     return () => {
       clearInterval(interval);
-      window.removeEventListener("storage", handleStorage);
+      clearTimeout(trailingSyncTimer);
+      window.removeEventListener("storage", handleCrossTabStorage);
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("visibilitychange", handleFocus);
       window.removeEventListener("buildcity_orders_updated", handleStorage);
@@ -1857,15 +1905,41 @@ export function AdminProvider({ children }) {
     }
   };
 
+  // Appends the next page of users (Admin → Customers tab)
+  const loadMoreUsers = async () => {
+    if (!usersPage?.nextCursor || loadingMoreUsers) return;
+    setLoadingMoreUsers(true);
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/users?limit=100&cursor=${encodeURIComponent(usersPage.nextCursor)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const older = Array.isArray(data?.users) ? data.users : [];
+      olderUsersLoadedRef.current = true;
+      setUsers((prev) => {
+        const known = new Set((prev || []).map((u) => u.id));
+        return [...(prev || []), ...older.filter((u) => !known.has(u.id))];
+      });
+      setUsersPage((prev) => ({ ...(prev || {}), nextCursor: data.nextCursor || null, hasMore: Boolean(data.hasMore) }));
+    } catch (err) {
+      console.warn("Load more users note:", err.message);
+    } finally {
+      setLoadingMoreUsers(false);
+    }
+  };
+
+  // Orders are paginated, so platform totals come from the server summary when available
+  const platformSummary = ordersSummary?.revenueBasis === "all_orders_total" ? ordersSummary : null;
   const stats = {
-    totalRevenue: orders.reduce((sum, o) => sum + (Number(o.totalAmount || o.total || o.amount) || 0), 0),
+    totalRevenue: platformSummary
+      ? platformSummary.totalRevenue
+      : orders.reduce((sum, o) => sum + (Number(o.totalAmount || o.total || o.amount) || 0), 0),
     approvedVendors: vendors.filter((v) => v.status === "APPROVED").length,
     pendingVendors: vendors.filter((v) => v.status === "PENDING").length,
     activeVendors: vendors.filter((v) => v.status === "APPROVED").length,
     activeDrs: drs.filter((d) => d.status === "ACTIVE").length,
     totalMasterProducts: masterProducts.length,
     totalListings: products.length,
-    totalOrders: orders.length,
+    totalOrders: platformSummary ? platformSummary.totalOrders : orders.length,
   };
 
   const updateOrderStatus = async (orderId, newStatus) => {
@@ -1890,6 +1964,10 @@ export function AdminProvider({ children }) {
         drs,
         vendors,
         users,
+        usersPage,
+        loadingMoreUsers,
+        loadMoreUsers,
+        ordersSummary,
         orders,
         categories,
         regions,

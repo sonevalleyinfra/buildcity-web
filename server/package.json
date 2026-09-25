@@ -12,7 +12,8 @@
     "prisma:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "node src/seed.js",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "test:security": "node tests/run.js"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

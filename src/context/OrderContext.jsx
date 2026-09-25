@@ -1,5 +1,5 @@
 import { authFetch, getToken } from "../config/authFetch";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useAuth } from "./AuthContext";
 import { API_BASE_URL } from "../config/api";
 
@@ -67,7 +67,19 @@ export function OrderProvider({ children }) {
     return `${STORAGE_KEY}_${userRole || "anon"}`;
   };
 
-  const fetchOrdersForCurrentRole = async () => {
+  // Focus, visibilitychange, dashboards and events often ask for orders at the same moment:
+  // share one in-flight request instead of sending (and querying the DB) several times.
+  const inFlightOrdersRef = useRef(null);
+  const fetchOrdersForCurrentRole = () => {
+    if (inFlightOrdersRef.current) return inFlightOrdersRef.current;
+    const request = loadOrdersForCurrentRole().finally(() => {
+      inFlightOrdersRef.current = null;
+    });
+    inFlightOrdersRef.current = request;
+    return request;
+  };
+
+  const loadOrdersForCurrentRole = async () => {
     const token = getToken() || user?.token || (typeof window !== "undefined" ? localStorage.getItem("buildcity_token") : null);
     if (!user || !token) return orders;
     const currentStorageKey = getRoleStorageKey();

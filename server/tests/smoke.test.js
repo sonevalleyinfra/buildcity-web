@@ -81,6 +81,15 @@ const req = async (method, p, { token, body, raw } = {}) => {
   const deliver = await req("PATCH", `/orders/${co.body.order.id}/status`, { token: vbTok, body: { status: "DELIVERED" } });
   ok(deliver.status === 200 && deliver.body.status === "DELIVERED", "vendor B delivers own order");
 
+  // Egress guard: repeated full syncs are served from a short cache; new orders invalidate it
+  const sync1 = await fetch(`${BASE}/cloud-sync`, { headers: { Authorization: `Bearer ${admin}` } });
+  const sync2 = await fetch(`${BASE}/cloud-sync`, { headers: { Authorization: `Bearer ${admin}` } });
+  ok(sync2.headers.get("x-cache") === "HIT", "repeated cloud-sync is served from cache (no DB read)", [sync1.headers.get("x-cache"), sync2.headers.get("x-cache")]);
+  const co2 = await req("POST", "/orders/checkout", { token: ct, body: { items: [{ id: ids.lb, quantity: 1 }], regionId: ids.reg } });
+  const sync3 = await fetch(`${BASE}/cloud-sync`, { headers: { Authorization: `Bearer ${admin}` } });
+  const sync3Body = await sync3.json();
+  ok(sync3.headers.get("x-cache") === "MISS" && sync3Body.orders.some((o) => o.id === co2.body.order?.id), "new order invalidates the sync cache and shows up immediately");
+
   // Notifications / broadcasts
   const bc = await req("POST", "/notifications", { token: admin, body: { title: "Sale", message: "10% off" } });
   ok(bc.status === 201, "admin broadcasts notification");

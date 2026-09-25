@@ -301,6 +301,8 @@ app.get("/api/v1/public-catalog", async (req, res) => {
   }
 });
 
+const CLOUD_SYNC_CACHE_TTL_MS = 15000;
+
 // Single Unified Cloud Sync Endpoint (100% Real-time Live DB query for Staff and Partners)
 app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"), async (req, res) => {
   const role = req.auth.role;
@@ -318,6 +320,16 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       }
     }
     const isVendor = role === "VENDOR";
+
+    // Short per-role cache: a full sync reads almost every table, so many open dashboards (or a
+    // client refresh bug) must not translate 1:1 into database egress. Any catalog/order mutation
+    // clears the cache (see invalidateCache middleware), so staff still see changes immediately.
+    const cacheKey = `cloud_sync_${role}_${ownVendor ? ownVendor.id : ""}`;
+    const cached = getCached(cacheKey);
+    if (cached) {
+      res.setHeader("X-Cache", "HIT");
+      return res.json(cached);
+    }
 
     const fetchPromises = [
       isVendor ? Promise.resolve([]) : prisma.dR.findMany({
@@ -401,6 +413,8 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       banners: dbBanners && dbBanners.length > 0 ? dbBanners : bannersList,
     };
 
+    setCached(cacheKey, data, CLOUD_SYNC_CACHE_TTL_MS);
+    res.setHeader("X-Cache", "MISS");
     res.json(data);
   } catch (err) {
     sendServerError(res, err);

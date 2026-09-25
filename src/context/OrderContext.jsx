@@ -1,12 +1,12 @@
 import { authFetch, getToken } from "../config/authFetch";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useAuth } from "./AuthContext";
 import { API_BASE_URL } from "../config/api";
+import { mergeOrderLists, ordersPageQuery, readOrdersPage } from "../utils/orderPagination";
 
 // OrderContext Provider — Customer checkout, Vendor isolated orders, Status tracking aur Supabase DB sync handle karta hai
 const OrderContext = createContext(null);
 const STORAGE_KEY = "buildcity_orders";
-
 export function OrderProvider({ children }) {
   const { user } = useAuth() || {};
   const userRole = (user?.role || "").toLowerCase();
@@ -16,6 +16,13 @@ export function OrderProvider({ children }) {
   const userIdent = user?.id || user?.phone;
 
   const [orders, setOrders] = useState([]);
+  // Pagination: newest page is refreshed on sync; older pages are appended by loadMoreOrders()
+  const [ordersCursor, setOrdersCursor] = useState(null);
+  const [hasMoreOrders, setHasMoreOrders] = useState(false);
+  const [loadingMoreOrders, setLoadingMoreOrders] = useState(false);
+  const [ordersSummary, setOrdersSummary] = useState(null);
+  const olderPagesLoadedRef = useRef(false);
+  const identityKeyRef = useRef(null);
 
   const areOrdersEqual = (listA, listB) => {
     if (listA === listB) return true;
@@ -67,56 +74,84 @@ export function OrderProvider({ children }) {
     return `${STORAGE_KEY}_${userRole || "anon"}`;
   };
 
-  const fetchOrdersForCurrentRole = async () => {
+  // Focus, visibilitychange, dashboards and events often ask for orders at the same moment:
+  // share one in-flight request instead of sending (and querying the DB) several times.
+  const inFlightOrdersRef = useRef(null);
+  const fetchOrdersForCurrentRole = () => {
+    if (inFlightOrdersRef.current) return inFlightOrdersRef.current;
+    const request = loadOrdersForCurrentRole().finally(() => {
+      inFlightOrdersRef.current = null;
+    });
+    inFlightOrdersRef.current = request;
+    return request;
+  };
+
+  // Role-scoped order list endpoint (Admin/DR: all, Vendor: own shop, Customer: own orders)
+  const getOrdersListUrl = () => {
+    if (isAdmin || isDr) return `${API_BASE_URL}/api/v1/orders`;
+    if (isVendor) {
+      const vId = user.vendorInfo?.id || user.vendorId || user.phone || user.id;
+      return `${API_BASE_URL}/api/v1/orders/vendor/${encodeURIComponent(vId)}`;
+    }
+    if (userIdent) return `${API_BASE_URL}/api/v1/orders/me`;
+    return null;
+  };
+
+  // Appends the next (older) page of orders
+  const loadMoreOrders = async () => {
+    const listUrl = getOrdersListUrl();
+    if (!listUrl || !ordersCursor || loadingMoreOrders) return [];
+    setLoadingMoreOrders(true);
+    try {
+      const res = await authFetch(`${listUrl}${ordersPageQuery(ordersCursor)}`);
+      if (!res.ok) return [];
+      const page = readOrdersPage(await res.json());
+      const older = page.orders.map(normalizeOrder);
+      olderPagesLoadedRef.current = true;
+      setOrders((prev) => mergeOrderLists(prev, older));
+      setOrdersCursor(page.nextCursor);
+      setHasMoreOrders(page.hasMore);
+      return older;
+    } catch (err) {
+      console.warn("Load more orders note:", err.message);
+      return [];
+    } finally {
+      setLoadingMoreOrders(false);
+    }
+  };
+
+  const loadOrdersForCurrentRole = async () => {
     const token = getToken() || user?.token || (typeof window !== "undefined" ? localStorage.getItem("buildcity_token") : null);
     if (!user || !token) return orders;
     const currentStorageKey = getRoleStorageKey();
 
+    const listUrl = getOrdersListUrl();
+    if (!listUrl) return orders;
+
     try {
-      if (isAdmin || isDr) {
-        const res = await authFetch(`${API_BASE_URL}/api/v1/orders`);
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) {
-            const normalized = data.map(normalizeOrder);
-            setOrders((prev) => {
-              if (areOrdersEqual(prev, normalized)) return prev;
-              try { localStorage.setItem(currentStorageKey, JSON.stringify(normalized)); } catch {}
-              return normalized;
-            });
-            return normalized;
-          }
+      // Exact totals for dashboards run alongside the list (they don't depend on loaded pages)
+      authFetch(`${API_BASE_URL}/api/v1/orders/summary`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((summary) => { if (summary) setOrdersSummary(summary); })
+        .catch(() => {});
+
+      const res = await authFetch(`${listUrl}${ordersPageQuery(null)}`);
+      if (res.ok) {
+        const page = readOrdersPage(await res.json());
+        const normalized = page.orders.map(normalizeOrder);
+        const keepOlderPages = olderPagesLoadedRef.current;
+        setOrders((prev) => {
+          // Once older pages are loaded, refresh the newest page without dropping them
+          const next = keepOlderPages ? mergeOrderLists(normalized, prev) : normalized;
+          if (areOrdersEqual(prev, next)) return prev;
+          try { localStorage.setItem(currentStorageKey, JSON.stringify(next)); } catch {}
+          return next;
+        });
+        if (!keepOlderPages) {
+          setOrdersCursor(page.nextCursor);
+          setHasMoreOrders(page.hasMore);
         }
-      } else if (isVendor) {
-        const vId = user.vendorInfo?.id || user.vendorId || user.phone || user.id;
-        const res = await authFetch(`${API_BASE_URL}/api/v1/orders/vendor/${encodeURIComponent(vId)}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) {
-            const normalized = data.map(normalizeOrder);
-            setOrders((prev) => {
-              if (areOrdersEqual(prev, normalized)) return prev;
-              try { localStorage.setItem(currentStorageKey, JSON.stringify(normalized)); } catch {}
-              return normalized;
-            });
-            return normalized;
-          }
-        }
-      } else if (userIdent) {
-        // Customer isolated orders via /me (zero phone number in URL)
-        const res = await authFetch(`${API_BASE_URL}/api/v1/orders/me`);
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) {
-            const normalized = data.map(normalizeOrder);
-            setOrders((prev) => {
-              if (areOrdersEqual(prev, normalized)) return prev;
-              try { localStorage.setItem(currentStorageKey, JSON.stringify(normalized)); } catch {}
-              return normalized;
-            });
-            return normalized;
-          }
-        }
+        return normalized;
       }
     } catch (err) {
       console.warn("Fetch orders role note:", err.message);
@@ -126,6 +161,16 @@ export function OrderProvider({ children }) {
 
   useEffect(() => {
     const currentStorageKey = getRoleStorageKey();
+    // Reset paging only when a different account signs in (the auth context also re-emits the
+    // same user after refreshing its profile, which must not wipe loaded pages or the summary)
+    const identityKey = `${userRole}:${userIdent || ""}`;
+    if (identityKeyRef.current !== identityKey) {
+      identityKeyRef.current = identityKey;
+      olderPagesLoadedRef.current = false;
+      setOrdersCursor(null);
+      setHasMoreOrders(false);
+      setOrdersSummary(null);
+    }
     const saved = localStorage.getItem(currentStorageKey);
     if (saved) {
       try {
@@ -316,15 +361,17 @@ export function OrderProvider({ children }) {
   };
 
   // Vendor Isolated Orders fetch from Supabase Cloud DB
+  // One page of a vendor's orders: { orders, nextCursor, hasMore } (null cursor = newest page + open orders)
+  const fetchVendorOrdersPage = async (vendorId, cursor = null) => {
+    const res = await authFetch(`${API_BASE_URL}/api/v1/orders/vendor/${encodeURIComponent(vendorId)}${ordersPageQuery(cursor)}`);
+    if (!res.ok) throw new Error(`Vendor orders HTTP ${res.status}`);
+    const page = readOrdersPage(await res.json());
+    return { ...page, orders: page.orders.map(normalizeOrder) };
+  };
+
   const fetchVendorOrders = async (vendorId) => {
     try {
-      const res = await authFetch(`${API_BASE_URL}/api/v1/orders/vendor/${vendorId}`);
-      if (res.ok) {
-        const vendorData = await res.json();
-        if (Array.isArray(vendorData)) {
-          return vendorData.map(normalizeOrder);
-        }
-      }
+      return (await fetchVendorOrdersPage(vendorId)).orders;
     } catch (err) {
       console.warn("Fetch vendor orders note:", err.message);
     }
@@ -390,7 +437,12 @@ export function OrderProvider({ children }) {
         fetchAllOrders: fetchOrdersForCurrentRole,
         fetchOrdersForCurrentRole,
         fetchVendorOrders,
+        fetchVendorOrdersPage,
         updateOrderStatus,
+        hasMoreOrders,
+        loadingMoreOrders,
+        loadMoreOrders,
+        ordersSummary,
       }}
     >
       {children}

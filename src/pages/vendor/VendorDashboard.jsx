@@ -5,6 +5,8 @@ import { useAdmin } from "../../context/AdminContext";
 import { useOrders } from "../../context/OrderContext";
 import { useAlert } from "../../context/AlertContext";
 import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
+import { mergeOrderLists } from "../../utils/orderPagination";
+import LoadMoreButton from "../../components/LoadMoreButton";
 import {
   notifyVendorNewOrder,
   requestOrderNotificationPermission,
@@ -138,7 +140,7 @@ export default function VendorDashboard() {
     updateVendorProductListing,
     removeVendorProductListing,
   } = useAdmin();
-  const { orders = [], fetchVendorOrders, updateOrderStatus } = useOrders();
+  const { orders = [], fetchVendorOrders, fetchVendorOrdersPage, updateOrderStatus, ordersSummary } = useOrders();
 
   // Logged-in Vendor Info details extraction matching DB Vendors (resolved early for 0ms cache lookups)
   const matchedVendorObj = useMemo(() => {
@@ -169,6 +171,13 @@ export default function VendorDashboard() {
   const [tabHistory, setTabHistory] = useState(["orders"]);
 
   // ⚡ 0-Delay Instant Frame 1 Cache: Load previous orders immediately so screen is NEVER blank
+  // Older (mostly completed) orders beyond the first page, loaded on demand
+  const [olderVendorOrders, setOlderVendorOrders] = useState([]);
+  const [vendorOrdersCursor, setVendorOrdersCursor] = useState(null);
+  const [vendorHasMoreOrders, setVendorHasMoreOrders] = useState(false);
+  const [loadingMoreVendorOrders, setLoadingMoreVendorOrders] = useState(false);
+  const olderVendorPagesLoadedRef = useRef(false);
+
   const [fetchedVendorOrders, setFetchedVendorOrders] = useState(() => {
     try {
       // Check if app was opened via push notification with a pending incoming order
@@ -320,7 +329,18 @@ export default function VendorDashboard() {
     let isMounted = true;
     const syncVendorOrders = async () => {
       try {
-        const vOrds = await fetchVendorOrders(vendorId);
+        // Newest page + every open order; falls back to cached orders when offline
+        let vOrds;
+        try {
+          const page = await fetchVendorOrdersPage(vendorId);
+          vOrds = page.orders;
+          if (isMounted && !olderVendorPagesLoadedRef.current) {
+            setVendorOrdersCursor(page.nextCursor);
+            setVendorHasMoreOrders(page.hasMore);
+          }
+        } catch {
+          vOrds = await fetchVendorOrders(vendorId);
+        }
         if (isMounted && Array.isArray(vOrds)) {
           // Detect newly arrived orders for this vendor
           if (initialLoadDoneRef.current) {
@@ -544,9 +564,29 @@ export default function VendorDashboard() {
     return Boolean(matchesId || matchesPhone || matchesShop || matchesOwner);
   };
 
-  // Dedicated candidate orders: When loaded or has data, strictly use fetchedVendorOrders
+  // Appends the next page of older orders (marked as known so they never trigger a new-order alert)
+  const loadMoreVendorOrders = async () => {
+    if (!vendorOrdersCursor || loadingMoreVendorOrders) return;
+    setLoadingMoreVendorOrders(true);
+    try {
+      const page = await fetchVendorOrdersPage(vendorId, vendorOrdersCursor);
+      page.orders.forEach((o) => {
+        if (o?.id) knownOrderIdsRef.current.add(o.id);
+      });
+      olderVendorPagesLoadedRef.current = true;
+      setOlderVendorOrders((prev) => mergeOrderLists(prev, page.orders));
+      setVendorOrdersCursor(page.nextCursor);
+      setVendorHasMoreOrders(page.hasMore);
+    } catch (err) {
+      console.warn("Load more vendor orders note:", err.message);
+    } finally {
+      setLoadingMoreVendorOrders(false);
+    }
+  };
+
+  // Dedicated candidate orders: When loaded or has data, strictly use fetchedVendorOrders (+ older pages)
   const candidateOrders = (fetchedVendorOrders && fetchedVendorOrders.length > 0)
-    ? fetchedVendorOrders
+    ? (olderVendorOrders.length > 0 ? mergeOrderLists(fetchedVendorOrders, olderVendorOrders) : fetchedVendorOrders)
     : (ordersLoaded
         ? []
         : (orders || []).filter((o) => Array.isArray(o.items) && o.items.some(isItemForThisVendor)));
@@ -988,11 +1028,20 @@ export default function VendorDashboard() {
   };
 
   // Real DB stats calculation: Revenue counts ONLY when order is DELIVERED!
-  const totalRevenue = vendorOrders.reduce((sum, ord) => {
+  const loadedDeliveredRevenue = vendorOrders.reduce((sum, ord) => {
     const st = (ord.status || "").toUpperCase();
     if (st !== "DELIVERED") return sum;
     return sum + (Number(ord.totalAmount || ord.total || 0) || 0);
   }, 0);
+
+  // Orders are paginated: totals come from the server summary (exact across all pages).
+  // Math.max keeps just-placed / just-updated orders visible before the next summary refresh.
+  const vendorSummary = ordersSummary?.revenueBasis === "delivered_vendor_items" ? ordersSummary : null;
+  const totalRevenue = vendorSummary ? Math.max(vendorSummary.totalRevenue, loadedDeliveredRevenue) : loadedDeliveredRevenue;
+  const vendorOrdersCount = vendorSummary ? Math.max(vendorSummary.totalOrders, vendorOrders.length) : vendorOrders.length;
+  const completedOrdersCount = vendorSummary
+    ? Math.max((vendorSummary.byStatus?.DELIVERED || 0) + (vendorSummary.byStatus?.CANCELLED || 0), completedOrders.length)
+    : completedOrders.length;
 
   // Live Status Change handler with real-time loading feedback & instant synchronous persistence
   const handleStatusChange = async (orderId, newStatus) => {
@@ -1338,7 +1387,7 @@ export default function VendorDashboard() {
                     onClick={() => setActiveTab("orders")}
                     className="text-xs font-bold text-brand-600 hover:text-brand-700 cursor-pointer"
                   >
-                    View All ({vendorOrders.length}) →
+                    View All ({vendorOrdersCount}) →
                   </button>
                 </div>
                 {vendorOrders.length === 0 ? (
@@ -1408,7 +1457,7 @@ export default function VendorDashboard() {
                     onClick={() => setActiveTab("orders")}
                     className="w-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-semibold p-3 rounded-xl flex items-center justify-between transition-colors cursor-pointer"
                   >
-                    <span>🛍️ Orders ({vendorOrders.length})</span>
+                    <span>🛍️ Orders ({vendorOrdersCount})</span>
                     <span>→</span>
                   </button>
                 </div>
@@ -1911,7 +1960,7 @@ export default function VendorDashboard() {
                   <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
                     orderSectionTab === "COMPLETED" ? "bg-emerald-100 text-emerald-900" : "bg-slate-200 text-slate-600"
                   }`}>
-                    {completedOrders.length}
+                    {completedOrdersCount}
                   </span>
                 </button>
               </div>
@@ -1979,7 +2028,7 @@ export default function VendorDashboard() {
                           : "bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200/60"
                       }`}
                     >
-                      All History ({completedOrders.length})
+                      All History ({completedOrdersCount})
                     </button>
                     <button
                       type="button"
@@ -2068,7 +2117,7 @@ export default function VendorDashboard() {
                 }}
                 className="mt-3 bg-brand-500 hover:bg-brand-600 active:scale-95 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer transition-all shadow-xs"
               >
-                Show All Orders ({vendorOrders.length})
+                Show All Orders ({vendorOrdersCount})
               </button>
             </div>
           ) : (
@@ -2480,6 +2529,13 @@ export default function VendorDashboard() {
               </div>
             </>
           )}
+          <LoadMoreButton
+            hasMore={vendorHasMoreOrders}
+            loading={loadingMoreVendorOrders}
+            onClick={loadMoreVendorOrders}
+            shown={vendorOrders.length}
+            total={vendorOrdersCount}
+          />
         </div>
       )}
 
@@ -2578,7 +2634,7 @@ export default function VendorDashboard() {
 
             <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 sm:p-4 text-center shadow-xs">
               <span className="text-xl">🛍️</span>
-              <p className="text-base sm:text-lg font-black text-navy-900 mt-1">{vendorOrders.length}</p>
+              <p className="text-base sm:text-lg font-black text-navy-900 mt-1">{vendorOrdersCount}</p>
               <span className="text-[10px] sm:text-xs text-slate-500 font-bold block">Total Orders</span>
             </div>
 

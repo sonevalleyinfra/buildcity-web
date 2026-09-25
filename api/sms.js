@@ -4,20 +4,29 @@ import http from "http";
 const httpAgent = new http.Agent({ keepAlive: true, timeout: 8000 });
 const httpsAgent = new https.Agent({ keepAlive: true, timeout: 8000, rejectUnauthorized: false });
 
+// Server-to-server relay for the backend's OTP SMS. Browsers never call it, so no CORS headers.
 export default async function handler(req, res) {
-  // CORS & Methods
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
+  // When SMS_RELAY_SECRET is configured, only the backend (which sends the same secret) may use the relay
+  const relaySecret = process.env.SMS_RELAY_SECRET;
+  if (relaySecret && req.headers["x-relay-secret"] !== relaySecret) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
   try {
     const rawUrl = req.url || "";
     const queryIdx = rawUrl.indexOf("?");
     const queryString = queryIdx !== -1 ? rawUrl.slice(queryIdx + 1) : "";
+
+    // Only relay single-recipient text SMS requests
+    const params = new URLSearchParams(queryString);
+    if (params.get("apirequest") !== "Text" || !/^\d{10}$/.test(params.get("mobile") || "")) {
+      return res.status(400).json({ error: "Invalid SMS request" });
+    }
+
     const path = `/sms-panel/api/http/index.php?${queryString}`;
 
     const makeRequest = (isHttps) => {
@@ -67,6 +76,7 @@ export default async function handler(req, res) {
 
     return res.status(result.status || 200).json(result.data);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error("SMS relay error:", err);
+    return res.status(502).json({ error: "SMS gateway unreachable" });
   }
 }

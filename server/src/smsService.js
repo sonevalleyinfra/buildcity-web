@@ -7,14 +7,20 @@ const http = require("http");
 const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 50, timeout: 5000 });
 const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 50, timeout: 5000, rejectUnauthorized: false });
 
-const username = process.env.SMS_USERNAME || process.env.ARADHYA_SMS_USERNAME || "sonevalley";
-const apikey = process.env.SMS_APIKEY || process.env.ARADHYA_SMS_APIKEY || "A79D5-10E6B";
+// Gateway credentials must come from the environment only (never commit them to source)
+if (!(process.env.SMS_USERNAME || process.env.ARADHYA_SMS_USERNAME) || !(process.env.SMS_APIKEY || process.env.ARADHYA_SMS_APIKEY)) {
+  console.warn("⚠️ SMS_USERNAME / SMS_APIKEY are not set. OTP SMS delivery is disabled until they are configured.");
+}
 
 async function sendRealSMSOTP(phone, otpCode) {
   const cleanMobile = (phone || "").toString().trim().replace(/\D/g, "").slice(-10);
 
-  const currentUsername = (process.env.SMS_USERNAME || process.env.ARADHYA_SMS_USERNAME || "sonevalley").trim();
-  const currentApikey = (process.env.SMS_APIKEY || process.env.ARADHYA_SMS_APIKEY || "A79D5-10E6B").trim();
+  const currentUsername = (process.env.SMS_USERNAME || process.env.ARADHYA_SMS_USERNAME || "").trim();
+  const currentApikey = (process.env.SMS_APIKEY || process.env.ARADHYA_SMS_APIKEY || "").trim();
+  if (!currentUsername || !currentApikey) {
+    console.error("[SMS] Gateway credentials missing (SMS_USERNAME / SMS_APIKEY). OTP not sent.");
+    return { success: false, error: "SMS gateway not configured", gateway: "AradhyaSMS" };
+  }
   const sender = (process.env.SMS_SENDER || process.env.ARADHYA_SMS_SENDER || "SNVLY").trim();
   const templateId = (process.env.SMS_TEMPLATE_ID || process.env.ARADHYA_SMS_TEMPLATE_ID || "1707175298595096991").trim();
   const peid = (process.env.SMS_PEID || process.env.ARADHYA_SMS_PE_ID || "1701175266640135857").trim();
@@ -93,7 +99,11 @@ async function sendRealSMSOTP(phone, otpCode) {
     try {
       const edgeRes = await fetch(`https://buildcity-web-part-2.vercel.app/api/sms?${queryParams}`, {
         method: "GET",
-        headers: { "User-Agent": "BuildCity-Core/2.0", "Accept": "*/*" },
+        headers: {
+          "User-Agent": "BuildCity-Core/2.0",
+          "Accept": "*/*",
+          ...(process.env.SMS_RELAY_SECRET ? { "x-relay-secret": process.env.SMS_RELAY_SECRET } : {}),
+        },
         signal: AbortSignal.timeout(6000),
       });
       const edgeText = await edgeRes.text();

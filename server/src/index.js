@@ -1,4 +1,5 @@
 require("dotenv").config();
+const crypto = require("crypto");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -6,7 +7,7 @@ const rateLimit = require("express-rate-limit");
 const bcrypt = require("bcryptjs");
 const compression = require("compression");
 const { PrismaClient } = require("@prisma/client");
-const { issueToken, requireAuth, requireRole, requireSelfOrAdmin } = require("./middleware/auth");
+const { issueToken, requireAuth, optionalAuth, requireRole, requireSelfOrAdmin } = require("./middleware/auth");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -25,13 +26,242 @@ app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false 
 app.disable("x-powered-by");
 
 // Enable CORS & JSON Parsing
-app.use(cors());
+// If ALLOWED_ORIGINS is configured, only those origins (plus the Capacitor app shells) may call the API from a browser.
+// Auth uses Bearer tokens (not cookies), so an unset list falls back to open CORS without exposing credentials.
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+const nativeAppOrigins = ["capacitor://localhost", "http://localhost", "https://localhost", "ionic://localhost"];
+app.use(
+  cors(
+    allowedOrigins.length > 0
+      ? {
+          origin: (origin, cb) => cb(null, !origin || allowedOrigins.includes(origin) || nativeAppOrigins.includes(origin)),
+        }
+      : {}
+  )
+);
 app.use(express.json());
 
-// Auto-Invalidate Cache on Mutations (POST, PUT, PATCH, DELETE)
+// Defense-in-depth: never serialize password hashes in any API response,
+// even when a Prisma query includes a full `user`/`vendor`/`dr` relation.
+app.set("json replacer", (key, value) => (key === "password" ? undefined : value));
+
+// Error thrown for request validation failures whose message is safe to show the client
+class ClientError extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.status = status;
+  }
+}
+
+// Logs the real error server-side and returns a generic message (no Prisma/stack internals)
+function sendServerError(res, err, label = "Request") {
+  if (err instanceof ClientError) {
+    return res.status(err.status).json({ error: err.message });
+  }
+  if (err?.code === "P2002") {
+    return res.status(409).json({ error: "A record with these details already exists." });
+  }
+  if (err?.code === "P2025") {
+    return res.status(404).json({ error: "Record not found." });
+  }
+  console.error(`${label} error:`, err);
+  return res.status(500).json({ error: "Something went wrong. Please try again." });
+}
+
+const SAFE_USER_SELECT = { id: true, name: true, phone: true, email: true, role: true };
+
+// ---------------------------------------------------------------------------
+// Pagination (keyset / cursor based: stable while new orders keep arriving)
+// ---------------------------------------------------------------------------
+const PAGE_DEFAULT_LIMIT = 50;
+const PAGE_MAX_LIMIT = 100;
+// Requests without ?limit/?cursor keep the legacy plain-array response (installed APKs ship a
+// frozen frontend), but are capped so a single call can never read an unbounded table.
+const LEGACY_LIST_CAP = 500;
+const NEWEST_FIRST = [{ createdAt: "desc" }, { id: "desc" }];
+const CLOSED_ORDER_STATUSES = ["DELIVERED", "CANCELLED"];
+const MAX_OPEN_ORDERS_INCLUDED = 200;
+
+// Returns { take, cursor } when the client asked for pagination, or null for a legacy request
+function getPageParams(req) {
+  const { limit, cursor } = req.query;
+  if (limit === undefined && cursor === undefined) return null;
+  const take = Math.min(Math.max(parseInt(limit, 10) || PAGE_DEFAULT_LIMIT, 1), PAGE_MAX_LIMIT);
+  return { take, cursor: typeof cursor === "string" && cursor ? cursor : null };
+}
+
+// Fetches one newest-first page from a Prisma model; reads one extra row to know if more exist
+async function findPage(model, args, page) {
+  const rows = await model.findMany({
+    ...args,
+    orderBy: NEWEST_FIRST,
+    take: page.take + 1,
+    ...(page.cursor ? { cursor: { id: page.cursor }, skip: 1 } : {}),
+  });
+  const hasMore = rows.length > page.take;
+  const items = hasMore ? rows.slice(0, page.take) : rows;
+  return { items, hasMore, nextCursor: hasMore ? items[items.length - 1].id : null };
+}
+
+// Lists orders for `where`: a paginated envelope when requested, else the capped legacy array.
+// With ?includeOpen=1 the first page also carries every still-open order (even older ones),
+// so pending work can never hide on a later page.
+async function listOrders(req, where, args) {
+  const page = getPageParams(req);
+  if (!page) {
+    const orders = await prisma.order.findMany({ ...args, where, orderBy: NEWEST_FIRST, take: LEGACY_LIST_CAP });
+    return { legacy: true, orders };
+  }
+
+  const result = await findPage(prisma.order, { ...args, where }, page);
+  let orders = result.items;
+  if (!page.cursor && req.query.includeOpen === "1" && result.hasMore) {
+    const oldestOnPage = orders[orders.length - 1];
+    const olderOpen = await prisma.order.findMany({
+      ...args,
+      where: {
+        AND: [
+          where || {},
+          { status: { notIn: CLOSED_ORDER_STATUSES } },
+          { createdAt: { lte: oldestOnPage.createdAt } },
+          { id: { notIn: orders.map((o) => o.id) } },
+        ],
+      },
+      orderBy: NEWEST_FIRST,
+      take: MAX_OPEN_ORDERS_INCLUDED,
+    });
+    orders = orders.concat(olderOpen);
+  }
+  return { legacy: false, orders, nextCursor: result.nextCursor, hasMore: result.hasMore };
+}
+
+function sendOrderList(res, list, orders) {
+  if (list.legacy) return res.json(orders);
+  return res.json({ orders, nextCursor: list.nextCursor, hasMore: list.hasMore });
+}
+
+// Orders that belong to a district: delivery address in the region, or (no address) a vendor there.
+// Accepts one region id or a comma-separated list (a district can span duplicate region records).
+function orderRegionWhere(regionIdParam) {
+  if (!regionIdParam || typeof regionIdParam !== "string") return {};
+  const regionIds = regionIdParam.split(",").map((id) => id.trim()).filter(Boolean).slice(0, 20);
+  if (regionIds.length === 0) return {};
+  return {
+    OR: [
+      { address: { regionId: { in: regionIds } } },
+      { addressId: null, items: { some: { vendor: { regionId: { in: regionIds } } } } },
+    ],
+  };
+}
+
+// Exact totals for dashboards, independent of how many pages the client has loaded
+async function computeOrdersSummary(where, { vendorId } = {}) {
+  const [totalOrders, byStatusRows, revenue] = await Promise.all([
+    prisma.order.count({ where }),
+    prisma.order.groupBy({ by: ["status"], where, _count: { _all: true } }),
+    vendorId
+      // Vendor revenue = their item subtotals on delivered orders (matches the vendor dashboard)
+      ? prisma.orderItem.aggregate({ where: { vendorId, order: { status: "DELIVERED" } }, _sum: { totalPrice: true } })
+      : prisma.order.aggregate({ where, _sum: { totalAmount: true } }),
+  ]);
+  const byStatus = Object.fromEntries(byStatusRows.map((r) => [r.status, r._count._all]));
+  const openOrders = Object.entries(byStatus)
+    .filter(([status]) => !CLOSED_ORDER_STATUSES.includes(status))
+    .reduce((sum, [, n]) => sum + n, 0);
+  return {
+    totalOrders,
+    openOrders,
+    byStatus,
+    totalRevenue: Number(vendorId ? revenue._sum.totalPrice || 0 : revenue._sum.totalAmount || 0),
+    revenueBasis: vendorId ? "delivered_vendor_items" : "all_orders_total",
+  };
+}
+
+// Resolves the Vendor row owned by the authenticated VENDOR (token sub is the vendor's user id)
+// (falls back to the phone in the signed token for legacy vendor rows without a linked user)
+async function resolveOwnVendor(req) {
+  const byUser = await prisma.vendor.findFirst({
+    where: { OR: [{ userId: req.auth.userId }, { id: req.auth.userId }] },
+  }).catch(() => null);
+  if (byUser) return byUser;
+
+  const cleanPhone = String(req.auth?.phone || "").replace(/\D/g, "");
+  if (cleanPhone.length !== 10) return null;
+  return prisma.vendor.findFirst({ where: { phone: cleanPhone } }).catch(() => null);
+}
+
+// Same district aliases as the DR dashboard, so "Banaras" and "Varanasi" region rows count as one district
+const DISTRICT_ALIASES = {
+  varanasi: ["varanasi", "varnasi", "banaras", "kashi", "vns"],
+  mirzapur: ["mirzapur", "mzp"],
+  prayagraj: ["prayagraj", "allahabad"],
+  jaunpur: ["jaunpur"],
+};
+function canonicalDistrict(name) {
+  const clean = String(name || "").toLowerCase().trim();
+  if (!clean) return "";
+  for (const [district, aliases] of Object.entries(DISTRICT_ALIASES)) {
+    if (aliases.some((alias) => clean.includes(alias))) return district;
+  }
+  return clean;
+}
+
+// Region IDs covering the logged-in DR's assigned district(s)
+async function resolveCallerDrRegionIds(auth) {
+  const last10 = String(auth?.phone || "").replace(/\D/g, "").slice(-10);
+  const or = [];
+  if (auth?.userId) or.push({ id: auth.userId }, { userId: auth.userId });
+  if (last10.length === 10) or.push({ phone: { endsWith: last10 } });
+  if (or.length === 0) return [];
+  const drs = await prisma.dR.findMany({ where: { OR: or }, include: { region: true } }).catch(() => []);
+  const regionIds = new Set(drs.map((d) => d.regionId).filter(Boolean));
+  const districts = new Set(drs.map((d) => canonicalDistrict(d.region?.name)).filter(Boolean));
+  if (districts.size > 0) {
+    const regions = await prisma.region.findMany({ select: { id: true, name: true } }).catch(() => []);
+    for (const r of regions) {
+      if (districts.has(canonicalDistrict(r.name))) regionIds.add(r.id);
+    }
+  }
+  return Array.from(regionIds);
+}
+
+// DRs may only manage shops (and their listings) in their own district
+async function drCanManageVendor(auth, vendorOrId) {
+  const vendor = typeof vendorOrId === "string"
+    ? await prisma.vendor.findUnique({ where: { id: vendorOrId }, select: { regionId: true } }).catch(() => null)
+    : vendorOrId;
+  if (!vendor?.regionId) return false;
+  const drRegionIds = await resolveCallerDrRegionIds(auth);
+  return drRegionIds.includes(vendor.regionId);
+}
+
+// Orders a DR may access: delivered into, or fulfilled by a shop in, one of the given regions
+function ordersInRegionsWhere(regionIds) {
+  return {
+    OR: [
+      { address: { regionId: { in: regionIds } } },
+      { items: { some: { vendor: { regionId: { in: regionIds } } } } },
+    ],
+  };
+}
+
+// Auto-Invalidate Catalog Cache on Mutations (POST, PUT, PATCH, DELETE).
+// Per-user writes (auth, cart, addresses, notifications...) don't touch cached catalog data,
+// so skipping them keeps the public catalog cache warm under normal customer traffic.
+const CACHE_NEUTRAL_PREFIXES = [
+  "/api/v1/auth/",
+  "/api/v1/cart",
+  "/api/v1/addresses",
+  "/api/v1/notifications",
+  "/api/v1/reviews",
+  "/api/v1/users",
+  "/api/v1/vendor/fcm-token",
+];
 app.use((req, res, next) => {
-  if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
-    invalidateCache();
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method) && !CACHE_NEUTRAL_PREFIXES.some((p) => req.path.startsWith(p))) {
     res.on("finish", () => {
       invalidateCache();
     });
@@ -47,6 +277,29 @@ const otpRequestLimiter = rateLimit({
   message: { error: "Too many OTP requests. Please try again after an hour." },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false,
+});
+
+// Per-IP cap on OTP sends so one client can't pump SMS to many different numbers
+const otpRequestIpLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 30,
+  keyGenerator: (req) => String(req.ip),
+  message: { error: "Too many OTP requests. Please try again after an hour." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: false,
+});
+
+// Brute-force protection for Partner (Admin / DR / Vendor) password login
+const partnerLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 mins
+  max: 10,
+  keyGenerator: (req) => `${req.ip}|${String(req.body?.phone || "").replace(/\D/g, "")}`,
+  message: { error: "Too many login attempts. Please try again after 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
   validate: false,
 });
 
@@ -90,7 +343,7 @@ app.get(["/health", "/api/v1/health"], (req, res) => {
 });
 
 // Database & Environment Diagnostic Check
-app.get("/api/v1/db-check", async (req, res) => {
+app.get("/api/v1/db-check", requireAuth, requireRole("ADMIN"), async (req, res) => {
   const hasDbUrl = !!process.env.DATABASE_URL;
   const dbHost = process.env.DATABASE_URL
     ? (process.env.DATABASE_URL.match(/@([^:/]+)/) || [])[1] || "configured"
@@ -221,9 +474,14 @@ app.get("/api/v1/public-catalog", async (req, res) => {
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
+
+const CLOUD_SYNC_CACHE_TTL_MS = 15000;
+const SYNC_ORDERS_PAGE_SIZE = 50;
+const SYNC_USERS_PAGE_SIZE = 100;
+const SYNC_USER_SELECT = { id: true, name: true, phone: true, email: true, role: true, status: true, productCount: true, createdAt: true };
 
 // Single Unified Cloud Sync Endpoint (100% Real-time Live DB query for Staff and Partners)
 app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"), async (req, res) => {
@@ -233,42 +491,62 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
   res.setHeader("Expires", "0");
 
   try {
+    // Vendors only get their own shop and the orders that contain their items
+    let ownVendor = null;
+    if (role === "VENDOR") {
+      ownVendor = await resolveOwnVendor(req);
+      if (!ownVendor) {
+        return res.status(403).json({ error: "Vendor profile not found for this account" });
+      }
+    }
+    const isVendor = role === "VENDOR";
+    // DRs get only their own district's team, shops and orders
     const drRegionIds = role === "DR" ? await resolveCallerDrRegionIds(req.auth) : null;
+
+    // Short per-role cache: a full sync reads almost every table, so many open dashboards (or a
+    // client refresh bug) must not translate 1:1 into database egress. Any catalog/order mutation
+    // clears the cache (see invalidateCache middleware), so staff still see changes immediately.
+    const cacheKey = `cloud_sync_${role}_${ownVendor ? ownVendor.id : ""}_${drRegionIds ? [...drRegionIds].sort().join(",") : ""}`;
+    const cached = getCached(cacheKey);
+    if (cached) {
+      res.setHeader("X-Cache", "HIT");
+      return res.json(cached);
+    }
+
+    const ordersScope = isVendor
+      ? { items: { some: { vendorId: ownVendor.id } } }
+      : drRegionIds ? ordersInRegionsWhere(drRegionIds) : {};
+
     const fetchPromises = [
-      prisma.dR.findMany({
+      isVendor ? Promise.resolve([]) : prisma.dR.findMany({
+        where: drRegionIds ? { regionId: { in: drRegionIds } } : undefined,
         include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
         orderBy: { joinedOn: "desc" },
       }).then(list => list.map(d => { const { password, ...safe } = d; return safe; })).catch(() => []),
       prisma.vendor.findMany({
+        where: isVendor ? { id: ownVendor.id } : drRegionIds ? { regionId: { in: drRegionIds } } : undefined,
         include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
         orderBy: { joinedOn: "desc" },
       }).then(list => list.map(v => { const { password, ...safe } = v; return safe; })).catch(() => []),
       prisma.productMaster.findMany({ include: { category: true }, orderBy: { createdAt: "desc" } }).catch(() => []),
       prisma.category.findMany().catch(() => []),
       prisma.region.findMany({ orderBy: { name: "asc" } }).catch(() => []),
-      prisma.order.findMany({
-        where: drRegionIds ? ordersInRegionsWhere(drRegionIds) : undefined,
-        include: {
-          items: {
-            include: {
-              vendor: {
-                select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true, region: true },
-              },
-            },
-          },
-          customer: { select: { id: true, name: true, phone: true, email: true, role: true } },
-          address: { include: { region: true } },
-        },
-        orderBy: { createdAt: "desc" },
-      }).then((list) =>
-        (list || []).map((o) => ({
+      // Orders: newest page plus every still-open order; older ones load via GET /orders?cursor=
+      listOrders(
+        { query: { limit: String(SYNC_ORDERS_PAGE_SIZE), includeOpen: "1" } },
+        ordersScope,
+        { include: STAFF_ORDER_INCLUDE }
+      ).then((list) => ({
+        nextCursor: list.nextCursor,
+        hasMore: list.hasMore,
+        orders: withVendorNames(list.orders).map((o) => ({
           ...o,
-          items: (o.items || []).map((it) => ({
-            ...it,
-            vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
-          })),
-        }))
-      ).catch(() => []),
+          items: o.items.filter((it) => !isVendor || it.vendorId === ownVendor.id),
+        })),
+      })).catch((err) => {
+        console.error("Cloud sync orders error:", err);
+        return { orders: [], nextCursor: null, hasMore: false };
+      }),
       prisma.vendorProduct.findMany({
         include: {
           vendor: {
@@ -288,58 +566,56 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       prisma.banner.findMany({ orderBy: { displayOrder: "asc" } }).catch(() => []),
     ];
 
+    fetchPromises.push(
+      computeOrdersSummary(ordersScope, isVendor ? { vendorId: ownVendor.id } : {}).catch((err) => {
+        console.error("Cloud sync summary error:", err);
+        return null;
+      })
+    );
+
     if (role === "ADMIN") {
       fetchPromises.push(
-        prisma.user.findMany({
-          orderBy: { createdAt: "desc" },
-          select: { id: true, name: true, phone: true, email: true, role: true, status: true, productCount: true, createdAt: true },
-        }).catch(() => [])
+        Promise.all([
+          findPage(prisma.user, { select: SYNC_USER_SELECT }, { take: SYNC_USERS_PAGE_SIZE, cursor: null }),
+          prisma.user.count(),
+          prisma.user.count({ where: { role: "CUSTOMER" } }),
+        ]).catch((err) => {
+          console.error("Cloud sync users error:", err);
+          return [{ items: [], nextCursor: null, hasMore: false }, 0, 0];
+        })
       );
     }
 
     const results = await Promise.all(fetchPromises);
-    const [drs, vendors, masterProducts, categories, regions, allOrders, listings, coupons, dbBanners, users] = results;
-
-    // Partners only receive their own shop profile and orders that belong entirely to their shop;
-    // other partners' and DRs' contact details stay with staff
-    let orders = allOrders;
-    let visibleDrs = drs;
-    let visibleVendors = vendors;
-    if (role === "DR") {
-      // DRs see their own district's team and shops
-      visibleDrs = (drs || []).filter((d) => drRegionIds.includes(d.regionId));
-      visibleVendors = (vendors || []).filter((v) => drRegionIds.includes(v.regionId));
-    }
-    if (role === "VENDOR") {
-      const myVendorIds = await resolveCallerVendorIds(req.auth);
-      orders = (allOrders || []).filter((o) =>
-        (o.items || []).length > 0 && o.items.every((it) => myVendorIds.includes(it.vendorId))
-      );
-      visibleDrs = [];
-      visibleVendors = (vendors || []).filter((v) => myVendorIds.includes(v.id));
-    }
+    const [drs, vendors, masterProducts, categories, regions, ordersPage, listings, coupons, dbBanners, ordersSummary, usersResult] = results;
+    const [usersPage, usersTotal, customersTotal] = usersResult || [null, 0, 0];
 
     const data = {
-      drs: visibleDrs,
-      vendors: visibleVendors,
+      drs,
+      vendors,
       masterProducts,
       categories,
       regions,
-      orders,
+      orders: ordersPage.orders,
+      ordersPage: { nextCursor: ordersPage.nextCursor, hasMore: ordersPage.hasMore, pageSize: SYNC_ORDERS_PAGE_SIZE },
+      ordersSummary,
       listings,
       coupons: coupons || [],
-      users: users || [],
+      users: usersPage ? usersPage.items : [],
+      usersPage: usersPage ? { nextCursor: usersPage.nextCursor, hasMore: usersPage.hasMore, total: usersTotal, customers: customersTotal } : null,
       banners: dbBanners && dbBanners.length > 0 ? dbBanners : bannersList,
     };
 
+    setCached(cacheKey, data, CLOUD_SYNC_CACHE_TTL_MS);
+    res.setHeader("X-Cache", "MISS");
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
 // Password Login Endpoint — Phone & Password Login for Admin, DR, and Vendor Partners
-app.post("/api/v1/auth/vendor/login", async (req, res) => {
+app.post("/api/v1/auth/vendor/login", partnerLoginLimiter, async (req, res) => {
   try {
     const { phone, password, fcmToken } = req.body;
     if (!phone || !password) {
@@ -511,8 +787,7 @@ app.post("/api/v1/auth/vendor/login", async (req, res) => {
       vendor,
     });
   } catch (err) {
-    console.error("Vendor Login Error:", err);
-    res.status(500).json({ error: err.message || "Vendor authentication failed." });
+    sendServerError(res, err, "Vendor login");
   }
 });
 
@@ -668,7 +943,7 @@ app.get("/api/v1/banners", async (req, res) => {
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.json(list);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -798,7 +1073,7 @@ app.delete("/api/v1/banners/:id", requireAuth, requireRole("ADMIN"), async (req,
 const { sendRealSMSOTP } = require("./smsService");
 
 // 1. AUTHENTICATION & USERS ENDPOINTS (INSTANT HIGH SPEED OPTIMIZED)
-app.post("/api/v1/auth/otp/request", otpRequestLimiter, async (req, res) => {
+app.post("/api/v1/auth/otp/request", otpRequestIpLimiter, otpRequestLimiter, async (req, res) => {
   const { phone, type = "login" } = req.body;
   if (!phone || !/^\d{10}$/.test(phone)) {
     return res.status(400).json({ error: "Valid 10-digit phone number required" });
@@ -854,18 +1129,22 @@ app.post("/api/v1/auth/otp/request", otpRequestLimiter, async (req, res) => {
     }
 
     // Generate 6-digit OTP code instantly
-    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    // Cryptographically secure OTP (Math.random is predictable)
+    const generatedOtp = crypto.randomInt(100000, 1000000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins expiry
 
-    // Save OTP record in DB asynchronously in background (Non-blocking)
-    prisma.oTPVerification.create({
-      data: {
-        phone: cleanPhone,
-        otp: generatedOtp,
-        expiresAt,
-        createdAt: new Date(),
-      },
-    }).catch((e) => console.warn("Background OTP save note:", e.message));
+    // Replace any older OTPs for this phone, then save the new one in background (Non-blocking)
+    prisma.oTPVerification.deleteMany({ where: { phone: cleanPhone } })
+      .catch(() => null)
+      .then(() => prisma.oTPVerification.create({
+        data: {
+          phone: cleanPhone,
+          otp: generatedOtp,
+          expiresAt,
+          createdAt: new Date(),
+        },
+      }))
+      .catch((e) => console.warn("Background OTP save note:", e.message));
 
     // Dispatch Live SMS via parallel fastest-gateway in background
     sendRealSMSOTP(cleanPhone, generatedOtp).catch((smsErr) => {
@@ -881,8 +1160,7 @@ app.post("/api/v1/auth/otp/request", otpRequestLimiter, async (req, res) => {
       isRegistered: !!existingUser,
     });
   } catch (err) {
-    console.error("OTP dispatch error:", err);
-    res.status(500).json({ error: "Failed to dispatch OTP", details: err.message });
+    sendServerError(res, err, "OTP dispatch");
   }
 });
 
@@ -906,6 +1184,9 @@ app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
     if (!validRecord) {
       return res.status(401).json({ error: "Invalid or expired OTP. Please enter the exact OTP code sent to your mobile." });
     }
+
+    // One-time use: consume every OTP for this phone so it can't be replayed
+    await prisma.oTPVerification.deleteMany({ where: { phone: cleanPhone } }).catch(() => null);
 
     // Fast Indexed User Lookup
     let user = await prisma.user.findUnique({
@@ -957,8 +1238,7 @@ app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
       user,
     });
   } catch (err) {
-    console.error("Auth verify error:", err);
-    res.status(500).json({ error: "Authentication failed", details: err.message });
+    sendServerError(res, err, "OTP verify");
   }
 });
 
@@ -970,7 +1250,7 @@ app.get("/api/v1/users/me", requireAuth, async (req, res) => {
     const { password, ...safeUser } = user;
     res.json(safeUser);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -1027,7 +1307,7 @@ app.patch("/api/v1/users/preferred-region", requireAuth, async (req, res) => {
     res.json({ success: true, user: safeUser });
   } catch (err) {
     console.error("Update preferred region error:", err);
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -1039,32 +1319,25 @@ app.get("/api/v1/users/by-phone/:phone", requireAuth, requireSelfOrAdmin((req) =
     const { password, ...safeUser } = user;
     res.json(safeUser);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
 // Update Profile (Name, Email, Preferred Region) in Supabase PostgreSQL
 app.put("/api/v1/users/profile", requireAuth, async (req, res) => {
   try {
-    const { phone, name, email, preferredRegionId, preferredRegionName } = req.body;
-    if (!phone) return res.status(400).json({ error: "Phone number is required" });
+    const { name, email, preferredRegionId, preferredRegionName } = req.body;
 
-    let user = await prisma.user.findUnique({ where: { phone } });
+    // Always act on the authenticated account (never on a phone number from the request body)
+    let user = await prisma.user.findUnique({ where: { id: req.auth.userId } }).catch(() => null);
+    if (!user && req.auth.phone) {
+      user = await prisma.user.findUnique({ where: { phone: req.auth.phone } }).catch(() => null);
+    }
     if (!user) {
-      user = await prisma.user.create({
-        data: {
-          phone,
-          name: name || "User",
-          email,
-          preferredRegionId: preferredRegionId || null,
-          preferredRegionName: preferredRegionName || null,
-          role: "CUSTOMER",
-          tokenVersion: 1,
-        },
-      });
+      return res.status(404).json({ error: "User not found", invalidSession: true });
     } else {
       user = await prisma.user.update({
-        where: { phone },
+        where: { id: user.id },
         data: {
           name: name !== undefined ? name : user.name,
           email: email !== undefined ? email : user.email,
@@ -1077,15 +1350,15 @@ app.put("/api/v1/users/profile", requireAuth, async (req, res) => {
     const { password, ...safeUser } = user;
     res.json({ success: true, user: safeUser });
   } catch (err) {
-    console.error("Profile update error:", err);
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err, "Profile update");
   }
 });
 
+// Supports ?limit=&cursor= (paginated envelope); without them returns the capped legacy array
 app.get("/api/v1/users", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
-    const users = await prisma.user.findMany({
-      orderBy: { createdAt: "desc" },
+    const page = getPageParams(req);
+    const args = {
       include: {
         addresses: true,
         orders: {
@@ -1099,33 +1372,45 @@ app.get("/api/v1/users", requireAuth, requireRole("ADMIN"), async (req, res) => 
           },
         },
       },
-    });
+    };
 
-    const sanitizedUsers = users.map((u) => {
+    const stripPassword = (list) => list.map((u) => {
       const { password, ...safeUser } = u;
       return safeUser;
     });
-    res.json(sanitizedUsers);
+
+    if (!page) {
+      const users = await prisma.user.findMany({ ...args, orderBy: NEWEST_FIRST, take: LEGACY_LIST_CAP });
+      return res.json(stripPassword(users));
+    }
+    const result = await findPage(prisma.user, args, page);
+    res.json({ users: stripPassword(result.items), nextCursor: result.nextCursor, hasMore: result.hasMore });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
 app.post("/api/v1/users", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const { phone, name, role, email } = req.body;
+    if (!phone || !/^\d{10}$/.test(String(phone).trim())) {
+      return res.status(400).json({ error: "Valid 10-digit phone number required" });
+    }
+    if (role && !["CUSTOMER", "VENDOR", "DR", "ADMIN"].includes(String(role).toUpperCase())) {
+      return res.status(400).json({ error: "Invalid role" });
+    }
     const newUser = await prisma.user.create({
       data: {
-        phone,
+        phone: String(phone).trim(),
         name: name || "User",
         email,
-        role: role || "CUSTOMER",
+        role: role ? String(role).toUpperCase() : "CUSTOMER",
         tokenVersion: 1,
       },
     });
     res.status(201).json(newUser);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -1139,7 +1424,7 @@ app.get("/api/v1/drs", requireAuth, requireRole("ADMIN", "DR"), async (req, res)
     const safeDrs = drs.map(d => { const { password, ...safe } = d; return safe; });
     res.json(safeDrs);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -1195,7 +1480,7 @@ app.post("/api/v1/drs", requireAuth, requireRole("ADMIN"), async (req, res) => {
     res.status(201).json(newDr);
   } catch (err) {
     console.error("Add DR error:", err);
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -1243,7 +1528,7 @@ app.patch("/api/v1/drs/:id", requireAuth, requireRole("ADMIN"), async (req, res)
     }
     return res.status(404).json({ error: "DR not found" });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -1261,7 +1546,7 @@ app.delete("/api/v1/drs/:id", requireAuth, requireRole("ADMIN"), async (req, res
     }
     return res.status(404).json({ error: "DR not found" });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -1277,7 +1562,7 @@ app.get("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req, 
     const safeVendors = vendors.map(v => { const { password, ...safe } = v; return safe; });
     res.json(safeVendors);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -1317,7 +1602,6 @@ app.post("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req,
         data: {
           name: reqRegName.trim(),
           state: "Uttar Pradesh",
-          priceFactor: reqRegName.toLowerCase().includes("mirzapur") ? 1.05 : 1.0,
           baseDeliveryCharge: 49,
           isActive: true,
         },
@@ -1368,7 +1652,7 @@ app.post("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req,
     res.status(201).json(newVendor);
   } catch (err) {
     console.error("Add Vendor error:", err);
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -1449,7 +1733,7 @@ const handleUpdateVendor = async (req, res) => {
     return res.status(404).json({ error: "Vendor not found" });
   } catch (err) {
     console.error("Update Vendor error:", err);
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 };
 
@@ -1499,7 +1783,7 @@ app.patch("/api/v1/vendors/:id/status", requireAuth, requireRole("ADMIN", "DR"),
 
     res.json({ message: "Vendor status updated", status });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -1567,7 +1851,7 @@ app.delete("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), async
     res.json({ message: "Vendor and associated user login deleted successfully from Supabase DB", id: rawId });
   } catch (err) {
     console.error("Delete vendor endpoint error:", err);
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -1588,7 +1872,7 @@ app.get("/api/v1/master-products", async (req, res) => {
     res.setHeader("X-Cache", "MISS");
     res.json(products);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -1617,7 +1901,7 @@ app.post("/api/v1/master-products", requireAuth, requireRole("ADMIN", "DR"), asy
     });
     res.status(201).json(newProduct);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -1665,7 +1949,7 @@ app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN", "DR")
     return res.status(404).json({ error: "Master Product not found" });
   } catch (err) {
     console.error("PATCH Master Product error:", err);
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -1676,7 +1960,7 @@ app.delete("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN"), asy
     await prisma.productMaster.delete({ where: { id: rawId } }).catch(() => null);
     res.json({ success: true, message: "Master product deleted" });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -1708,43 +1992,32 @@ app.get("/api/v1/vendor/listings", async (req, res) => {
     });
     res.json(listings);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
 app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
-    let { masterProductId, vendorId, vendorName, regionId, regionName, price, stockQty, addedBy } = req.body;
+    let { masterProductId, vendorId, vendorName, regionId, regionName, price, stockQty } = req.body;
+    const isVendorRole = req.auth.role === "VENDOR";
 
-    let masterProd = masterProductId ? await prisma.productMaster.findUnique({ where: { id: masterProductId }, include: { category: true } }).catch(() => null) : null;
-
+    const masterProd = masterProductId ? await prisma.productMaster.findUnique({ where: { id: masterProductId }, include: { category: true } }).catch(() => null) : null;
     if (!masterProd) {
-      masterProd = await prisma.productMaster.findFirst({ include: { category: true } }).catch(() => null);
-    }
-
-    if (!masterProd) {
-      const cat = await prisma.category.findFirst().catch(() => null);
-      masterProd = await prisma.productMaster.create({
-        data: {
-          name: "UltraTech Super PPC Cement",
-          categoryId: cat ? cat.id : "c1",
-          brand: "UltraTech",
-          type: "PPC Cement",
-          grade: "OPC 53 Grade",
-          unit: "50kg Bag",
-          suggestedPrice: 390,
-          imageUrl: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
-          addedBy: "Admin",
-        },
-        include: { category: true },
-      });
+      return res.status(400).json({ error: "Valid master product is required" });
     }
 
     let vendor = null;
-    if (vendorId) {
+    if (isVendorRole) {
+      // Vendors can only list products for their own shop
+      const own = await resolveOwnVendor(req);
+      vendor = own ? await prisma.vendor.findUnique({ where: { id: own.id }, include: { region: true } }).catch(() => null) : null;
+      if (!vendor) {
+        return res.status(403).json({ error: "Vendor profile not found for this account" });
+      }
+    } else if (vendorId) {
       vendor = await prisma.vendor.findUnique({ where: { id: vendorId }, include: { region: true } }).catch(() => null);
     }
-    if (!vendor && (vendorName || vendorId)) {
+    if (!vendor && !isVendorRole && (vendorName || vendorId)) {
       vendor = await prisma.vendor.findFirst({
         where: {
           OR: [
@@ -1757,18 +2030,7 @@ app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "AD
       }).catch(() => null);
     }
 
-    if (req.auth.role === "VENDOR") {
-      // Partners can only list products in their own shop
-      const myVendorIds = await resolveCallerVendorIds(req.auth);
-      if (!vendor || !myVendorIds.includes(vendor.id)) {
-        vendor = myVendorIds.length > 0
-          ? await prisma.vendor.findUnique({ where: { id: myVendorIds[0] }, include: { region: true } }).catch(() => null)
-          : null;
-      }
-      if (!vendor) {
-        return res.status(403).json({ error: "No shop is linked to this account." });
-      }
-    } else if (req.auth.role === "DR") {
+    if (req.auth.role === "DR") {
       if (!vendor) {
         return res.status(404).json({ error: "Vendor not found." });
       }
@@ -1808,7 +2070,6 @@ app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "AD
         data: {
           name: targetRegName.trim(),
           state: "Uttar Pradesh",
-          priceFactor: targetRegName.toLowerCase().includes("mirzapur") ? 1.05 : 1.0,
           baseDeliveryCharge: 49,
           isActive: true,
         },
@@ -1818,21 +2079,7 @@ app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "AD
     }
 
     if (!vendor) {
-      const user = await prisma.user.create({
-        data: { phone: "98765" + Math.floor(10000 + Math.random() * 89999), name: vendorName || "Vendor Partner", role: "VENDOR" },
-      });
-      vendor = await prisma.vendor.create({
-        data: {
-          userId: user.id,
-          shopName: vendorName || "Distributor Store",
-          ownerName: "Vendor Owner",
-          phone: user.phone,
-          regionId: matchedRegion.id,
-          commissionRate: 10,
-          status: "APPROVED",
-        },
-        include: { region: true },
-      });
+      return res.status(400).json({ error: "Vendor not found" });
     }
 
     const finalRegionId = matchedRegion ? matchedRegion.id : null;
@@ -1846,8 +2093,13 @@ app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "AD
       }).catch(() => null);
     }
 
-    // Vendors can never approve their own listings; they always go to DR/Admin review
-    const isAutoApproved = req.auth.role !== "VENDOR" && (addedBy === "Admin" || addedBy === "DR");
+    // Only staff can publish directly; vendor submissions always go through review
+    const isAutoApproved = req.auth.role === "ADMIN" || req.auth.role === "DR";
+    const listingPrice = Number(price) || Number(masterProd.suggestedPrice) || 100;
+    const listingStock = stockQty !== undefined && stockQty !== "" ? Number(stockQty) : 100;
+    if (!(listingPrice > 0) || !Number.isInteger(listingStock) || listingStock < 0) {
+      return res.status(400).json({ error: "Invalid price or stock quantity" });
+    }
 
     const newListing = await prisma.vendorProduct.create({
       data: {
@@ -1862,12 +2114,12 @@ app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "AD
         type: masterProd.type,
         grade: masterProd.grade,
         unit: masterProd.unit,
-        price: Number(price) || Number(masterProd.suggestedPrice) || 100,
-        stockQty: Number(stockQty) || 100,
+        price: listingPrice,
+        stockQty: listingStock,
         imageUrl: masterProd.imageUrl,
         approvalStatus: isAutoApproved ? "APPROVED" : "PENDING_REVIEW",
         isActive: isAutoApproved ? true : false,
-        addedBy: addedBy || "Vendor",
+        addedBy: isAutoApproved ? (req.auth.role === "ADMIN" ? "Admin" : "DR") : "Vendor",
       },
       include: { vendor: { include: { region: true } }, masterProduct: true },
     });
@@ -1881,7 +2133,7 @@ app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "AD
     res.status(201).json(newListing);
   } catch (err) {
     console.error("Vendor product listing error:", err);
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -1893,26 +2145,41 @@ app.patch("/api/v1/vendor/listings/:id", requireAuth, requireRole("VENDOR", "DR"
 
     let listing = await prisma.vendorProduct.findUnique({ where: { id: rawId } }).catch(() => null);
 
-    if (listing && req.auth.role === "VENDOR") {
-      const myVendorIds = await resolveCallerVendorIds(req.auth);
-      if (!myVendorIds.includes(listing.vendorId)) {
-        return res.status(403).json({ error: "You can only edit your own shop's listings." });
-      }
-    } else if (listing && req.auth.role === "DR" && !(await drCanManageVendor(req.auth, listing.vendorId))) {
+    if (listing && req.auth.role === "DR" && !(await drCanManageVendor(req.auth, listing.vendorId))) {
       return res.status(403).json({ error: "You can only manage listings for vendors in your own district." });
     }
 
     if (listing) {
-      const updateData = {};
-      if (price !== undefined && !isNaN(Number(price))) updateData.price = Number(price);
-      if (stockQty !== undefined && !isNaN(Number(stockQty))) updateData.stockQty = Number(stockQty);
-      // Approval and visibility are decided by DR/Admin review, never by the vendor
-      if (req.auth.role !== "VENDOR") {
-        if (approvalStatus !== undefined) {
-          updateData.approvalStatus = approvalStatus;
-          updateData.isActive = approvalStatus === "APPROVED";
+      const isVendorRole = req.auth.role === "VENDOR";
+      if (isVendorRole) {
+        const own = await resolveOwnVendor(req);
+        if (!own || own.id !== listing.vendorId) {
+          return res.status(403).json({ error: "You do not have permission for this action" });
         }
-        if (isActive !== undefined) updateData.isActive = isActive;
+      }
+
+      const updateData = {};
+      if (price !== undefined) {
+        const p = Number(price);
+        if (!(p > 0)) return res.status(400).json({ error: "Price must be greater than 0" });
+        updateData.price = p;
+      }
+      if (stockQty !== undefined) {
+        const q = Number(stockQty);
+        if (!Number.isInteger(q) || q < 0) return res.status(400).json({ error: "Stock must be a whole number" });
+        updateData.stockQty = q;
+      }
+      // Approval is a staff decision; vendors may only pause/resume an already-approved listing
+      if (approvalStatus !== undefined && !isVendorRole) {
+        if (!["PENDING_REVIEW", "APPROVED", "REJECTED"].includes(approvalStatus)) {
+          return res.status(400).json({ error: "Invalid approval status" });
+        }
+        updateData.approvalStatus = approvalStatus;
+        updateData.isActive = approvalStatus === "APPROVED";
+      }
+      if (isActive !== undefined) {
+        const effectiveStatus = updateData.approvalStatus || listing.approvalStatus;
+        updateData.isActive = isVendorRole ? Boolean(isActive) && effectiveStatus === "APPROVED" : Boolean(isActive);
       }
 
       const updatedListing = await prisma.vendorProduct.update({
@@ -1927,8 +2194,7 @@ app.patch("/api/v1/vendor/listings/:id", requireAuth, requireRole("VENDOR", "DR"
 
     res.status(404).json({ error: "Vendor product listing not found" });
   } catch (err) {
-    console.error("Patch listing error:", err.message);
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err, "Patch listing");
   }
 });
 
@@ -1936,6 +2202,9 @@ app.patch("/api/v1/vendor/listings/:id/status", requireAuth, requireRole("ADMIN"
   try {
     const rawId = req.params.id;
     const { approvalStatus } = req.body; // PENDING_REVIEW | APPROVED | REJECTED
+    if (approvalStatus !== undefined && !["PENDING_REVIEW", "APPROVED", "REJECTED"].includes(approvalStatus)) {
+      return res.status(400).json({ error: "Invalid approval status" });
+    }
 
     let listing = await prisma.vendorProduct.findUnique({ where: { id: rawId } }).catch(() => null);
 
@@ -1965,7 +2234,7 @@ app.patch("/api/v1/vendor/listings/:id/status", requireAuth, requireRole("ADMIN"
     res.status(404).json({ error: "Product listing not found" });
   } catch (err) {
     console.error("Update listing status error:", err.message);
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -1983,7 +2252,7 @@ app.get("/api/v1/categories", async (req, res) => {
     res.setHeader("X-Cache", "MISS");
     res.json(categories);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -2005,7 +2274,7 @@ app.post("/api/v1/categories", requireAuth, requireRole("ADMIN"), async (req, re
     });
     res.status(201).json(newCategory);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -2036,7 +2305,7 @@ app.patch("/api/v1/categories/:id", requireAuth, requireRole("ADMIN"), async (re
     res.json(updated);
   } catch (err) {
     console.error("Patch category error:", err.message);
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -2077,7 +2346,7 @@ app.delete("/api/v1/categories/:id", requireAuth, requireRole("ADMIN"), async (r
     res.json({ success: true, message: `Category "${cat.name}" deleted from DB` });
   } catch (err) {
     console.error("Delete category error:", err.message);
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -2094,7 +2363,7 @@ app.get("/api/v1/regions", async (req, res) => {
     res.setHeader("X-Cache", "MISS");
     res.json(regions);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -2118,7 +2387,7 @@ app.post("/api/v1/regions", requireAuth, requireRole("ADMIN"), async (req, res) 
     });
     res.status(201).json(newRegion);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -2169,7 +2438,7 @@ app.patch("/api/v1/regions/:id", requireAuth, requireRole("ADMIN"), async (req, 
     res.json(updated);
   } catch (err) {
     console.error("Patch region error:", err.message);
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -2216,321 +2485,226 @@ app.delete("/api/v1/regions/:id", requireAuth, requireRole("ADMIN"), async (req,
     res.json({ success: true, message: `Region "${reg.name}" deleted from DB` });
   } catch (err) {
     console.error("Delete region error:", err.message);
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
 // 7. ORDERS & CHECKOUT ENDPOINTS (With Vendor Isolation & Status Updates)
+const STAFF_ORDER_INCLUDE = {
+  items: {
+    include: {
+      vendor: {
+        select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true, region: true },
+      },
+    },
+  },
+  customer: { select: SAFE_USER_SELECT },
+  address: { include: { region: true } },
+};
+
+const CUSTOMER_ORDER_INCLUDE = {
+  items: {
+    include: {
+      vendor: {
+        select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
+      },
+    },
+  },
+  customer: { select: SAFE_USER_SELECT },
+  address: true,
+};
+
+const withVendorNames = (orders) =>
+  (orders || []).map((o) => ({
+    ...o,
+    items: (o.items || []).map((it) => ({
+      ...it,
+      vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
+    })),
+  }));
+
+// Orders a customer can see: placed by them, or delivered to their phone number
+function customerOrdersWhere(userId, phone) {
+  const cleanPhone = String(phone || "").replace(/\D/g, "").slice(-10);
+  return {
+    OR: [
+      ...(userId ? [{ customerId: userId }] : []),
+      ...(cleanPhone ? [{ customer: { phone: { contains: cleanPhone } } }] : []),
+      ...(cleanPhone ? [{ address: { phone: { contains: cleanPhone } } }] : []),
+    ],
+  };
+}
+
+// All orders (Admin / DR). Supports ?limit=&cursor=&includeOpen=1 and ?regionId= for a district.
 app.get("/api/v1/orders", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
-    let where;
+    let where = orderRegionWhere(req.query.regionId);
     if (req.auth.role === "DR") {
+      // DRs only ever see orders in their own district
       const drRegionIds = await resolveCallerDrRegionIds(req.auth);
-      if (drRegionIds.length === 0) return res.json([]);
-      where = ordersInRegionsWhere(drRegionIds);
+      if (drRegionIds.length === 0) {
+        return res.json(getPageParams(req) ? { orders: [], nextCursor: null, hasMore: false } : []);
+      }
+      where = { AND: [where, ordersInRegionsWhere(drRegionIds)] };
     }
-
-    const orders = await prisma.order.findMany({
-      where,
-      include: {
-        items: {
-          include: {
-            vendor: {
-              select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true, region: true },
-            },
-          },
-        },
-        customer: { select: { id: true, name: true, phone: true, email: true, role: true } },
-        address: { include: { region: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    const formatted = (orders || []).map((o) => ({
-      ...o,
-      items: (o.items || []).map((it) => ({
-        ...it,
-        vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
-      })),
-    }));
-    res.json(formatted);
+    const list = await listOrders(req, where, { include: STAFF_ORDER_INCLUDE });
+    sendOrderList(res, list, withVendorNames(list.orders));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
-// Customer Isolated Orders Fetch (Self by Token or Admin)
-app.get("/api/v1/orders/me", requireAuth, async (req, res) => {
+// Exact order totals for the caller's scope (dashboard headline numbers, independent of paging)
+app.get("/api/v1/orders/summary", requireAuth, async (req, res) => {
   try {
-    const targetUserId = req.auth?.userId;
-    const cleanPhone = (req.auth?.phone || "").replace(/\D/g, "");
-
-    const orders = await prisma.order.findMany({
-      where: {
-        OR: [
-          ...(targetUserId ? [{ customerId: targetUserId }] : []),
-          ...(cleanPhone ? [{ customer: { phone: { contains: cleanPhone.slice(-10) } } }] : []),
-          ...(cleanPhone ? [{ address: { phone: { contains: cleanPhone.slice(-10) } } }] : []),
-        ],
-      },
-      include: {
-        items: {
-          include: {
-            vendor: {
-              select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
-            },
-          },
-        },
-        customer: true,
-        address: true,
-      },
-      orderBy: { createdAt: "desc" },
-    }).catch(() => []);
-
-    const formatted = (orders || []).map((o) => ({
-      ...o,
-      items: (o.items || []).map((it) => ({
-        ...it,
-        vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
-      })),
-    }));
-
-    res.json(formatted);
+    const role = req.auth.role;
+    if (role === "ADMIN") {
+      return res.json(await computeOrdersSummary(orderRegionWhere(req.query.regionId)));
+    }
+    if (role === "DR") {
+      const drRegionIds = await resolveCallerDrRegionIds(req.auth);
+      return res.json(await computeOrdersSummary({ AND: [orderRegionWhere(req.query.regionId), ordersInRegionsWhere(drRegionIds)] }));
+    }
+    if (role === "VENDOR") {
+      const own = await resolveOwnVendor(req);
+      if (!own) return res.status(403).json({ error: "Vendor profile not found for this account" });
+      return res.json(await computeOrdersSummary({ items: { some: { vendorId: own.id } } }, { vendorId: own.id }));
+    }
+    res.json(await computeOrdersSummary(customerOrdersWhere(req.auth.userId, req.auth.phone)));
   } catch (err) {
+    sendServerError(res, err, "Orders summary");
+  }
+});
+
+// Customer Isolated Orders Fetch (Self by Token)
+app.get("/api/v1/orders/me", requireAuth, async (req, res) => {
+  const paginated = !!getPageParams(req);
+  try {
+    const list = await listOrders(req, customerOrdersWhere(req.auth?.userId, req.auth?.phone), { include: CUSTOMER_ORDER_INCLUDE });
+    sendOrderList(res, list, withVendorNames(list.orders));
+  } catch (err) {
+    if (paginated) return sendServerError(res, err, "My orders");
     res.json([]);
   }
 });
 
 // Customer Isolated Orders Fetch (Self or Admin by Param)
 app.get("/api/v1/orders/user/:userId", requireAuth, requireSelfOrAdmin("userId"), async (req, res) => {
+  const paginated = !!getPageParams(req);
   try {
     const targetUserId = req.auth?.role === "ADMIN" ? req.params.userId : (req.auth?.userId || req.params.userId);
-    const cleanPhone = (req.auth?.phone || req.params.userId || "").replace(/\D/g, "");
-
-    const orders = await prisma.order.findMany({
-      where: {
-        OR: [
-          { customerId: targetUserId },
-          ...(cleanPhone ? [{ customer: { phone: { contains: cleanPhone.slice(-10) } } }] : []),
-          ...(cleanPhone ? [{ address: { phone: { contains: cleanPhone.slice(-10) } } }] : []),
-        ],
-      },
-      include: {
-        items: {
-          include: {
-            vendor: {
-              select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
-            },
-          },
-        },
-        customer: true,
-        address: true,
-      },
-      orderBy: { createdAt: "desc" },
-    }).catch(() => []);
-
-    const formatted = (orders || []).map((o) => ({
-      ...o,
-      items: (o.items || []).map((it) => ({
-        ...it,
-        vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
-      })),
-    }));
-
-    res.json(formatted);
+    const phone = req.auth?.phone || req.params.userId || "";
+    const list = await listOrders(req, customerOrdersWhere(targetUserId, phone), { include: CUSTOMER_ORDER_INCLUDE });
+    sendOrderList(res, list, withVendorNames(list.orders));
   } catch (err) {
+    if (paginated) return sendServerError(res, err, "User orders");
     res.json([]);
   }
 });
-
-const ORDER_STATUSES = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"];
-
-// Vendor shop IDs owned by the logged-in partner (matched by linked user account or registered mobile)
-async function resolveCallerVendorIds(auth) {
-  const last10 = String(auth?.phone || "").replace(/\D/g, "").slice(-10);
-  const or = [];
-  if (auth?.userId) or.push({ userId: auth.userId });
-  if (last10.length === 10) or.push({ phone: { endsWith: last10 } });
-  if (or.length === 0) return [];
-  const vendors = await prisma.vendor.findMany({ where: { OR: or }, select: { id: true } }).catch(() => []);
-  return vendors.map((v) => v.id);
-}
-
-// Same district aliases as the DR dashboard, so "Banaras" and "Varanasi" region rows count as one district
-const DISTRICT_ALIASES = {
-  varanasi: ["varanasi", "varnasi", "banaras", "kashi", "vns"],
-  mirzapur: ["mirzapur", "mzp"],
-  prayagraj: ["prayagraj", "allahabad"],
-  jaunpur: ["jaunpur"],
-};
-function canonicalDistrict(name) {
-  const clean = String(name || "").toLowerCase().trim();
-  if (!clean) return "";
-  for (const [district, aliases] of Object.entries(DISTRICT_ALIASES)) {
-    if (aliases.some((alias) => clean.includes(alias))) return district;
-  }
-  return clean;
-}
-
-// Region IDs covering the logged-in DR's assigned district(s)
-async function resolveCallerDrRegionIds(auth) {
-  const last10 = String(auth?.phone || "").replace(/\D/g, "").slice(-10);
-  const or = [];
-  if (auth?.userId) or.push({ id: auth.userId }, { userId: auth.userId });
-  if (last10.length === 10) or.push({ phone: { endsWith: last10 } });
-  if (or.length === 0) return [];
-  const drs = await prisma.dR.findMany({ where: { OR: or }, include: { region: true } }).catch(() => []);
-  const regionIds = new Set(drs.map((d) => d.regionId).filter(Boolean));
-  const districts = new Set(drs.map((d) => canonicalDistrict(d.region?.name)).filter(Boolean));
-  if (districts.size > 0) {
-    const regions = await prisma.region.findMany({ select: { id: true, name: true } }).catch(() => []);
-    for (const r of regions) {
-      if (districts.has(canonicalDistrict(r.name))) regionIds.add(r.id);
-    }
-  }
-  return Array.from(regionIds);
-}
-
-// DRs may only manage shops (and their listings) in their own district
-async function drCanManageVendor(auth, vendorOrId) {
-  const vendor = typeof vendorOrId === "string"
-    ? await prisma.vendor.findUnique({ where: { id: vendorOrId }, select: { regionId: true } }).catch(() => null)
-    : vendorOrId;
-  if (!vendor?.regionId) return false;
-  const drRegionIds = await resolveCallerDrRegionIds(auth);
-  return drRegionIds.includes(vendor.regionId);
-}
-
-// Orders delivered to, or fulfilled by a shop in, one of the given regions
-function ordersInRegionsWhere(regionIds) {
-  return {
-    OR: [
-      { address: { regionId: { in: regionIds } } },
-      { items: { some: { vendor: { regionId: { in: regionIds } } } } },
-    ],
-  };
-}
 
 // Strict Vendor Isolated Orders Fetch
 app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
     const { vendorId } = req.params;
-    let vendorIds;
+    let vendor = null;
 
     if (req.auth.role === "VENDOR") {
-      // Partners only ever see their own shop's orders, whatever ID is in the URL
-      vendorIds = await resolveCallerVendorIds(req.auth);
+      // Vendors always get their own orders, whatever id the client sent
+      vendor = await resolveOwnVendor(req);
     } else {
       const cleanPhone = vendorId.replace(/^v-/, "").replace(/\D/g, "");
-      const vendor = await prisma.vendor.findFirst({
+      vendor = await prisma.vendor.findFirst({
         where: {
           OR: [
             { id: vendorId },
-            ...(vendorId.length > 20 ? [{ userId: vendorId }] : []),
-            ...(cleanPhone.length >= 8 ? [{ phone: { contains: cleanPhone.slice(-10) } }] : []),
-            { shopName: { equals: vendorId, mode: "insensitive" } },
+            { userId: vendorId },
+            ...(cleanPhone.length === 10 ? [{ phone: cleanPhone }] : []),
           ],
         },
       }).catch(() => null);
-      vendorIds = vendor ? [vendor.id] : [];
-      if (vendor && req.auth.role === "DR") {
-        const drRegionIds = await resolveCallerDrRegionIds(req.auth);
-        if (!drRegionIds.includes(vendor.regionId)) vendorIds = [];
-      }
     }
 
-    if (vendorIds.length === 0) {
-      return res.json([]);
+    if (!vendor || (req.auth.role === "DR" && !(await drCanManageVendor(req.auth, vendor)))) {
+      return res.json(getPageParams(req) ? { orders: [], nextCursor: null, hasMore: false } : []);
     }
 
-    const vendorOrders = await prisma.order.findMany({
-      where: { items: { some: { vendorId: { in: vendorIds } } } },
+    // Filter in the database instead of loading every order into memory
+    const list = await listOrders(req, { items: { some: { vendorId: vendor.id } } }, {
       include: {
         items: {
+          where: { vendorId: vendor.id },
           include: {
             vendor: {
               select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
             },
           },
         },
-        customer: { select: { id: true, name: true, phone: true, email: true, role: true } },
+        _count: { select: { items: true } },
+        customer: { select: SAFE_USER_SELECT },
         address: { include: { region: true } },
       },
-      orderBy: { createdAt: "desc" },
     });
 
-    const filtered = vendorOrders
-      .map((o) => {
-        if (!o || !Array.isArray(o.items) || o.items.length === 0) return null;
+    const formatted = list.orders.map(({ _count, ...o }) => {
+      const myItems = o.items || [];
+      const vendorSubtotal = myItems.reduce((acc, it) => acc + Number(it.priceAtPurchase || 0) * Number(it.quantity || 1), 0);
+      const allItemsCount = _count?.items ?? myItems.length;
+      const isFullOrder = myItems.length === allItemsCount;
+      const vendorTotal = isFullOrder ? Number(o.totalAmount || vendorSubtotal) : vendorSubtotal;
 
-        // Strictly retain ONLY items belonging to this vendor
-        const myItems = o.items.filter((it) => vendorIds.includes(it.vendorId));
+      return {
+        ...o,
+        items: myItems.map((it) => ({
+          ...it,
+          name: it.productName,
+          productName: it.productName,
+          price: Number(it.priceAtPurchase || 0),
+          totalPrice: Number(it.totalPrice || Number(it.priceAtPurchase || 0) * Number(it.quantity || 1)),
+          vendorName: it.vendor?.shopName || vendor.shopName || "District Vendor",
+        })),
+        totalAmount: vendorTotal,
+        total: vendorTotal,
+        vendorItemsTotal: vendorSubtotal,
+        isPartialOrder: !isFullOrder,
+        allOrderItemsCount: allItemsCount,
+      };
+    });
 
-        if (myItems.length === 0) return null;
-
-        // Calculate this vendor's items subtotal
-        const vendorSubtotal = myItems.reduce((acc, it) => {
-          const qty = Number(it.quantity || 1);
-          const price = Number(it.priceAtPurchase || it.price || 0);
-          return acc + (price * qty);
-        }, 0);
-
-        const isFullOrder = myItems.length === o.items.length;
-        const vendorTotal = isFullOrder
-          ? Number(o.totalAmount || vendorSubtotal)
-          : vendorSubtotal;
-
-        return {
-          ...o,
-          items: myItems.map((it) => ({
-            ...it,
-            name: it.productName || it.name,
-            productName: it.productName || it.name,
-            price: Number(it.priceAtPurchase || it.price || 0),
-            totalPrice: Number(it.totalPrice || (Number(it.priceAtPurchase || it.price || 0) * Number(it.quantity || 1))),
-            vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
-          })),
-          totalAmount: vendorTotal,
-          total: vendorTotal,
-          vendorItemsTotal: vendorSubtotal,
-          isPartialOrder: !isFullOrder,
-          allOrderItemsCount: o.items.length,
-        };
-      })
-      .filter(Boolean);
-
-    res.json(filtered);
+    sendOrderList(res, list, formatted);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err, "Vendor orders");
   }
 });
+
+const ORDER_STATUSES = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"];
 
 // Update Order Status (Vendor & Admin with Auto Stock Restore on Cancel)
 app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
     const { status } = req.body; // PENDING | PROCESSING | OUT_FOR_DELIVERY | DELIVERED | CANCELLED
     if (!ORDER_STATUSES.includes(status)) {
-      return res.status(400).json({ error: "Invalid order status." });
+      return res.status(400).json({ error: "Invalid order status" });
     }
 
     const previousOrder = await prisma.order.findUnique({
       where: { id: req.params.id },
       include: { items: true },
-    });
+    }).catch(() => null);
+
     if (!previousOrder) {
-      return res.status(404).json({ error: "Order not found." });
+      return res.status(404).json({ error: "Order not found" });
     }
 
-    // Vendors may only move orders whose items all belong to their own shop
+    // Vendors may only update orders whose items all belong to their own shop
     if (req.auth.role === "VENDOR") {
-      const myVendorIds = await resolveCallerVendorIds(req.auth);
-      const ownsEveryItem = previousOrder.items.length > 0 &&
-        previousOrder.items.every((it) => myVendorIds.includes(it.vendorId));
+      const own = await resolveOwnVendor(req);
+      const ownsEveryItem = !!own && previousOrder.items.length > 0 && previousOrder.items.every((it) => it.vendorId === own.id);
       if (!ownsEveryItem) {
-        const ownsSomeItem = previousOrder.items.some((it) => myVendorIds.includes(it.vendorId));
+        const ownsSomeItem = !!own && previousOrder.items.some((it) => it.vendorId === own.id);
         return res.status(403).json({
           error: ownsSomeItem
             ? "This order is shared with another shop. Please ask your District Representative to update it."
-            : "You do not have permission to update this order.",
+            : "You do not have permission for this action",
         });
       }
     }
@@ -2539,48 +2713,51 @@ app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", 
     if (req.auth.role === "DR") {
       const drRegionIds = await resolveCallerDrRegionIds(req.auth);
       const inDistrict = drRegionIds.length > 0 && (await prisma.order.count({
-        where: { id: previousOrder.id, ...ordersInRegionsWhere(drRegionIds) },
+        where: { AND: [{ id: previousOrder.id }, ordersInRegionsWhere(drRegionIds)] },
       })) > 0;
       if (!inDistrict) {
         return res.status(403).json({ error: "This order is outside your district." });
       }
     }
 
-    const updatedOrder = await prisma.order.update({
-      where: { id: req.params.id },
-      data: { status },
-      include: { items: true, customer: true },
-    });
+    const ops = [
+      prisma.order.update({
+        where: { id: previousOrder.id },
+        data: { status },
+        include: { items: true, customer: { select: SAFE_USER_SELECT } },
+      }),
+    ];
 
-    // Restore reserved quantity back to the same vendor's listing when order is cancelled or rejected
+    // Restore reserved quantity back to the exact listing when order is cancelled
     if (status === "CANCELLED" && previousOrder.status !== "CANCELLED") {
       for (const item of previousOrder.items) {
-        try {
-          const vp = item.vendorProductId
-            ? await prisma.vendorProduct.findUnique({ where: { id: item.vendorProductId } }).catch(() => null)
-            : await prisma.vendorProduct.findFirst({
-              where: {
-                vendorId: item.vendorId,
-                name: { equals: item.productName, mode: "insensitive" },
-              },
-            }).catch(() => null);
-
+        const qty = Number(item.quantity || 1);
+        if (item.vendorProductId) {
+          ops.push(prisma.vendorProduct.updateMany({
+            where: { id: item.vendorProductId },
+            data: { stockQty: { increment: qty } },
+          }));
+        } else {
+          // Legacy orders created before vendorProductId was recorded
+          const vp = await prisma.vendorProduct.findFirst({
+            where: { vendorId: item.vendorId, name: { equals: item.productName, mode: "insensitive" } },
+            select: { id: true },
+          }).catch(() => null);
           if (vp) {
-            await prisma.vendorProduct.update({
+            ops.push(prisma.vendorProduct.updateMany({
               where: { id: vp.id },
-              data: { stockQty: { increment: Number(item.quantity || 1) } },
-            }).catch(() => null);
-            console.log(`✓ Restored ${item.quantity} units to inventory stock for product "${vp.name}"`);
+              data: { stockQty: { increment: qty } },
+            }));
           }
-        } catch (e) {
-          console.warn("Stock restore note:", e.message);
         }
       }
     }
 
+    // Status change and stock restore succeed or fail together
+    const [updatedOrder] = await prisma.$transaction(ops);
     res.json(updatedOrder);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err, "Order status update");
   }
 });
 
@@ -2682,7 +2859,7 @@ app.post("/api/v1/addresses", requireAuth, async (req, res) => {
     }
     if (!reg) {
       reg = await prisma.region.create({
-        data: { name: regName.trim(), state: state || "Uttar Pradesh", priceFactor: 1.0, baseDeliveryCharge: 49, isActive: true },
+        data: { name: regName.trim(), state: state || "Uttar Pradesh", baseDeliveryCharge: 49, isActive: true },
       }).catch(async () => {
         return await prisma.region.findFirst().catch(() => null);
       });
@@ -2745,7 +2922,7 @@ app.post("/api/v1/addresses", requireAuth, async (req, res) => {
     res.status(201).json(newAddress);
   } catch (err) {
     console.error("POST /api/v1/addresses error:", err.message);
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -2788,7 +2965,7 @@ app.put("/api/v1/addresses/:id", requireAuth, async (req, res) => {
     return res.json(updated);
   } catch (err) {
     console.error("PUT /api/v1/addresses/:id error:", err.message);
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -2811,42 +2988,52 @@ app.delete("/api/v1/addresses/:id", requireAuth, async (req, res) => {
     return res.json({ success: true, count: 1 });
   } catch (err) {
     console.error("DELETE /api/v1/addresses/:id error:", err.message);
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
-// In-memory caches for ultra-fast checkout (eliminates 4000ms of static DB roundtrips)
-let cachedDefaultVendor = null;
-let cachedRegions = null;
-
 app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
   try {
-    const { customerId, totalAmount, deliveryFee, items, idempotencyKey } = req.body;
-
-    if (idempotencyKey) {
-      // A split checkout stores the key on its first order and "<key>__vN" on the rest
-      const existingOrders = await prisma.order.findMany({
-        where: { OR: [{ idempotencyKey }, { idempotencyKey: { startsWith: `${idempotencyKey}__v` } }] },
-        include: { items: true, customer: true, address: true },
-        orderBy: { createdAt: "asc" },
-      });
-      if (existingOrders.length > 0) {
-        return res.json({ success: true, order: existingOrders[0], orders: existingOrders, isDuplicate: true });
-      }
-    }
+    const { items, idempotencyKey } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "No items in order." });
     }
-
-    // 1. Fast Cache Resolution for static entities (0ms instead of 2000ms!)
-    if (!cachedDefaultVendor) {
-      cachedDefaultVendor = await prisma.vendor.findFirst().catch(() => null);
+    if (items.length > 100) {
+      return res.status(400).json({ error: "Too many items in one order." });
     }
-    const defaultVendor = cachedDefaultVendor;
 
-    if (!cachedRegions || cachedRegions.length === 0) {
+    // 1. The order always belongs to the authenticated account (never a customerId from the body)
+    let targetUser = await prisma.user.findUnique({ where: { id: req.auth.userId } }).catch(() => null);
+    if (!targetUser && req.auth.phone) {
+      targetUser = await prisma.user.findUnique({ where: { phone: req.auth.phone } }).catch(() => null);
+    }
+    if (!targetUser) {
+      return res.status(401).json({ error: "Session expired. Please log in again.", invalidSession: true });
+    }
+    const targetCustomerId = targetUser.id;
+
+    if (idempotencyKey) {
+      // A split checkout stores the key on its first order and "<key>__vN" on the rest
+      const key = String(idempotencyKey);
+      const existingOrders = await prisma.order.findMany({
+        where: { OR: [{ idempotencyKey: key }, { idempotencyKey: { startsWith: `${key}__v` } }] },
+        include: { items: true, customer: { select: SAFE_USER_SELECT }, address: true },
+        orderBy: { createdAt: "asc" },
+      });
+      if (existingOrders.length > 0) {
+        if (existingOrders.some((o) => o.customerId !== targetCustomerId)) {
+          return res.status(409).json({ error: "Duplicate order request. Please refresh and try again." });
+        }
+        return res.json({ success: true, order: existingOrders[0], orders: existingOrders, isDuplicate: true });
+      }
+    }
+
+    // Region list is near-static; cache briefly (catalog mutations clear it)
+    let cachedRegions = getCached("checkout_regions");
+    if (!cachedRegions) {
       cachedRegions = await prisma.region.findMany().catch(() => []);
+      setCached("checkout_regions", cachedRegions, 5 * 60 * 1000);
     }
 
     let reg = null;
@@ -2863,48 +3050,11 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
 
     const targetRegionName = reg?.name || (req.body.districtName || req.body.address?.city || req.body.address?.district || "Varanasi").trim();
 
-    // 2. Resolve User, Address, and Batch Products concurrently in parallel!
-    const incomingPhone = (
-      req.body.phone ||
-      req.body.address?.phone ||
-      (typeof customerId === "string" && customerId.startsWith("cust_") ? customerId.replace("cust_", "") : "") ||
-      (typeof customerId === "string" && !customerId.includes("-") ? customerId : "")
-    ).replace(/\D/g, "");
+    // 2. Batch query all cart products at once in 1 single fast database call!
+    const itemIds = items.map((i) => i.id || i.productId).filter((v) => typeof v === "string");
+    const itemNames = items.map((i) => String(i.name || i.productName || "").trim()).filter(Boolean);
 
-    const userPromise = (async () => {
-      if (customerId && customerId.length > 20 && !customerId.startsWith("cust_") && !customerId.startsWith("user_")) {
-        const u = await prisma.user.findUnique({ where: { id: customerId } }).catch(() => null);
-        if (u) return u;
-      }
-      if (incomingPhone && incomingPhone.length >= 8) {
-        const u = await prisma.user.findFirst({
-          where: {
-            OR: [
-              { phone: incomingPhone },
-              { phone: { contains: incomingPhone.slice(-10) } },
-            ],
-          },
-        }).catch(() => null);
-        if (u) return u;
-      }
-      const userPhone = incomingPhone && incomingPhone.length >= 10 ? incomingPhone : `cust_${Date.now()}`;
-      return await prisma.user.create({
-        data: {
-          phone: userPhone,
-          name: req.body.address?.fullName || "Customer",
-          role: "CUSTOMER",
-          tokenVersion: 1,
-        },
-      }).catch(async () => {
-        return await prisma.user.findFirst({ where: { role: "CUSTOMER" } }).catch(() => null);
-      });
-    })();
-
-    // Batch query all cart products at once in 1 single fast database call!
-    const itemIds = items.map((i) => i.id || i.productId).filter(Boolean);
-    const itemNames = items.map((i) => (i.name || i.productName || "").trim()).filter(Boolean);
-
-    const productsPromise = prisma.vendorProduct.findMany({
+    const liveProducts = await prisma.vendorProduct.findMany({
       where: {
         approvalStatus: "APPROVED",
         isActive: true,
@@ -2921,21 +3071,57 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       },
     }).catch(() => []);
 
-    const [resolvedUser, liveProducts] = await Promise.all([userPromise, productsPromise]);
+    // 3. Validate every item BEFORE any write, so a bad item can't leave partial side effects
+    const validatedItems = [];
+    const stockRequested = new Map();
 
-    const targetUser = resolvedUser || (await prisma.user.findFirst().catch(() => null));
-    const targetCustomerId = targetUser?.id;
+    for (const item of items) {
+      const itemQty = Number(item.quantity);
+      const prodName = String(item.name || item.productName || item.title || "").trim();
 
-    // 3. Address Save / Link Logic
+      if (!Number.isInteger(itemQty) || itemQty < 1 || itemQty > 10000) {
+        throw new ClientError(`Invalid quantity for product: ${prodName || "Item"}`);
+      }
+
+      const pId = item.id || item.productId;
+      let liveVp = liveProducts.find((p) => p.id === pId);
+      if (!liveVp && prodName) {
+        liveVp = liveProducts.find((p) => p.name.toLowerCase() === prodName.toLowerCase());
+      }
+
+      if (!liveVp) {
+        throw new ClientError(`Product not available or supplier suspended: ${prodName || "Item"}`);
+      }
+
+      const verifiedPrice = Number(liveVp.price);
+      if (isNaN(verifiedPrice) || verifiedPrice <= 0) {
+        throw new ClientError(`Invalid product price for ${liveVp.name}`);
+      }
+
+      const itemTotal = itemQty * verifiedPrice;
+      stockRequested.set(liveVp.id, (stockRequested.get(liveVp.id) || 0) + itemQty);
+
+      validatedItems.push({
+        vendorProductId: liveVp.id,
+        productName: liveVp.name || prodName,
+        priceAtPurchase: verifiedPrice,
+        quantity: itemQty,
+        totalPrice: itemTotal,
+        vendorId: liveVp.vendorId,
+        vendor: liveVp.vendor,
+      });
+    }
+
+    // 4. Address Save / Link Logic
     let addressId = null;
     if (req.body.address || req.body.districtName || req.body.regionId) {
       const addrObj = req.body.address || {};
-      const streetStr = typeof addrObj === "string" ? addrObj : (addrObj.street || addrObj.line || addrObj.address || "Main Site Delivery Address");
+      const streetStr = String(typeof addrObj === "string" ? addrObj : (addrObj.street || addrObj.line || addrObj.address || "Main Site Delivery Address"));
       const fullNameStr = typeof addrObj === "object" ? (addrObj.fullName || addrObj.name || "Customer") : "Customer";
-      const phoneStr = typeof addrObj === "object" ? (addrObj.phone || targetUser?.phone || "") : (targetUser?.phone || "");
+      const phoneStr = typeof addrObj === "object" ? (addrObj.phone || targetUser.phone || "") : (targetUser.phone || "");
       const cityStr = targetRegionName;
 
-      if (reg && reg.id && targetCustomerId) {
+      if (reg && reg.id) {
         let existingAddress = await prisma.address.findFirst({
           where: {
             userId: targetCustomerId,
@@ -2951,12 +3137,12 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
             data: {
               userId: targetCustomerId,
               regionId: reg.id,
-              fullName: fullNameStr,
-              phone: phoneStr,
+              fullName: String(fullNameStr),
+              phone: String(phoneStr),
               street: streetStr,
               city: cityStr,
               state: typeof addrObj === "object" ? (addrObj.state || "Uttar Pradesh") : "Uttar Pradesh",
-              pincode: typeof addrObj === "object" ? (addrObj.pincode || "221001") : "221001",
+              pincode: typeof addrObj === "object" ? String(addrObj.pincode || "221001") : "221001",
               isDefault: false,
             },
           }).catch((err) => {
@@ -2969,112 +3155,70 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       }
     }
 
-    // 4. In-Memory Item Validation & Verification (0ms!)
-    let serverTotalAmount = 0;
-    const validatedItems = [];
-
-    for (const item of items) {
-      const rawQty = item.quantity;
-      const itemQty = Number(rawQty);
-      const prodName = (item.name || item.productName || item.title || "").trim();
-
-      if (!Number.isInteger(itemQty) || itemQty < 1) {
-        throw new Error(`Invalid quantity for product: ${prodName || "Item"}`);
-      }
-
-      const pId = item.id || item.productId;
-      let liveVp = liveProducts.find((p) => p.id === pId);
-      if (!liveVp && prodName) {
-        liveVp = liveProducts.find((p) => p.name.toLowerCase() === prodName.toLowerCase());
-      }
-      if (!liveVp && pId) {
-        liveVp = await prisma.vendorProduct.findUnique({
-          where: { id: pId },
-          include: { vendor: { select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true, status: true } } },
-        }).catch(() => null);
-      }
-
-      if (!liveVp || liveVp.vendor?.status === "SUSPENDED" || liveVp.isActive === false) {
-        throw new Error(`Product not available or supplier suspended: ${prodName || item.id || "Item"}`);
-      }
-
-      const verifiedPrice = Number(liveVp.price);
-      if (isNaN(verifiedPrice) || verifiedPrice <= 0) {
-        throw new Error(`Invalid product price in database for ${liveVp.name}`);
-      }
-
-      const itemTotal = itemQty * verifiedPrice;
-      serverTotalAmount += itemTotal;
-
-      // Decrement stock asynchronously in background
-      if (liveVp.stockQty && liveVp.stockQty > 0) {
-        prisma.vendorProduct.update({
-          where: { id: liveVp.id },
-          data: { stockQty: { decrement: Math.min(liveVp.stockQty, itemQty) } },
-        }).catch(() => null);
-      }
-
-      let finalVendorId = liveVp.vendorId || liveVp.vendor?.id || item.vendorId;
-      if (!finalVendorId || finalVendorId === "v1" || String(finalVendorId).startsWith("v-")) {
-        finalVendorId = defaultVendor?.id || liveVp.vendor?.id;
-      }
-
-      validatedItems.push({
-        vendorProductId: liveVp.id,
-        productName: liveVp.name || prodName,
-        priceAtPurchase: verifiedPrice,
-        quantity: itemQty,
-        totalPrice: itemTotal,
-        vendorId: finalVendorId,
-        vendor: liveVp.vendor,
-      });
-    }
-
     const calculatedDeliveryFee = reg ? Number(reg.baseDeliveryCharge || 49) : 49;
 
     // 5. One order per vendor: each shop accepts, dispatches and delivers its own order,
     // so a status change by one vendor can never close another vendor's items.
+    // All orders, their items and the stock decrements commit atomically.
+    // Stock is decremented only while enough remains, so it can never go negative.
     const vendorGroups = new Map();
     for (const vi of validatedItems) {
       if (!vendorGroups.has(vi.vendorId)) vendorGroups.set(vi.vendorId, []);
       vendorGroups.get(vi.vendorId).push(vi);
     }
 
-    const createdOrders = await prisma.$transaction(
-      Array.from(vendorGroups.values()).map((groupItems, idx) => {
-        const groupSubtotal = groupItems.reduce((sum, vi) => sum + vi.totalPrice, 0);
-        return prisma.order.create({
-          data: {
-            customerId: targetCustomerId,
-            addressId,
-            totalAmount: groupSubtotal + calculatedDeliveryFee,
-            deliveryFee: calculatedDeliveryFee,
-            paymentMode: "COD",
-            status: "PENDING",
-            idempotencyKey: idempotencyKey ? (idx === 0 ? idempotencyKey : `${idempotencyKey}__v${idx + 1}`) : undefined,
-            items: {
-              create: groupItems.map((vi) => ({
-                vendorProductId: vi.vendorProductId,
-                productName: vi.productName,
-                priceAtPurchase: vi.priceAtPurchase,
-                quantity: vi.quantity,
-                totalPrice: vi.totalPrice,
-                vendorId: vi.vendorId,
-              })),
-            },
+    const orderCreates = Array.from(vendorGroups.values()).map((groupItems, idx) =>
+      prisma.order.create({
+        data: {
+          customerId: targetCustomerId,
+          addressId,
+          totalAmount: groupItems.reduce((sum, vi) => sum + vi.totalPrice, 0) + calculatedDeliveryFee,
+          deliveryFee: calculatedDeliveryFee,
+          paymentMode: "COD",
+          status: "PENDING",
+          idempotencyKey: idempotencyKey ? (idx === 0 ? String(idempotencyKey) : `${idempotencyKey}__v${idx + 1}`) : null,
+          items: {
+            create: groupItems.map((vi) => ({
+              vendorProductId: vi.vendorProductId,
+              productName: vi.productName,
+              priceAtPurchase: vi.priceAtPurchase,
+              quantity: vi.quantity,
+              totalPrice: vi.totalPrice,
+              vendorId: vi.vendorId,
+            })),
           },
-          include: {
-            items: {
-              include: {
-                vendor: {
-                  select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
-                },
+        },
+        include: {
+          items: {
+            include: {
+              vendor: {
+                select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
               },
             },
           },
-        });
+        },
       })
     );
+
+    const stockOps = [...stockRequested.entries()].map(([vpId, qty]) => {
+      const vp = liveProducts.find((p) => p.id === vpId);
+      const dec = Math.min(Number(vp?.stockQty || 0), qty);
+      return dec > 0
+        ? prisma.vendorProduct.updateMany({ where: { id: vpId, stockQty: { gte: dec } }, data: { stockQty: { decrement: dec } } })
+        : null;
+    }).filter(Boolean);
+
+    let createdOrders;
+    try {
+      const results = await prisma.$transaction([...orderCreates, ...stockOps]);
+      createdOrders = results.slice(0, orderCreates.length);
+    } catch (txErr) {
+      // Concurrent retry with the same idempotency key: the other request won
+      if (txErr.code === "P2002" && idempotencyKey) {
+        return res.status(409).json({ error: "Duplicate order request. Please refresh your orders." });
+      }
+      throw txErr;
+    }
 
     // 6. Build response objects with guaranteed real DB items
     const fullOrders = createdOrders.map((newOrder) => ({
@@ -3085,13 +3229,13 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
         totalPrice: Number(ci.totalPrice),
         vendorName: ci.vendor?.shopName || "District Vendor",
       })),
-      customer: targetUser ? {
+      customer: {
         id: targetUser.id,
         name: targetUser.name,
         phone: targetUser.phone,
         email: targetUser.email,
         role: targetUser.role,
-      } : null,
+      },
       address: {
         id: addressId,
         street: req.body.address?.street || "Main Site Delivery Address",
@@ -3105,7 +3249,7 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
     // Respond IMMEDIATELY to customer
     res.status(201).json({ success: true, order: fullOrders[0], orders: fullOrders });
 
-    // 7. Send High-Priority FCM Push Notification in background (non-blocking)
+    // 7. Send High-Priority FCM Push Notification to each vendor in background (non-blocking)
     setImmediate(async () => {
       try {
         const { sendVendorOrderPushNotification } = require("./pushService");
@@ -3126,48 +3270,56 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("Order checkout error:", err);
-    res.status(400).json({ error: err.message || "Failed to place order" });
+    sendServerError(res, err, "Order checkout");
   }
 });
 
 // Vendor FCM Device Token Registration (for background push notifications when app is killed)
-app.post("/api/v1/vendor/fcm-token", async (req, res) => {
+app.post("/api/v1/vendor/fcm-token", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
-    const { vendorId, token, phone } = req.body;
-    if (!vendorId || !token) {
+    const { token } = req.body;
+    let { vendorId, phone } = req.body;
+    if (req.auth.role === "VENDOR") {
+      // A device can only be bound to the logged-in vendor's own shop
+      const own = await resolveOwnVendor(req);
+      if (!own) return res.status(403).json({ error: "Vendor profile not found for this account" });
+      vendorId = own.id;
+      phone = own.phone;
+    }
+    if (!vendorId || !token || typeof token !== "string" || token.length > 4096) {
       return res.status(400).json({ error: "vendorId and token are required" });
     }
     const { saveToken } = require("./pushService");
     await saveToken(vendorId, token, phone);
     res.json({ success: true, message: "FCM token registered successfully" });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err, "FCM token save");
   }
 });
 
-// Vendor FCM Device Token Deregistration (Called when vendor logs out)
-app.delete("/api/v1/vendor/fcm-token", async (req, res) => {
+// Vendor FCM Device Token Deregistration (Called when vendor logs out).
+// Anyone holding the device token may unlink that device; unlinking by vendorId needs that vendor's session.
+async function handleRemoveFcmToken(req, res) {
   try {
-    const { vendorId, token } = req.body || {};
+    const { token } = req.body || {};
+    let vendorId = null;
+    if (req.auth?.role === "VENDOR") {
+      vendorId = (await resolveOwnVendor(req))?.id || null;
+    } else if (req.auth?.role === "ADMIN") {
+      vendorId = req.body?.vendorId || null;
+    }
+    if (!token && !vendorId) {
+      return res.status(400).json({ error: "token is required" });
+    }
     const { removeToken } = require("./pushService");
     await removeToken(vendorId, token);
     res.json({ success: true, message: "FCM token removed successfully" });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err, "FCM token remove");
   }
-});
-
-app.post("/api/v1/vendor/fcm-token/deregister", async (req, res) => {
-  try {
-    const { vendorId, token } = req.body || {};
-    const { removeToken } = require("./pushService");
-    await removeToken(vendorId, token);
-    res.json({ success: true, message: "FCM token removed successfully" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+}
+app.delete("/api/v1/vendor/fcm-token", optionalAuth, handleRemoveFcmToken);
+app.post("/api/v1/vendor/fcm-token/deregister", optionalAuth, handleRemoveFcmToken);
 
 // 12. PRODUCT REVIEWS ENDPOINTS (Supabase DB Persistence)
 app.get("/api/v1/reviews", async (req, res) => {
@@ -3182,7 +3334,7 @@ app.get("/api/v1/reviews", async (req, res) => {
 
     res.json(reviews);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -3193,65 +3345,26 @@ app.post("/api/v1/reviews", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "productId and comment are required" });
     }
 
+    const cleanRating = Math.round(Number(rating) || 5);
+    if (cleanRating < 1 || cleanRating > 5) {
+      return res.status(400).json({ error: "Rating must be between 1 and 5" });
+    }
+    if (String(comment).length > 2000) {
+      return res.status(400).json({ error: "Review is too long" });
+    }
+
     const review = await prisma.review.create({
       data: {
-        productId,
-        name: (name || "Verified Customer").trim(),
-        rating: Number(rating) || 5,
-        comment: comment.trim(),
+        productId: String(productId),
+        name: String(name || "Verified Customer").trim().slice(0, 80),
+        rating: cleanRating,
+        comment: String(comment).trim(),
       },
     });
 
     res.status(201).json(review);
   } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// 12.5 CART CLOUD SYNC ENDPOINTS
-const userCartMap = new Map();
-
-app.get("/api/v1/cart", requireAuth, async (req, res) => {
-  try {
-    const userId = req.auth?.userId || req.auth?.phone;
-    const items = userCartMap.get(userId) || [];
-    res.json({ success: true, cartItems: items });
-  } catch (err) {
-    res.json({ success: true, cartItems: [] });
-  }
-});
-
-app.put("/api/v1/cart", requireAuth, async (req, res) => {
-  try {
-    const userId = req.auth?.userId || req.auth?.phone;
-    const { items } = req.body;
-    userCartMap.set(userId, Array.isArray(items) ? items : []);
-    res.json({ success: true, cartItems: userCartMap.get(userId) });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post("/api/v1/cart", requireAuth, async (req, res) => {
-  try {
-    const userId = req.auth?.userId || req.auth?.phone;
-    const { item } = req.body;
-    const current = userCartMap.get(userId) || [];
-    const updated = item ? [...current.filter(i => i.id !== item.id), item] : current;
-    userCartMap.set(userId, updated);
-    res.json({ success: true, cartItems: updated });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.delete("/api/v1/cart", requireAuth, async (req, res) => {
-  try {
-    const userId = req.auth?.userId || req.auth?.phone;
-    userCartMap.delete(userId);
-    res.json({ success: true, cartItems: [] });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -3277,7 +3390,7 @@ app.get("/api/v1/notifications/me", requireAuth, async (req, res) => {
 
     const rawList = await prisma.notification.findMany({
       where: whereClause,
-      include: { user: true },
+      include: { user: { select: { id: true, name: true, role: true } } },
       orderBy: { createdAt: "desc" },
       take: 60,
     }).catch(() => []);
@@ -3287,11 +3400,11 @@ app.get("/api/v1/notifications/me", requireAuth, async (req, res) => {
     );
     res.json(uniqueList);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
-app.get("/api/v1/notifications", requireAuth, async (req, res) => {
+app.get("/api/v1/notifications", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const { userId } = req.query;
     const whereClause = {};
@@ -3301,7 +3414,7 @@ app.get("/api/v1/notifications", requireAuth, async (req, res) => {
 
     const rawList = await prisma.notification.findMany({
       where: whereClause,
-      include: { user: true },
+      include: { user: { select: SAFE_USER_SELECT } },
       orderBy: { createdAt: "desc" },
       take: 60,
     }).catch(() => []);
@@ -3312,7 +3425,7 @@ app.get("/api/v1/notifications", requireAuth, async (req, res) => {
 
     res.json(uniqueList);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -3356,20 +3469,21 @@ app.post("/api/v1/notifications", requireAuth, requireRole("ADMIN"), async (req,
     res.status(201).json({ success: true, notification: notif });
   } catch (err) {
     console.error("POST /api/v1/notifications error:", err);
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
 app.patch("/api/v1/notifications/:id/read", requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const notif = await prisma.notification.update({
-      where: { id },
+    // Users can only mark their own notifications; admin broadcasts stay unread for everyone else
+    await prisma.notification.updateMany({
+      where: req.auth.role === "ADMIN" ? { id } : { id, userId: req.auth.userId },
       data: { isRead: true },
     }).catch(() => null);
-    res.json(notif || { success: true });
+    res.json({ success: true, id });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -3384,7 +3498,7 @@ app.delete("/api/v1/notifications", requireAuth, async (req, res) => {
     }
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
@@ -3394,11 +3508,47 @@ app.delete("/api/v1/notifications/:id", requireAuth, requireRole("ADMIN"), async
     await prisma.notification.deleteMany({ where: { id } }).catch(() => null);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendServerError(res, err);
   }
 });
 
+// Unknown API routes return JSON instead of Express's HTML page
+app.use("/api", (req, res) => {
+  res.status(404).json({ error: "Not found" });
+});
+
+// Final error handler: malformed JSON bodies, oversized payloads and anything thrown synchronously
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (err?.type === "entity.parse.failed") {
+    return res.status(400).json({ error: "Invalid JSON body" });
+  }
+  if (err?.type === "entity.too.large") {
+    return res.status(413).json({ error: "Request body too large" });
+  }
+  sendServerError(res, err, `${req.method} ${req.path}`);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection:", reason);
+});
+
 // Start Express Server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 BuildCity Express Gateway running live on http://localhost:${PORT}`);
 });
+
+// Graceful shutdown: finish in-flight requests (e.g. checkouts) before the platform stops the container
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${signal} received: closing HTTP server...`);
+  server.close(async () => {
+    await prisma.$disconnect().catch(() => null);
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(1), 10000).unref();
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

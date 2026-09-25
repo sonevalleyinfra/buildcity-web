@@ -2,9 +2,19 @@ import { PushNotifications } from "@capacitor/push-notifications";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import { Capacitor } from "@capacitor/core";
 import { API_BASE_URL } from "../config/api";
+import { getToken } from "../config/authFetch";
 import { playOrderAlertChime, triggerOrderVibration } from "./orderAlertSound";
 
 let isRegistered = false;
+
+// FCM token endpoints are bound to the logged-in vendor's session
+const pushApiHeaders = () => {
+  const token = getToken();
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+};
 let currentRegisteredVendorId = null;
 
 /**
@@ -110,7 +120,7 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
     if (cachedToken) {
       fetch(`${API_BASE_URL}/api/v1/vendor/fcm-token`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: pushApiHeaders(),
         body: JSON.stringify({ vendorId, token: cachedToken, phone }),
       }).catch(() => {});
     }
@@ -163,7 +173,7 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
         try {
           await fetch(`${API_BASE_URL}/api/v1/vendor/fcm-token`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: pushApiHeaders(),
             body: JSON.stringify({ vendorId, token: token.value, phone }),
           });
           console.log(`✅ FCM token synced with backend for vendor: ${vendorId}`);
@@ -265,7 +275,7 @@ export async function unregisterVendorPushNotifications(vendorId) {
     if (cachedToken || vendorId) {
       await fetch(`${API_BASE_URL}/api/v1/vendor/fcm-token/deregister`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: pushApiHeaders(),
         body: JSON.stringify({ vendorId, token: cachedToken }),
       }).catch(() => {});
     }

@@ -113,8 +113,13 @@ export function RegionProvider({ children }) {
     loadDbRegions();
 
     const handleUpdate = () => loadDbRegions();
+    // Cross-tab: only region data/selection changes matter (reacting to every key refetched
+    // regions on each localStorage write made by any other open tab)
+    const handleStorage = (e) => {
+      if (e.key === STORAGE_KEY || e.key === "buildcity_admin_regions") loadDbRegions();
+    };
     window.addEventListener("buildcity_regions_updated", handleUpdate);
-    window.addEventListener("storage", handleUpdate);
+    window.addEventListener("storage", handleStorage);
 
     // Listen for logged-in user's preferred region from DB
     const handleUserPreferredRegion = (e) => {
@@ -127,7 +132,7 @@ export function RegionProvider({ children }) {
 
     return () => {
       window.removeEventListener("buildcity_regions_updated", handleUpdate);
-      window.removeEventListener("storage", handleUpdate);
+      window.removeEventListener("storage", handleStorage);
       window.removeEventListener("buildcity_user_preferred_region", handleUserPreferredRegion);
     };
   }, []);

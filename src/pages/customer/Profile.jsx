@@ -24,7 +24,7 @@ const supportLinks = [
 export default function Profile() {
   const { user, logout, updateProfile } = useAuth();
   const { count } = useCart();
-  const { orders } = useOrders();
+  const { orders, ordersSummary } = useOrders();
   const { addresses } = useAddresses();
   const { coupons = [] } = useAdmin();
   const [dbCoupons, setDbCoupons] = useState(coupons);
@@ -212,7 +212,7 @@ export default function Profile() {
               </p>
             </div>
             <div className="bg-white rounded-2xl border border-slate-200 p-4 text-center shadow-xs">
-              <p className="text-lg font-black text-navy-900">{myOrders.length}</p>
+              <p className="text-lg font-black text-navy-900">{Math.max(ordersSummary?.totalOrders || 0, myOrders.length)}</p>
               <p className="text-[11px] font-medium text-slate-500 mt-0.5">Total Orders</p>
             </div>
           </div>

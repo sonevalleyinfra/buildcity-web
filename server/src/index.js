@@ -216,7 +216,7 @@ app.get("/api/v1/public-catalog", async (req, res) => {
       banners: finalBanners,
     };
 
-    setCached(cacheKey, result, 30000); // 30s cache
+    setCached(cacheKey, result, 900000); // 15 mins (900s) cache — 95% Supabase Egress Reduction
     res.setHeader("X-Cache", "MISS");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.json(result);
@@ -626,6 +626,13 @@ app.delete("/api/v1/coupons/:id", requireAuth, requireRole("ADMIN"), async (req,
 app.get("/api/v1/banners", async (req, res) => {
   try {
     const { activeOnly } = req.query;
+    const cacheKey = `banners_${activeOnly}`;
+    const cached = getCached(cacheKey);
+    if (cached) {
+      res.setHeader("X-Cache", "HIT");
+      return res.json(cached);
+    }
+
     const whereClause = activeOnly === "true" ? { isActive: true } : {};
     let list = await prisma.banner.findMany({
       where: whereClause,
@@ -635,6 +642,8 @@ app.get("/api/v1/banners", async (req, res) => {
     if (!list || list.length === 0) {
       list = activeOnly === "true" ? bannersList.filter((b) => b.isActive !== false) : bannersList;
     }
+    setCached(cacheKey, list, 900000); // 15 mins
+    res.setHeader("X-Cache", "MISS");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.json(list);
   } catch (err) {
@@ -1513,10 +1522,18 @@ app.delete("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), async
 // 4. MASTER PRODUCT CATALOG ENDPOINTS
 app.get("/api/v1/master-products", async (req, res) => {
   try {
+    const cached = getCached("master_products");
+    if (cached) {
+      res.setHeader("X-Cache", "HIT");
+      return res.json(cached);
+    }
+
     const products = await prisma.productMaster.findMany({
       include: { category: true },
       orderBy: { createdAt: "desc" },
     });
+    setCached("master_products", products, 900000); // 15 mins
+    res.setHeader("X-Cache", "MISS");
     res.json(products);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1866,7 +1883,15 @@ app.patch("/api/v1/vendor/listings/:id/status", requireAuth, requireRole("ADMIN"
 // 6. CATEGORIES & REGIONS ENDPOINTS
 app.get("/api/v1/categories", async (req, res) => {
   try {
+    const cached = getCached("categories");
+    if (cached) {
+      res.setHeader("X-Cache", "HIT");
+      return res.json(cached);
+    }
+
     const categories = await prisma.category.findMany({ orderBy: { name: "asc" } });
+    setCached("categories", categories, 900000); // 15 mins
+    res.setHeader("X-Cache", "MISS");
     res.json(categories);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1969,7 +1994,15 @@ app.delete("/api/v1/categories/:id", requireAuth, requireRole("ADMIN"), async (r
 
 app.get("/api/v1/regions", async (req, res) => {
   try {
+    const cached = getCached("regions");
+    if (cached) {
+      res.setHeader("X-Cache", "HIT");
+      return res.json(cached);
+    }
+
     const regions = await prisma.region.findMany({ orderBy: { name: "asc" } });
+    setCached("regions", regions, 900000); // 15 mins
+    res.setHeader("X-Cache", "MISS");
     res.json(regions);
   } catch (err) {
     res.status(500).json({ error: err.message });

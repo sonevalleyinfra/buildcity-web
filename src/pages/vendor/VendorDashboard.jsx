@@ -397,14 +397,18 @@ export default function VendorDashboard() {
 
     syncVendorOrders();
 
-    // 1. Fast Background & Foreground Polling (Every 7 seconds continuously so orders are always fresh and alerts trigger)
+    // 1. Smart Fallback Interval (60s, visibility-aware — saves 90% egress while tab is idle or hidden)
     const interval = setInterval(() => {
-      syncVendorOrders();
-    }, 7000);
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        syncVendorOrders();
+      }
+    }, 60000);
 
     // 2. Instant Sync on Focus / Visibility
     const handleFocus = () => {
-      syncVendorOrders();
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        syncVendorOrders();
+      }
     };
 
     // 3. Instant Event-Driven Sync & Push Notification Click Auto-Scroll

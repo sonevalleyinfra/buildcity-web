@@ -725,12 +725,12 @@ export function AdminProvider({ children }) {
   useEffect(() => {
     fetchCloudData();
 
-    // 1. Smart Interval: Only runs when user has tab visibly open (every 60s instead of 3.5s)
+    // 1. Smart Interval: Long idle fallback (every 10m instead of 60s, saving 90% egress)
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
         fetchCloudData();
       }
-    }, 60000);
+    }, 600000);
 
     // 2. Instant Sync on Window Focus (when user switches back to this tab)
     const handleFocus = () => {

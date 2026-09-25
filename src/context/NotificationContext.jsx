@@ -198,12 +198,12 @@ export function NotificationProvider({ children }) {
 
     fetchDbNotifications();
 
-    // Smart polling: Only poll when user's tab is actively visible (120s fallback)
+    // Smart polling: Long fallback interval (5m instead of 120s, saving egress)
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
         fetchDbNotifications();
       }
-    }, 120000);
+    }, 300000);
 
     const handleFocus = () => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {

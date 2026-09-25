@@ -305,14 +305,14 @@ export default function DrDashboard() {
     fetchLiveVendorsDirect();
     fetchLiveProductsDirect();
 
-    // 1. Smart Interval: Poll only when active tab is visible (every 60s instead of 3s)
+    // 1. Smart Interval: Poll only when active tab is visible (5m fallback instead of 60s)
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
         fetchLiveOrdersDirect();
         fetchLiveVendorsDirect();
         fetchLiveProductsDirect();
       }
-    }, 60000);
+    }, 300000);
 
     // 2. Instant Sync on Focus (when user returns to tab)
     const handleFocus = () => {

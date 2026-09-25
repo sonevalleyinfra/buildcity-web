@@ -165,7 +165,7 @@ export default function Cart() {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
         fetchLiveCoupons();
       }
-    }, 60000);
+    }, 300000);
 
     const onSync = () => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {

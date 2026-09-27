@@ -547,7 +547,10 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
         console.error("Cloud sync orders error:", err);
         return { orders: [], nextCursor: null, hasMore: false };
       }),
+      // Vendors only ever use their own listings; sending every shop's catalog made this the slowest
+      // query in the sync and bloated the payload a vendor downloads right after login.
       prisma.vendorProduct.findMany({
+        where: isVendor ? { vendorId: ownVendor.id } : undefined,
         include: {
           vendor: {
             select: {

@@ -709,7 +709,9 @@ export function AdminProvider({ children }) {
           if (recent) item = { ...item, ...recent };
           return item;
         });
-        localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(formattedListings));
+        try {
+          localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(formattedListings));
+        } catch {}
         setProducts((prev) => {
           const prevMap = new Map(prev.map((p) => [p.id, p]));
           let hasChanged = prev.length !== formattedListings.length;

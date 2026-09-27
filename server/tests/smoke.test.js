@@ -78,6 +78,16 @@ const req = async (method, p, { token, body, raw } = {}) => {
   const vbOrders = await req("GET", `/orders/vendor/garbage-id`, { token: vbTok });
   ok(vbOrders.body.length === 2, "vendor B gets own orders regardless of path id", vbOrders.body.length);
   ok((await req("GET", "/orders", { token: drTok })).status === 200, "DR lists orders");
+  const drSync = await req("GET", "/cloud-sync", { token: drTok });
+  ok(drSync.status === 200 && drSync.body.orders.length === 0 && drSync.body.ordersSummary === null && drSync.body.vendors.length > 0, "DR cloud-sync skips orders/summary (dashboard loads them) but keeps district vendors", { o: drSync.body.orders?.length, s: drSync.body.ordersSummary, v: drSync.body.vendors?.length });
+
+  // DR district lookups are cached, but reassigning the DR applies immediately
+  ok((await req("GET", "/vendors", { token: drTok })).body.length > 0, "DR sees own district's vendors");
+  const otherReg = await prisma.region.create({ data: { name: "Jaunpur", baseDeliveryCharge: 49 } });
+  await req("PATCH", `/drs/${dr.body.id}`, { token: admin, body: { regionId: otherReg.id } });
+  const movedVendors = await req("GET", "/vendors", { token: drTok });
+  ok(movedVendors.status === 200 && movedVendors.body.length === 0, "reassigned DR immediately loses old district's vendors", movedVendors.body.length);
+  await req("PATCH", `/drs/${dr.body.id}`, { token: admin, body: { regionId: ids.reg } });
   const deliver = await req("PATCH", `/orders/${co.body.order.id}/status`, { token: vbTok, body: { status: "DELIVERED" } });
   ok(deliver.status === 200 && deliver.body.status === "DELIVERED", "vendor B delivers own order");
 

@@ -142,11 +142,14 @@ export function OrderProvider({ children }) {
     if (!listUrl) return orders;
 
     try {
-      // Exact totals for dashboards run alongside the list (they don't depend on loaded pages)
-      authFetch(`${API_BASE_URL}/api/v1/orders/summary`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((summary) => { if (summary) setOrdersSummary(summary); })
-        .catch(() => {});
+      // Exact totals for dashboards run alongside the list (they don't depend on loaded pages).
+      // The DR dashboard fetches its own district summary instead, so skip it for DRs.
+      if (!isDr) {
+        authFetch(`${API_BASE_URL}/api/v1/orders/summary`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((summary) => { if (summary) setOrdersSummary(summary); })
+          .catch(() => {});
+      }
 
       const res = await getOrdersPageShared(`${listUrl}${ordersPageQuery(null)}`);
       if (res.ok) {

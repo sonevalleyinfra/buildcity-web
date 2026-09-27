@@ -209,23 +209,41 @@ function canonicalDistrict(name) {
   return clean;
 }
 
-// Region IDs covering the logged-in DR's assigned district(s)
+// Region IDs covering the logged-in DR's assigned district(s).
+// A DR dashboard load sends several requests at once (cloud-sync, orders, summary, vendors,
+// listings) that each need this, so results are cached briefly; any mutation clears the cache
+// (see invalidateCache), so a DR reassignment still applies immediately.
+const DR_REGION_CACHE_TTL_MS = 30000;
+const drRegionIdsCache = new Map();
+
 async function resolveCallerDrRegionIds(auth) {
   const last10 = String(auth?.phone || "").replace(/\D/g, "").slice(-10);
   const or = [];
   if (auth?.userId) or.push({ id: auth.userId }, { userId: auth.userId });
   if (last10.length === 10) or.push({ phone: { endsWith: last10 } });
   if (or.length === 0) return [];
-  const drs = await prisma.dR.findMany({ where: { OR: or }, include: { region: true } }).catch(() => []);
-  const regionIds = new Set(drs.map((d) => d.regionId).filter(Boolean));
-  const districts = new Set(drs.map((d) => canonicalDistrict(d.region?.name)).filter(Boolean));
-  if (districts.size > 0) {
-    const regions = await prisma.region.findMany({ select: { id: true, name: true } }).catch(() => []);
+
+  const cacheKey = `${auth?.userId || ""}|${last10}`;
+  const cached = drRegionIdsCache.get(cacheKey);
+  // Callers get their own copy so none can alter the cached list
+  if (cached && cached.expiresAt > Date.now()) return cached.promise.then((ids) => ids.slice());
+
+  const promise = (async () => {
+    // Both reads in parallel: the region list is small, and this saves a sequential round trip
+    const [drs, regions] = await Promise.all([
+      prisma.dR.findMany({ where: { OR: or }, include: { region: true } }).catch(() => []),
+      prisma.region.findMany({ select: { id: true, name: true } }).catch(() => []),
+    ]);
+    const regionIds = new Set(drs.map((d) => d.regionId).filter(Boolean));
+    const districts = new Set(drs.map((d) => canonicalDistrict(d.region?.name)).filter(Boolean));
     for (const r of regions) {
       if (districts.has(canonicalDistrict(r.name))) regionIds.add(r.id);
     }
-  }
-  return Array.from(regionIds);
+    return Array.from(regionIds);
+  })();
+  drRegionIdsCache.set(cacheKey, { promise, expiresAt: Date.now() + DR_REGION_CACHE_TTL_MS });
+  promise.catch(() => drRegionIdsCache.delete(cacheKey));
+  return promise.then((ids) => ids.slice());
 }
 
 // DRs may only manage shops (and their listings) in their own district
@@ -330,6 +348,7 @@ function setCached(key, data, ttlMs = 60000) {
 function invalidateCache(prefix) {
   if (!prefix) {
     memoryCache.clear();
+    drRegionIdsCache.clear();
   } else {
     for (const k of memoryCache.keys()) {
       if (k.startsWith(prefix)) memoryCache.delete(k);
@@ -507,6 +526,8 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
     const isVendor = role === "VENDOR";
     // DRs get only their own district's team, shops and orders
     const drRegionIds = role === "DR" ? await resolveCallerDrRegionIds(req.auth) : null;
+    // Only the admin dashboard reads orders, totals, coupons and banners from the sync
+    const skipsSyncOrders = role !== "ADMIN";
 
     // Short per-role cache: a full sync reads almost every table, so many open dashboards (or a
     // client refresh bug) must not translate 1:1 into database egress. Any catalog/order mutation
@@ -537,9 +558,10 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       prisma.category.findMany().catch(() => []),
       prisma.region.findMany({ orderBy: { name: "asc" } }).catch(() => []),
       // Orders: newest page plus every still-open order; older ones load via GET /orders?cursor=
-      // Vendors skip this: their dashboard loads its orders and summary from /orders/vendor/:id
-      // and /orders/summary, so computing them here too only slowed down the vendor sync.
-      isVendor ? Promise.resolve({ orders: [], nextCursor: null, hasMore: false }) : listOrders(
+      // Vendors and DRs skip this: their dashboards load orders and totals themselves
+      // (/orders/vendor/:id, /orders?regionId=, /orders/summary), so computing them here too
+      // only slowed down the sync right after login.
+      skipsSyncOrders ? Promise.resolve({ orders: [], nextCursor: null, hasMore: false }) : listOrders(
         { query: { limit: String(SYNC_ORDERS_PAGE_SIZE), includeOpen: "1" } },
         ordersScope,
         { include: STAFF_ORDER_INCLUDE }
@@ -574,13 +596,13 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
         },
         orderBy: { submittedOn: "desc" },
       }).catch(() => []),
-      // Coupons and banners are unused on the vendor dashboard
-      isVendor ? Promise.resolve([]) : prisma.coupon.findMany({ orderBy: { createdAt: "desc" } }).catch(() => []),
-      isVendor ? Promise.resolve([]) : prisma.banner.findMany({ orderBy: { displayOrder: "asc" } }).catch(() => []),
+      // Coupons and banners are unused on the vendor and DR dashboards
+      skipsSyncOrders ? Promise.resolve([]) : prisma.coupon.findMany({ orderBy: { createdAt: "desc" } }).catch(() => []),
+      skipsSyncOrders ? Promise.resolve([]) : prisma.banner.findMany({ orderBy: { displayOrder: "asc" } }).catch(() => []),
     ];
 
     fetchPromises.push(
-      isVendor ? Promise.resolve(null) : computeOrdersSummary(ordersScope).catch((err) => {
+      skipsSyncOrders ? Promise.resolve(null) : computeOrdersSummary(ordersScope).catch((err) => {
         console.error("Cloud sync summary error:", err);
         return null;
       })
@@ -616,7 +638,7 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       coupons: coupons || [],
       users: usersPage ? usersPage.items : [],
       usersPage: usersPage ? { nextCursor: usersPage.nextCursor, hasMore: usersPage.hasMore, total: usersTotal, customers: customersTotal } : null,
-      banners: isVendor ? [] : dbBanners && dbBanners.length > 0 ? dbBanners : bannersList,
+      banners: skipsSyncOrders ? [] : dbBanners && dbBanners.length > 0 ? dbBanners : bannersList,
     };
 
     setCached(cacheKey, data, CLOUD_SYNC_CACHE_TTL_MS);

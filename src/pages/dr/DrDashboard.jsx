@@ -345,8 +345,10 @@ export default function DrDashboard() {
 
   // Smart Real-time Sync for DR Dashboard: Instant Event Sync + Focus/Visibility Aware (Zero waste on inactive tabs)
   useEffect(() => {
-    if (fetchCloudData) fetchCloudData();
-    fetchLiveOrdersDirect();
+    // AdminContext already runs a cloud-sync whenever the signed-in user changes, so a mount
+    // sync here only duplicated it right after login. Once the district is known, the
+    // districtRegionParam effect below loads the orders, so don't send the same request twice.
+    if (!districtRegionParamRef.current) fetchLiveOrdersDirect();
     fetchLiveVendorsDirect();
     fetchLiveProductsDirect();
 

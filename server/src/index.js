@@ -537,7 +537,9 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       prisma.category.findMany().catch(() => []),
       prisma.region.findMany({ orderBy: { name: "asc" } }).catch(() => []),
       // Orders: newest page plus every still-open order; older ones load via GET /orders?cursor=
-      listOrders(
+      // Vendors skip this: their dashboard loads its orders and summary from /orders/vendor/:id
+      // and /orders/summary, so computing them here too only slowed down the vendor sync.
+      isVendor ? Promise.resolve({ orders: [], nextCursor: null, hasMore: false }) : listOrders(
         { query: { limit: String(SYNC_ORDERS_PAGE_SIZE), includeOpen: "1" } },
         ordersScope,
         { include: STAFF_ORDER_INCLUDE }
@@ -572,12 +574,13 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
         },
         orderBy: { submittedOn: "desc" },
       }).catch(() => []),
-      prisma.coupon.findMany({ orderBy: { createdAt: "desc" } }).catch(() => []),
-      prisma.banner.findMany({ orderBy: { displayOrder: "asc" } }).catch(() => []),
+      // Coupons and banners are unused on the vendor dashboard
+      isVendor ? Promise.resolve([]) : prisma.coupon.findMany({ orderBy: { createdAt: "desc" } }).catch(() => []),
+      isVendor ? Promise.resolve([]) : prisma.banner.findMany({ orderBy: { displayOrder: "asc" } }).catch(() => []),
     ];
 
     fetchPromises.push(
-      computeOrdersSummary(ordersScope, isVendor ? { vendorId: ownVendor.id } : {}).catch((err) => {
+      isVendor ? Promise.resolve(null) : computeOrdersSummary(ordersScope).catch((err) => {
         console.error("Cloud sync summary error:", err);
         return null;
       })
@@ -613,7 +616,7 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       coupons: coupons || [],
       users: usersPage ? usersPage.items : [],
       usersPage: usersPage ? { nextCursor: usersPage.nextCursor, hasMore: usersPage.hasMore, total: usersTotal, customers: customersTotal } : null,
-      banners: dbBanners && dbBanners.length > 0 ? dbBanners : bannersList,
+      banners: isVendor ? [] : dbBanners && dbBanners.length > 0 ? dbBanners : bannersList,
     };
 
     setCached(cacheKey, data, CLOUD_SYNC_CACHE_TTL_MS);
@@ -669,17 +672,23 @@ app.post("/api/v1/auth/vendor/login", partnerLoginLimiter, async (req, res) => {
       });
     }
 
-    // 2. Lookup User in DB by phone to check assigned role
-    let userInDb = await prisma.user.findFirst({
-      where: { OR: [{ phone: cleanPhone }, { phone }] },
-    }).catch(() => null);
+    // 2-4. Look up the User, DR and Vendor rows for this phone in parallel (one DB round trip
+    // instead of three back-to-back ones); the role checks below still run in the same order.
+    const [userInDb, drInDb, vendor] = await Promise.all([
+      prisma.user.findFirst({
+        where: { OR: [{ phone: cleanPhone }, { phone }] },
+      }).catch(() => null),
+      prisma.dR.findFirst({
+        where: { OR: [{ phone: cleanPhone }, { phone }] },
+        include: { user: true, region: true },
+      }).catch(() => null),
+      prisma.vendor.findFirst({
+        where: { OR: [{ phone: cleanPhone }, { phone }] },
+        include: { region: true, user: true },
+      }).catch(() => null),
+    ]);
 
     // 3. District Representative (DR) Check
-    let drInDb = await prisma.dR.findFirst({
-      where: { OR: [{ phone: cleanPhone }, { phone }] },
-      include: { user: true, region: true },
-    }).catch(() => null);
-
     if (drInDb || userInDb?.role === "DR") {
       const storedPassword =
         drInDb?.password ||
@@ -715,17 +724,12 @@ app.post("/api/v1/auth/vendor/login", partnerLoginLimiter, async (req, res) => {
       });
     }
 
-    // 4. Find Vendor record by phone number
-    let vendor = await prisma.vendor.findFirst({
-      where: {
-        OR: [{ phone: cleanPhone }, { phone }],
-      },
-      include: { region: true, user: true },
-    }).catch(() => null);
-
+    // 4. Vendor record (looked up above)
     let user = null;
     if (vendor && vendor.user) {
       user = vendor.user;
+    } else if (userInDb && userInDb.role === "VENDOR" && userInDb.phone === cleanPhone) {
+      user = userInDb;
     } else {
       user = await prisma.user.findFirst({
         where: {
@@ -775,18 +779,16 @@ app.post("/api/v1/auth/vendor/login", partnerLoginLimiter, async (req, res) => {
     };
     const token = issueToken(vendorUserObj);
 
-    // ⚡ Atomic FCM Device Token Registration directly during login:
-    // Guarantees the token is saved in DB BEFORE the login response returns!
+    // FCM device token registration during login. saveToken() puts the token in its in-memory
+    // map synchronously (so pushes work immediately), then persists it to the DB with several
+    // round trips; those run in the background so they don't hold up the login response.
     if (fcmToken) {
-      try {
+      const vId = vendor?.id || vendor?.userId || resUser.id;
+      if (vId) {
         const { saveToken } = require("./pushService");
-        const vId = vendor?.id || vendor?.userId || resUser.id;
-        if (vId) {
-          await saveToken(vId, fcmToken, cleanPhone);
-          console.log(`✅ Atomic FCM device token saved during login for vendor ${vId}`);
-        }
-      } catch (fcmErr) {
-        console.warn("Login FCM save note:", fcmErr.message);
+        saveToken(vId, fcmToken, cleanPhone)
+          .then(() => console.log(`✅ FCM device token saved during login for vendor ${vId}`))
+          .catch((fcmErr) => console.warn("Login FCM save note:", fcmErr.message));
       }
     }
 

@@ -110,6 +110,7 @@ async function otpLogin(phone) {
   const cs = await req("GET", "/cloud-sync", { token: vA });
   ok(cs.status === 200 && !cs.body.orders.some((o) => o.id === ids.orderB), "vendor cloud-sync excludes other vendors' orders");
   ok(cs.status === 200 && cs.body.drs.length === 0 && cs.body.vendors.every((v) => v.id === ids.va), "vendor cloud-sync excludes DR/other-vendor directory", { drs: cs.body.drs?.length, v: cs.body.vendors?.map((v) => v.id) });
+  ok(cs.status === 200 && cs.body.listings.length > 0 && cs.body.listings.every((l) => l.vendorId === ids.va), "vendor cloud-sync returns only own listings", cs.body.listings?.map((l) => l.vendorId));
   const csAdmin = await req("GET", "/cloud-sync", { token: admin });
   ok(csAdmin.status === 200 && csAdmin.body.orders.length >= 2 && csAdmin.body.vendors.length === 2, "admin cloud-sync still returns everything");
 

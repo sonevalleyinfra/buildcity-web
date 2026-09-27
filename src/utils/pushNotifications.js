@@ -16,6 +16,31 @@ const pushApiHeaders = () => {
   };
 };
 let currentRegisteredVendorId = null;
+// `${vendorId}|${token}` last sent to the backend, so the same pair isn't re-sent (and re-saved
+// with several DB writes) by the login request, the login page and the dashboard in turn
+let lastSyncedTokenKey = null;
+
+/** Records that the backend already has this device token for the vendor (e.g. sent with login). */
+export function markFcmTokenSynced(vendorId, token) {
+  if (vendorId && token) lastSyncedTokenKey = `${vendorId}|${token}`;
+}
+
+function syncTokenWithBackend(vendorId, token, phone) {
+  const key = `${vendorId}|${token}`;
+  if (lastSyncedTokenKey === key) return Promise.resolve();
+  lastSyncedTokenKey = key;
+  return fetch(`${API_BASE_URL}/api/v1/vendor/fcm-token`, {
+    method: "POST",
+    headers: pushApiHeaders(),
+    body: JSON.stringify({ vendorId, token, phone }),
+  }).then((res) => {
+    if (!res.ok && lastSyncedTokenKey === key) lastSyncedTokenKey = null;
+    return res;
+  }, (err) => {
+    if (lastSyncedTokenKey === key) lastSyncedTokenKey = null;
+    throw err;
+  });
+}
 
 /**
  * Proactively registers and obtains the FCM device token on native app boot.
@@ -118,11 +143,7 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
   try {
     const cachedToken = localStorage.getItem("buildcity_permanent_device_token") || localStorage.getItem("vendor_fcm_token");
     if (cachedToken) {
-      fetch(`${API_BASE_URL}/api/v1/vendor/fcm-token`, {
-        method: "POST",
-        headers: pushApiHeaders(),
-        body: JSON.stringify({ vendorId, token: cachedToken, phone }),
-      }).catch(() => {});
+      syncTokenWithBackend(vendorId, cachedToken, phone).catch(() => {});
     }
   } catch (e) {}
 
@@ -171,11 +192,7 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
           localStorage.setItem("buildcity_permanent_device_token", token.value);
         } catch (e) {}
         try {
-          await fetch(`${API_BASE_URL}/api/v1/vendor/fcm-token`, {
-            method: "POST",
-            headers: pushApiHeaders(),
-            body: JSON.stringify({ vendorId, token: token.value, phone }),
-          });
+          await syncTokenWithBackend(vendorId, token.value, phone);
           console.log(`✅ FCM token synced with backend for vendor: ${vendorId}`);
         } catch (err) {
           console.warn("FCM token sync note:", err.message);
@@ -289,5 +306,6 @@ export async function unregisterVendorPushNotifications(vendorId) {
 
   isRegistered = false;
   currentRegisteredVendorId = null;
+  lastSyncedTokenKey = null;
   console.log(`🔒 Vendor FCM token successfully unlinked on logout for vendor: ${vendorId || "current"}`);
 }

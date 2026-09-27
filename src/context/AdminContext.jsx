@@ -254,6 +254,10 @@ export function AdminProvider({ children }) {
   const [products, setProducts] = useState(loadInitialProducts);
   const [productsLoading, setProductsLoading] = useState(true);
   const isFetchingRef = useRef(false);
+  // A sync requested while one is in flight (e.g. right after login, while the logged-out
+  // public-catalog fetch is still running) runs once that one finishes instead of being dropped.
+  const syncQueuedRef = useRef(false);
+  const fetchCloudDataRef = useRef(null);
   const lastEventSyncRef = useRef(0);
   const recentEditsRef = useRef(new Map());
 
@@ -401,7 +405,10 @@ export function AdminProvider({ children }) {
 
   // Single Source of Truth: Supabase Cloud DB se live data sync karne ke liye (Admin / DR / Vendor)
   const fetchCloudData = async () => {
-    if (isFetchingRef.current) return;
+    if (isFetchingRef.current) {
+      syncQueuedRef.current = true;
+      return;
+    }
     isFetchingRef.current = true;
 
     let currentUser = user;
@@ -420,6 +427,7 @@ export function AdminProvider({ children }) {
         await fetchPublicCatalog();
       } finally {
         isFetchingRef.current = false;
+        runQueuedSync();
       }
       return;
     }
@@ -659,7 +667,9 @@ export function AdminProvider({ children }) {
       }
 
       let fetchedOrders = ordersRes;
-      if (!Array.isArray(fetchedOrders) || fetchedOrders.length === 0) {
+      // Vendors get no orders from cloud-sync (their dashboard loads them itself), and GET /orders
+      // is admin/DR only, so the fallback would just be an extra round trip ending in a 403.
+      if (currentRole !== "vendor" && (!Array.isArray(fetchedOrders) || fetchedOrders.length === 0)) {
         fetchedOrders = await authFetch(`${API_BASE_URL}/api/v1/orders${ordersPageQuery(null)}`)
           .then((r) => r.json())
           .then((data) => readOrdersPage(data).orders)
@@ -744,7 +754,15 @@ export function AdminProvider({ children }) {
     } finally {
       isFetchingRef.current = false;
       setProductsLoading(false);
+      runQueuedSync();
     }
+  };
+  fetchCloudDataRef.current = fetchCloudData;
+
+  const runQueuedSync = () => {
+    if (!syncQueuedRef.current) return;
+    syncQueuedRef.current = false;
+    fetchCloudDataRef.current?.();
   };
 
   // Smart Real-time Sync: Instant Event Sync + Focus/Visibility Aware Refresh (Zero waste when tab is inactive)

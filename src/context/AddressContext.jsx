@@ -124,7 +124,9 @@ export function AddressProvider({ children }) {
 
   // Load addresses when user or addressStorageKey changes
   useEffect(() => {
-    if (!addressStorageKey || addressStorageKey === "buildcity_addresses_guest") {
+    // Partner accounts (admin / DR / vendor) don't have delivery addresses
+    const isPartner = ["admin", "dr", "vendor"].includes(String(user?.role || "").toLowerCase());
+    if (isPartner || !addressStorageKey || addressStorageKey === "buildcity_addresses_guest") {
       setAddresses([]);
       return;
     }

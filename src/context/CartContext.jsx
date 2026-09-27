@@ -17,6 +17,9 @@ export function CartProvider({ children }) {
   const isInitialCloudSyncDone = useRef(false);
 
   // Compute unique storage key for logged-in user or guest
+  // Partner accounts (admin / DR / vendor) have no shopping cart, so skip the cloud cart sync for them
+  const isPartner = ["admin", "dr", "vendor"].includes(String(user?.role || "").toLowerCase());
+
   const cartStorageKey = user?.phone
     ? `buildcity_cart_${user.phone.replace(/\D/g, "")}`
     : user?.id
@@ -28,6 +31,11 @@ export function CartProvider({ children }) {
     let isCancelled = false;
 
     const syncCart = async () => {
+      if (isPartner) {
+        isInitialCloudSyncDone.current = false;
+        setItems([]);
+        return;
+      }
       if (user?.phone || user?.id) {
         // 1. Check local guest items
         let guestItems = [];
@@ -141,7 +149,7 @@ export function CartProvider({ children }) {
     return () => {
       isCancelled = true;
     };
-  }, [cartStorageKey, user]);
+  }, [cartStorageKey, user, isPartner]);
 
   // Persist cart items to localStorage and Cloud DB in background
   useEffect(() => {

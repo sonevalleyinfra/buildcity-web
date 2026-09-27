@@ -5,7 +5,7 @@ import Button from "../../components/Button";
 import { useAuth } from "../../context/AuthContext";
 
 import { Capacitor } from "@capacitor/core";
-import { initVendorPushNotifications, getDeviceFcmToken } from "../../utils/pushNotifications";
+import { initVendorPushNotifications, getDeviceFcmToken, markFcmTokenSynced } from "../../utils/pushNotifications";
 
 const isVendorApp = import.meta.env.VITE_APP_MODE === "vendor";
 
@@ -191,6 +191,8 @@ export default function Login() {
       });
 
       const vid = userObj?.vendorInfo?.id || userObj?.vendorId || userObj?.id;
+      // The login request already saved this device token for the vendor
+      if (vid && fcmToken && userObj.role === "vendor") markFcmTokenSynced(vid, fcmToken);
       if (vid) {
         initVendorPushNotifications(vid, { phone: phone.trim() }).catch(() => {});
       }

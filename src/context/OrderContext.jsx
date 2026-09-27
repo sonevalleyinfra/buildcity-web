@@ -86,6 +86,19 @@ export function OrderProvider({ children }) {
     return request;
   };
 
+  // GET a JSON orders page, sharing one in-flight request per URL. After a vendor logs in, this
+  // context and the vendor dashboard both ask for the same first page of /orders/vendor/:id at once.
+  const inFlightPagesRef = useRef(new Map());
+  const getOrdersPageShared = (url) => {
+    const pending = inFlightPagesRef.current.get(url);
+    if (pending) return pending;
+    const request = authFetch(url)
+      .then(async (res) => ({ ok: res.ok, status: res.status, data: res.ok ? await res.json() : null }))
+      .finally(() => inFlightPagesRef.current.delete(url));
+    inFlightPagesRef.current.set(url, request);
+    return request;
+  };
+
   // Role-scoped order list endpoint (Admin/DR: all, Vendor: own shop, Customer: own orders)
   const getOrdersListUrl = () => {
     if (isAdmin || isDr) return `${API_BASE_URL}/api/v1/orders`;
@@ -135,9 +148,9 @@ export function OrderProvider({ children }) {
         .then((summary) => { if (summary) setOrdersSummary(summary); })
         .catch(() => {});
 
-      const res = await authFetch(`${listUrl}${ordersPageQuery(null)}`);
+      const res = await getOrdersPageShared(`${listUrl}${ordersPageQuery(null)}`);
       if (res.ok) {
-        const page = readOrdersPage(await res.json());
+        const page = readOrdersPage(res.data);
         const normalized = page.orders.map(normalizeOrder);
         const keepOlderPages = olderPagesLoadedRef.current;
         setOrders((prev) => {
@@ -363,9 +376,9 @@ export function OrderProvider({ children }) {
   // Vendor Isolated Orders fetch from Supabase Cloud DB
   // One page of a vendor's orders: { orders, nextCursor, hasMore } (null cursor = newest page + open orders)
   const fetchVendorOrdersPage = async (vendorId, cursor = null) => {
-    const res = await authFetch(`${API_BASE_URL}/api/v1/orders/vendor/${encodeURIComponent(vendorId)}${ordersPageQuery(cursor)}`);
+    const res = await getOrdersPageShared(`${API_BASE_URL}/api/v1/orders/vendor/${encodeURIComponent(vendorId)}${ordersPageQuery(cursor)}`);
     if (!res.ok) throw new Error(`Vendor orders HTTP ${res.status}`);
-    const page = readOrdersPage(await res.json());
+    const page = readOrdersPage(res.data);
     return { ...page, orders: page.orders.map(normalizeOrder) };
   };
 

@@ -139,7 +139,8 @@ async function walk(p, token, limit) {
   const userCount = await prisma.user.count();
   ok(cs.body.usersPage?.total === userCount && cs.body.users.length === Math.min(userCount, 100), "cloud-sync users are paginated with exact total", cs.body.usersPage);
   const vcs = await get("/cloud-sync", vA);
-  ok(vcs.body.users.length === 0 && vcs.body.usersPage === null && vcs.body.ordersSummary?.totalOrders === vDb, "vendor cloud-sync: no users, own summary");
+  // Vendors get orders + summary from /orders/vendor/:id and /orders/summary (checked above), not cloud-sync
+  ok(vcs.body.users.length === 0 && vcs.body.usersPage === null && vcs.body.orders.length === 0 && vcs.body.ordersSummary === null, "vendor cloud-sync: no users, no duplicate orders/summary");
 
   // Users endpoint
   const u1 = await get("/users?limit=3", admin);

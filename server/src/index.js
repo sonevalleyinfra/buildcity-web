@@ -478,6 +478,11 @@ app.get("/api/v1/public-catalog", async (req, res) => {
   }
 });
 
+// A listing belongs to a district through its shop or its own region
+const listingsInRegionsWhere = (regionIds) => ({
+  OR: [{ vendor: { regionId: { in: regionIds } } }, { regionId: { in: regionIds } }],
+});
+
 const CLOUD_SYNC_CACHE_TTL_MS = 15000;
 const SYNC_ORDERS_PAGE_SIZE = 50;
 const SYNC_USERS_PAGE_SIZE = 100;
@@ -547,10 +552,12 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
         console.error("Cloud sync orders error:", err);
         return { orders: [], nextCursor: null, hasMore: false };
       }),
-      // Vendors only ever use their own listings; sending every shop's catalog made this the slowest
-      // query in the sync and bloated the payload a vendor downloads right after login.
+      // Vendors only ever use their own listings and DRs only their district's; sending every shop's
+      // catalog made this the slowest query in the sync and bloated the payload right after login.
       prisma.vendorProduct.findMany({
-        where: isVendor ? { vendorId: ownVendor.id } : undefined,
+        where: isVendor
+          ? { vendorId: ownVendor.id }
+          : drRegionIds ? listingsInRegionsWhere(drRegionIds) : undefined,
         include: {
           vendor: {
             select: {
@@ -1968,9 +1975,12 @@ app.delete("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN"), asy
 });
 
 // 5. VENDOR PRODUCT LISTINGS & APPROVALS ENDPOINTS (Public Storefront - Zero PII / Zero Password)
-app.get("/api/v1/vendor/listings", async (req, res) => {
+app.get("/api/v1/vendor/listings", optionalAuth, async (req, res) => {
   try {
+    // Opt-in `?mine=1` from a signed-in DR returns only their district; everyone else gets the full catalog
+    const drRegionIds = req.query.mine === "1" && req.auth?.role === "DR" ? await resolveCallerDrRegionIds(req.auth) : null;
     const listings = await prisma.vendorProduct.findMany({
+      where: drRegionIds ? listingsInRegionsWhere(drRegionIds) : undefined,
       include: {
         vendor: {
           select: {

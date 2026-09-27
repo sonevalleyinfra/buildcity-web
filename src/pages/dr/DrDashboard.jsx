@@ -290,7 +290,7 @@ export default function DrDashboard() {
   // Fetch live vendor products/listings directly from DB endpoint (/api/v1/vendor/listings) with deep equality guard
   const fetchLiveProductsDirect = async () => {
     try {
-      const res = await authFetch(`${API_BASE_URL}/api/v1/vendor/listings`);
+      const res = await authFetch(`${API_BASE_URL}/api/v1/vendor/listings?mine=1`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {

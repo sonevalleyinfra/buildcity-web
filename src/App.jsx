@@ -47,7 +47,7 @@ function NativeBackButtonHandler() {
         if (handled) return;
       }
 
-      const exitRoutes = ["/", "/login", "/vendor/dashboard"];
+      const exitRoutes = ["/", "/login", "/vendor/login", "/vendor/dashboard"];
       if (exitRoutes.includes(location.pathname)) {
         CapApp.exitApp();
       } else if (canGoBack) {

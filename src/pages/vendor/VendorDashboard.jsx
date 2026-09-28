@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import VendorShell from "./VendorShell";
 import OrdersTab from "./sections/OrdersTab";
 import ProductsTab from "./sections/ProductsTab";
@@ -25,6 +26,7 @@ import { initVendorPushNotifications } from "../../utils/pushNotifications";
 // order feed / filters / products / sheets live in ./hooks, screens in ./sections.
 export default function VendorDashboard() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const { showAlert, showConfirm } = useAlert();
   const {
     masterProducts = [],
@@ -86,6 +88,11 @@ export default function VendorDashboard() {
   const productView = useVendorProducts({ products, categories, vendorId, vendor, user, shopName, ownerName });
   const { vendorProducts } = productView;
   const { stats } = feed;
+
+  const handleLogout = () => {
+    logout();
+    navigate("/vendor/login", { replace: true });
+  };
 
   // Notification permission + FCM background push
   useEffect(() => {
@@ -281,7 +288,7 @@ export default function VendorDashboard() {
           vendorPhone={vendorPhone}
           email={user?.email}
           districtName={districtName}
-          onLogout={logout}
+          onLogout={handleLogout}
         />
       )}
     </VendorShell>

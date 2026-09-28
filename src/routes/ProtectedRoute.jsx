@@ -11,6 +11,8 @@ export default function ProtectedRoute({ children, role }) {
   if (loading) return null; // could render a spinner here
 
   if (!user) {
+    // Partners sign in on their own login page; it sends them back to the dashboard.
+    if ((role || "").toLowerCase() === "vendor") return <Navigate to="/vendor/login" replace />;
     const redirectParam = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?redirect=${redirectParam}`} replace />;
   }

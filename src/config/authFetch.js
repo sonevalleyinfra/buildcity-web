@@ -129,7 +129,7 @@ export const authFetch = async (path, options = {}) => {
        window.location.pathname.startsWith("/vendor") ||
        window.location.pathname.startsWith("/dr"))
     ) {
-      window.location.href = "/login";
+      window.location.href = window.location.pathname.startsWith("/vendor") ? "/vendor/login" : "/login";
     }
   }
 

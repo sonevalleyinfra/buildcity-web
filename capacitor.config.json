@@ -1,6 +1,6 @@
 {
-  "appId": "com.buildcity.app",
-  "appName": "BuildCity",
+  "appId": "com.buildcity.vendor",
+  "appName": "BuildCity Partner",
   "webDir": "dist",
   "server": {
     "androidScheme": "https",

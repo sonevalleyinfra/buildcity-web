@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useRef } from "react";
+import { createContext, useContext, useEffect, useState, useRef, useCallback } from "react";
 import { useAuth } from "./AuthContext";
 import { authFetch } from "../config/authFetch";
 import { API_BASE_URL } from "../config/api";
@@ -1789,7 +1789,7 @@ export function AdminProvider({ children }) {
     }
   };
 
-  const fetchWalletSettings = async () => {
+  const fetchWalletSettings = useCallback(async () => {
     try {
       setLoadingWalletSettings(true);
       const res = await authFetch(`${API_BASE_URL}/api/v1/settings/wallet`);
@@ -1803,7 +1803,7 @@ export function AdminProvider({ children }) {
     } finally {
       setLoadingWalletSettings(false);
     }
-  };
+  }, []);
 
   const updateWalletSettings = async (newSettings) => {
     try {

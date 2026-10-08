@@ -34,8 +34,6 @@ export default function WalletSettingsTab() {
 
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [savingDelivery, setSavingDelivery] = useState(false);
-  const [deliverySaveSuccess, setDeliverySaveSuccess] = useState(false);
   const [visibleWalletUsersCount, setVisibleWalletUsersCount] = useState(10);
   const [searchPhone, setSearchPhone] = useState("");
   const [adjustModal, setAdjustModal] = useState({
@@ -92,51 +90,6 @@ export default function WalletSettingsTab() {
       alert("Failed to save wallet settings: " + err.message);
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleToggleFreeDelivery = async (nextVal) => {
-    const targetState = typeof nextVal === "boolean" ? nextVal : !form.freeDeliveryEnabled;
-    const nextAmount = Number(form.freeDeliveryMinAmount) || 0;
-
-    setForm((prev) => ({ ...prev, freeDeliveryEnabled: targetState }));
-    setSavingDelivery(true);
-    setDeliverySaveSuccess(false);
-
-    try {
-      const payload = {
-        ...form,
-        freeDeliveryEnabled: targetState,
-        freeDeliveryMinAmount: nextAmount,
-      };
-      await updateWalletSettings(payload);
-      setDeliverySaveSuccess(true);
-      setTimeout(() => setDeliverySaveSuccess(false), 3000);
-    } catch (err) {
-      console.error("Failed to toggle free delivery:", err);
-      setForm((prev) => ({ ...prev, freeDeliveryEnabled: !targetState }));
-      alert("Failed to update status: " + (err.message || "Network error"));
-    } finally {
-      setSavingDelivery(false);
-    }
-  };
-
-  const handleSaveDeliveryRules = async () => {
-    setSavingDelivery(true);
-    setDeliverySaveSuccess(false);
-    try {
-      const payload = {
-        ...form,
-        freeDeliveryEnabled: Boolean(form.freeDeliveryEnabled),
-        freeDeliveryMinAmount: Number(form.freeDeliveryMinAmount) || 0,
-      };
-      await updateWalletSettings(payload);
-      setDeliverySaveSuccess(true);
-      setTimeout(() => setDeliverySaveSuccess(false), 3000);
-    } catch (err) {
-      alert("Failed to save delivery rule: " + err.message);
-    } finally {
-      setSavingDelivery(false);
     }
   };
 
@@ -533,7 +486,7 @@ export default function WalletSettingsTab() {
           </div>
 
           {/* Checkout Redemption Limits */}
-          <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs space-y-4">
+          <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs space-y-4 md:col-span-2">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-sm font-black text-navy-950">Checkout Redemption Limits</h3>
@@ -577,142 +530,6 @@ export default function WalletSettingsTab() {
                   <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">₹</span>
                 </div>
                 <p className="text-[10px] text-slate-400 mt-1">Ceiling per single order.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Free Delivery Threshold Rules */}
-          <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 gap-2">
-              <div>
-                <h3 className="text-sm font-black text-navy-950">Free Delivery Rules & Threshold</h3>
-                <p className="text-[10px] text-slate-500 mt-0.5">Toggle free delivery program and set minimum order qualifying value</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => handleToggleFreeDelivery(!form.freeDeliveryEnabled)}
-                  disabled={savingDelivery}
-                  className={`text-[11px] font-black px-3 py-1 rounded-full border transition-all cursor-pointer active:scale-95 disabled:opacity-50 ${
-                    form.freeDeliveryEnabled
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
-                      : "bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200"
-                  }`}
-                  title="Click to toggle status"
-                >
-                  {form.freeDeliveryEnabled ? "Active" : "Deactivated"}
-                </button>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={form.freeDeliveryEnabled}
-                  onClick={() => handleToggleFreeDelivery(!form.freeDeliveryEnabled)}
-                  disabled={savingDelivery}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
-                    form.freeDeliveryEnabled ? "bg-emerald-500" : "bg-slate-300"
-                  }`}
-                  title={form.freeDeliveryEnabled ? "Click to deactivate" : "Click to activate"}
-                >
-                  <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
-                      form.freeDeliveryEnabled ? "translate-x-5" : "translate-x-0"
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              {/* Interactive Full Row Toggle */}
-              <div
-                onClick={() => !savingDelivery && handleToggleFreeDelivery(!form.freeDeliveryEnabled)}
-                className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer select-none active:scale-[0.99] ${
-                  form.freeDeliveryEnabled
-                    ? "bg-emerald-50/60 border-emerald-200 hover:bg-emerald-100/50"
-                    : "bg-slate-50 border-slate-200 hover:bg-slate-100/80"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all ${
-                      form.freeDeliveryEnabled
-                        ? "bg-emerald-600 border-emerald-600 text-white"
-                        : "bg-white border-slate-300 text-transparent"
-                    }`}
-                  >
-                    <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-xs font-black text-navy-950">
-                      {form.freeDeliveryEnabled ? "Free Delivery Program: ACTIVE" : "Enable Free Delivery Program"}
-                    </p>
-                    <p className="text-[10px] text-slate-500">
-                      {form.freeDeliveryEnabled
-                        ? "Qualifying high-value cart orders will get 100% Free District Delivery."
-                        : "Program is currently turned off. District delivery charges apply to all customer orders."}
-                    </p>
-                  </div>
-                </div>
-                <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-md tracking-wider ${form.freeDeliveryEnabled ? "text-emerald-700 bg-emerald-100 border border-emerald-200" : "text-slate-600 bg-slate-200 border border-slate-300"}`}>
-                  {form.freeDeliveryEnabled ? "ENABLED" : "DISABLED"}
-                </span>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                  Minimum Qualifying Order Value (₹)
-                </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    step="500"
-                    min="0"
-                    value={form.freeDeliveryMinAmount ?? ""}
-                    onChange={(e) => setForm({ ...form, freeDeliveryMinAmount: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-navy-950 focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
-                    placeholder="e.g. 5000"
-                  />
-                  <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">₹</span>
-                </div>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  {form.freeDeliveryEnabled
-                    ? `Cart subtotal at or above ₹${Number(form.freeDeliveryMinAmount || 0).toLocaleString("en-IN")} gets Free Delivery (₹0). Below this, district fee applies.`
-                    : `Currently disabled. When enabled, orders above ₹${Number(form.freeDeliveryMinAmount || 0).toLocaleString("en-IN")} will receive Free Delivery.`}
-                </p>
-              </div>
-
-              {/* Card Save Action */}
-              <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-slate-100">
-                <div>
-                  {deliverySaveSuccess && (
-                    <span className="text-xs font-bold text-emerald-600 flex items-center gap-1.5">
-                      <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
-                      </svg>
-                      Delivery rule updated successfully!
-                    </span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSaveDeliveryRules}
-                  disabled={savingDelivery}
-                  className="px-4 py-2 rounded-xl bg-navy-900 hover:bg-navy-800 text-white font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shrink-0"
-                >
-                  {savingDelivery ? (
-                    <>
-                      <svg className="animate-spin h-3.5 w-3.5 text-white" viewBox="0 0 24 24" fill="none">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                      </svg>
-                      <span>Saving Rule...</span>
-                    </>
-                  ) : (
-                    <span>Save Delivery Rule</span>
-                  )}
-                </button>
               </div>
             </div>
           </div>

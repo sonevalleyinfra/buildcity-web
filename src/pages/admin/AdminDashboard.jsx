@@ -216,17 +216,19 @@ export default function AdminDashboard() {
   });
   const [savingDeliverySettings, setSavingDeliverySettings] = useState(false);
   const [deliverySaveSuccess, setDeliverySaveSuccess] = useState(false);
+  const deliveryInitializedRef = useRef(false);
 
   useEffect(() => {
     if (fetchWalletSettings) fetchWalletSettings();
-  }, [fetchWalletSettings]);
+  }, []);
 
   useEffect(() => {
-    if (walletSettings) {
+    if (walletSettings && !deliveryInitializedRef.current) {
       setDeliverySettings({
         freeDeliveryEnabled: walletSettings.freeDeliveryEnabled !== false,
-        freeDeliveryMinAmount: Number(walletSettings.freeDeliveryMinAmount ?? 25000),
+        freeDeliveryMinAmount: walletSettings.freeDeliveryMinAmount ?? 25000,
       });
+      deliveryInitializedRef.current = true;
     }
   }, [walletSettings]);
 
@@ -2295,9 +2297,18 @@ export default function AdminDashboard() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-base font-extrabold text-navy-950">Free Delivery Rules & Threshold</h2>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${deliverySettings.freeDeliveryEnabled ? "bg-emerald-100 text-emerald-800 border-emerald-300" : "bg-slate-100 text-slate-600 border-slate-200"}`}>
+                    <button
+                      type="button"
+                      onClick={() => setDeliverySettings((prev) => ({ ...prev, freeDeliveryEnabled: !prev.freeDeliveryEnabled }))}
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border transition-all cursor-pointer active:scale-95 ${
+                        deliverySettings.freeDeliveryEnabled
+                          ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200"
+                          : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
+                      }`}
+                      title="Click to toggle active status"
+                    >
                       {deliverySettings.freeDeliveryEnabled ? "FREE DELIVERY ACTIVE" : "DISABLED (ALWAYS CHARGE)"}
-                    </span>
+                    </button>
                   </div>
                   <p className="text-xs text-slate-600 mt-1">
                     Decide whether orders get 100% Free Delivery above a minimum qualifying cart value or if district fee always applies.
@@ -2305,11 +2316,11 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="flex items-center gap-3 flex-wrap">
-                  <label className="flex items-center gap-2 cursor-pointer bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-2xs hover:bg-slate-50 transition-colors">
+                  <label className="flex items-center gap-2 cursor-pointer bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-2xs hover:bg-slate-50 transition-colors select-none">
                     <input
                       type="checkbox"
-                      checked={deliverySettings.freeDeliveryEnabled}
-                      onChange={(e) => setDeliverySettings({ ...deliverySettings, freeDeliveryEnabled: e.target.checked })}
+                      checked={Boolean(deliverySettings.freeDeliveryEnabled)}
+                      onChange={(e) => setDeliverySettings((prev) => ({ ...prev, freeDeliveryEnabled: e.target.checked }))}
                       className="w-4 h-4 rounded text-emerald-600 accent-emerald-600 cursor-pointer"
                     />
                     <span className="text-xs font-bold text-navy-900">Enable Free Delivery</span>
@@ -2322,21 +2333,29 @@ export default function AdminDashboard() {
                       min="0"
                       step="500"
                       value={deliverySettings.freeDeliveryMinAmount ?? ""}
-                      onChange={(e) => setDeliverySettings({ ...deliverySettings, freeDeliveryMinAmount: e.target.value })}
+                      onChange={(e) => setDeliverySettings((prev) => ({ ...prev, freeDeliveryMinAmount: e.target.value }))}
                       className="w-24 text-xs font-black text-navy-900 outline-none"
                       placeholder="25000"
                     />
                   </div>
 
                   <button
+                    type="button"
                     onClick={handleSaveDeliverySettings}
                     disabled={savingDeliverySettings}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black px-4 py-2.5 rounded-xl shadow-xs cursor-pointer active:scale-95 disabled:opacity-50 flex items-center gap-1.5"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black px-4 py-2.5 rounded-xl shadow-xs cursor-pointer active:scale-95 disabled:opacity-50 flex items-center gap-1.5 transition-all"
                   >
                     {savingDeliverySettings ? (
                       <>
                         <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                         <span>Saving...</span>
+                      </>
+                    ) : deliverySaveSuccess ? (
+                      <>
+                        <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>Saved!</span>
                       </>
                     ) : (
                       <span>Save Delivery Rule</span>

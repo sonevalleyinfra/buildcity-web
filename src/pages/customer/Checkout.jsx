@@ -822,7 +822,7 @@ export default function Checkout() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1">
                       <span className="font-extrabold text-xs text-navy-950 flex items-center gap-1">
-                        <span>💰 Use BuildCity Wallet</span>
+                        <span>Use BuildCity Wallet</span>
                       </span>
                       <span className="text-[10px] font-black text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-full border border-amber-200">
                         ₹{walletBalance.toLocaleString("en-IN")} Bal
@@ -899,7 +899,7 @@ export default function Checkout() {
               )}
               {useWallet && appliedWalletDiscount > 0 && (
                 <div className="flex justify-between items-center text-amber-800 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200">
-                  <span className="font-extrabold text-xs">💰 Wallet Balance</span>
+                  <span className="font-extrabold text-xs">Wallet Balance</span>
                   <span className="font-black">− ₹{appliedWalletDiscount.toLocaleString("en-IN")}</span>
                 </div>
               )}

@@ -2321,10 +2321,9 @@ export default function AdminDashboard() {
                       type="number"
                       min="0"
                       step="500"
-                      disabled={!deliverySettings.freeDeliveryEnabled}
-                      value={deliverySettings.freeDeliveryMinAmount}
+                      value={deliverySettings.freeDeliveryMinAmount ?? ""}
                       onChange={(e) => setDeliverySettings({ ...deliverySettings, freeDeliveryMinAmount: e.target.value })}
-                      className="w-24 text-xs font-black text-navy-900 outline-none disabled:opacity-40"
+                      className="w-24 text-xs font-black text-navy-900 outline-none"
                       placeholder="25000"
                     />
                   </div>

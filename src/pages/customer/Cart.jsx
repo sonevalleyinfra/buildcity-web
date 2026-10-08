@@ -585,11 +585,11 @@ export default function Cart() {
                       {isFreeDelivery ? "FREE District Delivery Unlocked!" : `Free Delivery on orders above ₹${freeDeliveryThreshold.toLocaleString("en-IN")}`}
                     </span>
                   </div>
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0 ${
-                    isFreeDelivery ? "bg-emerald-600 text-white" : "bg-sky-600 text-white"
-                  }`}>
-                    {isFreeDelivery ? "UNLOCKED" : `${freeDeliveryProgress}%`}
-                  </span>
+                  {isFreeDelivery && (
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0 bg-emerald-600 text-white">
+                      UNLOCKED
+                    </span>
+                  )}
                 </div>
                 
                 {!isFreeDelivery ? (

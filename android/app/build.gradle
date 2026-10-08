@@ -21,8 +21,8 @@ android {
         customer {
             dimension "app"
             applicationId "com.buildcity.app"
-            versionCode 6
-            versionName "1.2.3"
+            versionCode 7
+            versionName "1.2.4"
             resValue "string", "app_name", "BuildCity"
             resValue "string", "title_activity_main", "BuildCity"
             resValue "string", "package_name", "com.buildcity.app"

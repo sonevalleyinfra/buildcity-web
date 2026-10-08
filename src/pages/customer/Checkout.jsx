@@ -51,7 +51,13 @@ export default function Checkout() {
   }, [directItem, mrpTotal]);
 
   const { user, updateProfile } = useAuth();
-  const { products = [], vendors = [], coupons = [], walletSettings: adminWalletSettings } = useAdmin() || {};
+  const { products = [], vendors = [], coupons = [], walletSettings: adminWalletSettings, fetchWalletSettings } = useAdmin() || {};
+
+  useEffect(() => {
+    if (fetchWalletSettings) {
+      fetchWalletSettings();
+    }
+  }, [fetchWalletSettings]);
   const { region } = useRegion();
   const { addresses: contextAddresses = [], addAddress: addContextAddress } = useAddresses();
 
@@ -194,7 +200,11 @@ export default function Checkout() {
 
   const baseDeliveryFee = Number(region?.baseDeliveryCharge) || 49;
   const activeWalletSettings = walletData?.settings || adminWalletSettings || {};
-  const isFreeDelivery = activeWalletSettings.freeDeliveryEnabled !== false && checkoutSubtotal >= (Number(activeWalletSettings.freeDeliveryMinAmount) || 25000);
+  const freeDeliveryThreshold = Number(activeWalletSettings.freeDeliveryMinAmount) || 25000;
+  const isFreeDeliveryProgramActive = activeWalletSettings.freeDeliveryEnabled !== false;
+  const isFreeDelivery = isFreeDeliveryProgramActive && checkoutSubtotal >= freeDeliveryThreshold;
+  const remainingForFreeDelivery = Math.max(0, freeDeliveryThreshold - checkoutSubtotal);
+  const freeDeliveryProgress = Math.min(100, Math.round((checkoutSubtotal / freeDeliveryThreshold) * 100));
   const deliveryCharge = isFreeDelivery ? 0 : baseDeliveryFee;
 
   const couponDiscount = useMemo(() => {
@@ -831,6 +841,47 @@ export default function Checkout() {
               </div>
             )}
 
+            {/* Free Delivery Threshold Goal Tracker */}
+            {isFreeDeliveryProgramActive && (
+              <div className={`rounded-xl p-3 border mb-3 transition-all ${
+                isFreeDelivery 
+                  ? "bg-gradient-to-r from-emerald-50 to-teal-50/50 border-emerald-200 text-emerald-950 shadow-2xs" 
+                  : "bg-gradient-to-r from-sky-50 to-blue-50 border-sky-200 text-slate-800 shadow-2xs"
+              }`}>
+                <div className="flex items-center justify-between gap-2 text-xs font-black mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm">🚚</span>
+                    <span className="tracking-tight">
+                      {isFreeDelivery ? "FREE District Delivery Unlocked!" : `Free Delivery on orders above ₹${freeDeliveryThreshold.toLocaleString("en-IN")}`}
+                    </span>
+                  </div>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0 ${
+                    isFreeDelivery ? "bg-emerald-600 text-white" : "bg-sky-600 text-white"
+                  }`}>
+                    {isFreeDelivery ? "UNLOCKED" : `${freeDeliveryProgress}%`}
+                  </span>
+                </div>
+                {!isFreeDelivery ? (
+                  <>
+                    <div className="w-full bg-sky-200/80 rounded-full h-1.5 overflow-hidden mb-1.5">
+                      <div 
+                        className="bg-brand-600 h-1.5 rounded-full transition-all duration-300"
+                        style={{ width: `${freeDeliveryProgress}%` }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-600 font-semibold leading-snug">
+                      Add <strong className="text-brand-600 font-extrabold">₹{remainingForFreeDelivery.toLocaleString("en-IN")}</strong> more materials to get <strong className="text-emerald-700 font-extrabold">100% Free District Delivery</strong>.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-emerald-800 font-bold flex items-center gap-1">
+                    <span>✓</span>
+                    <span>District delivery fee (₹{baseDeliveryFee}) is 100% free for this order!</span>
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2 text-sm">
               <div className="flex justify-between text-slate-500">
                 <span>Total MRP</span>
@@ -852,11 +903,27 @@ export default function Checkout() {
                   <span className="font-black">− ₹{appliedWalletDiscount.toLocaleString("en-IN")}</span>
                 </div>
               )}
-              <div className="flex justify-between text-slate-500">
-                <span>Delivery</span>
-                <span className={deliveryCharge === 0 ? "text-success" : ""}>
-                  {deliveryCharge === 0 ? "FREE" : `₹${deliveryCharge}`}
-                </span>
+              <div className="flex justify-between items-center text-slate-500">
+                <div className="flex flex-col">
+                  <span>Delivery Fee</span>
+                  {isFreeDeliveryProgramActive && !isFreeDelivery && (
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      Free above ₹{freeDeliveryThreshold.toLocaleString("en-IN")}
+                    </span>
+                  )}
+                </div>
+                <div className="text-right shrink-0">
+                  {deliveryCharge === 0 ? (
+                    <div className="flex items-center gap-1.5 justify-end">
+                      <span className="line-through text-slate-400 font-semibold text-xs">₹{baseDeliveryFee}</span>
+                      <span className="text-emerald-700 font-extrabold text-xs bg-emerald-100/90 px-2 py-0.5 rounded-md border border-emerald-200">
+                        FREE
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="font-bold tabular-nums">₹{deliveryCharge}</span>
+                  )}
+                </div>
               </div>
               <div className="h-px bg-slate-100 my-2" />
               <div className="flex justify-between text-base font-bold text-navy-900">

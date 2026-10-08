@@ -38,10 +38,10 @@ export default function Cart() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!walletSettings && fetchWalletSettings) {
+    if (fetchWalletSettings) {
       fetchWalletSettings();
     }
-  }, [walletSettings, fetchWalletSettings]);
+  }, [fetchWalletSettings]);
 
   // Database se aane wale coupons ka state
   const [dbCoupons, setDbCoupons] = useState(adminCoupons);
@@ -254,12 +254,16 @@ export default function Cart() {
   };
 
   const baseDeliveryFee = Number(region?.baseDeliveryCharge) || 49;
-  const isFreeDelivery = walletSettings?.freeDeliveryEnabled !== false && subtotal >= (Number(walletSettings?.freeDeliveryMinAmount) || 25000);
+  const freeDeliveryThreshold = Number(walletSettings?.freeDeliveryMinAmount) || 25000;
+  const isFreeDeliveryProgramActive = walletSettings?.freeDeliveryEnabled !== false;
+  const isFreeDelivery = isFreeDeliveryProgramActive && subtotal >= freeDeliveryThreshold;
+  const remainingForFreeDelivery = Math.max(0, freeDeliveryThreshold - subtotal);
+  const freeDeliveryProgress = Math.min(100, Math.round((subtotal / freeDeliveryThreshold) * 100));
   const deliveryCharge = isFreeDelivery ? 0 : baseDeliveryFee;
   const couponDiscount = appliedCoupon ? Number(appliedCoupon.discountAmount) || 0 : 0;
   const total = Math.max(0, subtotal + deliveryCharge - couponDiscount);
   const mrpDiscount = Math.max(0, Number(mrpTotal || 0) - Number(subtotal || 0));
-  const totalSavings = mrpDiscount + couponDiscount;
+  const totalSavings = mrpDiscount + couponDiscount + (isFreeDelivery ? baseDeliveryFee : 0);
 
   if (items.length === 0) {
     return (
@@ -567,6 +571,48 @@ export default function Cart() {
               {couponError && <p className="text-[11px] font-bold text-rose-600">{couponError}</p>}
             </div>
 
+            {/* Free Delivery Threshold Goal Tracker */}
+            {isFreeDeliveryProgramActive && (
+              <div className={`rounded-2xl p-3.5 sm:p-4 border transition-all ${
+                isFreeDelivery 
+                  ? "bg-gradient-to-r from-emerald-50 to-teal-50/50 border-emerald-200 text-emerald-950 shadow-2xs" 
+                  : "bg-gradient-to-r from-sky-50/90 to-blue-50/60 border-sky-200 text-slate-800 shadow-2xs"
+              }`}>
+                <div className="flex items-center justify-between gap-2 text-xs font-black mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🚚</span>
+                    <span className="tracking-tight">
+                      {isFreeDelivery ? "FREE District Delivery Unlocked!" : `Free Delivery on orders above ₹${freeDeliveryThreshold.toLocaleString("en-IN")}`}
+                    </span>
+                  </div>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0 ${
+                    isFreeDelivery ? "bg-emerald-600 text-white" : "bg-sky-600 text-white"
+                  }`}>
+                    {isFreeDelivery ? "UNLOCKED" : `${freeDeliveryProgress}%`}
+                  </span>
+                </div>
+                
+                {!isFreeDelivery ? (
+                  <>
+                    <div className="w-full bg-sky-200/80 rounded-full h-2 overflow-hidden mb-2">
+                      <div 
+                        className="bg-brand-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${freeDeliveryProgress}%` }}
+                      />
+                    </div>
+                    <p className="text-[11px] font-semibold text-slate-600 leading-snug">
+                      Add <strong className="text-brand-600 font-extrabold">₹{remainingForFreeDelivery.toLocaleString("en-IN")}</strong> more materials to your cart to get <strong className="text-emerald-700 font-extrabold">100% Free District Delivery</strong>.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-[11px] font-bold text-emerald-800 flex items-center gap-1.5">
+                    <span>✓</span>
+                    <span>District delivery fee (₹{baseDeliveryFee}) is 100% free for this order!</span>
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Order ka pura price details breakdown */}
             <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-sm sticky top-20 space-y-4 w-full min-w-0">
               <h3 className="text-xs font-black text-navy-900 uppercase tracking-wider border-b border-slate-100 pb-2.5">
@@ -594,10 +640,26 @@ export default function Cart() {
                 )}
 
                 <div className="flex justify-between items-center text-slate-600 font-medium gap-2">
-                  <span className="truncate">District Delivery Fee</span>
-                  <span className={`shrink-0 ${deliveryCharge === 0 ? "text-emerald-700 font-extrabold" : "font-bold tabular-nums"}`}>
-                    {deliveryCharge === 0 ? "FREE" : `₹${deliveryCharge}`}
-                  </span>
+                  <div className="flex flex-col">
+                    <span className="truncate">District Delivery Fee</span>
+                    {isFreeDeliveryProgramActive && !isFreeDelivery && (
+                      <span className="text-[10px] text-slate-400 font-normal">
+                        Free above ₹{freeDeliveryThreshold.toLocaleString("en-IN")}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-right shrink-0">
+                    {deliveryCharge === 0 ? (
+                      <div className="flex items-center gap-1.5 justify-end">
+                        <span className="line-through text-slate-400 font-semibold text-xs">₹{baseDeliveryFee}</span>
+                        <span className="text-emerald-700 font-extrabold text-xs bg-emerald-100/90 px-2 py-0.5 rounded-md border border-emerald-200">
+                          FREE
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="font-bold tabular-nums">₹{deliveryCharge}</span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="border-t border-slate-200/80 pt-3 flex justify-between items-baseline text-base font-black text-navy-900 tracking-tight gap-2">

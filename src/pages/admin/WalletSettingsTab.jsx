@@ -34,6 +34,9 @@ export default function WalletSettingsTab() {
 
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [savingDelivery, setSavingDelivery] = useState(false);
+  const [deliverySaveSuccess, setDeliverySaveSuccess] = useState(false);
+  const [visibleWalletUsersCount, setVisibleWalletUsersCount] = useState(10);
   const [searchPhone, setSearchPhone] = useState("");
   const [adjustModal, setAdjustModal] = useState({
     open: false,
@@ -78,7 +81,11 @@ export default function WalletSettingsTab() {
     setSaving(true);
     setSaveSuccess(false);
     try {
-      await updateWalletSettings(form);
+      await updateWalletSettings({
+        ...form,
+        freeDeliveryEnabled: Boolean(form.freeDeliveryEnabled),
+        freeDeliveryMinAmount: Number(form.freeDeliveryMinAmount) || 0,
+      });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);
     } catch (err) {
@@ -88,8 +95,28 @@ export default function WalletSettingsTab() {
     }
   };
 
+  const handleSaveDeliveryRules = async () => {
+    setSavingDelivery(true);
+    setDeliverySaveSuccess(false);
+    try {
+      const payload = {
+        ...form,
+        freeDeliveryEnabled: Boolean(form.freeDeliveryEnabled),
+        freeDeliveryMinAmount: Number(form.freeDeliveryMinAmount) || 0,
+      };
+      await updateWalletSettings(payload);
+      setDeliverySaveSuccess(true);
+      setTimeout(() => setDeliverySaveSuccess(false), 3000);
+    } catch (err) {
+      alert("Failed to save delivery rule: " + err.message);
+    } finally {
+      setSavingDelivery(false);
+    }
+  };
+
   const handleSearchSubmit = (e) => {
     e.preventDefault();
+    setVisibleWalletUsersCount(10);
     fetchWalletUsers(searchPhone);
   };
 
@@ -153,9 +180,6 @@ export default function WalletSettingsTab() {
               {form.referralEnabled || form.cashbackEnabled ? "Active Program" : "System Paused"}
             </span>
           </div>
-          <p className="text-xs sm:text-sm text-slate-300 font-normal max-w-2xl leading-relaxed">
-            Super Admin Control Center: Adjust cashback percentages, referral bonuses, and maximum redemption limits in real-time. Changes apply instantly across the storefront.
-          </p>
         </div>
 
         <button
@@ -173,7 +197,9 @@ export default function WalletSettingsTab() {
             </>
           ) : (
             <>
-              <span>💾</span>
+              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+              </svg>
               <span>Save Settings</span>
             </>
           )}
@@ -183,7 +209,9 @@ export default function WalletSettingsTab() {
       {saveSuccess && (
         <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl flex items-center justify-between text-xs sm:text-sm font-bold shadow-2xs">
           <div className="flex items-center gap-2">
-            <span>✅</span>
+            <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+            </svg>
             <span>Settings saved successfully! Storefront is now using the updated configuration.</span>
           </div>
           <button onClick={() => setSaveSuccess(false)} className="text-emerald-600 hover:text-emerald-900 text-xs">
@@ -498,8 +526,8 @@ export default function WalletSettingsTab() {
                     step="1"
                     min="1"
                     max="100"
-                    value={form.maxWalletUsagePercent}
-                    onChange={(e) => setForm({ ...form, maxWalletUsagePercent: Number(e.target.value) })}
+                    value={form.maxWalletUsagePercent ?? ""}
+                    onChange={(e) => setForm({ ...form, maxWalletUsagePercent: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-navy-950 focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
                   />
                   <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
@@ -516,8 +544,8 @@ export default function WalletSettingsTab() {
                     type="number"
                     step="50"
                     min="0"
-                    value={form.maxWalletUsageFlat}
-                    onChange={(e) => setForm({ ...form, maxWalletUsageFlat: Number(e.target.value) })}
+                    value={form.maxWalletUsageFlat ?? ""}
+                    onChange={(e) => setForm({ ...form, maxWalletUsageFlat: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-navy-950 focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
                   />
                   <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">₹</span>
@@ -534,7 +562,7 @@ export default function WalletSettingsTab() {
                 <h3 className="text-sm font-black text-navy-950">Free Delivery Rules & Threshold</h3>
               </div>
               <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${form.freeDeliveryEnabled ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200"}`}>
-                {form.freeDeliveryEnabled ? "Active" : "Disabled"}
+                {form.freeDeliveryEnabled ? "Active" : "Deactivated"}
               </span>
             </div>
 
@@ -542,7 +570,7 @@ export default function WalletSettingsTab() {
               <label className="flex items-center gap-2.5 cursor-pointer bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 hover:bg-slate-100/70 transition-colors">
                 <input
                   type="checkbox"
-                  checked={form.freeDeliveryEnabled}
+                  checked={Boolean(form.freeDeliveryEnabled)}
                   onChange={(e) => setForm({ ...form, freeDeliveryEnabled: e.target.checked })}
                   className="w-4 h-4 rounded text-emerald-600 accent-emerald-600 cursor-pointer"
                 />
@@ -562,8 +590,8 @@ export default function WalletSettingsTab() {
                     step="500"
                     min="0"
                     disabled={!form.freeDeliveryEnabled}
-                    value={form.freeDeliveryMinAmount}
-                    onChange={(e) => setForm({ ...form, freeDeliveryMinAmount: Number(e.target.value) })}
+                    value={form.freeDeliveryMinAmount ?? ""}
+                    onChange={(e) => setForm({ ...form, freeDeliveryMinAmount: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-navy-950 focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none disabled:opacity-40"
                   />
                   <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">₹</span>
@@ -573,6 +601,38 @@ export default function WalletSettingsTab() {
                     ? `Cart subtotal at or above ₹${Number(form.freeDeliveryMinAmount || 0).toLocaleString("en-IN")} gets Free Delivery (₹0). Below this, district fee applies.`
                     : "Free delivery disabled. District base fee will always apply on all orders."}
                 </p>
+              </div>
+
+              {/* Card Save Action */}
+              <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-slate-100">
+                <div>
+                  {deliverySaveSuccess && (
+                    <span className="text-xs font-bold text-emerald-600 flex items-center gap-1.5">
+                      <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+                      </svg>
+                      Delivery rule updated successfully!
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveDeliveryRules}
+                  disabled={savingDelivery}
+                  className="px-4 py-2 rounded-xl bg-navy-900 hover:bg-navy-800 text-white font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shrink-0"
+                >
+                  {savingDelivery ? (
+                    <>
+                      <svg className="animate-spin h-3.5 w-3.5 text-white" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                      </svg>
+                      <span>Saving Rule...</span>
+                    </>
+                  ) : (
+                    <span>Save Delivery Rule</span>
+                  )}
+                </button>
               </div>
             </div>
           </div>
@@ -585,6 +645,9 @@ export default function WalletSettingsTab() {
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-black text-navy-950">Customer Wallet Inspector</h3>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                {walletUsers.length} total
+              </span>
             </div>
             <p className="text-[11px] text-slate-500">
               Lookup customer wallet balances, view referral codes, or manually credit/debit for customer support.
@@ -608,11 +671,11 @@ export default function WalletSettingsTab() {
           </form>
         </div>
 
-        {/* Customer Table */}
-        <div className="overflow-x-auto">
+        {/* Customer Table with Internal Fixed Scroll (Whole page does not scroll) */}
+        <div className="max-h-[440px] overflow-y-auto overflow-x-auto rounded-xl border border-slate-200/80">
           <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+            <thead className="sticky top-0 bg-slate-50 z-10 shadow-2xs">
+              <tr className="border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
                 <th className="py-2.5 px-3">Customer</th>
                 <th className="py-2.5 px-3">Phone</th>
                 <th className="py-2.5 px-3">Referral Code</th>
@@ -621,7 +684,7 @@ export default function WalletSettingsTab() {
                 <th className="py-2.5 px-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
+            <tbody className="divide-y divide-slate-100 text-slate-700 bg-white">
               {walletUsers.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="py-8 text-center text-slate-400">
@@ -629,7 +692,7 @@ export default function WalletSettingsTab() {
                   </td>
                 </tr>
               ) : (
-                walletUsers.map((u) => (
+                walletUsers.slice(0, visibleWalletUsersCount).map((u) => (
                   <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-3 font-bold text-navy-950">{u.name || "Customer"}</td>
                     <td className="py-3 px-3 font-mono text-slate-600">{u.phone}</td>
@@ -658,6 +721,26 @@ export default function WalletSettingsTab() {
             </tbody>
           </table>
         </div>
+
+        {/* Load More Button (Loads after 10 rows without page scrolling) */}
+        {walletUsers.length > 10 && (
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-slate-100">
+            <span className="text-[11px] font-semibold text-slate-500">
+              Showing {Math.min(visibleWalletUsersCount, walletUsers.length)} of {walletUsers.length} customers
+            </span>
+            {walletUsers.length > visibleWalletUsersCount ? (
+              <button
+                type="button"
+                onClick={() => setVisibleWalletUsersCount((prev) => prev + 10)}
+                className="px-4 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-navy-950 font-extrabold text-xs border border-slate-200 transition-all active:scale-95 cursor-pointer shadow-2xs"
+              >
+                Load More Customers (+10)
+              </button>
+            ) : (
+              <span className="text-[11px] text-slate-400 font-medium">All customers loaded</span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Manual Wallet Adjustment Modal */}

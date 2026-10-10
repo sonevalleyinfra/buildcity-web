@@ -46,7 +46,6 @@ function OfferForm({ form, onSubmit, onCancel, isSubmitting }) {
           min="1"
           placeholder="2500"
           value={mrp ?? ""}
-          onFocus={(e) => e.target.select()}
           onChange={(e) => onMrpChange(e.target.value)}
         />
         <Field
@@ -58,7 +57,6 @@ function OfferForm({ form, onSubmit, onCancel, isSubmitting }) {
           max="90"
           placeholder="0"
           value={discountPct !== undefined && discountPct !== null ? discountPct : ""}
-          onFocus={(e) => e.target.select()}
           onBlur={() => {
             if (discountPct === "" || discountPct === undefined) {
               onDiscountChange("0");
@@ -75,7 +73,6 @@ function OfferForm({ form, onSubmit, onCancel, isSubmitting }) {
           min="1"
           placeholder="2250"
           value={sellingPrice ?? ""}
-          onFocus={(e) => e.target.select()}
           onChange={(e) => onSellingPriceChange(e.target.value)}
         />
         <Field
@@ -86,7 +83,6 @@ function OfferForm({ form, onSubmit, onCancel, isSubmitting }) {
           min="1"
           placeholder="100"
           value={stockQty ?? ""}
-          onFocus={(e) => e.target.select()}
           onChange={(e) => onStockChange(e.target.value)}
         />
       </div>
@@ -154,7 +150,6 @@ function OfferForm({ form, onSubmit, onCancel, isSubmitting }) {
                         min="1"
                         placeholder="Price"
                         value={pack.price !== undefined ? pack.price : ""}
-                        onFocus={(e) => e.target.select()}
                         onChange={(e) => onPackPriceChange(idx, e.target.value)}
                         className="w-full px-2 py-1 bg-white text-xs border border-slate-200 rounded-md font-bold text-slate-900 focus:border-brand-500 outline-none"
                       />
@@ -166,7 +161,6 @@ function OfferForm({ form, onSubmit, onCancel, isSubmitting }) {
                         min="0"
                         placeholder="Stock"
                         value={pack.stock !== undefined ? pack.stock : ""}
-                        onFocus={(e) => e.target.select()}
                         onChange={(e) => onPackStockChange(idx, e.target.value)}
                         className="w-full px-2 py-1 bg-white text-xs border border-slate-200 rounded-md font-bold text-slate-900 focus:border-brand-500 outline-none"
                       />

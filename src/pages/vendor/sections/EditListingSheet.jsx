@@ -150,7 +150,6 @@ export default function EditListingSheet({
               required
               min="1"
               value={product.mrp ?? ""}
-              onFocus={(e) => e.target.select()}
               onChange={(e) => onMrpChange(e.target.value)}
             />
             <Field
@@ -162,7 +161,6 @@ export default function EditListingSheet({
               max="90"
               placeholder="0"
               value={product.discountPct !== undefined && product.discountPct !== null ? product.discountPct : ""}
-              onFocus={(e) => e.target.select()}
               onBlur={() => {
                 if (product.discountPct === "" || product.discountPct === undefined) {
                   onDiscountChange("0");
@@ -178,7 +176,6 @@ export default function EditListingSheet({
               required
               min="1"
               value={product.price ?? ""}
-              onFocus={(e) => e.target.select()}
               onChange={(e) => onPriceChange(e.target.value)}
             />
             <Field
@@ -188,7 +185,6 @@ export default function EditListingSheet({
               required
               min="0"
               value={product.stockQty ?? ""}
-              onFocus={(e) => e.target.select()}
               onChange={(e) => onStockChange(e.target.value)}
             />
           </div>
@@ -270,7 +266,6 @@ export default function EditListingSheet({
                             min="1"
                             placeholder="e.g. 1850"
                             value={pack.price !== undefined ? pack.price : ""}
-                            onFocus={(e) => e.target.select()}
                             onChange={(e) => handlePackPriceChange(idx, e.target.value)}
                             className="w-full pl-6 pr-2.5 py-1.5 bg-slate-50 text-xs border border-slate-200 rounded-lg outline-none font-bold text-slate-900 focus:border-brand-500 focus:bg-white transition-colors"
                           />
@@ -286,7 +281,6 @@ export default function EditListingSheet({
                           min="0"
                           placeholder="e.g. 50"
                           value={pack.stock !== undefined ? pack.stock : ""}
-                          onFocus={(e) => e.target.select()}
                           onChange={(e) => handlePackStockChange(idx, e.target.value)}
                           className="w-full px-2.5 py-1.5 bg-slate-50 text-xs border border-slate-200 rounded-lg outline-none font-bold text-slate-900 focus:border-brand-500 focus:bg-white transition-colors"
                         />

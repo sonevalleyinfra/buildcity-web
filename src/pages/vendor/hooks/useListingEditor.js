@@ -79,9 +79,10 @@ export default function useListingEditor({ updateVendorProductListing, showAlert
     open,
     close: () => setEditingProduct(null),
     save,
-    onMrpChange: (v) =>
+    onMrpChange: (v) => {
+      const cleaned = typeof v === "string" ? v.replace(/^0+(?=\d)/, "") : v;
       setEditingProduct((p) => {
-        const updated = withMrp(p, v);
+        const updated = withMrp(p, cleaned);
         if (Array.isArray(updated.customPacks) && updated.customPacks.length > 0) {
           const newUnitMrp = Number(updated.mrp) || Math.round((Number(updated.price) || 0) * 1.2);
           updated.customPacks = updated.customPacks.map((cp) => ({
@@ -90,11 +91,16 @@ export default function useListingEditor({ updateVendorProductListing, showAlert
           }));
         }
         return updated;
-      }),
-    onDiscountChange: (v) => setEditingProduct((p) => withDiscount(p, v)),
-    onPriceChange: (v) =>
+      });
+    },
+    onDiscountChange: (v) => {
+      const cleaned = typeof v === "string" ? v.replace(/^0+(?=\d)/, "") : v;
+      setEditingProduct((p) => withDiscount(p, cleaned));
+    },
+    onPriceChange: (v) => {
+      const cleaned = typeof v === "string" ? v.replace(/^0+(?=\d)/, "") : v;
       setEditingProduct((p) => {
-        const updated = withPrice(p, v);
+        const updated = withPrice(p, cleaned);
         if (Array.isArray(updated.customPacks) && updated.customPacks.length > 0) {
           const newPrice = Number(updated.price) || 0;
           updated.customPacks = updated.customPacks.map((cp) => {
@@ -105,8 +111,12 @@ export default function useListingEditor({ updateVendorProductListing, showAlert
           });
         }
         return updated;
-      }),
-    onStockChange: (v) => setEditingProduct((p) => ({ ...p, stockQty: v })),
+      });
+    },
+    onStockChange: (v) => {
+      const cleaned = typeof v === "string" ? v.replace(/^0+(?=\d)/, "") : v;
+      setEditingProduct((p) => ({ ...p, stockQty: cleaned }));
+    },
     onCustomPacksChange: (packs) => setEditingProduct((p) => ({ ...p, customPacks: packs })),
   };
 }

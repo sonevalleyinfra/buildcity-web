@@ -37,10 +37,58 @@ function OfferForm({ form, onSubmit, onCancel, isSubmitting }) {
       className="vd-page space-y-4 border-t border-brand-100 bg-brand-50/50 px-4 py-4 sm:px-5"
     >
       <div className="grid grid-cols-2 gap-3">
-        <Field label="MRP" prefix="₹" type="number" inputMode="numeric" required min="1" placeholder="2500" value={mrp} onChange={(e) => onMrpChange(e.target.value)} />
-        <Field label="Discount" suffix="%" type="number" inputMode="numeric" min="0" max="90" placeholder="10" value={discountPct} onChange={(e) => onDiscountChange(e.target.value)} />
-        <Field label="Selling price" prefix="₹" type="number" inputMode="numeric" required min="1" placeholder="2250" value={sellingPrice} onChange={(e) => onSellingPriceChange(e.target.value)} />
-        <Field label="Stock" type="number" inputMode="numeric" required min="1" placeholder="100" value={stockQty} onChange={(e) => onStockChange(e.target.value)} />
+        <Field
+          label="MRP"
+          prefix="₹"
+          type="number"
+          inputMode="numeric"
+          required
+          min="1"
+          placeholder="2500"
+          value={mrp ?? ""}
+          onFocus={(e) => e.target.select()}
+          onChange={(e) => onMrpChange(e.target.value)}
+        />
+        <Field
+          label="Discount"
+          suffix="%"
+          type="number"
+          inputMode="numeric"
+          min="0"
+          max="90"
+          placeholder="0"
+          value={discountPct !== undefined && discountPct !== null ? discountPct : ""}
+          onFocus={(e) => e.target.select()}
+          onBlur={() => {
+            if (discountPct === "" || discountPct === undefined) {
+              onDiscountChange("0");
+            }
+          }}
+          onChange={(e) => onDiscountChange(e.target.value)}
+        />
+        <Field
+          label="Selling price"
+          prefix="₹"
+          type="number"
+          inputMode="numeric"
+          required
+          min="1"
+          placeholder="2250"
+          value={sellingPrice ?? ""}
+          onFocus={(e) => e.target.select()}
+          onChange={(e) => onSellingPriceChange(e.target.value)}
+        />
+        <Field
+          label="Stock"
+          type="number"
+          inputMode="numeric"
+          required
+          min="1"
+          placeholder="100"
+          value={stockQty ?? ""}
+          onFocus={(e) => e.target.select()}
+          onChange={(e) => onStockChange(e.target.value)}
+        />
       </div>
 
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-white px-3.5 py-2.5 text-sm ring-1 ring-inset ring-emerald-200/80">
@@ -106,6 +154,7 @@ function OfferForm({ form, onSubmit, onCancel, isSubmitting }) {
                         min="1"
                         placeholder="Price"
                         value={pack.price !== undefined ? pack.price : ""}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) => onPackPriceChange(idx, e.target.value)}
                         className="w-full px-2 py-1 bg-white text-xs border border-slate-200 rounded-md font-bold text-slate-900 focus:border-brand-500 outline-none"
                       />
@@ -117,6 +166,7 @@ function OfferForm({ form, onSubmit, onCancel, isSubmitting }) {
                         min="0"
                         placeholder="Stock"
                         value={pack.stock !== undefined ? pack.stock : ""}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) => onPackStockChange(idx, e.target.value)}
                         className="w-full px-2 py-1 bg-white text-xs border border-slate-200 rounded-md font-bold text-slate-900 focus:border-brand-500 outline-none"
                       />

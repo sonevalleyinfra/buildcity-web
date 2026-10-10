@@ -86,21 +86,23 @@ export default function EditListingSheet({
   };
 
   const handlePackPriceChange = (index, val) => {
+    const cleaned = typeof val === "string" ? val.replace(/^0+(?=\d)/, "") : val;
     const next = activePacks.map((pk, idx) => {
       const packQty = Number(pk.qty) || 5;
       const packMrp = Math.round(unitMrp * packQty);
       if (idx !== index) return { ...pk, mrp: packMrp };
-      return { ...pk, price: val, mrp: packMrp };
+      return { ...pk, price: cleaned, mrp: packMrp };
     });
     onCustomPacksChange?.(next);
   };
 
   const handlePackStockChange = (index, val) => {
+    const cleaned = typeof val === "string" ? val.replace(/^0+(?=\d)/, "") : val;
     const next = activePacks.map((pk, idx) => {
       const packQty = Number(pk.qty) || 5;
       const packMrp = Math.round(unitMrp * packQty);
       if (idx !== index) return { ...pk, mrp: packMrp };
-      return { ...pk, stock: val, mrp: packMrp };
+      return { ...pk, stock: cleaned, mrp: packMrp };
     });
     onCustomPacksChange?.(next);
   };
@@ -140,10 +142,55 @@ export default function EditListingSheet({
         <div>
           <p className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">Base Unit Pricing ({product.unit || "1 Unit"})</p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="MRP" prefix="₹" type="number" inputMode="numeric" required min="1" value={product.mrp || ""} onChange={(e) => onMrpChange(e.target.value)} />
-            <Field label="Discount" suffix="%" type="number" inputMode="numeric" min="0" max="90" value={product.discountPct || 0} onChange={(e) => onDiscountChange(e.target.value)} />
-            <Field label="Selling price" prefix="₹" type="number" inputMode="numeric" required min="1" value={product.price} onChange={(e) => onPriceChange(e.target.value)} />
-            <Field label="Stock" type="number" inputMode="numeric" required min="0" value={product.stockQty} onChange={(e) => onStockChange(e.target.value)} />
+            <Field
+              label="MRP"
+              prefix="₹"
+              type="number"
+              inputMode="numeric"
+              required
+              min="1"
+              value={product.mrp ?? ""}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => onMrpChange(e.target.value)}
+            />
+            <Field
+              label="Discount"
+              suffix="%"
+              type="number"
+              inputMode="numeric"
+              min="0"
+              max="90"
+              placeholder="0"
+              value={product.discountPct !== undefined && product.discountPct !== null ? product.discountPct : ""}
+              onFocus={(e) => e.target.select()}
+              onBlur={() => {
+                if (product.discountPct === "" || product.discountPct === undefined) {
+                  onDiscountChange("0");
+                }
+              }}
+              onChange={(e) => onDiscountChange(e.target.value)}
+            />
+            <Field
+              label="Selling price"
+              prefix="₹"
+              type="number"
+              inputMode="numeric"
+              required
+              min="1"
+              value={product.price ?? ""}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => onPriceChange(e.target.value)}
+            />
+            <Field
+              label="Stock"
+              type="number"
+              inputMode="numeric"
+              required
+              min="0"
+              value={product.stockQty ?? ""}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => onStockChange(e.target.value)}
+            />
           </div>
         </div>
 
@@ -223,6 +270,7 @@ export default function EditListingSheet({
                             min="1"
                             placeholder="e.g. 1850"
                             value={pack.price !== undefined ? pack.price : ""}
+                            onFocus={(e) => e.target.select()}
                             onChange={(e) => handlePackPriceChange(idx, e.target.value)}
                             className="w-full pl-6 pr-2.5 py-1.5 bg-slate-50 text-xs border border-slate-200 rounded-lg outline-none font-bold text-slate-900 focus:border-brand-500 focus:bg-white transition-colors"
                           />
@@ -238,6 +286,7 @@ export default function EditListingSheet({
                           min="0"
                           placeholder="e.g. 50"
                           value={pack.stock !== undefined ? pack.stock : ""}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => handlePackStockChange(idx, e.target.value)}
                           className="w-full px-2.5 py-1.5 bg-slate-50 text-xs border border-slate-200 rounded-lg outline-none font-bold text-slate-900 focus:border-brand-500 focus:bg-white transition-colors"
                         />

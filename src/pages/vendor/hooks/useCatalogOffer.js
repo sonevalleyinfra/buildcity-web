@@ -166,18 +166,31 @@ export default function useCatalogOffer({ masterProducts, submitListing, showAle
         });
       },
       onPackStockChange: (index, val) => {
+        const cleaned = typeof val === "string" ? val.replace(/^0+(?=\d)/, "") : val;
         setCustomPacks((prev) => {
           const list = prev.length > 0 ? [...prev] : [...activePacks];
           const packQty = Number(list[index]?.qty) || 5;
-          const numStock = val === "" ? "" : Number(val);
+          const numStock = cleaned === "" ? "" : Number(cleaned);
           list[index] = { ...list[index], stock: numStock, mrp: Math.round(unitMrp * packQty) };
           return list;
         });
       },
-      onMrpChange: (v) => setOffer((o) => withMrp(o, v)),
-      onDiscountChange: (v) => setOffer((o) => withDiscount(o, v)),
-      onSellingPriceChange: (v) => setOffer((o) => withPrice(o, v)),
-      onStockChange: setStockQty,
+      onMrpChange: (v) => {
+        const cleaned = typeof v === "string" ? v.replace(/^0+(?=\d)/, "") : v;
+        setOffer((o) => withMrp(o, cleaned));
+      },
+      onDiscountChange: (v) => {
+        const cleaned = typeof v === "string" ? v.replace(/^0+(?=\d)/, "") : v;
+        setOffer((o) => withDiscount(o, cleaned));
+      },
+      onSellingPriceChange: (v) => {
+        const cleaned = typeof v === "string" ? v.replace(/^0+(?=\d)/, "") : v;
+        setOffer((o) => withPrice(o, cleaned));
+      },
+      onStockChange: (v) => {
+        const cleaned = typeof v === "string" ? v.replace(/^0+(?=\d)/, "") : v;
+        setStockQty(cleaned);
+      },
     },
     submit,
     isSubmitting,

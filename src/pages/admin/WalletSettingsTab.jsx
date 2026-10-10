@@ -81,6 +81,12 @@ export default function WalletSettingsTab() {
     try {
       await updateWalletSettings({
         ...form,
+        cashbackValue: Number(form.cashbackValue) || 0,
+        minOrderForCashback: Number(form.minOrderForCashback) || 0,
+        maxCashbackCap: Number(form.maxCashbackCap) || 0,
+        referrerReward: Number(form.referrerReward) || 0,
+        maxWalletUsagePercent: Number(form.maxWalletUsagePercent) || 10,
+        maxWalletUsageFlat: Number(form.maxWalletUsageFlat) || 500,
         freeDeliveryEnabled: Boolean(form.freeDeliveryEnabled),
         freeDeliveryMinAmount: Number(form.freeDeliveryMinAmount) || 0,
       });
@@ -135,10 +141,13 @@ export default function WalletSettingsTab() {
 
   // Preview calculations
   const previewOrderAmount = 10000;
+  const numCashbackVal = Number(form.cashbackValue) || 0;
+  const numMaxCap = Number(form.maxCashbackCap) || 0;
+  const rawCashback = (previewOrderAmount * numCashbackVal) / 100;
   const calculatedCashback =
     form.cashbackType === "PERCENTAGE"
-      ? Math.min(form.maxCashbackCap, (previewOrderAmount * form.cashbackValue) / 100)
-      : form.cashbackValue;
+      ? (numMaxCap > 0 ? Math.min(numMaxCap, rawCashback) : rawCashback)
+      : (numMaxCap > 0 ? Math.min(numMaxCap, numCashbackVal) : numCashbackVal);
 
   return (
     <div className="space-y-6">
@@ -335,8 +344,12 @@ export default function WalletSettingsTab() {
                   step="0.5"
                   min="0"
                   max="100"
-                  value={form.cashbackValue}
-                  onChange={(e) => setForm({ ...form, cashbackValue: Number(e.target.value) })}
+                  placeholder="0"
+                  value={form.cashbackValue === 0 || form.cashbackValue === "0" ? "" : (form.cashbackValue ?? "")}
+                  onChange={(e) => {
+                    const cleaned = e.target.value.replace(/^0+(?=\d)/, "");
+                    setForm({ ...form, cashbackValue: cleaned });
+                  }}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-navy-950 focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
                 />
                 <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">
@@ -358,13 +371,19 @@ export default function WalletSettingsTab() {
                   type="number"
                   step="500"
                   min="0"
-                  value={form.minOrderForCashback}
-                  onChange={(e) => setForm({ ...form, minOrderForCashback: Number(e.target.value) })}
+                  placeholder="0"
+                  value={form.minOrderForCashback === 0 || form.minOrderForCashback === "0" ? "" : (form.minOrderForCashback ?? "")}
+                  onChange={(e) => {
+                    const cleaned = e.target.value.replace(/^0+(?=\d)/, "");
+                    setForm({ ...form, minOrderForCashback: cleaned });
+                  }}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-navy-950 focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
                 />
                 <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">₹</span>
               </div>
-              <p className="text-[10px] text-slate-400 mt-1">Orders below this amount will receive ₹0 cashback.</p>
+              <p className="text-[10px] text-slate-400 mt-1">
+                {Number(form.minOrderForCashback) > 0 ? `Orders below ₹${Number(form.minOrderForCashback).toLocaleString("en-IN")} will receive ₹0 cashback.` : "No minimum order restriction applied."}
+              </p>
             </div>
 
             {/* Maximum Cap per Order */}
@@ -377,14 +396,18 @@ export default function WalletSettingsTab() {
                   type="number"
                   step="50"
                   min="0"
-                  value={form.maxCashbackCap}
-                  onChange={(e) => setForm({ ...form, maxCashbackCap: Number(e.target.value) })}
+                  placeholder="0"
+                  value={form.maxCashbackCap === 0 || form.maxCashbackCap === "0" ? "" : (form.maxCashbackCap ?? "")}
+                  onChange={(e) => {
+                    const cleaned = e.target.value.replace(/^0+(?=\d)/, "");
+                    setForm({ ...form, maxCashbackCap: cleaned });
+                  }}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-navy-950 focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
                 />
                 <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">₹</span>
               </div>
               <p className="text-[10px] text-slate-400 mt-1">
-                Protects margin on bulk orders (e.g. ₹1,00,000 order gets capped at ₹{form.maxCashbackCap}).
+                Protects margin on bulk orders {Number(form.maxCashbackCap) > 0 ? `(e.g. ₹1,00,000 order gets capped at ₹${Number(form.maxCashbackCap).toLocaleString("en-IN")})` : "(No cap applied)"}.
               </p>
             </div>
 
@@ -393,7 +416,7 @@ export default function WalletSettingsTab() {
               <span className="font-bold text-navy-950 block">Live Calculator Example:</span>
               <p className="text-slate-600">
                 Agar customer <strong className="text-navy-900">₹{previewOrderAmount.toLocaleString("en-IN")}</strong> net materials ka order karta hai, toh uske wallet mein{" "}
-                <strong className="text-emerald-700 font-black">₹{calculatedCashback}</strong> credit hoga. (Delivery charges excluded).
+                <strong className="text-emerald-700 font-black">₹{calculatedCashback.toLocaleString("en-IN")}</strong> credit hoga. (Delivery charges excluded).
               </p>
             </div>
           </div>
@@ -433,8 +456,12 @@ export default function WalletSettingsTab() {
                     step="0.5"
                     min="0"
                     max="100"
-                    value={form.referrerReward}
-                    onChange={(e) => setForm({ ...form, referrerReward: Number(e.target.value) })}
+                    placeholder="0"
+                    value={form.referrerReward === 0 || form.referrerReward === "0" ? "" : (form.referrerReward ?? "")}
+                    onChange={(e) => {
+                      const cleaned = e.target.value.replace(/^0+(?=\d)/, "");
+                      setForm({ ...form, referrerReward: cleaned });
+                    }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-navy-950 focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
                   />
                   <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">
@@ -451,7 +478,7 @@ export default function WalletSettingsTab() {
                 <div className="flex items-center justify-between">
                   <span className="font-extrabold text-navy-950">Live Referral Calculator:</span>
                   <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/80">
-                    {form.referrerReward}% Lifetime on Every Qualifying Order
+                    {Number(form.referrerReward || 0)}% Lifetime on Every Qualifying Order
                   </span>
                 </div>
 
@@ -462,7 +489,7 @@ export default function WalletSettingsTab() {
                   </div>
                   <div className="flex justify-between text-slate-500 text-[10.5px]">
                     <span>Commission Rate:</span>
-                    <strong className="text-navy-900 font-bold">{form.referrerReward}%</strong>
+                    <strong className="text-navy-900 font-bold">{Number(form.referrerReward || 0)}%</strong>
                   </div>
                   <div className="flex justify-between text-navy-950 font-black text-xs pt-1 border-t border-slate-100">
                     <span>Referrer ko Milega:</span>
@@ -505,8 +532,12 @@ export default function WalletSettingsTab() {
                     step="1"
                     min="1"
                     max="100"
-                    value={form.maxWalletUsagePercent ?? ""}
-                    onChange={(e) => setForm({ ...form, maxWalletUsagePercent: e.target.value })}
+                    placeholder="10"
+                    value={form.maxWalletUsagePercent === 0 || form.maxWalletUsagePercent === "0" ? "" : (form.maxWalletUsagePercent ?? "")}
+                    onChange={(e) => {
+                      const cleaned = e.target.value.replace(/^0+(?=\d)/, "");
+                      setForm({ ...form, maxWalletUsagePercent: cleaned });
+                    }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-navy-950 focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
                   />
                   <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
@@ -523,8 +554,12 @@ export default function WalletSettingsTab() {
                     type="number"
                     step="50"
                     min="0"
-                    value={form.maxWalletUsageFlat ?? ""}
-                    onChange={(e) => setForm({ ...form, maxWalletUsageFlat: e.target.value })}
+                    placeholder="500"
+                    value={form.maxWalletUsageFlat === 0 || form.maxWalletUsageFlat === "0" ? "" : (form.maxWalletUsageFlat ?? "")}
+                    onChange={(e) => {
+                      const cleaned = e.target.value.replace(/^0+(?=\d)/, "");
+                      setForm({ ...form, maxWalletUsageFlat: cleaned });
+                    }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-navy-950 focus:bg-white focus:ring-2 focus:ring-brand-500 outline-none"
                   />
                   <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">₹</span>

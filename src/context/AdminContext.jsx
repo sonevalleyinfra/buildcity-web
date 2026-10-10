@@ -2190,11 +2190,12 @@ export function AdminProvider({ children }) {
   };
 
   // orders paginated hai isliye total platform stats server summary se lete hai
-  const platformSummary = ordersSummary?.revenueBasis === "all_orders_total" ? ordersSummary : null;
+  const platformSummary = (ordersSummary?.revenueBasis === "delivered_orders_total" || ordersSummary?.revenueBasis === "all_orders_total") ? ordersSummary : null;
+  const deliveredOrdersList = orders.filter((o) => (o.status || "").toUpperCase() === "DELIVERED");
   const stats = {
     totalRevenue: platformSummary
       ? platformSummary.totalRevenue
-      : orders.reduce((sum, o) => sum + (Number(o.totalAmount || o.total || o.amount) || 0), 0),
+      : deliveredOrdersList.reduce((sum, o) => sum + (Number(o.totalAmount || o.total || o.amount) || 0), 0),
     approvedVendors: vendors.filter((v) => v.status === "APPROVED").length,
     pendingVendors: vendors.filter((v) => v.status === "PENDING").length,
     activeVendors: vendors.filter((v) => v.status === "APPROVED").length,

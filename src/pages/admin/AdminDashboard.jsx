@@ -164,11 +164,12 @@ export default function AdminDashboard() {
   );
 
   // Orders are paginated: platform-wide totals come from the server summary (exact across all pages)
-  const platformSummary = [contextOrdersSummary, syncOrdersSummary].find((s) => s?.revenueBasis === "all_orders_total");
-  const totalOrdersCount = platformSummary ? platformSummary.totalOrders : displayOrders.length;
+  const deliveredOrdersList = displayOrders.filter((o) => (o.status || "").toUpperCase() === "DELIVERED");
+  const platformSummary = [contextOrdersSummary, syncOrdersSummary].find((s) => s?.revenueBasis === "delivered_orders_total" || s?.revenueBasis === "all_orders_total");
+  const deliveredOrdersCount = platformSummary?.deliveredOrders ?? (platformSummary?.byStatus?.DELIVERED ?? deliveredOrdersList.length);
   const liveTotalRevenue = platformSummary
     ? platformSummary.totalRevenue
-    : displayOrders.reduce((sum, o) => sum + (Number(o.totalAmount || o.total || o.amount) || 0), 0);
+    : deliveredOrdersList.reduce((sum, o) => sum + (Number(o.totalAmount || o.total || o.amount) || 0), 0);
   const totalCustomersCount = usersPage?.customers ?? users.filter((u) => !u.role || u.role === "CUSTOMER").length;
 
   // Tab State: Overview, District Reps, Vendors, Products, Listings, Orders, Categories, Regions
@@ -936,7 +937,7 @@ export default function AdminDashboard() {
                 <p className="text-xs font-semibold text-slate-500 tracking-tight">Total Revenue</p>
                 <p className="text-2xl font-black text-navy-900 tracking-tight mt-1">₹{Number(liveTotalRevenue || 0).toLocaleString("en-IN")}</p>
                 <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold inline-block mt-1">
-                  From {totalOrdersCount} platform orders
+                  From {deliveredOrdersCount} delivered orders
                 </span>
               </div>
               <div className="bg-white border border-slate-200/90 rounded-2xl p-4.5 shadow-2xs hover:shadow-md hover:border-brand-300 transition-all duration-200 relative overflow-hidden group">
@@ -2499,7 +2500,7 @@ export default function AdminDashboard() {
                       required
                       placeholder="200"
                       value={couponForm.discountAmount}
-                      onChange={(e) => setCouponForm({ ...couponForm, discountAmount: e.target.value })}
+                      onChange={(e) => setCouponForm({ ...couponForm, discountAmount: e.target.value.replace(/^0+(?=\d)/, "") })}
                       className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
                     />
                   </div>
@@ -2510,7 +2511,7 @@ export default function AdminDashboard() {
                       required
                       placeholder="1500"
                       value={couponForm.minOrder}
-                      onChange={(e) => setCouponForm({ ...couponForm, minOrder: e.target.value })}
+                      onChange={(e) => setCouponForm({ ...couponForm, minOrder: e.target.value.replace(/^0+(?=\d)/, "") })}
                       className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
                     />
                   </div>
@@ -3182,7 +3183,7 @@ export default function AdminDashboard() {
                   type="number"
                   required
                   value={editingCoupon.discountAmount}
-                  onChange={(e) => setEditingCoupon({ ...editingCoupon, discountAmount: e.target.value })}
+                  onChange={(e) => setEditingCoupon({ ...editingCoupon, discountAmount: e.target.value.replace(/^0+(?=\d)/, "") })}
                   className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
                 />
               </div>
@@ -3192,7 +3193,7 @@ export default function AdminDashboard() {
                   type="number"
                   required
                   value={editingCoupon.minOrder}
-                  onChange={(e) => setEditingCoupon({ ...editingCoupon, minOrder: e.target.value })}
+                  onChange={(e) => setEditingCoupon({ ...editingCoupon, minOrder: e.target.value.replace(/^0+(?=\d)/, "") })}
                   className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
                 />
               </div>

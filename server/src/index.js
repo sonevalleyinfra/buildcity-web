@@ -165,18 +165,20 @@ async function computeOrdersSummary(where, { vendorId } = {}) {
     vendorId
       // Vendor revenue = their item subtotals on delivered orders (matches the vendor dashboard)
       ? prisma.orderItem.aggregate({ where: { vendorId, order: { status: "DELIVERED" } }, _sum: { totalPrice: true } })
-      : prisma.order.aggregate({ where, _sum: { totalAmount: true } }),
+      : prisma.order.aggregate({ where: { ...where, status: "DELIVERED" }, _sum: { totalAmount: true } }),
   ]);
   const byStatus = Object.fromEntries(byStatusRows.map((r) => [r.status, r._count._all]));
   const openOrders = Object.entries(byStatus)
     .filter(([status]) => !CLOSED_ORDER_STATUSES.includes(status))
     .reduce((sum, [, n]) => sum + n, 0);
+  const deliveredOrders = byStatus.DELIVERED || 0;
   return {
     totalOrders,
+    deliveredOrders,
     openOrders,
     byStatus,
     totalRevenue: Number(vendorId ? revenue._sum.totalPrice || 0 : revenue._sum.totalAmount || 0),
-    revenueBasis: vendorId ? "delivered_vendor_items" : "all_orders_total",
+    revenueBasis: vendorId ? "delivered_vendor_items" : "delivered_orders_total",
   };
 }
 

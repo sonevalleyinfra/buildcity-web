@@ -23,7 +23,12 @@ export function OrderProvider({ children }) {
   const [ordersSummary, setOrdersSummary] = useState(() => {
     try {
       const saved = localStorage.getItem(`${getRoleStorageKey()}_summary`);
-      return saved ? JSON.parse(saved) : null;
+      const parsed = saved ? JSON.parse(saved) : null;
+      if (parsed?.revenueBasis === "all_orders_total") {
+        try { localStorage.removeItem(`${getRoleStorageKey()}_summary`); } catch {}
+        return null;
+      }
+      return parsed;
     } catch {
       return null;
     }
@@ -155,6 +160,10 @@ export function OrderProvider({ children }) {
           .then((r) => (r.ok ? r.json() : null))
           .then((summary) => {
             if (summary) {
+              if (summary.revenueBasis === "all_orders_total") {
+                try { localStorage.removeItem(`${currentStorageKey}_summary`); } catch {}
+                return;
+              }
               setOrdersSummary(summary);
               try { localStorage.setItem(`${currentStorageKey}_summary`, JSON.stringify(summary)); } catch {}
             }

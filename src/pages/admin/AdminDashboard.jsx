@@ -165,11 +165,13 @@ export default function AdminDashboard() {
 
   // Orders are paginated: platform-wide totals come from the server summary (exact across all pages)
   const deliveredOrdersList = displayOrders.filter((o) => (o.status || "").toUpperCase() === "DELIVERED");
-  const platformSummary = [contextOrdersSummary, syncOrdersSummary].find((s) => s?.revenueBasis === "delivered_orders_total" || s?.revenueBasis === "all_orders_total");
-  const totalOrdersCount = platformSummary ? platformSummary.totalOrders : displayOrders.length;
+  // Strictly require delivered_orders_total - never accept legacy all_orders_total
+  const platformSummary = [syncOrdersSummary, contextOrdersSummary].find((s) => s?.revenueBasis === "delivered_orders_total");
+  const totalOrdersCount = syncOrdersSummary?.totalOrders ?? (contextOrdersSummary?.totalOrders ?? displayOrders.length);
   const deliveredOrdersCount = platformSummary?.deliveredOrders ?? (platformSummary?.byStatus?.DELIVERED ?? deliveredOrdersList.length);
-  const liveTotalRevenue = platformSummary
-    ? platformSummary.totalRevenue
+  // Revenue STRICTLY counts ONLY orders that are DELIVERED!
+  const liveTotalRevenue = platformSummary?.revenueBasis === "delivered_orders_total"
+    ? Number(platformSummary.totalRevenue || 0)
     : deliveredOrdersList.reduce((sum, o) => sum + (Number(o.totalAmount || o.total || o.amount) || 0), 0);
   const totalCustomersCount = usersPage?.customers ?? users.filter((u) => !u.role || u.role === "CUSTOMER").length;
 

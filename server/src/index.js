@@ -3346,6 +3346,9 @@ app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", 
       );
     }
 
+    // Invalidate sync cache so live dashboard stats reflect the new status immediately
+    invalidateCache();
+
     res.json(updatedOrder);
   } catch (err) {
     sendServerError(res, err, "Order status update");
@@ -3919,6 +3922,9 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
     }));
 
     console.log(`✅ ${fullOrders.length} order(s) created (${fullOrders.map((o) => o.id).join(", ")}) for customer ${targetCustomerId}`);
+
+    // Invalidate sync cache so newly created orders sync properly
+    invalidateCache();
 
     // Respond IMMEDIATELY to customer
     res.status(201).json({ success: true, order: fullOrders[0], orders: fullOrders });

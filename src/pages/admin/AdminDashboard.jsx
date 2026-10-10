@@ -166,6 +166,7 @@ export default function AdminDashboard() {
   // Orders are paginated: platform-wide totals come from the server summary (exact across all pages)
   const deliveredOrdersList = displayOrders.filter((o) => (o.status || "").toUpperCase() === "DELIVERED");
   const platformSummary = [contextOrdersSummary, syncOrdersSummary].find((s) => s?.revenueBasis === "delivered_orders_total" || s?.revenueBasis === "all_orders_total");
+  const totalOrdersCount = platformSummary ? platformSummary.totalOrders : displayOrders.length;
   const deliveredOrdersCount = platformSummary?.deliveredOrders ?? (platformSummary?.byStatus?.DELIVERED ?? deliveredOrdersList.length);
   const liveTotalRevenue = platformSummary
     ? platformSummary.totalRevenue

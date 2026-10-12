@@ -505,7 +505,20 @@ export default function Checkout() {
       console.error("Order placement error:", err);
       // Cart clear NAHI hoga taaki customer ke items cart me safe rahein
       const rawMsg = err?.message || "";
-      const isNetworkIssue = rawMsg.toLowerCase().includes("failed to fetch") || rawMsg.toLowerCase().includes("network");
+      const lowerMsg = rawMsg.toLowerCase();
+
+      if (lowerMsg.includes("authentication required") || lowerMsg.includes("session expired")) {
+        showAlert({
+          title: "Login Required",
+          message: "Please verify your mobile number once to complete your order. Your cart items are safely saved.",
+          type: "warning",
+          buttonText: "Login Now",
+        });
+        navigate("/login?redirect=/checkout", { state: location.state });
+        return;
+      }
+
+      const isNetworkIssue = lowerMsg.includes("failed to fetch") || lowerMsg.includes("network");
       const displayMsg = isNetworkIssue
         ? "Network connection issue. Order not placed , please try again."
         : rawMsg && rawMsg !== "Order placement failed on server"

@@ -45,12 +45,25 @@ export default function DrOrdersTab({
   loadMoreDistrictOrders,
 }) {
   const getFilterCount = (st) => {
-    if (districtSummary) {
-      return st === "ALL" ? districtSummary.totalOrders : districtSummary.byStatus?.[st] || 0;
+    if (st === "ALL") {
+      if (districtSummary?.byStatus) {
+        return Object.entries(districtSummary.byStatus).reduce((sum, [statusKey, count]) => {
+          const upper = String(statusKey).toUpperCase();
+          if (upper !== "DELIVERED" && upper !== "COMPLETED" && upper !== "CANCELLED") {
+            return sum + Number(count || 0);
+          }
+          return sum;
+        }, 0);
+      }
+      return districtOrders.filter((o) => {
+        const ordSt = (o.status || "PENDING").toUpperCase();
+        return ordSt !== "DELIVERED" && ordSt !== "COMPLETED" && ordSt !== "CANCELLED";
+      }).length;
     }
-    return st === "ALL"
-      ? districtOrders.length
-      : districtOrders.filter((o) => (o.status || "PENDING").toUpperCase() === st).length;
+    if (districtSummary) {
+      return districtSummary.byStatus?.[st] || 0;
+    }
+    return districtOrders.filter((o) => (o.status || "PENDING").toUpperCase() === st).length;
   };
 
   const handleOrderStatusSelect = (ord, nextSt) => {

@@ -729,7 +729,7 @@ app.post("/api/v1/auth/vendor/login", partnerLoginLimiter, async (req, res) => {
       }
 
       const drUserObj = {
-        id: drInDb?.id || userInDb?.id || `u-dr-${cleanPhone}`,
+        id: userInDb?.id || drInDb?.userId || drInDb?.id || `u-dr-${cleanPhone}`,
         name: drInDb?.name || userInDb?.name || "District Representative",
         phone: cleanPhone,
         role: "DR",
@@ -1790,9 +1790,91 @@ app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
 app.get("/api/v1/users/me", requireAuth, async (req, res) => {
   try {
     let user = await prisma.user.findUnique({ where: { id: req.auth.userId } }).catch(() => null);
-    if (!user) return res.status(404).json({ error: "User not found", invalidSession: true });
+    if (!user && req.auth.phone) {
+      user = await prisma.user.findUnique({ where: { phone: req.auth.phone } }).catch(() => null);
+    }
 
-    if (!user.referralCode) {
+    // Fallback for DR or Vendor tokens whose `sub` was the dR.id or vendor.id
+    if (!user && req.auth.role === "DR") {
+      const dr = await prisma.dR.findFirst({
+        where: {
+          OR: [
+            ...(req.auth.userId ? [{ id: req.auth.userId }, { userId: req.auth.userId }] : []),
+            ...(req.auth.phone ? [{ phone: req.auth.phone }] : []),
+          ],
+        },
+        include: { region: true, user: true },
+      }).catch(() => null);
+
+      if (dr) {
+        const { password, ...safeDr } = dr;
+        const drUser = dr.user || {
+          id: dr.userId || dr.id,
+          name: dr.name,
+          phone: dr.phone,
+          role: "DR",
+          regionId: dr.regionId || dr.region?.id,
+          regionName: dr.region?.name,
+        };
+        const { password: _up, ...safeUser } = drUser;
+        const refreshedToken = issueToken({ ...safeUser, role: "DR" });
+        return res.json({
+          ...safeUser,
+          role: "DR",
+          regionId: dr.regionId || dr.region?.id,
+          regionName: dr.region?.name,
+          drInfo: safeDr,
+          token: refreshedToken,
+        });
+      }
+    }
+
+    if (!user && req.auth.role === "VENDOR") {
+      const vendor = await prisma.vendor.findFirst({
+        where: {
+          OR: [
+            ...(req.auth.userId ? [{ id: req.auth.userId }, { userId: req.auth.userId }] : []),
+            ...(req.auth.phone ? [{ phone: req.auth.phone }] : []),
+          ],
+        },
+        include: { region: true, user: true },
+      }).catch(() => null);
+
+      if (vendor) {
+        const { password, ...safeVendor } = vendor;
+        const vUser = vendor.user || {
+          id: vendor.userId || vendor.id,
+          name: vendor.ownerName || vendor.shopName,
+          phone: vendor.phone,
+          role: "VENDOR",
+          regionId: vendor.regionId || vendor.region?.id,
+          regionName: vendor.region?.name,
+        };
+        const { password: _vp, ...safeUser } = vUser;
+        const refreshedToken = issueToken({ ...safeUser, role: "VENDOR" });
+        return res.json({
+          ...safeUser,
+          role: "VENDOR",
+          vendorInfo: safeVendor,
+          token: refreshedToken,
+        });
+      }
+    }
+
+    if (!user && req.auth.role === "ADMIN") {
+      const adminPayload = {
+        id: req.auth.userId || "u-admin-9999999999",
+        name: "Super Admin",
+        phone: req.auth.phone || "9999999999",
+        role: "ADMIN",
+      };
+      const refreshedToken = issueToken(adminPayload);
+      return res.json({ ...adminPayload, token: refreshedToken });
+    }
+
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    if (user.role === "CUSTOMER" && !user.referralCode) {
       const code = await generateUniqueReferralCode();
       user = await prisma.user.update({
         where: { id: user.id },
@@ -1801,7 +1883,7 @@ app.get("/api/v1/users/me", requireAuth, async (req, res) => {
     }
 
     const { password, ...safeUser } = user;
-    const refreshedToken = issueToken(user);
+    const refreshedToken = issueToken({ ...safeUser, role: req.auth.role || safeUser.role });
     res.json({ ...safeUser, token: refreshedToken });
   } catch (err) {
     sendServerError(res, err);

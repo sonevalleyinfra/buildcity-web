@@ -869,7 +869,15 @@ export default function DrDashboard() {
   const districtOrdersCount = districtSummary ? districtSummary.totalOrders : districtOrders.length;
 
   const filteredDistrictOrders = useMemo(() => {
-    return districtOrders.filter((ord) => {
+    const statusPriority = (st) => {
+      const upper = String(st || "PENDING").toUpperCase();
+      if (upper === "PENDING") return 1;
+      if (upper === "PROCESSING" || upper === "CONFIRMED") return 2;
+      if (upper === "OUT_FOR_DELIVERY") return 3;
+      return 4;
+    };
+
+    const filtered = districtOrders.filter((ord) => {
       if (!ord) return false;
       const matchesSearch =
         !searchTerm ||
@@ -881,10 +889,25 @@ export default function DrDashboard() {
           ord.items.some((i) => (i?.productName || i?.name || "").toLowerCase().includes(searchTerm.toLowerCase())));
 
       const ordStatus = (ord.status || "PENDING").toUpperCase();
-      const matchesStatus = orderStatusFilter === "ALL" || ordStatus === orderStatusFilter;
+      const isActiveOrder =
+        ordStatus !== "DELIVERED" && ordStatus !== "COMPLETED" && ordStatus !== "CANCELLED";
+      const matchesStatus =
+        orderStatusFilter === "ALL" ? isActiveOrder : ordStatus === orderStatusFilter;
 
       return matchesSearch && matchesStatus;
     });
+
+    if (orderStatusFilter === "ALL") {
+      return [...filtered].sort((a, b) => {
+        const prioDiff = statusPriority(a?.status) - statusPriority(b?.status);
+        if (prioDiff !== 0) return prioDiff;
+        const timeA = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeB - timeA;
+      });
+    }
+
+    return filtered;
   }, [districtOrders, searchTerm, orderStatusFilter]);
 
   const filteredVendors = useMemo(() => {

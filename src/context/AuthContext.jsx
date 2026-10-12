@@ -51,11 +51,8 @@ export function AuthProvider({ children }) {
               handleAuthExpired();
               return null;
             }
+            if (!r.ok) return null;
             const data = await r.json().catch(() => null);
-            if (r.status === 404 && data?.invalidSession) {
-              handleAuthExpired();
-              return null;
-            }
             return data;
           })
           .then((dbUser) => {
@@ -69,6 +66,11 @@ export function AuthProvider({ children }) {
                 id: dbUser.id || parsed.id,
                 name: dbUser.name || parsed.name,
                 email: dbUser.email || parsed.email,
+                role: (parsed.role || dbUser.role || "customer").toLowerCase(),
+                drInfo: dbUser.drInfo || parsed.drInfo,
+                vendorInfo: dbUser.vendorInfo || parsed.vendorInfo,
+                regionId: dbUser.regionId || parsed.regionId,
+                regionName: dbUser.regionName || parsed.regionName,
                 preferredRegionId: dbUser.preferredRegionId || parsed.preferredRegionId,
                 preferredRegionName: dbUser.preferredRegionName || parsed.preferredRegionName,
                 referralCode: dbUser.referralCode || parsed.referralCode || null,

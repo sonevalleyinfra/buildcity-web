@@ -1511,7 +1511,7 @@ async function handleOrderDeliveredRewards(order) {
         } else {
           earnedCashback = Number(settings.cashbackValue || 0);
         }
-        earnedCashback = Math.round(earnedCashback * 100) / 100;
+        earnedCashback = Math.round(earnedCashback);
 
         if (earnedCashback > 0) {
           await prisma.$transaction([
@@ -3536,14 +3536,14 @@ app.get("/api/v1/returns/search", requireAuth, requireRole("DR", "ADMIN"), async
         }
 
         const materialsSubtotal = Math.round(
-          (ord.items || []).reduce((sum, it) => sum + Number(it.quantity || 0) * Number(it.priceAtPurchase || 0), 0) * 100
-        ) / 100;
-        const deliveryFee = Math.max(0, Number(ord.deliveryFee || 0));
-        const walletDiscount = Math.max(0, Number(ord.walletDiscount || 0));
-        const discountAmount = Math.max(0, Number(ord.discountAmount || 0));
-        const totalAmount = Math.max(0, Number(ord.totalAmount || 0));
-        // Delivery fee is strictly non-refundable; max cash paid for materials is (totalAmount - deliveryFee)
-        const netMaterialsCashPaid = Math.max(0, Math.round((totalAmount - deliveryFee) * 100) / 100);
+          (ord.items || []).reduce((sum, it) => sum + Number(it.quantity || 0) * Number(it.priceAtPurchase || 0), 0)
+        );
+        const deliveryFee = Math.round(Math.max(0, Number(ord.deliveryFee || 0)));
+        const walletDiscount = Math.round(Math.max(0, Number(ord.walletDiscount || 0)));
+        const discountAmount = Math.round(Math.max(0, Number(ord.discountAmount || 0)));
+        const netMaterialsCashPaid = Math.max(0, materialsSubtotal - Math.min(materialsSubtotal, walletDiscount + discountAmount));
+        const totalAmount = netMaterialsCashPaid + deliveryFee;
+        const roundedCashback = Math.round(cashbackEarned);
 
         return {
           ...ord,
@@ -3551,9 +3551,10 @@ app.get("/api/v1/returns/search", requireAuth, requireRole("DR", "ADMIN"), async
           deliveryFee,
           walletDiscount,
           discountAmount,
+          totalAmount,
           netMaterialsCashPaid,
-          cashbackEarned,
-          remainingCashbackToDeduct: Math.max(0, Math.round((cashbackEarned - totalAlreadyDeductedCashback) * 100) / 100),
+          cashbackEarned: roundedCashback,
+          remainingCashbackToDeduct: Math.max(0, Math.round(roundedCashback - totalAlreadyDeductedCashback)),
           returnedQtyMap,
         };
       })
@@ -3727,18 +3728,18 @@ app.post("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req,
     // 1. Delivery charge (order.deliveryFee) is strictly NON-REFUNDABLE.
     // 2. Wallet Paid at checkout (order.walletDiscount) and Coupon Discount (order.discountAmount) were not paid in cash.
     const orderMaterialsSubtotal = Math.round(
-      (order.items || []).reduce((sum, it) => sum + Number(it.quantity || 0) * Number(it.priceAtPurchase || 0), 0) * 100
-    ) / 100;
-    const orderDeliveryFee = Math.max(0, Number(order.deliveryFee || 0));
-    const orderTotalAmount = Math.max(0, Number(order.totalAmount || 0));
-    const netMaterialsCashPaid = Math.max(0, Math.round((orderTotalAmount - orderDeliveryFee) * 100) / 100);
-    const totalCheckoutDeductions = Math.max(0, Math.round((orderMaterialsSubtotal - netMaterialsCashPaid) * 100) / 100);
+      (order.items || []).reduce((sum, it) => sum + Number(it.quantity || 0) * Number(it.priceAtPurchase || 0), 0)
+    );
+    const orderDeliveryFee = Math.round(Math.max(0, Number(order.deliveryFee || 0)));
+    const orderWalletDiscount = Math.round(Math.max(0, Number(order.walletDiscount || 0)));
+    const orderCouponDiscount = Math.round(Math.max(0, Number(order.discountAmount || 0)));
+    const totalCheckoutDeductions = Math.min(orderMaterialsSubtotal, orderWalletDiscount + orderCouponDiscount);
 
-    const checkoutDiscountOnReturn = orderMaterialsSubtotal > 0
-      ? Math.round((totalReturnItemsValue / orderMaterialsSubtotal) * totalCheckoutDeductions * 100) / 100
-      : 0;
+    const returnRatio = orderMaterialsSubtotal > 0 ? Math.min(1, totalReturnItemsValue / orderMaterialsSubtotal) : 0;
+    const checkoutDiscountOnReturn = Math.round(returnRatio * totalCheckoutDeductions);
+    const walletUsedOnReturn = Math.round(returnRatio * orderWalletDiscount);
 
-    const refundableMaterialCash = Math.max(0, Math.round((totalReturnItemsValue - checkoutDiscountOnReturn) * 100) / 100);
+    const refundableMaterialCash = Math.max(0, Math.round(totalReturnItemsValue - checkoutDiscountOnReturn));
 
     // Check cashback earned on this order
     let orderCashback = Number(order.cashbackEarned || 0);
@@ -3748,13 +3749,23 @@ app.post("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req,
       }).catch(() => null);
       if (cbTx) orderCashback = Math.abs(Number(cbTx.amount || 0));
     }
+    orderCashback = Math.round(orderCashback);
 
-    const remainingCashback = Math.max(0, Math.round((orderCashback - alreadyDeductedCashback) * 100) / 100);
-    const cashbackToDeduct = customCashbackDeduct !== undefined
-      ? Math.min(refundableMaterialCash, Math.max(0, Number(customCashbackDeduct) || 0))
-      : Math.min(refundableMaterialCash, remainingCashback);
+    const remainingCashback = Math.max(0, Math.round(orderCashback - alreadyDeductedCashback));
+    const proportionalCashback = Math.min(remainingCashback, Math.round(returnRatio * orderCashback));
+    const cashbackOnReturn = customCashbackDeduct !== undefined
+      ? Math.max(0, Math.round(Number(customCashbackDeduct) || 0))
+      : proportionalCashback;
 
-    const netRefundCash = Math.max(0, Math.round((refundableMaterialCash - cashbackToDeduct) * 100) / 100);
+    // Wallet & Cash Settlement Logic:
+    // 1. Wallet balance used at order (`walletUsedOnReturn`, e.g. ₹24) is added back to Customer's Wallet (+₹24).
+    // 2. Cashback earned on order (`cashbackOnReturn`, e.g. ₹23) is already in Customer's Wallet.
+    // 3. Total in Customer's Wallet = ₹23 (Already) + ₹24 (Added Now) = ₹47.
+    // 4. Net Cash Refund = Returned Material Value (₹488) - Wallet Added Back (₹24) - Cashback in Wallet (₹23) = ₹441.
+    const walletToCredit = walletUsedOnReturn;
+    const cashbackDeductedFromCash = Math.min(refundableMaterialCash, cashbackOnReturn);
+    const totalWalletSettled = cashbackDeductedFromCash + walletToCredit;
+    const netRefundCash = Math.max(0, Math.round(refundableMaterialCash - cashbackDeductedFromCash));
 
     const custPhone = order.customer?.phone || order.address?.phone || "";
     const custName = order.customer?.name || order.address?.fullName || "Customer";
@@ -3770,7 +3781,7 @@ app.post("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req,
           customerPhone: custPhone,
           customerName: custName,
           returnAmount: refundableMaterialCash,
-          cashbackDeducted: cashbackToDeduct,
+          cashbackDeducted: cashbackDeductedFromCash,
           netRefundCash,
           returnReason: String(returnReason || "Excess / Returned Material").trim(),
           returnItems: validatedReturnItems,
@@ -3780,32 +3791,20 @@ app.post("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req,
       ...stockRestoreOps,
     ];
 
-    // If cashback was deducted and customer exists, claw back from customer's wallet balance & record ledger entry
-    if (cashbackToDeduct > 0 && order.customerId) {
-      const custUser = await prisma.user.findUnique({
-        where: { id: order.customerId },
-        select: { walletBalance: true },
-      }).catch(() => null);
-
-      const currentBal = Number(custUser?.walletBalance || 0);
-      const walletDecrement = Math.min(currentBal, cashbackToDeduct);
-
-      if (walletDecrement > 0) {
-        txOps.push(
-          prisma.user.update({
-            where: { id: order.customerId },
-            data: { walletBalance: { decrement: walletDecrement } },
-          })
-        );
-      }
+    // Credit the Wallet balance used at order (`walletToCredit`, e.g. +₹24) back to Customer's Wallet
+    if (walletToCredit > 0 && order.customerId) {
       txOps.push(
+        prisma.user.update({
+          where: { id: order.customerId },
+          data: { walletBalance: { increment: walletToCredit } },
+        }),
         prisma.walletTransaction.create({
           data: {
             userId: order.customerId,
-            amount: -cashbackToDeduct,
+            amount: walletToCredit,
             type: "ADMIN_ADJUST",
             orderId: order.id,
-            description: `Cashback adjusted on Return for Order #${order.orderNumber || order.id.slice(0, 8)} (Net Cash Refund: ₹${netRefundCash})`,
+            description: `Return Wallet Refund for Order #${order.orderNumber || order.id.slice(0, 8)} (+₹${walletToCredit} Wallet Used Added Back; ₹${cashbackDeductedFromCash} Cashback Already in Wallet = ₹${totalWalletSettled} Total Wallet)`,
           },
         })
       );
@@ -3820,8 +3819,12 @@ app.post("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req,
       summary: {
         grossReturnItemsValue: totalReturnItemsValue,
         checkoutDiscountDeducted: checkoutDiscountOnReturn,
+        walletUsedOnReturn,
+        cashbackOnReturn: cashbackDeductedFromCash,
+        walletToCredit,
+        totalWalletSettled,
         returnAmount: refundableMaterialCash,
-        cashbackDeducted: cashbackToDeduct,
+        cashbackDeducted: cashbackDeductedFromCash,
         netRefundCash,
       },
     });
@@ -4275,11 +4278,10 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
     if (requestedUseWallet && settings.walletRedeemEnabled) {
       const userBalance = Number(targetUser.walletBalance || 0);
       if (userBalance > 0) {
-        const maxPercentLimit = (cartTotalBeforeWallet * Number(settings.maxWalletUsagePercent || 10)) / 100;
-        const maxAllowed = Math.min(Number(settings.maxWalletUsageFlat || 500), maxPercentLimit, userBalance);
+        const maxPercentLimit = Math.floor((cartTotalBeforeWallet * Number(settings.maxWalletUsagePercent || 10)) / 100);
+        const maxAllowed = Math.min(Number(settings.maxWalletUsageFlat || 500), maxPercentLimit, Math.floor(userBalance));
         const requested = req.body.walletDiscount !== undefined ? Number(req.body.walletDiscount) : (req.body.walletAmount !== undefined ? Number(req.body.walletAmount) : userBalance);
-        verifiedWalletDiscount = Math.max(0, Math.min(requested, maxAllowed));
-        verifiedWalletDiscount = Math.round(verifiedWalletDiscount * 100) / 100;
+        verifiedWalletDiscount = Math.max(0, Math.min(Math.round(requested), maxAllowed));
       }
     }
 
@@ -4297,7 +4299,7 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       const groupSubtotal = groupItems.reduce((sum, vi) => sum + vi.totalPrice, 0);
       const orderDiscount = idx === 0 ? Math.min(groupSubtotal, verifiedDiscount) : 0;
       const orderWalletPart = idx === 0 ? Math.min(Math.max(0, groupSubtotal - orderDiscount), verifiedWalletDiscount) : 0;
-      const orderTotal = Math.round(Math.max(0, groupSubtotal + calculatedDeliveryFee - orderDiscount - orderWalletPart) * 100) / 100;
+      const orderTotal = Math.round(Math.max(0, groupSubtotal + calculatedDeliveryFee - orderDiscount - orderWalletPart));
 
       return prisma.order.create({
         data: {

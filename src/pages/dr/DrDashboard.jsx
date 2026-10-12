@@ -464,10 +464,11 @@ export default function DrDashboard() {
       initialQtys[key] = 0;
     });
     setReturnQuantities(initialQtys);
-    const defaultCb =
+    const defaultCb = Math.round(
       ord?.remainingCashbackToDeduct !== undefined
         ? Number(ord.remainingCashbackToDeduct || 0)
-        : Number(ord?.cashbackEarned || 0);
+        : Number(ord?.cashbackEarned || 0)
+    );
     setCustomCashbackDeduct(defaultCb > 0 ? String(defaultCb) : "0");
   };
 
@@ -578,8 +579,15 @@ export default function DrDashboard() {
         return;
       }
 
+      const walletCredited = Number(data.summary?.walletToCredit || 0);
+      const walletSettled = Number(data.summary?.totalWalletSettled || 0);
+      const walletNote =
+        walletCredited > 0
+          ? ` Wallet Credited: +₹${walletCredited.toLocaleString("en-IN")} (Total Wallet Settled: ₹${walletSettled.toLocaleString("en-IN")}).`
+          : "";
+
       showAlert(
-        `Return recorded successfully. Net Cash to refund customer: ₹${Number(data.summary?.netRefundCash || 0).toLocaleString("en-IN")}. Vendor stock has been restored.`,
+        `Return recorded successfully. Net Cash to refund customer: ₹${Number(data.summary?.netRefundCash || 0).toLocaleString("en-IN")}.${walletNote} Vendor stock has been restored.`,
         "Return Completed",
         "success"
       );

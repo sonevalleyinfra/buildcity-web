@@ -39,6 +39,8 @@ const STATUS_STYLE = {
   SUSPENDED: "bg-rose-50 text-rose-700 border border-rose-200/80 font-bold",
   ACTIVE: "bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-bold",
   INACTIVE: "bg-rose-50 text-rose-700 border border-rose-200/80 font-bold",
+  DELIVERED: "bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-bold",
+  COMPLETED: "bg-teal-50 text-teal-800 border border-teal-300 font-black",
   Delivered: "bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-bold",
   Shipped: "bg-blue-50 text-blue-700 border border-blue-200/80 font-bold",
   Pending: "bg-amber-50 text-amber-700 border border-amber-200/80 font-bold",
@@ -164,12 +166,15 @@ export default function AdminDashboard() {
   );
 
   // Orders are paginated: platform-wide totals come from the server summary (exact across all pages)
-  const deliveredOrdersList = displayOrders.filter((o) => (o.status || "").toUpperCase() === "DELIVERED");
+  const deliveredOrdersList = displayOrders.filter((o) => {
+    const st = (o.status || "").toUpperCase();
+    return st === "DELIVERED" || st === "COMPLETED";
+  });
   // Strictly require delivered_orders_total - never accept legacy all_orders_total
   const platformSummary = [syncOrdersSummary, contextOrdersSummary].find((s) => s?.revenueBasis === "delivered_orders_total");
   const totalOrdersCount = syncOrdersSummary?.totalOrders ?? (contextOrdersSummary?.totalOrders ?? displayOrders.length);
-  const deliveredOrdersCount = platformSummary?.deliveredOrders ?? (platformSummary?.byStatus?.DELIVERED ?? deliveredOrdersList.length);
-  // Revenue STRICTLY counts ONLY orders that are DELIVERED!
+  const deliveredOrdersCount = platformSummary?.deliveredOrders ?? ((platformSummary?.byStatus?.DELIVERED || 0) + (platformSummary?.byStatus?.COMPLETED || 0) || deliveredOrdersList.length);
+  // Revenue STRICTLY counts ONLY orders that are DELIVERED / COMPLETED!
   const liveTotalRevenue = platformSummary?.revenueBasis === "delivered_orders_total"
     ? Number(platformSummary.totalRevenue || 0)
     : deliveredOrdersList.reduce((sum, o) => sum + (Number(o.totalAmount || o.total || o.amount) || 0), 0);
@@ -2159,24 +2164,51 @@ export default function AdminDashboard() {
                             )}
                           </td>
                           <td className="py-3.5 px-4">
-                            <div className="flex items-center gap-2">
-                              <span className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold border ${statusStyle}`}>
-                                {o.status || "PENDING"}
-                              </span>
-                              {updateOrderStatus && (
-                                <select
-                                  value={o.status || "PENDING"}
-                                  onChange={(e) => updateOrderStatus(o.id, e.target.value)}
-                                  className="text-[11px] font-bold bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 outline-none text-navy-900 cursor-pointer"
-                                >
-                                  <option value="PENDING">PENDING</option>
-                                  <option value="PROCESSING">PROCESSING</option>
-                                  <option value="OUT_FOR_DELIVERY">OUT FOR DELIVERY</option>
-                                  <option value="DELIVERED">DELIVERED</option>
-                                  <option value="CANCELLED">CANCELLED</option>
-                                </select>
-                              )}
-                            </div>
+                            {(() => {
+                              const stUpper = (o.status || "PENDING").toUpperCase();
+                              const isLocked = stUpper === "COMPLETED";
+                              return (
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold border ${statusStyle}`}>
+                                    {isLocked ? "🔒 COMPLETED" : (o.status || "PENDING")}
+                                  </span>
+                                  {isLocked ? (
+                                    <span className="text-[10px] font-bold text-slate-400 bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg select-none">
+                                      Locked
+                                    </span>
+                                  ) : (
+                                    updateOrderStatus && (
+                                      <select
+                                        value={stUpper}
+                                        onChange={(e) => {
+                                          const nextSt = e.target.value;
+                                          if (nextSt === "COMPLETED") {
+                                            showConfirm({
+                                              title: "Mark Order as COMPLETED (Locked)?",
+                                              message: "Once marked COMPLETED, this order status will be locked permanently and cannot be changed.",
+                                              type: "warning",
+                                              confirmText: "Yes, Mark Completed",
+                                              cancelText: "Cancel",
+                                              onConfirm: () => updateOrderStatus(o.id, "COMPLETED"),
+                                            });
+                                          } else {
+                                            updateOrderStatus(o.id, nextSt);
+                                          }
+                                        }}
+                                        className="text-[11px] font-bold bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 outline-none text-navy-900 cursor-pointer"
+                                      >
+                                        <option value="PENDING">PENDING</option>
+                                        <option value="PROCESSING">PROCESSING</option>
+                                        <option value="OUT_FOR_DELIVERY">OUT FOR DELIVERY</option>
+                                        <option value="DELIVERED">DELIVERED</option>
+                                        <option value="COMPLETED">🔒 COMPLETED (Lock)</option>
+                                        <option value="CANCELLED">CANCELLED</option>
+                                      </select>
+                                    )
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </td>
                         </tr>
                       );

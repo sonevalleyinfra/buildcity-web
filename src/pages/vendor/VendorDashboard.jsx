@@ -160,7 +160,7 @@ export default function VendorDashboard() {
   // Jump from an overview row to that order's card
   const openOrder = (ord) => {
     const st = (ord.status || "PENDING").toUpperCase();
-    orderFilters.showSection(st === "DELIVERED" || st === "CANCELLED" ? "COMPLETED" : "ACTIVE");
+    orderFilters.showSection(st === "DELIVERED" || st === "COMPLETED" || st === "CANCELLED" ? "COMPLETED" : "ACTIVE");
     setActiveTab("orders");
     feed.triggerOrderHighlight(ord.id || ord.orderNumber);
   };

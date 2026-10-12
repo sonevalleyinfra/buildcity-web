@@ -352,11 +352,11 @@ export default function useVendorOrders({
   // Paginated totals come from the server summary; Math.max keeps just-updated orders visible
   const stats = useMemo(() => {
     const byStatus = (s) => vendorOrders.filter((o) => (o.status || "PENDING").toUpperCase() === s).length;
-    const loadedRevenue = vendorOrders.reduce(
-      (sum, o) => ((o.status || "").toUpperCase() === "DELIVERED" ? sum + (Number(o.totalAmount || o.total || 0) || 0) : sum),
-      0
-    );
-    const loadedCompleted = byStatus("DELIVERED") + byStatus("CANCELLED");
+    const loadedRevenue = vendorOrders.reduce((sum, o) => {
+      const st = (o.status || "").toUpperCase();
+      return st === "DELIVERED" || st === "COMPLETED" ? sum + (Number(o.totalAmount || o.total || 0) || 0) : sum;
+    }, 0);
+    const loadedCompleted = byStatus("DELIVERED") + byStatus("COMPLETED") + byStatus("CANCELLED");
     const summary = ordersSummary?.revenueBasis === "delivered_vendor_items" ? ordersSummary : null;
 
     return {
@@ -365,7 +365,7 @@ export default function useVendorOrders({
       totalRevenue: summary ? Math.max(summary.totalRevenue, loadedRevenue) : loadedRevenue,
       totalCount: summary ? Math.max(summary.totalOrders, vendorOrders.length) : vendorOrders.length,
       completedCount: summary
-        ? Math.max((summary.byStatus?.DELIVERED || 0) + (summary.byStatus?.CANCELLED || 0), loadedCompleted)
+        ? Math.max((summary.byStatus?.DELIVERED || 0) + (summary.byStatus?.COMPLETED || 0) + (summary.byStatus?.CANCELLED || 0), loadedCompleted)
         : loadedCompleted,
     };
   }, [vendorOrders, ordersSummary]);

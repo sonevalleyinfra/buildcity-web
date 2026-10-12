@@ -45,6 +45,16 @@ export const ORDER_STATUS = {
     tile: "bg-gradient-to-b from-emerald-50/60 to-white to-45% border-emerald-300/60",
     halo: "ring-emerald-500/20",
   },
+  COMPLETED: {
+    label: "Completed (Locked)",
+    tone: "bg-teal-50 text-teal-800 ring-teal-600/20",
+    dot: "bg-teal-600",
+    accent: "bg-teal-600",
+    text: "text-teal-800",
+    select: "bg-teal-50/70 text-teal-800 ring-teal-200",
+    tile: "bg-gradient-to-b from-teal-50/60 to-white to-45% border-teal-300/60",
+    halo: "ring-teal-500/20",
+  },
   CANCELLED: {
     label: "Cancelled",
     tone: "bg-rose-50 text-rose-600 ring-rose-600/15",

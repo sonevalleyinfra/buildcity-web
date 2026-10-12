@@ -35,6 +35,7 @@ enum OrderStatus {
   SHIPPED
   OUT_FOR_DELIVERY
   DELIVERED
+  COMPLETED
   CANCELLED
 }
 
@@ -266,11 +267,36 @@ model Order {
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
-  items OrderItem[]
+  items   OrderItem[]
+  returns OrderReturn[]
 
   @@index([customerId, createdAt])
   @@index([createdAt, id])
   @@map("orders")
+}
+
+// 11b. DR Order Return & Refund Record Entity (Internal DR/Admin Only)
+model OrderReturn {
+  id               String   @id @default(uuid())
+  orderId          String
+  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  drId             String?
+  drPhone          String?
+  districtName     String?
+  customerPhone    String
+  customerName     String?
+  returnAmount     Decimal
+  cashbackDeducted Decimal  @default(0.00)
+  netRefundCash    Decimal
+  returnReason     String   @default("Excess / Returned Material")
+  returnItems      Json     // [{ itemId, vendorProductId, productName, quantity, price, total, vendorId, vendorName }]
+  status           String   @default("COMPLETED")
+  createdAt        DateTime @default(now())
+
+  @@index([orderId])
+  @@index([customerPhone])
+  @@index([createdAt])
+  @@map("order_returns")
 }
 
 // 12. Order Line Item Entity (Freezes priceAtPurchase)

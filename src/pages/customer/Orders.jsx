@@ -67,6 +67,15 @@ const STATUS_MAP = {
     dot: "bg-emerald-500",
     pulse: false,
   },
+  COMPLETED: {
+    label: "Delivered",
+    color: "bg-emerald-50 text-emerald-800 border-emerald-300/80",
+    tile: "bg-gradient-to-b from-emerald-50/70 via-white to-white border-emerald-300/70 shadow-[0_2px_10px_-4px_rgba(16,185,129,0.15)]",
+    accent: "bg-emerald-500",
+    halo: "ring-emerald-500/25",
+    dot: "bg-emerald-500",
+    pulse: false,
+  },
   CANCELLED: {
     label: "Cancelled",
     color: "bg-rose-50 text-rose-700 border-rose-300/70",

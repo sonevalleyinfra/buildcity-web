@@ -3,7 +3,7 @@ import { formatShortId } from "../../../utils/formatId";
 import { customerKey, getOrderParty } from "../orderView";
 
 const ACTIVE = ["PENDING", "PROCESSING", "OUT_FOR_DELIVERY"];
-const COMPLETED = ["DELIVERED", "CANCELLED"];
+const COMPLETED = ["DELIVERED", "COMPLETED", "CANCELLED"];
 const ACTIVE_PRIORITY = { PENDING: 1, PROCESSING: 2, OUT_FOR_DELIVERY: 3 };
 const statusOf = (o) => (o.status || "PENDING").toUpperCase();
 

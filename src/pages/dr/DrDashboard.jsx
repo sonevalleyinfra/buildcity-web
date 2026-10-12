@@ -25,6 +25,7 @@ const ORDER_STATUS_STYLE = {
   SHIPPED: "bg-blue-50 text-blue-700 border-blue-200/80 font-bold",
   OUT_FOR_DELIVERY: "bg-indigo-50 text-indigo-700 border-indigo-200/80 font-bold",
   DELIVERED: "bg-emerald-50 text-emerald-700 border-emerald-200/80 font-bold",
+  COMPLETED: "bg-teal-50 text-teal-800 border-teal-300 font-black",
   PENDING: "bg-amber-50 text-amber-700 border-amber-200/80 font-bold",
   CANCELLED: "bg-rose-50 text-rose-700 border-rose-200/80 font-bold",
 };
@@ -432,6 +433,158 @@ export default function DrDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [listingFilter, setListingFilter] = useState("ALL");
   const [orderStatusFilter, setOrderStatusFilter] = useState("ALL");
+
+  // --- Return & Refund Desk State (DR Only) ---
+  const [returnSearchQuery, setReturnSearchQuery] = useState("");
+  const [returnSearchResults, setReturnSearchResults] = useState([]);
+  const [selectedReturnOrder, setSelectedReturnOrder] = useState(null);
+  const [returnQuantities, setReturnQuantities] = useState({});
+  const [returnReason, setReturnReason] = useState("Excess unused material leftover");
+  const [customCashbackDeduct, setCustomCashbackDeduct] = useState("");
+  const [isSearchingReturnOrder, setIsSearchingReturnOrder] = useState(false);
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+  const [processedReturns, setProcessedReturns] = useState([]);
+  const [loadingReturnsHistory, setLoadingReturnsHistory] = useState(false);
+
+  const fetchProcessedReturns = async () => {
+    setLoadingReturnsHistory(true);
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/returns`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setProcessedReturns(data);
+      }
+    } catch (err) {
+      console.warn("Fetch returns history note:", err.message);
+    } finally {
+      setLoadingReturnsHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "returns") {
+      fetchProcessedReturns();
+    }
+  }, [activeTab]);
+
+  const selectOrderForReturn = (ord) => {
+    setSelectedReturnOrder(ord);
+    const initialQtys = {};
+    (ord?.items || []).forEach((it) => {
+      const key = it.id || it.vendorProductId || it.productName;
+      initialQtys[key] = 0;
+    });
+    setReturnQuantities(initialQtys);
+    const defaultCb = ord?.remainingCashbackToDeduct !== undefined
+      ? Number(ord.remainingCashbackToDeduct || 0)
+      : Number(ord?.cashbackEarned || 0);
+    setCustomCashbackDeduct(defaultCb > 0 ? String(defaultCb) : "0");
+  };
+
+  const handleSearchReturnOrder = async (e) => {
+    if (e) e.preventDefault();
+    const q = returnSearchQuery.trim();
+    if (!q) {
+      showAlert("Please enter an Order ID or Customer Mobile Number to search.", "Search Required", "warning");
+      return;
+    }
+    setIsSearchingReturnOrder(true);
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/returns/search?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        showAlert(data?.error || "Search failed.", "Error", "error");
+        return;
+      }
+      const list = Array.isArray(data) ? data : [];
+      setReturnSearchResults(list);
+      if (list.length === 1) {
+        selectOrderForReturn(list[0]);
+      } else if (list.length === 0) {
+        setSelectedReturnOrder(null);
+        showAlert(`No orders found matching "${q}" in your district.`, "No Order Found", "warning");
+      } else {
+        selectOrderForReturn(list[0]);
+      }
+    } catch (err) {
+      showAlert("Could not search orders. Please check your connection.", "Network Error", "error");
+    } finally {
+      setIsSearchingReturnOrder(false);
+    }
+  };
+
+  const handleReturnQtyChange = (itemKey, newVal, maxQty) => {
+    const clean = Math.min(maxQty, Math.max(0, Math.floor(Number(newVal) || 0)));
+    setReturnQuantities((prev) => ({ ...prev, [itemKey]: clean }));
+  };
+
+  const handleProcessReturn = async () => {
+    if (!selectedReturnOrder) return;
+    const itemsPayload = (selectedReturnOrder.items || [])
+      .map((it) => {
+        const key = it.id || it.vendorProductId || it.productName;
+        const qty = Number(returnQuantities[key] || 0);
+        return {
+          itemId: it.id,
+          vendorProductId: it.vendorProductId,
+          productName: it.productName || it.name,
+          returnQty: qty,
+        };
+      })
+      .filter((x) => x.returnQty > 0);
+
+    if (itemsPayload.length === 0) {
+      showAlert("Kripya kam se kam 1 item ki Return Quantity (+ button daba kar) chunein.", "Select Return Quantity", "warning");
+      return;
+    }
+
+    setIsSubmittingReturn(true);
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/returns`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: selectedReturnOrder.id,
+          items: itemsPayload,
+          returnReason,
+          districtName,
+          customCashbackDeduct: customCashbackDeduct !== "" ? Number(customCashbackDeduct) : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showAlert(data?.error || "Failed to process return.", "Return Error", "error");
+        return;
+      }
+
+      showAlert(
+        `Return recorded! Net Cash to pay customer: ₹${Number(data.summary?.netRefundCash || 0).toLocaleString("en-IN")}. Vendor stock has been restored.`,
+        "Return Completed ✓",
+        "success"
+      );
+
+      // Refresh return history, products stock & order search
+      await fetchProcessedReturns();
+      fetchLiveProductsDirect();
+      fetchLiveOrdersDirect();
+      // Re-run search to refresh remaining returnable quantities
+      if (returnSearchQuery.trim()) {
+        const refreshRes = await authFetch(`${API_BASE_URL}/api/v1/returns/search?q=${encodeURIComponent(returnSearchQuery.trim())}`);
+        if (refreshRes.ok) {
+          const refreshedList = await refreshRes.json();
+          if (Array.isArray(refreshedList)) {
+            setReturnSearchResults(refreshedList);
+            const updatedOrd = refreshedList.find((o) => o.id === selectedReturnOrder.id);
+            if (updatedOrd) selectOrderForReturn(updatedOrd);
+          }
+        }
+      }
+    } catch (err) {
+      showAlert("Network error while filing return.", "Error", "error");
+    } finally {
+      setIsSubmittingReturn(false);
+    }
+  };
 
   // Modals state
   const [showVendorModal, setShowVendorModal] = useState(false);
@@ -1026,18 +1179,35 @@ export default function DrDashboard() {
             >
               🛍️ District Orders ({districtOrdersCount})
             </button>
+            <button
+              onClick={() => setActiveTab("returns")}
+              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                activeTab === "returns"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
+              }`}
+            >
+              <span>↩️ Return & Refund Desk</span>
+              {processedReturns.length > 0 && (
+                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-1.5 py-0.2 rounded-full">
+                  {processedReturns.length}
+                </span>
+              )}
+            </button>
           </div>
 
-          <div className="relative w-full sm:w-72">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder={`Search ${activeTab}...`}
-              className="w-full bg-white text-xs border border-slate-200/90 rounded-xl px-3.5 py-2.5 pl-9 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 shadow-2xs transition-all duration-200"
-            />
-            <span className="absolute left-3 top-2.5 text-slate-400 text-xs">🔍</span>
-          </div>
+          {activeTab !== "returns" && (
+            <div className="relative w-full sm:w-72">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder={`Search ${activeTab}...`}
+                className="w-full bg-white text-xs border border-slate-200/90 rounded-xl px-3.5 py-2.5 pl-9 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 shadow-2xs transition-all duration-200"
+              />
+              <span className="absolute left-3 top-2.5 text-slate-400 text-xs">🔍</span>
+            </div>
+          )}
         </div>
 
         {/* Tab 1: Products Section */}
@@ -1702,7 +1872,7 @@ export default function DrDashboard() {
 
             {/* Status Filter Pills */}
             <div className="flex flex-wrap gap-1.5 bg-slate-100 p-1 rounded-xl w-fit text-xs font-bold">
-              {["ALL", "PENDING", "PROCESSING", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"].map((st) => {
+              {["ALL", "PENDING", "PROCESSING", "OUT_FOR_DELIVERY", "DELIVERED", "COMPLETED", "CANCELLED"].map((st) => {
                 const count = districtSummary
                   ? (st === "ALL" ? districtSummary.totalOrders : districtSummary.byStatus?.[st] || 0)
                   : st === "ALL"
@@ -1716,7 +1886,21 @@ export default function DrDashboard() {
                       orderStatusFilter === st ? "bg-white text-navy-900 shadow-2xs" : "text-slate-600 hover:text-navy-900"
                     }`}
                   >
-                    <span>{st === "ALL" ? "All" : st === "PENDING" ? "🟡 Pending" : st === "PROCESSING" ? "🔵 Processing" : st === "OUT_FOR_DELIVERY" ? "🚚 Out for Delivery" : st === "DELIVERED" ? "🟢 Delivered" : "🔴 Cancelled"}</span>
+                    <span>
+                      {st === "ALL"
+                        ? "All"
+                        : st === "PENDING"
+                        ? "🟡 Pending"
+                        : st === "PROCESSING"
+                        ? "🔵 Processing"
+                        : st === "OUT_FOR_DELIVERY"
+                        ? "🚚 Out for Delivery"
+                        : st === "DELIVERED"
+                        ? "🟢 Delivered"
+                        : st === "COMPLETED"
+                        ? "🔒 Completed"
+                        : "🔴 Cancelled"}
+                    </span>
                     <span className="text-[10px] opacity-75 font-black">({count})</span>
                   </button>
                 );
@@ -1769,6 +1953,7 @@ export default function DrDashboard() {
                     const dateStr = formatDateTimeIST(ord.createdAt || ord.date);
                     const statusKey = (ord.status || "PENDING").toUpperCase();
                     const statusStyle = ORDER_STATUS_STYLE[statusKey] || "bg-amber-50 text-amber-700 border-amber-200/80 font-bold";
+                    const isCompletedLocked = statusKey === "COMPLETED";
 
                     return (
                       <tr key={ord.id} className="hover:bg-slate-50/80 transition-colors">
@@ -1813,22 +1998,46 @@ export default function DrDashboard() {
                           )}
                         </td>
                         <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold border ${statusStyle}`}>
-                              {ord.status || "PENDING"}
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold border inline-flex items-center gap-1 w-fit ${statusStyle}`}>
+                              {isCompletedLocked ? "🔒 COMPLETED" : (ord.status || "PENDING")}
                             </span>
-                            {updateOrderStatus && (
-                              <select
-                                value={(ord.status || "PENDING").toUpperCase()}
-                                onChange={(e) => updateOrderStatus(ord.id, e.target.value)}
-                                className="text-[11px] font-bold bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 outline-none text-navy-900 cursor-pointer hover:bg-slate-200 transition-colors"
-                              >
-                                <option value="PENDING">PENDING</option>
-                                <option value="PROCESSING">PROCESSING</option>
-                                <option value="OUT_FOR_DELIVERY">OUT FOR DELIVERY</option>
-                                <option value="DELIVERED">DELIVERED</option>
-                                <option value="CANCELLED">CANCELLED</option>
-                              </select>
+                            {isCompletedLocked ? (
+                              <span className="text-[10px] font-bold text-slate-400 bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg select-none">
+                                Status Locked
+                              </span>
+                            ) : (
+                              updateOrderStatus && (
+                                <select
+                                  value={statusKey}
+                                  onChange={(e) => {
+                                    const nextSt = e.target.value;
+                                    if (nextSt === "COMPLETED") {
+                                      showConfirm({
+                                        title: "Mark Order as COMPLETED (Locked)?",
+                                        message: "Ek baar COMPLETED karne ke baad ye order status lock ho jayega aur dubara change nahi ho sakega. Kya aap sure hain?",
+                                        type: "warning",
+                                        confirmText: "Yes, Mark Completed & Lock",
+                                        cancelText: "Cancel",
+                                        onConfirm: async () => {
+                                          await updateOrderStatus(ord.id, "COMPLETED");
+                                          fetchLiveOrdersDirect();
+                                        },
+                                      });
+                                    } else {
+                                      updateOrderStatus(ord.id, nextSt).then(() => fetchLiveOrdersDirect());
+                                    }
+                                  }}
+                                  className="text-[11px] font-bold bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 outline-none text-navy-900 cursor-pointer hover:bg-slate-200 transition-colors"
+                                >
+                                  <option value="PENDING">PENDING</option>
+                                  <option value="PROCESSING">PROCESSING</option>
+                                  <option value="OUT_FOR_DELIVERY">OUT FOR DELIVERY</option>
+                                  <option value="DELIVERED">DELIVERED</option>
+                                  <option value="COMPLETED">🔒 COMPLETED (Lock)</option>
+                                  <option value="CANCELLED">CANCELLED</option>
+                                </select>
+                              )
                             )}
                           </div>
                         </td>
@@ -1848,6 +2057,419 @@ export default function DrDashboard() {
           />
         </div>
       )}
+
+      {/* Tab 5: Return & Refund Desk (Internal DR Only — Hidden from Customer App) */}
+      {activeTab === "returns" && (() => {
+        const currentReturnItems = (selectedReturnOrder?.items || []).map((it) => {
+          const key = it.id || it.vendorProductId || it.productName;
+          const orderedQty = Number(it.quantity || 1);
+          const alreadyRetQty = Number(selectedReturnOrder?.returnedQtyMap?.[key] || 0);
+          const maxReturnable = Math.max(0, orderedQty - alreadyRetQty);
+          const selectedQty = Math.min(maxReturnable, Math.max(0, Number(returnQuantities[key] || 0)));
+          const unitPrice = Number(it.priceAtPurchase || it.price || 0);
+          const lineReturnVal = Math.round(selectedQty * unitPrice * 100) / 100;
+          return {
+            ...it,
+            key,
+            orderedQty,
+            alreadyRetQty,
+            maxReturnable,
+            selectedQty,
+            unitPrice,
+            lineReturnVal,
+          };
+        });
+
+        const totalReturnItemsVal = Math.round(
+          currentReturnItems.reduce((sum, it) => sum + it.lineReturnVal, 0) * 100
+        ) / 100;
+
+        const rawCbDeduct = customCashbackDeduct !== ""
+          ? Number(customCashbackDeduct || 0)
+          : Number(selectedReturnOrder?.remainingCashbackToDeduct || selectedReturnOrder?.cashbackEarned || 0);
+
+        const effectiveCashbackDeduct = totalReturnItemsVal > 0
+          ? Math.min(totalReturnItemsVal, Math.max(0, rawCbDeduct))
+          : 0;
+
+        const netCashToRefund = Math.max(
+          0,
+          Math.round((totalReturnItemsVal - effectiveCashbackDeduct) * 100) / 100
+        );
+
+        return (
+          <div className="space-y-6 font-sans">
+            {/* Search & Process Card */}
+            <div className="bg-white border border-slate-200 rounded-2xl shadow-xs p-5 space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                <div>
+                  <h2 className="text-base font-extrabold text-navy-900 flex items-center gap-2">
+                    <span>↩️ DR Return & Refund Desk ({districtName})</span>
+                    <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full">
+                      Internal DR Only
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Customer call aane par Order ID ya Mobile Number search karein, wapas aaye bags/items select karein, aur cashback kaat ke final cash refund hisaab dekhein.
+                  </p>
+                </div>
+              </div>
+
+              {/* Search Bar */}
+              <form onSubmit={handleSearchReturnOrder} className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={returnSearchQuery}
+                    onChange={(e) => setReturnSearchQuery(e.target.value)}
+                    placeholder="Enter Customer 10-digit Mobile Number (e.g. 9876543210) or Order ID (e.g. ORD-...)"
+                    className="w-full bg-slate-50 text-xs font-bold text-navy-900 border border-slate-200 rounded-xl px-4 py-3 pl-10 outline-none focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                  />
+                  <span className="absolute left-3.5 top-3 text-slate-400 text-sm">🔍</span>
+                </div>
+                <button
+                  type="submit"
+                  disabled={isSearchingReturnOrder}
+                  className="bg-navy-900 hover:bg-navy-800 active:scale-[0.98] text-white text-xs font-extrabold px-6 py-3 rounded-xl shadow-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shrink-0 transition-all"
+                >
+                  {isSearchingReturnOrder ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Searching...</span>
+                    </>
+                  ) : (
+                    <span>Search Order</span>
+                  )}
+                </button>
+              </form>
+
+              {/* If multiple orders found for a phone number, let DR pick which order */}
+              {returnSearchResults.length > 1 && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                  <p className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
+                    Found {returnSearchResults.length} Orders — Click an order to select:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {returnSearchResults.map((ro) => {
+                      const isSel = selectedReturnOrder?.id === ro.id;
+                      return (
+                        <button
+                          key={ro.id}
+                          type="button"
+                          onClick={() => selectOrderForReturn(ro)}
+                          className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-2 ${
+                            isSel
+                              ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                              : "bg-white text-navy-900 border-slate-200 hover:border-emerald-300"
+                          }`}
+                        >
+                          <span>{formatShortId(ro.id || ro.orderNumber, "ORD")}</span>
+                          <span className="opacity-80">• ₹{Number(ro.totalAmount || 0).toLocaleString("en-IN")}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/10">{ro.status}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Selected Order Return Card */}
+              {selectedReturnOrder && (
+                <div className="border-2 border-emerald-500/30 bg-emerald-50/10 rounded-2xl p-5 space-y-5">
+                  {/* Order Header Info */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <span className="text-sm font-black text-navy-900">
+                          Order ID: <span className="text-brand-700 font-mono">{formatShortId(selectedReturnOrder.id || selectedReturnOrder.orderNumber, "ORD")}</span>
+                        </span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${ORDER_STATUS_STYLE[(selectedReturnOrder.status || "PENDING").toUpperCase()] || ""}`}>
+                          {selectedReturnOrder.status}
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold text-slate-700">
+                        👤 Customer: <span className="text-navy-900">{selectedReturnOrder.customer?.name || selectedReturnOrder.address?.fullName || "Customer"}</span>
+                        {"  "}•{"  "}
+                        📱 <span className="text-brand-700 font-extrabold">{selectedReturnOrder.customer?.phone || selectedReturnOrder.address?.phone || "N/A"}</span>
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        📍 Address: {selectedReturnOrder.address?.street || "Site Delivery"}, {selectedReturnOrder.address?.city || districtName}
+                      </p>
+                    </div>
+                    <div className="sm:text-right space-y-1">
+                      <p className="text-[11px] font-bold text-slate-400 uppercase">Order Bill Paid</p>
+                      <p className="text-lg font-black text-navy-900">₹{Number(selectedReturnOrder.totalAmount || 0).toLocaleString("en-IN")}</p>
+                      <p className="text-[11px] font-bold text-emerald-700">
+                        🎁 Cashback Earned on Order: ₹{Number(selectedReturnOrder.cashbackEarned || 0).toLocaleString("en-IN")}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Items List with [-] Qty [+] Counter */}
+                  <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                    <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex items-center justify-between">
+                      <h3 className="text-xs font-black text-navy-900 uppercase tracking-wider">
+                        📦 Step 1: Select Return Quantity (Ordered Items Auto-Loaded)
+                      </h3>
+                      <span className="text-[11px] text-slate-500 font-semibold">
+                        Use [ - ] [ + ] or type quantity directly
+                      </span>
+                    </div>
+
+                    <div className="divide-y divide-slate-100">
+                      {currentReturnItems.map((item) => (
+                        <div key={item.key} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/60 transition-colors">
+                          <div className="space-y-1 flex-1">
+                            <p className="text-sm font-extrabold text-navy-900">{item.productName || item.name}</p>
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 font-semibold">
+                              <span className="bg-blue-50 text-blue-800 border border-blue-200 px-2.5 py-0.5 rounded-lg font-extrabold">
+                                Ordered / Delivered: {item.orderedQty} Units
+                              </span>
+                              <span>Rate: <strong>₹{item.unitPrice.toLocaleString("en-IN")}</strong> / unit</span>
+                              {item.vendorName && (
+                                <span className="text-brand-700">🏬 {item.vendorName}</span>
+                              )}
+                              {item.alreadyRetQty > 0 && (
+                                <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-lg text-[11px] font-bold">
+                                  Already Returned: {item.alreadyRetQty}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Quantity Counter Controls: [ - ] [ input ] [ + ] [All] */}
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                              <button
+                                type="button"
+                                disabled={item.selectedQty <= 0}
+                                onClick={() => handleReturnQtyChange(item.key, item.selectedQty - 1, item.maxReturnable)}
+                                className="w-8 h-8 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-40 text-navy-900 font-black text-base shadow-2xs flex items-center justify-center cursor-pointer active:scale-95 transition-all"
+                              >
+                                −
+                              </button>
+                              <input
+                                type="number"
+                                min="0"
+                                max={item.maxReturnable}
+                                value={item.selectedQty}
+                                onChange={(e) => handleReturnQtyChange(item.key, e.target.value, item.maxReturnable)}
+                                className="w-16 text-center bg-white border border-slate-200 rounded-lg py-1.5 text-xs font-black text-navy-900 outline-none focus:border-emerald-500"
+                              />
+                              <button
+                                type="button"
+                                disabled={item.selectedQty >= item.maxReturnable}
+                                onClick={() => handleReturnQtyChange(item.key, item.selectedQty + 1, item.maxReturnable)}
+                                className="w-8 h-8 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-40 text-navy-900 font-black text-base shadow-2xs flex items-center justify-center cursor-pointer active:scale-95 transition-all"
+                              >
+                                +
+                              </button>
+                            </div>
+
+                            <button
+                              type="button"
+                              disabled={item.maxReturnable <= 0}
+                              onClick={() => handleReturnQtyChange(item.key, item.maxReturnable, item.maxReturnable)}
+                              className="text-[11px] font-extrabold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1.5 rounded-lg cursor-pointer disabled:opacity-40 transition-colors"
+                            >
+                              All ({item.maxReturnable})
+                            </button>
+
+                            {item.selectedQty > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleReturnQtyChange(item.key, 0, item.maxReturnable)}
+                                className="text-[11px] font-bold text-slate-400 hover:text-rose-600 px-1.5 py-1 cursor-pointer"
+                              >
+                                Clear
+                              </button>
+                            )}
+
+                            <div className="min-w-[120px] text-right">
+                              <span className="block text-[10px] font-bold text-slate-400 uppercase">Item Return Value</span>
+                              <span className={`text-sm font-black ${item.lineReturnVal > 0 ? "text-emerald-700" : "text-slate-400"}`}>
+                                ₹{item.lineReturnVal.toLocaleString("en-IN")}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Reason & Bill Calculation Box */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Left: Return Reason */}
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3 shadow-2xs">
+                      <label className="block text-xs font-black text-navy-900 uppercase tracking-wider">
+                        📝 Step 2: Return Reason / Notes
+                      </label>
+                      <select
+                        value={returnReason}
+                        onChange={(e) => setReturnReason(e.target.value)}
+                        className="w-full bg-slate-50 text-xs font-bold text-navy-900 border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-emerald-500"
+                      >
+                        <option value="Excess unused material leftover">Excess unused material leftover (Bacha hua samaan)</option>
+                        <option value="Damaged / Defective material">Damaged / Defective material</option>
+                        <option value="Wrong grade or brand delivered">Wrong grade or brand delivered</option>
+                        <option value="Customer cancelled partial items on site">Customer cancelled partial items on site</option>
+                      </select>
+
+                      <div className="pt-2">
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                          Wallet Cashback Deduction (₹) — Auto-detected from Order:
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={customCashbackDeduct}
+                          onChange={(e) => setCustomCashbackDeduct(e.target.value)}
+                          className="w-full bg-slate-50 text-xs font-black text-rose-700 border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-emerald-500"
+                          placeholder="0"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Customer ko is order par ₹{Number(selectedReturnOrder.cashbackEarned || 0)} cashback mila tha. Return karte waqt ye amount kaat liya jayega.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Right: Auto-Hisaab Summary */}
+                    <div className="bg-white border-2 border-emerald-500/40 rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-xs">
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-black text-navy-900 uppercase tracking-wider border-b border-slate-100 pb-2">
+                          💵 Step 3: Final Cash Refund Hisaab
+                        </h4>
+                        <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                          <span>Wapas Hue Samaan Ka Paisa (Return Value):</span>
+                          <span className="font-black text-navy-900">₹{totalReturnItemsVal.toLocaleString("en-IN")}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs font-bold text-rose-600">
+                          <span>(-) Wallet Cashback Deducted:</span>
+                          <span className="font-black">− ₹{effectiveCashbackDeduct.toLocaleString("en-IN")}</span>
+                        </div>
+                        <div className="border-t border-slate-200 pt-2.5 flex items-center justify-between">
+                          <span className="text-sm font-black text-emerald-800">
+                            Customer Ko Cash Wapas Dena Hai:
+                          </span>
+                          <span className="text-xl font-black text-emerald-700">
+                            ₹{netCashToRefund.toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={isSubmittingReturn || totalReturnItemsVal <= 0}
+                        onClick={handleProcessReturn}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] disabled:opacity-40 text-white text-xs font-black py-3 px-5 rounded-xl shadow-sm cursor-pointer transition-all flex items-center justify-center gap-2"
+                      >
+                        {isSubmittingReturn ? (
+                          <>
+                            <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>Processing Return & Updating Stock...</span>
+                          </>
+                        ) : (
+                          <span>✓ Confirm Return, Deduct Cashback & Restore Vendor Stock</span>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Processed Returns History Table (Saved in DR Panel) */}
+            <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                  <h3 className="text-sm font-extrabold text-navy-900 flex items-center gap-2">
+                    <span>📋 Saved Return Records in {districtName}</span>
+                    <span className="bg-slate-100 text-slate-700 text-xs font-black px-2 py-0.5 rounded-full">
+                      {processedReturns.length} Records
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500">Complete log of all returns filed by DR, stock restored, and net cash refunded.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchProcessedReturns}
+                  className="text-xs font-bold text-brand-600 hover:underline cursor-pointer"
+                >
+                  ↻ Refresh List
+                </button>
+              </div>
+
+              {loadingReturnsHistory ? (
+                <div className="text-center py-8 text-xs text-slate-400 font-semibold">Loading return records...</div>
+              ) : processedReturns.length === 0 ? (
+                <div className="text-center py-10 text-xs text-slate-400 font-medium">
+                  Abhi tak koi return record दर्ज nahi hua hai.
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-black text-slate-500 uppercase tracking-wider">
+                      <tr>
+                        <th className="py-3 px-4">Return Date & Order ID</th>
+                        <th className="py-3 px-4">Customer</th>
+                        <th className="py-3 px-4">Returned Items</th>
+                        <th className="py-3 px-4">Return Value</th>
+                        <th className="py-3 px-4">Cashback Cut</th>
+                        <th className="py-3 px-4">Net Cash Paid</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {processedReturns.map((ret) => {
+                        const rItems = Array.isArray(ret.returnItems) ? ret.returnItems : [];
+                        return (
+                          <tr key={ret.id} className="hover:bg-slate-50/80">
+                            <td className="py-3.5 px-4">
+                              <span className="font-extrabold text-brand-700 block">
+                                {formatShortId(ret.orderId || ret.order?.orderNumber, "ORD")}
+                              </span>
+                              <span className="text-[11px] text-slate-400">{formatDateTimeIST(ret.createdAt)}</span>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span className="font-bold text-navy-900 block">👤 {ret.customerName || "Customer"}</span>
+                              <span className="text-[11px] text-slate-500 font-semibold">📱 {ret.customerPhone}</span>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <div className="space-y-1">
+                                {rItems.map((ri, i) => (
+                                  <div key={i} className="text-[11px]">
+                                    <span className="font-bold text-navy-900">• {ri.productName}</span>
+                                    <span className="text-emerald-700 font-black ml-1.5">
+                                      Returned: {ri.quantity} {ri.orderedQuantity ? `(of ${ri.orderedQuantity})` : ""}
+                                    </span>
+                                    <span className="text-slate-400 ml-1">@ ₹{ri.price}</span>
+                                  </div>
+                                ))}
+                                <span className="block text-[10px] text-slate-400 italic">Reason: {ret.returnReason}</span>
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 font-bold text-slate-700">
+                              ₹{Number(ret.returnAmount || 0).toLocaleString("en-IN")}
+                            </td>
+                            <td className="py-3.5 px-4 font-bold text-rose-600">
+                              − ₹{Number(ret.cashbackDeducted || 0).toLocaleString("en-IN")}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-black text-xs">
+                                ₹{Number(ret.netRefundCash || 0).toLocaleString("en-IN")}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
       </main>
 
       {/*  Add Vendor Modal */}

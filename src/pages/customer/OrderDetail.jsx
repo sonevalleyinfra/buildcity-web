@@ -48,6 +48,13 @@ const STATUS_MAP = {
     halo: "ring-8 ring-emerald-500/25",
     text: "text-emerald-700",
   },
+  COMPLETED: {
+    label: "Delivered",
+    color: "bg-emerald-50 text-emerald-800 border-emerald-300 ring-emerald-500/25",
+    accent: "bg-emerald-600",
+    halo: "ring-8 ring-emerald-500/25",
+    text: "text-emerald-700",
+  },
   CANCELLED: {
     label: "Cancelled",
     color: "bg-rose-50 text-rose-700 border-rose-300 ring-rose-500/25",
@@ -73,7 +80,7 @@ export default function OrderDetail() {
 
   const rawStatus = (order.status || "PENDING").toUpperCase();
   const statusInfo = STATUS_MAP[rawStatus] || STATUS_MAP.PENDING;
-  const isDelivered = rawStatus === "DELIVERED";
+  const isDelivered = rawStatus === "DELIVERED" || rawStatus === "COMPLETED";
 
   let currentStepIndex = STEP_FLOW.findIndex((s) => s.id === rawStatus);
   if (currentStepIndex === -1) {

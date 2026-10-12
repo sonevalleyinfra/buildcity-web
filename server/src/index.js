@@ -82,7 +82,7 @@ const PAGE_MAX_LIMIT = 100;
 // frozen frontend), but are capped so a single call can never read an unbounded table.
 const LEGACY_LIST_CAP = 500;
 const NEWEST_FIRST = [{ createdAt: "desc" }, { id: "desc" }];
-const CLOSED_ORDER_STATUSES = ["DELIVERED", "CANCELLED"];
+const CLOSED_ORDER_STATUSES = ["DELIVERED", "COMPLETED", "CANCELLED"];
 const MAX_OPEN_ORDERS_INCLUDED = 200;
 
 // Returns { take, cursor } when the client asked for pagination, or null for a legacy request
@@ -163,15 +163,15 @@ async function computeOrdersSummary(where, { vendorId } = {}) {
     prisma.order.count({ where }),
     prisma.order.groupBy({ by: ["status"], where, _count: { _all: true } }),
     vendorId
-      // Vendor revenue = their item subtotals on delivered orders (matches the vendor dashboard)
-      ? prisma.orderItem.aggregate({ where: { vendorId, order: { status: "DELIVERED" } }, _sum: { totalPrice: true } })
-      : prisma.order.aggregate({ where: { ...where, status: "DELIVERED" }, _sum: { totalAmount: true } }),
+      // Vendor revenue = their item subtotals on delivered/completed orders (matches the vendor dashboard)
+      ? prisma.orderItem.aggregate({ where: { vendorId, order: { status: { in: ["DELIVERED", "COMPLETED"] } } }, _sum: { totalPrice: true } })
+      : prisma.order.aggregate({ where: { ...where, status: { in: ["DELIVERED", "COMPLETED"] } }, _sum: { totalAmount: true } }),
   ]);
   const byStatus = Object.fromEntries(byStatusRows.map((r) => [r.status, r._count._all]));
   const openOrders = Object.entries(byStatus)
     .filter(([status]) => !CLOSED_ORDER_STATUSES.includes(status))
     .reduce((sum, [, n]) => sum + n, 0);
-  const deliveredOrders = byStatus.DELIVERED || 0;
+  const deliveredOrders = (byStatus.DELIVERED || 0) + (byStatus.COMPLETED || 0);
   return {
     totalOrders,
     deliveredOrders,
@@ -3259,12 +3259,12 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
   }
 });
 
-const ORDER_STATUSES = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"];
+const ORDER_STATUSES = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED", "COMPLETED", "CANCELLED"];
 
-// Update Order Status (Vendor & Admin with Auto Stock Restore on Cancel)
+// Update Order Status (Vendor, DR & Admin with Auto Stock Restore on Cancel + COMPLETED Lock)
 app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
-    const { status } = req.body; // PENDING | PROCESSING | OUT_FOR_DELIVERY | DELIVERED | CANCELLED
+    const { status } = req.body; // PENDING | PROCESSING | OUT_FOR_DELIVERY | DELIVERED | COMPLETED | CANCELLED
     if (!ORDER_STATUSES.includes(status)) {
       return res.status(400).json({ error: "Invalid order status" });
     }
@@ -3276,6 +3276,21 @@ app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", 
 
     if (!previousOrder) {
       return res.status(404).json({ error: "Order not found" });
+    }
+
+    // Strict Immutability Rule: Once an order is marked COMPLETED, its status cannot be changed anymore
+    if (String(previousOrder.status || "").toUpperCase() === "COMPLETED") {
+      return res.status(400).json({
+        error: "This order is already marked COMPLETED and locked. Its status cannot be changed anymore.",
+        isLocked: true,
+      });
+    }
+
+    // Only DR or ADMIN can mark an order as COMPLETED
+    if (status === "COMPLETED" && req.auth.role === "VENDOR") {
+      return res.status(403).json({
+        error: "Only a District Representative (DR) or Admin can mark an order as COMPLETED.",
+      });
     }
 
     // Vendors may only update orders whose items all belong to their own shop
@@ -3339,8 +3354,8 @@ app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", 
     // Status change and stock restore succeed or fail together
     const [updatedOrder] = await prisma.$transaction(ops);
 
-    // Automatically trigger Cashback & Referral Rewards on successful delivery!
-    if (status === "DELIVERED" && previousOrder.status !== "DELIVERED") {
+    // Automatically trigger Cashback & Referral Rewards on successful delivery or completion!
+    if ((status === "DELIVERED" || status === "COMPLETED") && previousOrder.status !== "DELIVERED" && previousOrder.status !== "COMPLETED") {
       handleOrderDeliveredRewards(updatedOrder || previousOrder).catch((e) =>
         console.warn("Delivered rewards notice:", e.message)
       );
@@ -3352,6 +3367,336 @@ app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", 
     res.json(updatedOrder);
   } catch (err) {
     sendServerError(res, err, "Order status update");
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 7b. DR / ADMIN ORDER RETURNS & REFUND DESK ENDPOINTS (Staff Only)
+// ---------------------------------------------------------------------------
+
+// Search orders by Order ID / Order Number or Customer Phone for filing a return
+app.get("/api/v1/returns/search", requireAuth, requireRole("DR", "ADMIN"), async (req, res) => {
+  try {
+    const rawQ = String(req.query.q || "").trim();
+    if (!rawQ) {
+      return res.status(400).json({ error: "Please enter an Order ID or Customer Mobile Number to search." });
+    }
+
+    const cleanDigits = rawQ.replace(/\D/g, "");
+    const cleanShort = rawQ.replace(/^#?ORD-?/i, "").trim();
+
+    let scopeWhere = {};
+    if (req.auth.role === "DR") {
+      const drRegionIds = await resolveCallerDrRegionIds(req.auth);
+      if (drRegionIds.length > 0) {
+        scopeWhere = ordersInRegionsWhere(drRegionIds);
+      }
+    }
+
+    const searchOr = [
+      { id: { contains: cleanShort, mode: "insensitive" } },
+      { orderNumber: { contains: cleanShort, mode: "insensitive" } },
+    ];
+    if (cleanDigits.length >= 4) {
+      const phoneQuery = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
+      searchOr.push(
+        { customer: { phone: { contains: phoneQuery } } },
+        { address: { phone: { contains: phoneQuery } } }
+      );
+    }
+
+    const matchingOrders = await prisma.order.findMany({
+      where: {
+        AND: [
+          scopeWhere,
+          { OR: searchOr },
+        ],
+      },
+      include: {
+        ...STAFF_ORDER_INCLUDE,
+        returns: {
+          orderBy: { createdAt: "desc" },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+
+    // Attach cashback earned & existing returned quantities per item
+    const enriched = await Promise.all(
+      withVendorNames(matchingOrders).map(async (ord) => {
+        let cashbackEarned = Number(ord.cashbackEarned || 0);
+        if (!cashbackEarned) {
+          const cbTx = await prisma.walletTransaction.findFirst({
+            where: { orderId: ord.id, type: "ORDER_CASHBACK" },
+          }).catch(() => null);
+          if (cbTx) cashbackEarned = Math.abs(Number(cbTx.amount || 0));
+        }
+
+        // Compute already returned quantities per itemId or productName
+        const returnedQtyMap = {};
+        let totalAlreadyDeductedCashback = 0;
+        for (const ret of ord.returns || []) {
+          totalAlreadyDeductedCashback += Number(ret.cashbackDeducted || 0);
+          const rItems = Array.isArray(ret.returnItems) ? ret.returnItems : [];
+          for (const ri of rItems) {
+            const key = ri.itemId || ri.vendorProductId || ri.productName;
+            if (key) {
+              returnedQtyMap[key] = (returnedQtyMap[key] || 0) + Number(ri.quantity || 0);
+            }
+          }
+        }
+
+        return {
+          ...ord,
+          cashbackEarned,
+          remainingCashbackToDeduct: Math.max(0, Math.round((cashbackEarned - totalAlreadyDeductedCashback) * 100) / 100),
+          returnedQtyMap,
+        };
+      })
+    );
+
+    res.json(enriched);
+  } catch (err) {
+    sendServerError(res, err, "Return order search");
+  }
+});
+
+// List all processed returns for DR's district (or all for Admin)
+app.get("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req, res) => {
+  try {
+    let where = {};
+    if (req.auth.role === "DR") {
+      const drRegionIds = await resolveCallerDrRegionIds(req.auth);
+      if (drRegionIds.length > 0) {
+        where = { order: ordersInRegionsWhere(drRegionIds) };
+      }
+    }
+
+    const returnsList = await prisma.orderReturn.findMany({
+      where,
+      include: {
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            totalAmount: true,
+            status: true,
+            createdAt: true,
+            address: { select: { street: true, city: true, pincode: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+
+    res.json(returnsList);
+  } catch (err) {
+    sendServerError(res, err, "List order returns");
+  }
+});
+
+// Process an order return: record return, restore vendor stock, deduct wallet cashback, calculate net cash refund
+app.post("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req, res) => {
+  try {
+    const { orderId, items, returnReason, districtName, customCashbackDeduct } = req.body;
+    if (!orderId) {
+      return res.status(400).json({ error: "Order ID is required" });
+    }
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: "Please select at least 1 item quantity to return." });
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        ...STAFF_ORDER_INCLUDE,
+        returns: true,
+      },
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    // Check DR district access
+    if (req.auth.role === "DR") {
+      const drRegionIds = await resolveCallerDrRegionIds(req.auth);
+      const inDistrict = drRegionIds.length > 0 && (await prisma.order.count({
+        where: { AND: [{ id: order.id }, ordersInRegionsWhere(drRegionIds)] },
+      })) > 0;
+      if (!inDistrict) {
+        return res.status(403).json({ error: "This order belongs to another district." });
+      }
+    }
+
+    // Compute already returned quantities to prevent returning more than ordered
+    const alreadyReturnedMap = {};
+    let alreadyDeductedCashback = 0;
+    for (const prevRet of order.returns || []) {
+      alreadyDeductedCashback += Number(prevRet.cashbackDeducted || 0);
+      const rItems = Array.isArray(prevRet.returnItems) ? prevRet.returnItems : [];
+      for (const ri of rItems) {
+        const key = ri.itemId || ri.vendorProductId || ri.productName;
+        if (key) alreadyReturnedMap[key] = (alreadyReturnedMap[key] || 0) + Number(ri.quantity || 0);
+      }
+    }
+
+    const validatedReturnItems = [];
+    let totalReturnItemsValue = 0;
+    const stockRestoreOps = [];
+
+    for (const reqItem of items) {
+      const returnQty = Math.floor(Number(reqItem.returnQty || reqItem.quantity || 0));
+      if (returnQty <= 0) continue;
+
+      const orderItem = order.items.find(
+        (oi) => oi.id === reqItem.itemId || (reqItem.vendorProductId && oi.vendorProductId === reqItem.vendorProductId) || oi.productName === reqItem.productName
+      );
+
+      if (!orderItem) {
+        return res.status(400).json({ error: `Item "${reqItem.productName || reqItem.itemId}" not found in this order.` });
+      }
+
+      const key = orderItem.id || orderItem.vendorProductId || orderItem.productName;
+      const previouslyReturned = alreadyReturnedMap[key] || 0;
+      const maxReturnable = Math.max(0, Number(orderItem.quantity || 0) - previouslyReturned);
+
+      if (returnQty > maxReturnable) {
+        return res.status(400).json({
+          error: `Cannot return ${returnQty} of "${orderItem.productName}". Max returnable quantity is ${maxReturnable}.`,
+        });
+      }
+
+      const unitPrice = Number(orderItem.priceAtPurchase || 0);
+      const lineTotal = Math.round(returnQty * unitPrice * 100) / 100;
+      totalReturnItemsValue += lineTotal;
+
+      validatedReturnItems.push({
+        itemId: orderItem.id,
+        vendorProductId: orderItem.vendorProductId,
+        productName: orderItem.productName,
+        quantity: returnQty,
+        orderedQuantity: Number(orderItem.quantity || 0),
+        price: unitPrice,
+        total: lineTotal,
+        vendorId: orderItem.vendorId,
+        vendorName: orderItem.vendor?.shopName || "District Vendor",
+      });
+
+      // Restore stock to VendorProduct
+      if (orderItem.vendorProductId) {
+        stockRestoreOps.push(
+          prisma.vendorProduct.updateMany({
+            where: { id: orderItem.vendorProductId },
+            data: { stockQty: { increment: returnQty } },
+          })
+        );
+      } else if (orderItem.vendorId && orderItem.productName) {
+        stockRestoreOps.push(
+          prisma.vendorProduct.updateMany({
+            where: {
+              vendorId: orderItem.vendorId,
+              name: { equals: orderItem.productName, mode: "insensitive" },
+            },
+            data: { stockQty: { increment: returnQty } },
+          })
+        );
+      }
+    }
+
+    if (validatedReturnItems.length === 0) {
+      return res.status(400).json({ error: "Please select at least 1 valid item quantity to return." });
+    }
+
+    totalReturnItemsValue = Math.round(totalReturnItemsValue * 100) / 100;
+
+    // Check cashback earned on this order
+    let orderCashback = Number(order.cashbackEarned || 0);
+    if (!orderCashback) {
+      const cbTx = await prisma.walletTransaction.findFirst({
+        where: { orderId: order.id, type: "ORDER_CASHBACK" },
+      }).catch(() => null);
+      if (cbTx) orderCashback = Math.abs(Number(cbTx.amount || 0));
+    }
+
+    const remainingCashback = Math.max(0, Math.round((orderCashback - alreadyDeductedCashback) * 100) / 100);
+    const cashbackToDeduct = customCashbackDeduct !== undefined
+      ? Math.min(totalReturnItemsValue, Math.max(0, Number(customCashbackDeduct) || 0))
+      : Math.min(totalReturnItemsValue, remainingCashback);
+
+    const netRefundCash = Math.max(0, Math.round((totalReturnItemsValue - cashbackToDeduct) * 100) / 100);
+
+    const custPhone = order.customer?.phone || order.address?.phone || "";
+    const custName = order.customer?.name || order.address?.fullName || "Customer";
+    const resolvedDistrict = districtName || order.address?.city || order.address?.region?.name || "District";
+
+    const txOps = [
+      prisma.orderReturn.create({
+        data: {
+          orderId: order.id,
+          drId: req.auth.userId || null,
+          drPhone: req.auth.phone || null,
+          districtName: resolvedDistrict,
+          customerPhone: custPhone,
+          customerName: custName,
+          returnAmount: totalReturnItemsValue,
+          cashbackDeducted: cashbackToDeduct,
+          netRefundCash,
+          returnReason: String(returnReason || "Excess / Returned Material").trim(),
+          returnItems: validatedReturnItems,
+          status: "COMPLETED",
+        },
+      }),
+      ...stockRestoreOps,
+    ];
+
+    // If cashback was deducted and customer exists, claw back from customer's wallet balance & record ledger entry
+    if (cashbackToDeduct > 0 && order.customerId) {
+      const custUser = await prisma.user.findUnique({
+        where: { id: order.customerId },
+        select: { walletBalance: true },
+      }).catch(() => null);
+
+      const currentBal = Number(custUser?.walletBalance || 0);
+      const walletDecrement = Math.min(currentBal, cashbackToDeduct);
+
+      if (walletDecrement > 0) {
+        txOps.push(
+          prisma.user.update({
+            where: { id: order.customerId },
+            data: { walletBalance: { decrement: walletDecrement } },
+          })
+        );
+      }
+      txOps.push(
+        prisma.walletTransaction.create({
+          data: {
+            userId: order.customerId,
+            amount: -cashbackToDeduct,
+            type: "ADMIN_ADJUST",
+            orderId: order.id,
+            description: `Cashback adjusted on Return for Order #${order.orderNumber || order.id.slice(0, 8)} (Net Cash Refund: ₹${netRefundCash})`,
+          },
+        })
+      );
+    }
+
+    const [createdReturn] = await prisma.$transaction(txOps);
+    invalidateCache();
+
+    res.status(201).json({
+      success: true,
+      returnRecord: createdReturn,
+      summary: {
+        returnAmount: totalReturnItemsValue,
+        cashbackDeducted: cashbackToDeduct,
+        netRefundCash,
+      },
+    });
+  } catch (err) {
+    sendServerError(res, err, "Process order return");
   }
 });
 

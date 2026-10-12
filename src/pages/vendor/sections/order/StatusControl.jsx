@@ -32,9 +32,8 @@ export default function StatusControl({ orderId, status, phone, customerName, is
         >
           <span className="flex items-center gap-1.5">
             <span className={cx("h-2 w-2 rounded-full", statusCfg.dot)} aria-hidden="true" />
-            <span>🔒 Completed by DR</span>
+            <span>Completed</span>
           </span>
-          <span className="text-xs opacity-75">Locked</span>
         </div>
       ) : (
         <label className={cx("relative flex-1", statusCfg.text)}>

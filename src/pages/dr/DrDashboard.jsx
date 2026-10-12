@@ -1,14 +1,19 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import Logo from "../../components/Logo";
 import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useOrders } from "../../context/OrderContext";
 import { useAlert } from "../../context/AlertContext";
 import { API_BASE_URL } from "../../config/api";
 import { authFetch } from "../../config/authFetch";
-import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
 import { mergeOrderLists, ordersPageQuery, readOrdersPage } from "../../utils/orderPagination";
-import LoadMoreButton from "../../components/LoadMoreButton";
+import DrShell from "./DrShell";
+import DrOrdersTab from "./sections/DrOrdersTab";
+import DrApprovalsTab from "./sections/DrApprovalsTab";
+import DrVendorsTab from "./sections/DrVendorsTab";
+import DrCatalogTab from "./sections/DrCatalogTab";
+import DrReturnsTab from "./sections/DrReturnsTab";
+import DrProfileTab from "./sections/DrProfileTab";
+import DrModals from "./sections/DrModals";
 
 const PRESET_IMAGES = [
   { label: "Cement Bag", url: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80" },
@@ -17,18 +22,6 @@ const PRESET_IMAGES = [
   { label: "Pipes & Plumbing", url: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=80" },
   { label: "Electrical / Wire", url: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=400&q=80" },
 ];
-
-const ORDER_STATUS_STYLE = {
-  APPROVED: "bg-emerald-50 text-emerald-700 border-emerald-200/80 font-bold",
-  CONFIRMED: "bg-emerald-50 text-emerald-700 border-emerald-200/80 font-bold",
-  PROCESSING: "bg-blue-50 text-blue-700 border-blue-200/80 font-bold",
-  SHIPPED: "bg-blue-50 text-blue-700 border-blue-200/80 font-bold",
-  OUT_FOR_DELIVERY: "bg-indigo-50 text-indigo-700 border-indigo-200/80 font-bold",
-  DELIVERED: "bg-emerald-50 text-emerald-700 border-emerald-200/80 font-bold",
-  COMPLETED: "bg-teal-50 text-teal-800 border-teal-300 font-black",
-  PENDING: "bg-amber-50 text-amber-700 border-amber-200/80 font-bold",
-  CANCELLED: "bg-rose-50 text-rose-700 border-rose-200/80 font-bold",
-};
 
 // Canonical district name resolver
 const getCanonicalDistrict = (name) => {
@@ -121,22 +114,18 @@ export default function DrDashboard() {
     productsLoading,
     categories = [],
     regions = [],
-    orders: adminOrders = [],
     fetchCloudData,
     addVendor,
     updateVendor,
     removeVendor,
     addMasterProduct,
     updateMasterProduct,
-    removeMasterProduct,
     assignMasterProductToVendor,
-    updateVendorProductListing,
-    removeVendorProductListing,
     setVendorStatus,
     updateListingApprovalStatus,
     markRecentEdit,
   } = useAdmin();
-  const { orders: contextOrders = [], fetchAllOrders, updateOrderStatus } = useOrders() || {};
+  const { orders: contextOrders = [], updateOrderStatus } = useOrders() || {};
 
   const recentDrEditsRef = useRef(new Map());
 
@@ -211,11 +200,12 @@ export default function DrDashboard() {
     const regionParam = districtRegionParamRef.current;
     const regionQuery = regionParam ? `&regionId=${encodeURIComponent(regionParam)}` : "";
     try {
-      // Exact district totals for the counters, independent of loaded pages
       if (regionParam) {
         authFetch(`${API_BASE_URL}/api/v1/orders/summary?regionId=${encodeURIComponent(regionParam)}`)
           .then((r) => (r.ok ? r.json() : null))
-          .then((summary) => { if (summary) setDistrictSummary(summary); })
+          .then((summary) => {
+            if (summary) setDistrictSummary(summary);
+          })
           .catch(() => {});
       }
 
@@ -319,7 +309,10 @@ export default function DrDashboard() {
               mrp: Number(l.mrp || l.masterProduct?.suggestedPrice || Math.round((Number(l.price) || 100) * 1.2)),
               price: Number(l.price) || 100,
               stockQty: Number(l.stockQty) || 100,
-              imageUrl: l.imageUrl || l.masterProduct?.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80",
+              imageUrl:
+                l.imageUrl ||
+                l.masterProduct?.imageUrl ||
+                "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80",
               approvalStatus: l.approvalStatus || "APPROVED",
               isActive: isListingApproved && l.isActive !== false && !isVendorSuspended,
               isVendorSuspended: Boolean(isVendorSuspended),
@@ -344,16 +337,12 @@ export default function DrDashboard() {
     }
   };
 
-  // Smart Real-time Sync for DR Dashboard: Instant Event Sync + Focus/Visibility Aware (Zero waste on inactive tabs)
+  // Smart Real-time Sync for DR Dashboard
   useEffect(() => {
-    // AdminContext already runs a cloud-sync whenever the signed-in user changes, so a mount
-    // sync here only duplicated it right after login. Once the district is known, the
-    // districtRegionParam effect below loads the orders, so don't send the same request twice.
     if (!districtRegionParamRef.current) fetchLiveOrdersDirect();
     fetchLiveVendorsDirect();
     fetchLiveProductsDirect();
 
-    // 1. Smart Interval: Poll only when active tab is visible (5m fallback instead of 60s)
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
         fetchLiveOrdersDirect();
@@ -362,7 +351,6 @@ export default function DrDashboard() {
       }
     }, 300000);
 
-    // 2. Instant Sync on Focus (when user returns to tab)
     const handleFocus = () => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
         fetchLiveOrdersDirect();
@@ -372,7 +360,6 @@ export default function DrDashboard() {
       }
     };
 
-    // 3. Instant Event-Driven Sync
     const handleOrdersUpdated = () => fetchLiveOrdersDirect();
     const handleVendorsUpdated = () => fetchLiveVendorsDirect();
     const handleProductsUpdated = () => fetchLiveProductsDirect();
@@ -395,7 +382,7 @@ export default function DrDashboard() {
     };
   }, []);
 
-  // Stable, zero-flicker live orders list (Direct DB stream priority)
+  // Stable, zero-flicker live orders list
   const orders = useMemo(() => {
     if (Array.isArray(directOrders) && directOrders.length > 0) {
       if (Array.isArray(contextOrders) && contextOrders.length > 0) {
@@ -413,7 +400,7 @@ export default function DrDashboard() {
     return [];
   }, [directOrders, contextOrders]);
 
-  // Live vendors list (Direct DB stream priority)
+  // Live vendors list
   const allVendors = useMemo(() => {
     if (Array.isArray(directVendors) && directVendors.length > 0) {
       return directVendors;
@@ -421,7 +408,7 @@ export default function DrDashboard() {
     return vendors || [];
   }, [directVendors, vendors]);
 
-  // Live products list (Direct DB stream priority)
+  // Live products list
   const allProducts = useMemo(() => {
     if (Array.isArray(directProducts) && directProducts.length > 0) {
       return directProducts;
@@ -429,7 +416,14 @@ export default function DrDashboard() {
     return products || [];
   }, [directProducts, products]);
 
-  const [activeTab, setActiveTab] = useState("products");
+  // Navigation Tabs with Android Back Button History
+  const [activeTab, setActiveTabState] = useState("orders");
+  const [tabHistory, setTabHistory] = useState(["orders"]);
+  const setActiveTab = (tab) => {
+    if (tab === activeTab) return;
+    setActiveTabState(tab);
+    setTabHistory((prev) => [...prev, tab]);
+  };
   const [searchTerm, setSearchTerm] = useState("");
   const [listingFilter, setListingFilter] = useState("ALL");
   const [orderStatusFilter, setOrderStatusFilter] = useState("ALL");
@@ -438,6 +432,7 @@ export default function DrDashboard() {
   const [returnSearchQuery, setReturnSearchQuery] = useState("");
   const [returnSearchResults, setReturnSearchResults] = useState([]);
   const [selectedReturnOrder, setSelectedReturnOrder] = useState(null);
+  const [returnSearchMessage, setReturnSearchMessage] = useState("");
   const [returnQuantities, setReturnQuantities] = useState({});
   const [returnReason, setReturnReason] = useState("Excess unused material leftover");
   const [customCashbackDeduct, setCustomCashbackDeduct] = useState("");
@@ -461,12 +456,6 @@ export default function DrDashboard() {
     }
   };
 
-  useEffect(() => {
-    if (activeTab === "returns") {
-      fetchProcessedReturns();
-    }
-  }, [activeTab]);
-
   const selectOrderForReturn = (ord) => {
     setSelectedReturnOrder(ord);
     const initialQtys = {};
@@ -475,42 +464,74 @@ export default function DrDashboard() {
       initialQtys[key] = 0;
     });
     setReturnQuantities(initialQtys);
-    const defaultCb = ord?.remainingCashbackToDeduct !== undefined
-      ? Number(ord.remainingCashbackToDeduct || 0)
-      : Number(ord?.cashbackEarned || 0);
+    const defaultCb =
+      ord?.remainingCashbackToDeduct !== undefined
+        ? Number(ord.remainingCashbackToDeduct || 0)
+        : Number(ord?.cashbackEarned || 0);
     setCustomCashbackDeduct(defaultCb > 0 ? String(defaultCb) : "0");
   };
 
-  const handleSearchReturnOrder = async (e) => {
-    if (e) e.preventDefault();
-    const q = returnSearchQuery.trim();
+  const searchOrderByIdForReturn = async (queryText = "") => {
+    const q = String(queryText || "").trim();
     if (!q) {
-      showAlert("Please enter an Order ID or Customer Mobile Number to search.", "Search Required", "warning");
+      setReturnSearchResults([]);
+      setSelectedReturnOrder(null);
+      setReturnSearchMessage("Please enter an Order ID or its last 4 characters.");
       return;
     }
+
     setIsSearchingReturnOrder(true);
+    setReturnSearchMessage("");
     try {
       const res = await authFetch(`${API_BASE_URL}/api/v1/returns/search?q=${encodeURIComponent(q)}`);
       const data = await res.json();
       if (!res.ok) {
-        showAlert(data?.error || "Search failed.", "Error", "error");
+        setReturnSearchResults([]);
+        setSelectedReturnOrder(null);
+        setReturnSearchMessage(data?.error || "Search failed.");
         return;
       }
-      const list = Array.isArray(data) ? data : [];
-      setReturnSearchResults(list);
-      if (list.length === 1) {
-        selectOrderForReturn(list[0]);
-      } else if (list.length === 0) {
+
+      const matchedOrders = Array.isArray(data) ? data : [];
+      if (matchedOrders.length === 0) {
+        setReturnSearchResults([]);
         setSelectedReturnOrder(null);
-        showAlert(`No orders found matching "${q}" in your district.`, "No Order Found", "warning");
-      } else {
-        selectOrderForReturn(list[0]);
+        setReturnSearchMessage("Order not found.");
+        return;
       }
-    } catch (err) {
-      showAlert("Could not search orders. Please check your connection.", "Network Error", "error");
+
+      const deliveredList = matchedOrders.filter((o) => {
+        const st = String(o.status || "").toUpperCase();
+        return st === "DELIVERED" || st === "COMPLETED";
+      });
+
+      if (deliveredList.length === 0) {
+        setReturnSearchResults([]);
+        setSelectedReturnOrder(null);
+        setReturnSearchMessage("Order not delivered");
+        return;
+      }
+
+      setReturnSearchMessage("");
+      setReturnSearchResults(deliveredList);
+      const stillSelected = selectedReturnOrder && deliveredList.find((o) => o.id === selectedReturnOrder.id);
+      selectOrderForReturn(stillSelected || deliveredList[0]);
+    } catch {
+      setReturnSearchMessage("Unable to search order right now.");
     } finally {
       setIsSearchingReturnOrder(false);
     }
+  };
+
+  useEffect(() => {
+    if (activeTab === "returns") {
+      fetchProcessedReturns();
+    }
+  }, [activeTab]);
+
+  const handleSearchReturnOrder = async (e) => {
+    if (e) e.preventDefault();
+    await searchOrderByIdForReturn(returnSearchQuery);
   };
 
   const handleReturnQtyChange = (itemKey, newVal, maxQty) => {
@@ -534,7 +555,7 @@ export default function DrDashboard() {
       .filter((x) => x.returnQty > 0);
 
     if (itemsPayload.length === 0) {
-      showAlert("Kripya kam se kam 1 item ki Return Quantity (+ button daba kar) chunein.", "Select Return Quantity", "warning");
+      showAlert("Please select a return quantity of at least 1 item using the + button.", "Select Return Quantity", "warning");
       return;
     }
 
@@ -558,28 +579,16 @@ export default function DrDashboard() {
       }
 
       showAlert(
-        `Return recorded! Net Cash to pay customer: ₹${Number(data.summary?.netRefundCash || 0).toLocaleString("en-IN")}. Vendor stock has been restored.`,
-        "Return Completed ✓",
+        `Return recorded successfully. Net Cash to refund customer: ₹${Number(data.summary?.netRefundCash || 0).toLocaleString("en-IN")}. Vendor stock has been restored.`,
+        "Return Completed",
         "success"
       );
 
-      // Refresh return history, products stock & order search
       await fetchProcessedReturns();
       fetchLiveProductsDirect();
       fetchLiveOrdersDirect();
-      // Re-run search to refresh remaining returnable quantities
-      if (returnSearchQuery.trim()) {
-        const refreshRes = await authFetch(`${API_BASE_URL}/api/v1/returns/search?q=${encodeURIComponent(returnSearchQuery.trim())}`);
-        if (refreshRes.ok) {
-          const refreshedList = await refreshRes.json();
-          if (Array.isArray(refreshedList)) {
-            setReturnSearchResults(refreshedList);
-            const updatedOrd = refreshedList.find((o) => o.id === selectedReturnOrder.id);
-            if (updatedOrd) selectOrderForReturn(updatedOrd);
-          }
-        }
-      }
-    } catch (err) {
+      await searchOrderByIdForReturn(returnSearchQuery);
+    } catch {
       showAlert("Network error while filing return.", "Error", "error");
     } finally {
       setIsSubmittingReturn(false);
@@ -589,21 +598,64 @@ export default function DrDashboard() {
   // Modals state
   const [showVendorModal, setShowVendorModal] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
-
-  // Editing state
   const [editingVendor, setEditingVendor] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
 
-  // Edit modal me product ki 3 images manage karne ke liye helper state
+  // Android Back Button & Modal Scroll Lock (Vendor Dashboard style)
+  useEffect(() => {
+    window.__buildcity_vendor_back_handler = () => {
+      if (showVendorModal) {
+        setShowVendorModal(false);
+        return true;
+      }
+      if (showProductModal) {
+        setShowProductModal(false);
+        return true;
+      }
+      if (editingVendor) {
+        setEditingVendor(null);
+        return true;
+      }
+      if (editingProduct) {
+        setEditingProduct(null);
+        return true;
+      }
+      if (tabHistory.length > 1) {
+        const updated = tabHistory.slice(0, -1);
+        setTabHistory(updated);
+        setActiveTabState(updated[updated.length - 1]);
+        return true;
+      }
+      return false;
+    };
+    return () => {
+      window.__buildcity_vendor_back_handler = null;
+    };
+  });
+
+  useEffect(() => {
+    const anySheetOpen = showVendorModal || showProductModal || Boolean(editingVendor) || Boolean(editingProduct);
+    if (!anySheetOpen) return;
+    const origOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = origOverflow;
+    };
+  }, [showVendorModal, showProductModal, editingVendor, editingProduct]);
+
   const editingImages = useMemo(() => {
     if (!editingProduct) return ["", "", ""];
-    const list = Array.isArray(editingProduct.images) && editingProduct.images.length > 0
-      ? editingProduct.images.filter(Boolean)
-      : (editingProduct.imageUrl || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const list =
+      Array.isArray(editingProduct.images) && editingProduct.images.length > 0
+        ? editingProduct.images.filter(Boolean)
+        : (editingProduct.imageUrl || "")
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
     return [
-      editingProduct.img1 !== undefined ? editingProduct.img1 : (list[0] || ""),
-      editingProduct.img2 !== undefined ? editingProduct.img2 : (list[1] || ""),
-      editingProduct.img3 !== undefined ? editingProduct.img3 : (list[2] || ""),
+      editingProduct.img1 !== undefined ? editingProduct.img1 : list[0] || "",
+      editingProduct.img2 !== undefined ? editingProduct.img2 : list[1] || "",
+      editingProduct.img3 !== undefined ? editingProduct.img3 : list[2] || "",
     ];
   }, [editingProduct]);
 
@@ -646,81 +698,89 @@ export default function DrDashboard() {
     description: "",
   });
 
-  // Find current logged-in DR info dynamically from live DB drs list or user.drInfo
-  const currentDr = (drs || []).find((d) => {
-    if (!d) return false;
-    const userPhoneClean = user?.phone ? String(user.phone).replace(/\D/g, "") : "";
-    const dPhoneClean = d.phone ? String(d.phone).replace(/\D/g, "") : "";
-    return (
-      (userPhoneClean && dPhoneClean && dPhoneClean.slice(-10) === userPhoneClean.slice(-10)) ||
-      d.userId === user?.id ||
-      d.id === user?.id ||
-      d.id === user?.drInfo?.id ||
-      (d.userId && user?.drInfo?.userId && d.userId === user.drInfo.userId)
-    );
-  }) || user?.drInfo || {};
-  
-  const rawDrRegionId = currentDr?.regionId || currentDr?.region?.id || user?.drInfo?.regionId || user?.drInfo?.region?.id || user?.regionId || user?.preferredRegionId || "";
-  const rawDrRegionName = currentDr?.region?.name || currentDr?.regionName || user?.drInfo?.region?.name || user?.drInfo?.regionName || user?.regionName || user?.preferredRegionName || "";
+  // Find current logged-in DR info dynamically
+  const currentDr =
+    (drs || []).find((d) => {
+      if (!d) return false;
+      const userPhoneClean = user?.phone ? String(user.phone).replace(/\D/g, "") : "";
+      const dPhoneClean = d.phone ? String(d.phone).replace(/\D/g, "") : "";
+      return (
+        (userPhoneClean && dPhoneClean && dPhoneClean.slice(-10) === userPhoneClean.slice(-10)) ||
+        d.userId === user?.id ||
+        d.id === user?.id ||
+        d.id === user?.drInfo?.id ||
+        (d.userId && user?.drInfo?.userId && d.userId === user.drInfo.userId)
+      );
+    }) ||
+    user?.drInfo ||
+    {};
 
-  // Match region object from database regions list
-  const drRegion = (regions || []).find((r) =>
-    (rawDrRegionId && (r.id === rawDrRegionId || String(r.id).toLowerCase() === String(rawDrRegionId).toLowerCase())) ||
-    (rawDrRegionName && isSameDistrict(r.name, rawDrRegionName))
+  const rawDrRegionId =
+    currentDr?.regionId ||
+    currentDr?.region?.id ||
+    user?.drInfo?.regionId ||
+    user?.drInfo?.region?.id ||
+    user?.regionId ||
+    user?.preferredRegionId ||
+    "";
+  const rawDrRegionName =
+    currentDr?.region?.name ||
+    currentDr?.regionName ||
+    user?.drInfo?.region?.name ||
+    user?.drInfo?.regionName ||
+    user?.regionName ||
+    user?.preferredRegionName ||
+    "";
+
+  const drRegion = (regions || []).find(
+    (r) =>
+      (rawDrRegionId && (r.id === rawDrRegionId || String(r.id).toLowerCase() === String(rawDrRegionId).toLowerCase())) ||
+      (rawDrRegionName && isSameDistrict(r.name, rawDrRegionName))
   );
 
-  const districtName = drRegion?.name || rawDrRegionName || (regions[0]?.name || "Varanasi");
-  const drRegionId = drRegion?.id || rawDrRegionId || (regions.find((r) => isSameDistrict(r.name, districtName)))?.id || "";
+  const districtName = drRegion?.name || rawDrRegionName || regions[0]?.name || "Varanasi";
+  const drRegionId =
+    drRegion?.id || rawDrRegionId || regions.find((r) => isSameDistrict(r.name, districtName))?.id || "";
 
   // DR Assigned Region Vendors Filter (STRICT JURISDICTION LOCK)
-  const districtVendors = (allVendors || []).filter((v) => {
-    if (!v) return false;
-    const vRegId = v.regionId || v.region?.id;
-    const vRegName = v.region?.name || v.regionName || v.districtName || "";
-
-    // 1. Match Region ID
-    if (drRegionId && vRegId && String(vRegId).toLowerCase() === String(drRegionId).toLowerCase()) {
-      return true;
-    }
-
-    // 2. Match Region Name with canonical aliases
-    if (districtName && vRegName && isSameDistrict(districtName, vRegName)) {
-      return true;
-    }
-
-    return false;
-  });
+  const districtVendors = useMemo(() => {
+    return (allVendors || []).filter((v) => {
+      if (!v) return false;
+      const vRegId = v.regionId || v.region?.id;
+      const vRegName = v.region?.name || v.regionName || v.districtName || "";
+      if (drRegionId && vRegId && String(vRegId).toLowerCase() === String(drRegionId).toLowerCase()) {
+        return true;
+      }
+      if (districtName && vRegName && isSameDistrict(districtName, vRegName)) {
+        return true;
+      }
+      return false;
+    });
+  }, [allVendors, drRegionId, districtName]);
 
   // DR Assigned Region Products Filter (STRICT JURISDICTION LOCK)
-  const districtProducts = (allProducts || []).filter((p) => {
-    if (!p) return false;
-    const pRegId = p.regionId || p.vendor?.regionId || p.vendor?.region?.id;
-    const pRegName = p.vendor?.region?.name || p.regionName || p.districtName || "";
+  const districtProducts = useMemo(() => {
+    return (allProducts || []).filter((p) => {
+      if (!p) return false;
+      const pRegId = p.regionId || p.vendor?.regionId || p.vendor?.region?.id;
+      const pRegName = p.vendor?.region?.name || p.regionName || p.districtName || "";
+      if (drRegionId && pRegId && String(pRegId).toLowerCase() === String(drRegionId).toLowerCase()) {
+        return true;
+      }
+      if (districtName && pRegName && isSameDistrict(districtName, pRegName)) {
+        return true;
+      }
+      return districtVendors.some(
+        (v) =>
+          (v?.id && p.vendorId && String(v.id).toLowerCase() === String(p.vendorId).toLowerCase()) ||
+          (v?.shopName && p.vendorName && v.shopName.toLowerCase().trim() === p.vendorName.toLowerCase().trim())
+      );
+    });
+  }, [allProducts, drRegionId, districtName, districtVendors]);
 
-    // 1. Direct region ID match
-    if (drRegionId && pRegId && String(pRegId).toLowerCase() === String(drRegionId).toLowerCase()) {
-      return true;
-    }
-
-    // 2. Direct region Name match with canonical alias
-    if (districtName && pRegName && isSameDistrict(districtName, pRegName)) {
-      return true;
-    }
-
-    // 3. Belongs to a vendor in this DR's district
-    const belongsToDistrictVendor = districtVendors.some(
-      (v) =>
-        (v?.id && p.vendorId && String(v.id).toLowerCase() === String(p.vendorId).toLowerCase()) ||
-        (v?.shopName && p.vendorName && v.shopName.toLowerCase().trim() === p.vendorName.toLowerCase().trim())
-    );
-    return belongsToDistrictVendor;
-  });
-
-  // Resolve single definitive district for each order with strict Region Priority
+  // Resolve single definitive district for each order
   const getOrderDistrict = (o) => {
     if (!o) return "Varanasi";
-
-    // 1. HIGHEST PRIORITY: Delivery Address Region (Strict customer delivery location)
     if (o.address?.region?.name) {
       const r = getCanonicalDistrict(o.address.region.name);
       if (r === "mirzapur") return "Mirzapur";
@@ -728,7 +788,6 @@ export default function DrDashboard() {
       if (r === "jaunpur") return "Jaunpur";
       if (r === "varanasi") return "Varanasi";
     }
-
     if (o.address?.regionId) {
       const matched = (regions || []).find((r) => r.id === o.address.regionId);
       if (matched?.name) {
@@ -739,8 +798,6 @@ export default function DrDashboard() {
         if (r === "varanasi") return "Varanasi";
       }
     }
-
-    // 2. SECOND PRIORITY: Vendor's Region from ordered items (Crucial for orders without delivery address)
     if (Array.isArray(o.items) && o.items.length > 0) {
       for (const it of o.items) {
         const vReg = it?.vendor?.region?.name || it?.vendorRegion || it?.regionName;
@@ -753,8 +810,6 @@ export default function DrDashboard() {
         }
       }
     }
-
-    // 3. THIRD PRIORITY: Order's explicit District / Region Name if set from DB
     if (o.region?.name) {
       const r = getCanonicalDistrict(o.region.name);
       if (r === "mirzapur") return "Mirzapur";
@@ -762,7 +817,6 @@ export default function DrDashboard() {
       if (r === "jaunpur") return "Jaunpur";
       if (r === "varanasi") return "Varanasi";
     }
-
     if (o.districtName) {
       const d = getCanonicalDistrict(o.districtName);
       if (d === "mirzapur") return "Mirzapur";
@@ -770,7 +824,6 @@ export default function DrDashboard() {
       if (d === "jaunpur") return "Jaunpur";
       if (d === "varanasi") return "Varanasi";
     }
-
     if (o.regionName) {
       const r = getCanonicalDistrict(o.regionName);
       if (r === "mirzapur") return "Mirzapur";
@@ -778,8 +831,6 @@ export default function DrDashboard() {
       if (r === "jaunpur") return "Jaunpur";
       if (r === "varanasi") return "Varanasi";
     }
-
-    // 4. FALLBACK: Address City / Street text
     if (o.address?.city) {
       const c = getCanonicalDistrict(o.address.city);
       if (c === "mirzapur") return "Mirzapur";
@@ -787,14 +838,11 @@ export default function DrDashboard() {
       if (c === "jaunpur") return "Jaunpur";
       if (c === "varanasi") return "Varanasi";
     }
-
     return "Varanasi";
   };
 
-  // DR Assigned Region Orders Filter (Strict 1-to-1 region matching: only orders in DR's region)
   const currentDrCanonical = getCanonicalDistrict(districtName);
 
-  // Every region record belonging to this DR's district (names are matched canonically client-side)
   const districtRegionParam = useMemo(() => {
     const ids = (regions || [])
       .filter((r) => r?.id && getCanonicalDistrict(r.name) === currentDrCanonical)
@@ -804,7 +852,6 @@ export default function DrDashboard() {
   }, [regions, currentDrCanonical, drRegionId]);
   districtRegionParamRef.current = districtRegionParam;
 
-  // Once the district is known, restart district paging scoped to it
   useEffect(() => {
     if (!districtRegionParam) return;
     olderDirectLoadedRef.current = false;
@@ -819,8 +866,6 @@ export default function DrDashboard() {
     });
   }, [orders, currentDrCanonical, regions]);
 
-  // Filtered district orders by search and status filter
-  // Exact district total from the server; falls back to loaded orders until it arrives
   const districtOrdersCount = districtSummary ? districtSummary.totalOrders : districtOrders.length;
 
   const filteredDistrictOrders = useMemo(() => {
@@ -832,7 +877,8 @@ export default function DrDashboard() {
         (ord.orderNumber && String(ord.orderNumber).toLowerCase().includes(searchTerm.toLowerCase())) ||
         (ord.customer?.name && String(ord.customer.name).toLowerCase().includes(searchTerm.toLowerCase())) ||
         (ord.customer?.phone && String(ord.customer.phone).includes(searchTerm)) ||
-        (Array.isArray(ord.items) && ord.items.some((i) => (i?.productName || i?.name || "").toLowerCase().includes(searchTerm.toLowerCase())));
+        (Array.isArray(ord.items) &&
+          ord.items.some((i) => (i?.productName || i?.name || "").toLowerCase().includes(searchTerm.toLowerCase())));
 
       const ordStatus = (ord.status || "PENDING").toUpperCase();
       const matchesStatus = orderStatusFilter === "ALL" || ordStatus === orderStatusFilter;
@@ -841,46 +887,100 @@ export default function DrDashboard() {
     });
   }, [districtOrders, searchTerm, orderStatusFilter]);
 
-  // Filtered by search
-  const filteredVendors = districtVendors.filter(
-    (v) =>
-      !searchTerm ||
-      (v?.shopName && v.shopName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (v?.ownerName && v.ownerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (v?.phone && String(v.phone).includes(searchTerm))
-  );
+  const filteredVendors = useMemo(() => {
+    return districtVendors.filter(
+      (v) =>
+        !searchTerm ||
+        (v?.shopName && v.shopName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (v?.ownerName && v.ownerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (v?.phone && String(v.phone).includes(searchTerm))
+    );
+  }, [districtVendors, searchTerm]);
 
-  const filteredProducts = districtProducts.filter((p) => {
-    if (!p) return false;
-    const matchesSearch =
-      !searchTerm ||
-      (p?.name && p.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (p?.brand && p.brand.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (p?.categoryName && p.categoryName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (p?.vendorName && p.vendorName.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredProducts = useMemo(() => {
+    return districtProducts.filter((p) => {
+      if (!p) return false;
+      const matchesSearch =
+        !searchTerm ||
+        (p?.name && p.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (p?.brand && p.brand.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (p?.categoryName && p.categoryName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (p?.vendorName && p.vendorName.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    const st = p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW");
-    const matchesStatus = listingFilter === "ALL" ? true : st === listingFilter;
+      const st = p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW");
+      const matchesStatus = listingFilter === "ALL" ? true : st === listingFilter;
 
-    return matchesSearch && matchesStatus;
-  });
+      return matchesSearch && matchesStatus;
+    });
+  }, [districtProducts, searchTerm, listingFilter]);
+
+  // KPI Summary Stats for DrShell
+  const stats = useMemo(() => {
+    const deliveredRevenue = districtSummary?.deliveredRevenue !== undefined
+      ? Number(districtSummary.deliveredRevenue || 0)
+      : districtOrders.reduce((sum, o) => {
+          const st = String(o?.status || "").toUpperCase();
+          if (st === "DELIVERED" || st === "COMPLETED") {
+            return sum + Number(o.totalAmount || o.total || 0);
+          }
+          return sum;
+        }, 0);
+
+    const activeOrdersCount = districtOrders.filter((o) => {
+      const st = String(o?.status || "PENDING").toUpperCase();
+      return st !== "DELIVERED" && st !== "COMPLETED" && st !== "CANCELLED";
+    }).length;
+
+    const approvedVendorsCount = districtVendors.filter(
+      (v) => String(v?.status || "APPROVED").toUpperCase() === "APPROVED"
+    ).length;
+
+    const pendingApprovalsCount = districtProducts.filter(
+      (p) => (p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW")) === "PENDING_REVIEW"
+    ).length;
+
+    return {
+      districtRevenue: deliveredRevenue,
+      totalOrdersCount: districtOrdersCount,
+      activeOrdersCount,
+      totalVendorsCount: districtVendors.length,
+      approvedVendorsCount,
+      totalProductsCount: districtProducts.length,
+      pendingApprovalsCount,
+      returnsCount: processedReturns.length,
+    };
+  }, [districtSummary, districtOrders, districtOrdersCount, districtVendors, districtProducts, processedReturns.length]);
 
   const [isSubmittingVendor, setIsSubmittingVendor] = useState(false);
   const [isSubmittingEditVendor, setIsSubmittingEditVendor] = useState(false);
   const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
   const [deletingVendorId, setDeletingVendorId] = useState(null);
-  const [updatingVendorStatus, setUpdatingVendorStatus] = useState(null); // { id, action }
-  const [busyListingAction, setBusyListingAction] = useState(null); // { id, action: 'APPROVED' | 'REJECTED' }
-  const [busyListingId, setBusyListingId] = useState(null);
+  const [updatingVendorStatus, setUpdatingVendorStatus] = useState(null);
+  const [busyListingAction, setBusyListingAction] = useState(null);
+
+  const handleListingAction = async (listingId, nextStatus) => {
+    if (busyListingAction) return;
+    const isApproved = nextStatus === "APPROVED";
+    setBusyListingAction({ id: listingId, action: nextStatus });
+    markRecentDrEdit(listingId, { approvalStatus: nextStatus, isActive: isApproved });
+    setDirectProducts((prev) =>
+      prev.map((item) => (item.id === listingId ? { ...item, approvalStatus: nextStatus, isActive: isApproved } : item))
+    );
+    try {
+      await updateListingApprovalStatus(listingId, nextStatus);
+      await fetchLiveProductsDirect();
+      window.dispatchEvent(new CustomEvent("buildcity_products_updated"));
+    } finally {
+      setBusyListingAction(null);
+    }
+  };
 
   const handleToggleVendorStatus = async (vendorId, nextStatus) => {
     if (updatingVendorStatus) return;
     markRecentDrEdit(vendorId, { status: nextStatus });
     setUpdatingVendorStatus({ id: vendorId, action: nextStatus });
     try {
-      setDirectVendors((prev) =>
-        prev.map((v) => (v.id === vendorId ? { ...v, status: nextStatus } : v))
-      );
+      setDirectVendors((prev) => prev.map((v) => (v.id === vendorId ? { ...v, status: nextStatus } : v)));
       await setVendorStatus(vendorId, nextStatus);
       await fetchLiveVendorsDirect();
       window.dispatchEvent(new CustomEvent("buildcity_vendors_updated"));
@@ -905,7 +1005,11 @@ export default function DrDashboard() {
           showAlert({ title: "Vendor Deleted", message: `Vendor "${v.shopName}" removed successfully from database.`, type: "success" });
         } catch (err) {
           await fetchLiveVendorsDirect();
-          showAlert({ title: "Delete Failed", message: err.message || "Failed to delete vendor from database. Try suspending instead.", type: "error" });
+          showAlert({
+            title: "Delete Failed",
+            message: err.message || "Failed to delete vendor from database. Try suspending instead.",
+            type: "error",
+          });
         } finally {
           setDeletingVendorId(null);
         }
@@ -924,8 +1028,8 @@ export default function DrDashboard() {
     setIsSubmittingVendor(true);
     try {
       const matchedReg = (regions || []).find((r) => r.name?.toLowerCase() === districtName.toLowerCase() || r.id === drRegionId);
-      const targetRegionId = matchedReg ? matchedReg.id : (drRegionId || "r2");
-      const targetRegionName = matchedReg ? matchedReg.name : (districtName || "Mirzapur");
+      const targetRegionId = matchedReg ? matchedReg.id : drRegionId || "r2";
+      const targetRegionName = matchedReg ? matchedReg.name : districtName || "Mirzapur";
 
       const created = await addVendor({
         shopName: vendorForm.shopName.trim(),
@@ -949,7 +1053,11 @@ export default function DrDashboard() {
 
       setVendorForm({ shopName: "", ownerName: "", phone: "", password: "", status: "APPROVED", commissionRate: 10 });
       setShowVendorModal(false);
-      showAlert({ title: "Vendor Added", message: `Vendor "${vendorForm.shopName.trim()}" successfully added to Supabase Cloud Database!`, type: "success" });
+      showAlert({
+        title: "Vendor Added",
+        message: `Vendor "${vendorForm.shopName.trim()}" successfully added to Supabase Cloud Database!`,
+        type: "success",
+      });
     } catch (err) {
       showAlert({ title: "Error", message: "Failed to add vendor: " + err.message, type: "error" });
     } finally {
@@ -960,13 +1068,17 @@ export default function DrDashboard() {
   const handleUpdateVendorSubmit = async (e) => {
     e.preventDefault();
     if (!editingVendor) return;
+    setIsSubmittingEditVendor(true);
     const vendorToSave = { ...editingVendor };
     markRecentDrEdit(vendorToSave.id, vendorToSave);
-    setDirectVendors((prev) =>
-      prev.map((v) => (v.id === vendorToSave.id ? { ...v, ...vendorToSave } : v))
-    );
+    setDirectVendors((prev) => prev.map((v) => (v.id === vendorToSave.id ? { ...v, ...vendorToSave } : v)));
     setEditingVendor(null);
-    showAlert({ title: "Vendor Updated", message: `Vendor "${vendorToSave.shopName}" details & password updated successfully!`, type: "success" });
+    setIsSubmittingEditVendor(false);
+    showAlert({
+      title: "Vendor Updated",
+      message: `Vendor "${vendorToSave.shopName}" details & password updated successfully!`,
+      type: "success",
+    });
 
     try {
       await updateVendor(vendorToSave.id, vendorToSave);
@@ -1032,7 +1144,11 @@ export default function DrDashboard() {
       await fetchLiveProductsDirect();
       window.dispatchEvent(new CustomEvent("buildcity_products_updated"));
       setShowProductModal(false);
-      showAlert({ title: "Product Added", message: `Product "${productForm.name.trim()}" added to Master Catalog & District Listings!`, type: "success" });
+      showAlert({
+        title: "Product Added",
+        message: `Product "${productForm.name.trim()}" added to Master Catalog & District Listings!`,
+        type: "success",
+      });
     } catch (err) {
       showAlert({ title: "Error", message: "Failed to add product: " + (err.message || err), type: "error" });
     } finally {
@@ -1040,2037 +1156,192 @@ export default function DrDashboard() {
     }
   };
 
+  const handleEditMasterProduct = (p) => {
+    const defaultDesc = `High-quality certified ${p.name || "Product"} by ${p.brand || "Authorized Brand"}. Supplied directly via BuildCity Certified Delivery Network.`;
+    setEditingProduct({
+      ...p,
+      description: p.description && p.description.trim() ? p.description : defaultDesc,
+    });
+  };
+
+  const handleSaveEditedMasterProduct = (e) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+    const finalImgs = [
+      editingProduct.img1 !== undefined ? editingProduct.img1 : editingImages[0],
+      editingProduct.img2 !== undefined ? editingProduct.img2 : editingImages[1],
+      editingProduct.img3 !== undefined ? editingProduct.img3 : editingImages[2],
+    ]
+      .map((s) => (s || "").trim())
+      .filter(Boolean);
+    const finalImageUrl = finalImgs.join(", ") || editingProduct.imageUrl || "";
+
+    const prodToSave = {
+      ...editingProduct,
+      imageUrl: finalImageUrl,
+      images: finalImgs,
+      description: editingProduct.description !== undefined ? editingProduct.description?.trim() || null : undefined,
+    };
+    delete prodToSave.img1;
+    delete prodToSave.img2;
+    delete prodToSave.img3;
+
+    setEditingProduct(null);
+    updateMasterProduct(prodToSave.id || prodToSave.masterProductId, prodToSave);
+    showAlert({ title: "Product Updated", message: `Product "${prodToSave.name}" updated successfully!`, type: "success" });
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 text-navy-900 pb-16">
-      {/* Header */}
-      <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Logo size="sm" />
-            <span className="bg-brand-50 text-brand-600 border border-brand-200 text-xs font-bold px-2.5 py-1 rounded-full">
-              DR Portal
-            </span>
-            <span className="hidden md:inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg border border-amber-200">
-              📍 District: <strong>{districtName}</strong>
-            </span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="text-right hidden sm:block">
-              <p className="text-sm font-bold text-navy-900">{user?.name || "District Representative"}</p>
-              <p className="text-xs text-slate-500">📱 {user?.phone}</p>
-            </div>
-            <button
-              onClick={logout}
-              className="text-xs font-semibold text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-100 transition-colors"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Container */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 mt-6">
-        {/* District Banner & Stats */}
-        <div className="bg-gradient-to-r from-navy-950 via-navy-900 to-slate-900 border border-navy-800/60 rounded-2xl p-6 text-white shadow-md mb-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <span className="text-[11px] font-extrabold uppercase tracking-wider text-brand-300">
-                District Representative Dashboard
-              </span>
-              <h1 className="text-2xl font-black tracking-tight mt-1">{districtName} District Portal</h1>
-              <p className="text-xs text-slate-300 font-medium mt-1">
-                Manage vendors, add construction products, category, brands, grade & images for {districtName}.
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowVendorModal(true)}
-                className="bg-white text-navy-950 font-extrabold text-xs px-4 py-2.5 rounded-xl hover:bg-slate-100 active:scale-[0.98] transition-all duration-200 flex items-center gap-2 shadow-xs cursor-pointer"
-              >
-                <span>➕</span> Add New Vendor
-              </button>
-              <button
-                onClick={() => setShowProductModal(true)}
-                className="bg-brand-500 hover:bg-brand-600 active:scale-[0.98] transition-all duration-200 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-xs cursor-pointer"
-              >
-                <span>📦</span> Add New Product
-              </button>
-            </div>
-          </div>
-
-          {/* Quick Metrics */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-5 border-t border-slate-700/60">
-            <div className="bg-white/10 rounded-xl p-3.5 backdrop-blur-xs border border-white/10">
-              <p className="text-[11px] text-slate-300 font-medium">Assigned District</p>
-              <p className="text-lg font-black mt-0.5 tracking-tight text-amber-300">📍 {districtName}</p>
-            </div>
-            <div className="bg-white/10 rounded-xl p-3.5 backdrop-blur-xs border border-white/10">
-              <p className="text-[11px] text-slate-300 font-medium">District Vendors</p>
-              <p className="text-lg font-black mt-0.5 tracking-tight">{districtVendors.length}</p>
-            </div>
-            <div className="bg-white/10 rounded-xl p-3.5 backdrop-blur-xs border border-white/10">
-              <p className="text-[11px] text-slate-300 font-medium">District Orders</p>
-              <p className="text-lg font-black mt-0.5 tracking-tight">{districtOrdersCount}</p>
-            </div>
-            <div className="bg-white/10 rounded-xl p-3.5 backdrop-blur-xs border border-white/10">
-              <p className="text-[11px] text-slate-300 font-medium">District Products</p>
-              <p className="text-lg font-black mt-0.5 tracking-tight">{districtProducts.length}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Navigation Tabs & Search */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-6">
-          <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200 shadow-2xs overflow-x-auto no-scrollbar">
-            <button
-              onClick={() => setActiveTab("products")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer shrink-0 ${
-                activeTab === "products"
-                  ? "bg-brand-600 text-white shadow-xs"
-                  : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
-              }`}
-            >
-              📦 District Products ({districtProducts.length})
-            </button>
-            <button
-              onClick={() => setActiveTab("masterCatalog")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer shrink-0 ${
-                activeTab === "masterCatalog"
-                  ? "bg-brand-600 text-white shadow-xs"
-                  : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
-              }`}
-            >
-              🏬 Master Catalog ({masterProducts.length})
-            </button>
-            <button
-              onClick={() => setActiveTab("vendors")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer shrink-0 ${
-                activeTab === "vendors"
-                  ? "bg-brand-600 text-white shadow-xs"
-                  : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
-              }`}
-            >
-              🏬 Vendors ({districtVendors.length})
-            </button>
-            <button
-              onClick={() => setActiveTab("listings")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer shrink-0 flex items-center gap-1.5 ${
-                activeTab === "listings"
-                  ? "bg-brand-600 text-white shadow-xs"
-                  : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
-              }`}
-            >
-              <span>📋 Listings & Approvals ({districtProducts.length})</span>
-              {districtProducts.filter((p) => (p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW")) === "PENDING_REVIEW").length > 0 && (
-                <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full animate-pulse">
-                  {districtProducts.filter((p) => (p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW")) === "PENDING_REVIEW").length}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab("orders")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer shrink-0 ${
-                activeTab === "orders"
-                  ? "bg-brand-600 text-white shadow-xs"
-                  : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
-              }`}
-            >
-              🛍️ District Orders ({districtOrdersCount})
-            </button>
-            <button
-              onClick={() => setActiveTab("returns")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer shrink-0 flex items-center gap-1.5 ${
-                activeTab === "returns"
-                  ? "bg-emerald-600 text-white shadow-xs"
-                  : "text-slate-600 hover:text-navy-900 hover:bg-slate-100/80"
-              }`}
-            >
-              <span>↩️ Return & Refund Desk</span>
-              {processedReturns.length > 0 && (
-                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-1.5 py-0.2 rounded-full">
-                  {processedReturns.length}
-                </span>
-              )}
-            </button>
-          </div>
-
-          {activeTab !== "returns" && (
-            <div className="relative w-full sm:w-72">
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder={`Search ${activeTab}...`}
-                className="w-full bg-white text-xs border border-slate-200/90 rounded-xl px-3.5 py-2.5 pl-9 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 shadow-2xs transition-all duration-200"
-              />
-              <span className="absolute left-3 top-2.5 text-slate-400 text-xs">🔍</span>
-            </div>
-          )}
-        </div>
-
-        {/* Tab 1: Products Section */}
-        {activeTab === "products" && (
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
-            <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
-              <h2 className="text-sm font-bold text-navy-900">
-                Products in {districtName}
-              </h2>
-
-              <div className="flex items-center gap-2">
-                <div className="flex gap-1 bg-slate-200/70 p-1 rounded-xl text-xs font-bold">
-                  {["ALL", "PENDING_REVIEW", "APPROVED", "REJECTED"].map((st) => (
-                    <button
-                      key={st}
-                      onClick={() => setListingFilter(st)}
-                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                        listingFilter === st ? "bg-white text-navy-900 shadow-2xs" : "text-slate-600 hover:text-navy-900"
-                      }`}
-                    >
-                      {st === "ALL" ? "All" : st === "PENDING_REVIEW" ? "🟡 Pending" : st === "APPROVED" ? "🟢 Approved" : "🔴 Rejected"}
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  onClick={() => setShowProductModal(true)}
-                  className="text-xs bg-brand-500 hover:bg-brand-600 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
-                >
-                  + Add Product
-                </button>
-              </div>
-            </div>
-
-            {productsLoading ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                      <th className="py-3 px-4">Product Details</th>
-                      <th className="py-3 px-4">Category / Brand</th>
-                      <th className="py-3 px-4">Type & Grade</th>
-                      <th className="py-3 px-4">Vendor</th>
-                      <th className="py-3 px-4">Price / Unit</th>
-                      <th className="py-3 px-4">Stock</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs animate-pulse">
-                    {[1, 2, 3, 4].map((n) => (
-                      <tr key={n}>
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 bg-slate-200 rounded-lg shrink-0" />
-                            <div className="space-y-1.5 flex-1">
-                              <div className="h-3.5 bg-slate-200 rounded w-44" />
-                              <div className="h-2.5 bg-slate-200 rounded w-24" />
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-4"><div className="h-3.5 bg-slate-200 rounded w-20" /></td>
-                        <td className="py-3.5 px-4"><div className="h-3.5 bg-slate-200 rounded w-24" /></td>
-                        <td className="py-3.5 px-4"><div className="h-3.5 bg-slate-200 rounded w-24" /></td>
-                        <td className="py-3.5 px-4"><div className="h-3.5 bg-slate-200 rounded w-16" /></td>
-                        <td className="py-3.5 px-4"><div className="h-3.5 bg-slate-200 rounded w-16" /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : filteredProducts.length === 0 ? (
-              <div className="text-center py-12 px-4">
-                <p className="text-3xl mb-2">📦</p>
-                <p className="text-sm font-semibold text-navy-900">No products found</p>
-                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                  District vendors ke liye pehla product add karein. Specify Category, Brand, Type, Grade & Image.
-                </p>
-                <button
-                  onClick={() => setShowProductModal(true)}
-                  className="mt-4 bg-brand-500 text-white text-xs font-semibold px-4 py-2 rounded-xl"
-                >
-                  Add Product Now
-                </button>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                      <th className="py-3 px-4">Product Details</th>
-                      <th className="py-3 px-4">Category / Brand</th>
-                      <th className="py-3 px-4">Type & Grade</th>
-                      <th className="py-3 px-4">Vendor</th>
-                      <th className="py-3 px-4">Price / Unit</th>
-                      <th className="py-3 px-4">Stock</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs">
-                    {filteredProducts.map((p) => (
-                      <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-3">
-                            <img
-                              src={p.imageUrl}
-                              alt={p.name}
-                              className="w-12 h-12 object-cover rounded-lg border border-slate-200 shrink-0"
-                            />
-                            <div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="bg-navy-900 text-white font-mono text-[9px] font-bold px-1.5 py-0.5 rounded">
-                                  {formatShortId(p.id, "PRD")}
-                                </span>
-                                <p className="font-bold text-navy-900">{p.name}</p>
-                              </div>
-                              <p className="text-[11px] text-slate-400">Added by: {p.addedBy || "DR"}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span className="inline-block bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded text-[11px]">
-                            {p.categoryName || "General"}
-                          </span>
-                          <p className="text-xs font-medium text-navy-900 mt-1">
-                            🏷️ {p.brand || "Generic"}
-                          </p>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <p className="font-semibold text-slate-800">{p.type || "Standard"}</p>
-                          <span className="inline-block bg-amber-50 text-amber-700 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-amber-200 mt-0.5">
-                            Grade: {p.grade || "N/A"}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <p className="font-semibold text-navy-900">{p.vendorName}</p>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <p className="font-extrabold text-navy-900 text-sm">₹{p.price}</p>
-                          <p className="text-[11px] text-slate-500">per {p.unit || "Unit"}</p>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span
-                            className={`font-semibold px-2 py-1 rounded text-xs ${
-                              p.stockQty > 0 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
-                            }`}
-                          >
-                            {p.stockQty} in stock
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              disabled={Boolean(busyListingAction?.id === p.id) || p.approvalStatus === "APPROVED"}
-                              onClick={async () => {
-                                if (busyListingAction) return;
-                                setBusyListingAction({ id: p.id, action: "APPROVED" });
-                                markRecentDrEdit(p.id, { approvalStatus: "APPROVED", isActive: true });
-                                setDirectProducts((prev) =>
-                                  prev.map((item) => (item.id === p.id ? { ...item, approvalStatus: "APPROVED", isActive: true } : item))
-                                );
-                                try {
-                                  await updateListingApprovalStatus(p.id, "APPROVED");
-                                  await fetchLiveProductsDirect();
-                                  window.dispatchEvent(new CustomEvent("buildcity_products_updated"));
-                                } finally {
-                                  setBusyListingAction(null);
-                                }
-                              }}
-                              className={`min-w-[95px] text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                                p.approvalStatus === "APPROVED"
-                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed opacity-80"
-                                  : busyListingAction?.id === p.id && busyListingAction?.action === "APPROVED"
-                                  ? "bg-emerald-600 text-white cursor-wait pointer-events-none"
-                                  : busyListingAction?.id === p.id
-                                  ? "opacity-40 cursor-not-allowed bg-emerald-600 text-white"
-                                  : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs active:scale-[0.98] cursor-pointer"
-                              }`}
-                            >
-                              {busyListingAction?.id === p.id && busyListingAction?.action === "APPROVED" ? (
-                                <>
-                                  <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                  <span>Approving...</span>
-                                </>
-                              ) : p.approvalStatus === "APPROVED" ? (
-                                "✓ Approved"
-                              ) : (
-                                "✓ Approve"
-                              )}
-                            </button>
-
-                            <button
-                              disabled={Boolean(busyListingAction?.id === p.id) || p.approvalStatus === "REJECTED"}
-                              onClick={async () => {
-                                if (busyListingAction) return;
-                                setBusyListingAction({ id: p.id, action: "REJECTED" });
-                                markRecentDrEdit(p.id, { approvalStatus: "REJECTED", isActive: false });
-                                setDirectProducts((prev) =>
-                                  prev.map((item) => (item.id === p.id ? { ...item, approvalStatus: "REJECTED", isActive: false } : item))
-                                );
-                                try {
-                                  await updateListingApprovalStatus(p.id, "REJECTED");
-                                  await fetchLiveProductsDirect();
-                                  window.dispatchEvent(new CustomEvent("buildcity_products_updated"));
-                                } finally {
-                                  setBusyListingAction(null);
-                                }
-                              }}
-                              className={`min-w-[90px] text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                                p.approvalStatus === "REJECTED"
-                                  ? "bg-rose-50 text-rose-600 border border-rose-200 cursor-not-allowed opacity-80"
-                                  : busyListingAction?.id === p.id && busyListingAction?.action === "REJECTED"
-                                  ? "bg-rose-100 text-rose-700 border border-rose-300 cursor-wait pointer-events-none"
-                                  : busyListingAction?.id === p.id
-                                  ? "opacity-40 cursor-not-allowed bg-white text-rose-600 border border-rose-200"
-                                  : "bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 active:scale-[0.98] cursor-pointer"
-                              }`}
-                            >
-                              {busyListingAction?.id === p.id && busyListingAction?.action === "REJECTED" ? (
-                                <>
-                                  <span className="w-3 h-3 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
-                                  <span>Rejecting...</span>
-                                </>
-                              ) : p.approvalStatus === "REJECTED" ? (
-                                "✕ Rejected"
-                              ) : (
-                                "✕ Reject"
-                              )}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Tab: Master Products Catalog (All Platform Master Products) */}
-        {activeTab === "masterCatalog" && (
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
-            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
-              <div>
-                <h2 className="text-sm font-bold text-navy-900">
-                  Platform Master Product Catalog ({masterProducts.length})
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">Sare Master Products jo Platform Catalog me listed hain.</p>
-              </div>
-              <button
-                onClick={() => setShowProductModal(true)}
-                className="text-xs bg-brand-500 hover:bg-brand-600 text-white font-semibold px-3.5 py-2 rounded-xl transition-colors cursor-pointer shadow-2xs"
-              >
-                + Add Master Product
-              </button>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                    <th className="py-3 px-4">Product Details</th>
-                    <th className="py-3 px-4">Category / Brand</th>
-                    <th className="py-3 px-4">Type & Grade</th>
-                    <th className="py-3 px-4">Suggested Price</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {masterProducts
-                    .filter((p) => {
-                      if (!searchTerm.trim()) return true;
-                      const q = searchTerm.toLowerCase().trim();
-                      return (
-                        (p.name || "").toLowerCase().includes(q) ||
-                        (p.brand || "").toLowerCase().includes(q) ||
-                        (p.categoryName || "").toLowerCase().includes(q)
-                      );
-                    })
-                    .map((p) => (
-                      <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-3">
-                            <img src={p.imageUrl} alt={p.name} className="w-10 h-10 object-cover rounded-lg border border-slate-200 shrink-0" />
-                            <div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="bg-navy-900 text-white font-mono text-[9px] font-bold px-1.5 py-0.5 rounded">
-                                  {formatShortId(p.id, "PRD")}
-                                </span>
-                                <p className="font-bold text-navy-900">{p.name}</p>
-                              </div>
-                              <p className="text-[10px] text-slate-400">Packaging: {p.unit}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-semibold">
-                            {p.categoryName || "General"}
-                          </span>
-                          <p className="text-slate-700 font-medium mt-0.5">🏷️ {p.brand}</p>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <p className="font-semibold text-slate-800">{p.type}</p>
-                          <span className="bg-amber-50 text-amber-700 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-amber-200 inline-block mt-0.5">
-                            Grade: {p.grade}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span className="font-extrabold text-navy-900 text-sm">₹{p.suggestedPrice || p.price}</span>
-                          <span className="text-[11px] text-slate-500"> /{p.unit}</span>
-                        </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <button
-                            onClick={() => {
-                              const defaultDesc = `High-quality certified ${p.name || "Product"} by ${p.brand || "Authorized Brand"}. Supplied directly via BuildCity Certified Delivery Network.`;
-                              setEditingProduct({
-                                ...p,
-                                description: (p.description && p.description.trim()) ? p.description : defaultDesc,
-                              });
-                            }}
-                            className="text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer active:scale-[0.98] transition-all"
-                          >
-                            ✏️ Edit Catalog
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/*  Vendors Section */}
-        {activeTab === "vendors" && (
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
-            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
-              <h2 className="text-sm font-bold text-navy-900">
-                Vendors in {districtName}
-              </h2>
-              <button
-                onClick={() => setShowVendorModal(true)}
-                className="text-xs bg-brand-500 hover:bg-brand-600 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-              >
-                + Add Vendor
-              </button>
-            </div>
-
-            {filteredVendors.length === 0 ? (
-              <div className="text-center py-12 px-4">
-                <p className="text-3xl mb-2">🏬</p>
-                <p className="text-sm font-semibold text-navy-900">No vendors registered in this district</p>
-                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                  {districtName} district ke pehle vendor/trader ko yahan register karein.
-                </p>
-                <button
-                  onClick={() => setShowVendorModal(true)}
-                  className="mt-4 bg-brand-500 text-white text-xs font-semibold px-4 py-2 rounded-xl"
-                >
-                  Register Vendor Now
-                </button>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                      <th className="py-3 px-4">Shop / Business</th>
-                      <th className="py-3 px-4">Owner & Mobile</th>
-                      <th className="py-3 px-4">District / Region</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4">Products</th>
-                      <th className="py-3 px-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs">
-                    {filteredVendors.map((v) => (
-                      <tr key={v.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3.5 px-4 font-bold text-navy-900">{v.shopName}</td>
-                        <td className="py-3.5 px-4">
-                          <p className="font-semibold text-slate-800">{v.ownerName}</p>
-                          <p className="text-[11px] text-slate-500">📱 {v.phone}</p>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium text-[11px]">
-                            {v.regionName || districtName}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span
-                            className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                              v.status === "APPROVED"
-                                ? "bg-green-50 text-green-700 border border-green-200"
-                                : v.status === "PENDING"
-                                ? "bg-amber-50 text-amber-700 border border-amber-200"
-                                : "bg-red-50 text-red-600 border border-red-200"
-                            }`}
-                          >
-                            {v.status}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 font-semibold text-slate-700">
-                          {v.productCount || 0} Products
-                        </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => setEditingVendor({ ...v })}
-                              className="text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer"
-                            >
-                              ✏️ Edit
-                            </button>
-                            {v.status !== "APPROVED" && (
-                              <button
-                                disabled={updatingVendorStatus?.id === v.id}
-                                onClick={() => handleToggleVendorStatus(v.id, "APPROVED")}
-                                className="text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-2.5 py-1.5 shadow-2xs active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1 min-w-[75px] justify-center"
-                              >
-                                {updatingVendorStatus?.id === v.id && updatingVendorStatus?.action === "APPROVED" ? (
-                                  <>
-                                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                                    <span>Approving...</span>
-                                  </>
-                                ) : (
-                                  "Approve"
-                                )}
-                              </button>
-                            )}
-                            {v.status !== "SUSPENDED" && (
-                              <button
-                                disabled={updatingVendorStatus?.id === v.id}
-                                onClick={() => handleToggleVendorStatus(v.id, "SUSPENDED")}
-                                className="text-[11px] font-semibold border border-amber-300 text-amber-700 hover:bg-amber-50 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1 min-w-[75px] justify-center"
-                              >
-                                {updatingVendorStatus?.id === v.id && updatingVendorStatus?.action === "SUSPENDED" ? (
-                                  <>
-                                    <span className="w-3 h-3 border-2 border-amber-700 border-t-transparent rounded-full animate-spin"></span>
-                                    <span>Suspending...</span>
-                                  </>
-                                ) : (
-                                  "Suspend"
-                                )}
-                              </button>
-                            )}
-                            {v.status === "SUSPENDED" && (
-                              <button
-                                disabled={updatingVendorStatus?.id === v.id}
-                                onClick={() => handleToggleVendorStatus(v.id, "APPROVED")}
-                                className="text-[11px] font-semibold border border-emerald-500 text-emerald-600 hover:bg-emerald-50 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1 min-w-[75px] justify-center"
-                              >
-                                {updatingVendorStatus?.id === v.id && updatingVendorStatus?.action === "APPROVED" ? (
-                                  <>
-                                    <span className="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></span>
-                                    <span>Reinstating...</span>
-                                  </>
-                                ) : (
-                                  "Reinstate"
-                                )}
-                              </button>
-                            )}
-                            <button
-                              disabled={deletingVendorId === v.id}
-                              onClick={() => handleDeleteVendor(v)}
-                              className="text-[11px] font-bold bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg px-2.5 py-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                            >
-                              {deletingVendorId === v.id ? (
-                                <>
-                                  <span className="w-3 h-3 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></span>
-                                  Deleting...
-                                </>
-                              ) : (
-                                "🗑️ Delete"
-                              )}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-
-      {/* 3. LISTINGS & APPROVALS TAB */}
-      {activeTab === "listings" && (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden p-5 space-y-4 font-sans">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-            <div>
-              <h3 className="font-extrabold text-navy-900 text-sm flex items-center gap-2">
-                District Vendor Product Listings & Approvals ({districtProducts.length})
-              </h3>
-              <p className="text-xs text-slate-500">Review vendor product requests, custom price & stock settings for {districtName}.</p>
-            </div>
-
-            {/* Filter Pills */}
-            <div className="flex gap-1.5 bg-slate-100 p-1 rounded-xl w-fit text-xs font-bold">
-              {["ALL", "PENDING_REVIEW", "APPROVED", "REJECTED"].map((st) => (
-                <button
-                  key={st}
-                  onClick={() => setListingFilter(st)}
-                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                    listingFilter === st ? "bg-white text-navy-900 shadow-2xs" : "text-slate-600 hover:text-navy-900"
-                  }`}
-                >
-                  {st === "ALL" ? "All" : st === "PENDING_REVIEW" ? "🟡 Pending Review" : st === "APPROVED" ? "🟢 Approved" : "🔴 Rejected"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {filteredProducts.length === 0 ? (
-            <div className="text-center py-10 text-xs text-slate-500 font-medium">No product listings found for selected filter status ({listingFilter}).</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200/90 bg-slate-50/90 text-[11px] font-black text-slate-500 uppercase tracking-wider">
-                    <th className="py-3 px-4">Vendor Shop</th>
-                    <th className="py-3 px-4">Product Name</th>
-                    <th className="py-3 px-4">Category & Brand</th>
-                    <th className="py-3 px-4">Selling Price</th>
-                    <th className="py-3 px-4">Stock Qty</th>
-                    <th className="py-3 px-4">Approval Status</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredProducts.map((p) => {
-                      const st = p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW");
-                      const stBadge =
-                        st === "APPROVED"
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-bold"
-                          : st === "REJECTED"
-                          ? "bg-rose-50 text-rose-700 border border-rose-200/80 font-bold"
-                          : "bg-amber-50 text-amber-700 border border-amber-200/80 font-bold";
-
-                      return (
-                        <tr key={p.id} className="hover:bg-slate-50/80 transition-colors duration-150">
-                          <td className="py-3.5 px-4 font-bold text-navy-900">
-                            🏬 {p.vendorName || "Shree Cement Traders"}
-                          </td>
-                          <td className="py-3.5 px-4 font-semibold text-slate-800 flex items-center gap-2">
-                            <img src={p.imageUrl} alt={p.name} className="h-8 w-8 rounded-lg object-cover border border-slate-200 shrink-0" />
-                            <span>{p.name}</span>
-                          </td>
-                          <td className="py-3.5 px-4 text-slate-600">
-                            {p.categoryName || "Category"} · {p.brand} ({p.grade})
-                          </td>
-                          <td className="py-3.5 px-4 font-extrabold text-navy-900">₹{p.price}</td>
-                          <td className="py-3.5 px-4 font-bold text-slate-700">{p.stockQty} {p.unit || "units"}</td>
-                          <td className="py-3.5 px-4">
-                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${stBadge}`}>
-                              {st === "APPROVED" ? "APPROVED" : st === "REJECTED" ? "REJECTED" : "PENDING REVIEW"}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                disabled={Boolean(busyListingAction?.id === p.id) || st === "APPROVED"}
-                                onClick={async (e) => {
-                                  e.preventDefault();
-                                  if (busyListingAction) return;
-                                  setBusyListingAction({ id: p.id, action: "APPROVED" });
-                                  markRecentDrEdit(p.id, { approvalStatus: "APPROVED", isActive: true });
-                                  try {
-                                    setDirectProducts((prev) =>
-                                      prev.map((item) => (item.id === p.id ? { ...item, approvalStatus: "APPROVED", isActive: true } : item))
-                                    );
-                                    await updateListingApprovalStatus(p.id, "APPROVED");
-                                    await fetchLiveProductsDirect();
-                                    window.dispatchEvent(new CustomEvent("buildcity_products_updated"));
-                                  } finally {
-                                    setBusyListingAction(null);
-                                  }
-                                }}
-                                className={`min-w-[100px] text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 select-none ${
-                                  st === "APPROVED"
-                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default opacity-90 pointer-events-none"
-                                    : busyListingAction?.id === p.id && busyListingAction?.action === "APPROVED"
-                                    ? "bg-emerald-600 text-white cursor-wait pointer-events-none"
-                                    : busyListingAction?.id === p.id
-                                    ? "opacity-40 cursor-not-allowed bg-emerald-600 text-white"
-                                    : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs active:scale-[0.98] cursor-pointer"
-                                }`}
-                              >
-                                {busyListingAction?.id === p.id && busyListingAction?.action === "APPROVED" ? (
-                                  <>
-                                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                    <span>Approving...</span>
-                                  </>
-                                ) : st === "APPROVED" ? (
-                                  "✓ Approved"
-                                ) : (
-                                  "✓ Approve"
-                                )}
-                              </button>
-
-                              <button
-                                disabled={Boolean(busyListingAction?.id === p.id) || st === "REJECTED"}
-                                onClick={async (e) => {
-                                  e.preventDefault();
-                                  if (busyListingAction) return;
-                                  setBusyListingAction({ id: p.id, action: "REJECTED" });
-                                  markRecentDrEdit(p.id, { approvalStatus: "REJECTED", isActive: false });
-                                  try {
-                                    setDirectProducts((prev) =>
-                                      prev.map((item) => (item.id === p.id ? { ...item, approvalStatus: "REJECTED", isActive: false } : item))
-                                    );
-                                    await updateListingApprovalStatus(p.id, "REJECTED");
-                                    await fetchLiveProductsDirect();
-                                    window.dispatchEvent(new CustomEvent("buildcity_products_updated"));
-                                  } finally {
-                                    setBusyListingAction(null);
-                                  }
-                                }}
-                                className={`min-w-[95px] text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 select-none ${
-                                  st === "REJECTED"
-                                    ? "bg-rose-50 text-rose-600 border border-rose-200 cursor-default opacity-90 pointer-events-none"
-                                    : busyListingAction?.id === p.id && busyListingAction?.action === "REJECTED"
-                                    ? "bg-rose-100 text-rose-700 border border-rose-300 cursor-wait pointer-events-none"
-                                    : busyListingAction?.id === p.id
-                                    ? "opacity-40 cursor-not-allowed bg-white text-rose-600 border border-rose-200"
-                                    : "bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 active:scale-[0.98] cursor-pointer"
-                                }`}
-                              >
-                                {busyListingAction?.id === p.id && busyListingAction?.action === "REJECTED" ? (
-                                  <>
-                                    <span className="w-3 h-3 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
-                                    <span>Rejecting...</span>
-                                  </>
-                                ) : st === "REJECTED" ? (
-                                  "✕ Rejected"
-                                ) : (
-                                  "✕ Reject"
-                                )}
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Tab 4: District Orders */}
+    <DrShell
+      drName={user?.name || currentDr?.name || "District Representative"}
+      drPhone={user?.phone || currentDr?.phone || ""}
+      districtName={districtName}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      stats={stats}
+      onAddVendor={() => setShowVendorModal(true)}
+      onAddProduct={() => setShowProductModal(true)}
+      onOpenPendingApprovals={() => {
+        setListingFilter(stats.pendingApprovalsCount > 0 ? "PENDING_REVIEW" : "ALL");
+        setActiveTab("listings");
+      }}
+      onLogout={logout}
+      modals={
+        <DrModals
+          districtName={districtName}
+          categories={categories}
+          presetImages={PRESET_IMAGES}
+          showVendorModal={showVendorModal}
+          setShowVendorModal={setShowVendorModal}
+          vendorForm={vendorForm}
+          setVendorForm={setVendorForm}
+          isSubmittingVendor={isSubmittingVendor}
+          handleCreateVendor={handleCreateVendor}
+          showProductModal={showProductModal}
+          setShowProductModal={setShowProductModal}
+          productForm={productForm}
+          setProductForm={setProductForm}
+          isSubmittingProduct={isSubmittingProduct}
+          handleCreateProduct={handleCreateProduct}
+          editingVendor={editingVendor}
+          setEditingVendor={setEditingVendor}
+          isSubmittingEditVendor={isSubmittingEditVendor}
+          handleUpdateVendorSubmit={handleUpdateVendorSubmit}
+          editingProduct={editingProduct}
+          setEditingProduct={setEditingProduct}
+          editingImages={editingImages}
+          handleEditImageSlotChange={handleEditImageSlotChange}
+          onSaveEditedMasterProduct={handleSaveEditedMasterProduct}
+        />
+      }
+    >
       {activeTab === "orders" && (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden p-5 space-y-4 font-sans">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-            <div>
-              <h2 className="text-base font-extrabold text-navy-900 flex items-center gap-2">
-                <span>🛒 Customer Orders in {districtName} District</span>
-                <span className="bg-brand-50 text-brand-700 border border-brand-200 text-xs font-extrabold px-2.5 py-0.5 rounded-full">
-                  {districtOrdersCount} District Orders
-                </span>
-              </h2>
-              <p className="text-xs text-slate-500">Live real-time tracking of marketplace orders placed for delivery within {districtName} jurisdiction.</p>
-            </div>
-
-            {/* Status Filter Pills */}
-            <div className="flex flex-wrap gap-1.5 bg-slate-100 p-1 rounded-xl w-fit text-xs font-bold">
-              {["ALL", "PENDING", "PROCESSING", "OUT_FOR_DELIVERY", "DELIVERED", "COMPLETED", "CANCELLED"].map((st) => {
-                const count = districtSummary
-                  ? (st === "ALL" ? districtSummary.totalOrders : districtSummary.byStatus?.[st] || 0)
-                  : st === "ALL"
-                    ? districtOrders.length
-                    : districtOrders.filter((o) => (o.status || "PENDING").toUpperCase() === st).length;
-                return (
-                  <button
-                    key={st}
-                    onClick={() => setOrderStatusFilter(st)}
-                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-                      orderStatusFilter === st ? "bg-white text-navy-900 shadow-2xs" : "text-slate-600 hover:text-navy-900"
-                    }`}
-                  >
-                    <span>
-                      {st === "ALL"
-                        ? "All"
-                        : st === "PENDING"
-                        ? "🟡 Pending"
-                        : st === "PROCESSING"
-                        ? "🔵 Processing"
-                        : st === "OUT_FOR_DELIVERY"
-                        ? "🚚 Out for Delivery"
-                        : st === "DELIVERED"
-                        ? "🟢 Delivered"
-                        : st === "COMPLETED"
-                        ? "🔒 Completed"
-                        : "🔴 Cancelled"}
-                    </span>
-                    <span className="text-[10px] opacity-75 font-black">({count})</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {filteredDistrictOrders.length === 0 ? (
-            <div className="text-center py-12 text-xs text-slate-500 font-medium">
-              <p className="text-3xl mb-2">🛍️</p>
-              <p className="text-sm font-bold text-navy-900">No {orderStatusFilter !== "ALL" ? orderStatusFilter : ""} orders found in {districtName}</p>
-              <p className="text-xs text-slate-500 mt-1">Orders placed by customers for delivery within {districtName} will appear here live in real-time.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto border border-slate-200 rounded-xl">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-black text-slate-500 uppercase tracking-wider">
-                  <tr>
-                    <th className="py-3 px-4">Order ID & Date</th>
-                    <th className="py-3 px-4">Customer Info</th>
-                    <th className="py-3 px-4">Delivery Address</th>
-                    <th className="py-3 px-4">Ordered Items & Vendor</th>
-                    <th className="py-3 px-4">Total Amount</th>
-                    <th className="py-3 px-4">Status & Control</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredDistrictOrders.map((ord) => {
-                    const displayAmt = Number(ord.totalAmount || ord.total || 0);
-                    const custName = ord.customer?.name || ord.customerName || "Customer";
-                    const custPhone = ord.customer?.phone || ord.customerPhone || "";
-                    const rawAddr = ord.address;
-                    const isObj = typeof rawAddr === "object" && rawAddr !== null;
-                    const isStr = typeof rawAddr === "string" && rawAddr.trim().length > 0;
-
-                    let streetAddr = isObj ? (rawAddr.street || rawAddr.line || rawAddr.address) : (isStr ? rawAddr : null);
-                    let cityAddr = isObj ? rawAddr.city : (ord.districtName || ord.regionName || districtName);
-                    let pincodeAddr = isObj ? rawAddr.pincode : "";
-
-                    if (!streetAddr || streetAddr.includes("Site Delivery Address") || streetAddr.includes("Main Delivery Address")) {
-                      if (ord.customer?.address && !ord.customer.address.includes("Site Delivery Address")) {
-                        streetAddr = ord.customer.address;
-                      } else if (custPhone) {
-                        streetAddr = `Site Location for Mobile ${custPhone}`;
-                      } else {
-                        streetAddr = `Site Delivery Location (${cityAddr || districtName})`;
-                      }
-                    }
-
-                    const dateStr = formatDateTimeIST(ord.createdAt || ord.date);
-                    const statusKey = (ord.status || "PENDING").toUpperCase();
-                    const statusStyle = ORDER_STATUS_STYLE[statusKey] || "bg-amber-50 text-amber-700 border-amber-200/80 font-bold";
-                    const isCompletedLocked = statusKey === "COMPLETED";
-
-                    return (
-                      <tr key={ord.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3.5 px-4">
-                          <span className="font-extrabold text-brand-700 block text-xs">{formatShortId(ord.id || ord.orderNumber, "ORD")}</span>
-                          <span className="text-[11px] text-slate-400 font-medium">{dateStr}</span>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span className="font-bold text-navy-900 block">👤 {custName}</span>
-                          {custPhone && <span className="text-[11px] text-slate-500 font-semibold">📱 {custPhone}</span>}
-                        </td>
-                        <td className="py-3.5 px-4 min-w-[220px]">
-                          <div className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs">
-                            <p className="font-bold text-navy-900 leading-snug whitespace-normal break-words">🏢 {streetAddr}</p>
-                            <p className="text-[11px] text-slate-600 font-medium mt-0.5">
-                              🏙️ <span className="font-bold text-brand-700">{cityAddr}</span> {pincodeAddr ? `- ${pincodeAddr}` : ""}
-                            </p>
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          {Array.isArray(ord.items) && ord.items.length > 0 ? (
-                            <div className="space-y-1">
-                              {ord.items.map((it, idx) => (
-                                <div key={idx} className="text-[11px]">
-                                  <span className="font-bold text-slate-800">• {it.productName || it.name}</span>
-                                  <span className="text-slate-500 font-medium ml-1">x{it.quantity} (₹{it.priceAtPurchase || it.price})</span>
-                                  {it.vendorName && <span className="text-[10px] text-brand-600 block pl-2 font-semibold">🏬 {it.vendorName}</span>}
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-slate-500 font-medium">Construction Materials Order</span>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span className="font-black text-navy-900 text-sm">₹{displayAmt.toLocaleString("en-IN")}</span>
-                          <span className="block text-[10px] font-bold text-emerald-600 uppercase">💵 COD</span>
-                          {ord.couponCode && (
-                            <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">
-                              🏷️ {ord.couponCode} {Number(ord.discountAmount) > 0 ? `(-₹${Number(ord.discountAmount).toLocaleString("en-IN")})` : ""}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold border inline-flex items-center gap-1 w-fit ${statusStyle}`}>
-                              {isCompletedLocked ? "🔒 COMPLETED" : (ord.status || "PENDING")}
-                            </span>
-                            {isCompletedLocked ? (
-                              <span className="text-[10px] font-bold text-slate-400 bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg select-none">
-                                Status Locked
-                              </span>
-                            ) : (
-                              updateOrderStatus && (
-                                <select
-                                  value={statusKey}
-                                  onChange={(e) => {
-                                    const nextSt = e.target.value;
-                                    if (nextSt === "COMPLETED") {
-                                      showConfirm({
-                                        title: "Mark Order as COMPLETED (Locked)?",
-                                        message: "Ek baar COMPLETED karne ke baad ye order status lock ho jayega aur dubara change nahi ho sakega. Kya aap sure hain?",
-                                        type: "warning",
-                                        confirmText: "Yes, Mark Completed & Lock",
-                                        cancelText: "Cancel",
-                                        onConfirm: async () => {
-                                          await updateOrderStatus(ord.id, "COMPLETED");
-                                          fetchLiveOrdersDirect();
-                                        },
-                                      });
-                                    } else {
-                                      updateOrderStatus(ord.id, nextSt).then(() => fetchLiveOrdersDirect());
-                                    }
-                                  }}
-                                  className="text-[11px] font-bold bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 outline-none text-navy-900 cursor-pointer hover:bg-slate-200 transition-colors"
-                                >
-                                  <option value="PENDING">PENDING</option>
-                                  <option value="PROCESSING">PROCESSING</option>
-                                  <option value="OUT_FOR_DELIVERY">OUT FOR DELIVERY</option>
-                                  <option value="DELIVERED">DELIVERED</option>
-                                  <option value="COMPLETED">🔒 COMPLETED (Lock)</option>
-                                  <option value="CANCELLED">CANCELLED</option>
-                                </select>
-                              )
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <LoadMoreButton
-            hasMore={directHasMore}
-            loading={loadingMoreDirect}
-            onClick={loadMoreDistrictOrders}
-            shown={districtOrders.length}
-            total={districtOrdersCount}
-          />
-        </div>
+        <DrOrdersTab
+          districtName={districtName}
+          districtOrders={districtOrders}
+          filteredDistrictOrders={filteredDistrictOrders}
+          districtOrdersCount={districtOrdersCount}
+          districtSummary={districtSummary}
+          orderStatusFilter={orderStatusFilter}
+          setOrderStatusFilter={setOrderStatusFilter}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          updateOrderStatus={updateOrderStatus}
+          fetchLiveOrdersDirect={fetchLiveOrdersDirect}
+          showConfirm={showConfirm}
+          directHasMore={directHasMore}
+          loadingMoreDirect={loadingMoreDirect}
+          loadMoreDistrictOrders={loadMoreDistrictOrders}
+        />
       )}
 
-      {/* Tab 5: Return & Refund Desk (Internal DR Only — Hidden from Customer App) */}
-      {activeTab === "returns" && (() => {
-        const currentReturnItems = (selectedReturnOrder?.items || []).map((it) => {
-          const key = it.id || it.vendorProductId || it.productName;
-          const orderedQty = Number(it.quantity || 1);
-          const alreadyRetQty = Number(selectedReturnOrder?.returnedQtyMap?.[key] || 0);
-          const maxReturnable = Math.max(0, orderedQty - alreadyRetQty);
-          const selectedQty = Math.min(maxReturnable, Math.max(0, Number(returnQuantities[key] || 0)));
-          const unitPrice = Number(it.priceAtPurchase || it.price || 0);
-          const lineReturnVal = Math.round(selectedQty * unitPrice * 100) / 100;
-          return {
-            ...it,
-            key,
-            orderedQty,
-            alreadyRetQty,
-            maxReturnable,
-            selectedQty,
-            unitPrice,
-            lineReturnVal,
-          };
-        });
-
-        const totalReturnItemsVal = Math.round(
-          currentReturnItems.reduce((sum, it) => sum + it.lineReturnVal, 0) * 100
-        ) / 100;
-
-        const rawCbDeduct = customCashbackDeduct !== ""
-          ? Number(customCashbackDeduct || 0)
-          : Number(selectedReturnOrder?.remainingCashbackToDeduct || selectedReturnOrder?.cashbackEarned || 0);
-
-        const effectiveCashbackDeduct = totalReturnItemsVal > 0
-          ? Math.min(totalReturnItemsVal, Math.max(0, rawCbDeduct))
-          : 0;
-
-        const netCashToRefund = Math.max(
-          0,
-          Math.round((totalReturnItemsVal - effectiveCashbackDeduct) * 100) / 100
-        );
-
-        return (
-          <div className="space-y-6 font-sans">
-            {/* Search & Process Card */}
-            <div className="bg-white border border-slate-200 rounded-2xl shadow-xs p-5 space-y-5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-                <div>
-                  <h2 className="text-base font-extrabold text-navy-900 flex items-center gap-2">
-                    <span>↩️ DR Return & Refund Desk ({districtName})</span>
-                    <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full">
-                      Internal DR Only
-                    </span>
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Customer call aane par Order ID ya Mobile Number search karein, wapas aaye bags/items select karein, aur cashback kaat ke final cash refund hisaab dekhein.
-                  </p>
-                </div>
-              </div>
-
-              {/* Search Bar */}
-              <form onSubmit={handleSearchReturnOrder} className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1">
-                  <input
-                    type="text"
-                    value={returnSearchQuery}
-                    onChange={(e) => setReturnSearchQuery(e.target.value)}
-                    placeholder="Enter Customer 10-digit Mobile Number (e.g. 9876543210) or Order ID (e.g. ORD-...)"
-                    className="w-full bg-slate-50 text-xs font-bold text-navy-900 border border-slate-200 rounded-xl px-4 py-3 pl-10 outline-none focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-                  />
-                  <span className="absolute left-3.5 top-3 text-slate-400 text-sm">🔍</span>
-                </div>
-                <button
-                  type="submit"
-                  disabled={isSearchingReturnOrder}
-                  className="bg-navy-900 hover:bg-navy-800 active:scale-[0.98] text-white text-xs font-extrabold px-6 py-3 rounded-xl shadow-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shrink-0 transition-all"
-                >
-                  {isSearchingReturnOrder ? (
-                    <>
-                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Searching...</span>
-                    </>
-                  ) : (
-                    <span>Search Order</span>
-                  )}
-                </button>
-              </form>
-
-              {/* If multiple orders found for a phone number, let DR pick which order */}
-              {returnSearchResults.length > 1 && (
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
-                  <p className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
-                    Found {returnSearchResults.length} Orders — Click an order to select:
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {returnSearchResults.map((ro) => {
-                      const isSel = selectedReturnOrder?.id === ro.id;
-                      return (
-                        <button
-                          key={ro.id}
-                          type="button"
-                          onClick={() => selectOrderForReturn(ro)}
-                          className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-2 ${
-                            isSel
-                              ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                              : "bg-white text-navy-900 border-slate-200 hover:border-emerald-300"
-                          }`}
-                        >
-                          <span>{formatShortId(ro.id || ro.orderNumber, "ORD")}</span>
-                          <span className="opacity-80">• ₹{Number(ro.totalAmount || 0).toLocaleString("en-IN")}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/10">{ro.status}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Selected Order Return Card */}
-              {selectedReturnOrder && (
-                <div className="border-2 border-emerald-500/30 bg-emerald-50/10 rounded-2xl p-5 space-y-5">
-                  {/* Order Header Info */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        <span className="text-sm font-black text-navy-900">
-                          Order ID: <span className="text-brand-700 font-mono">{formatShortId(selectedReturnOrder.id || selectedReturnOrder.orderNumber, "ORD")}</span>
-                        </span>
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${ORDER_STATUS_STYLE[(selectedReturnOrder.status || "PENDING").toUpperCase()] || ""}`}>
-                          {selectedReturnOrder.status}
-                        </span>
-                      </div>
-                      <p className="text-xs font-bold text-slate-700">
-                        👤 Customer: <span className="text-navy-900">{selectedReturnOrder.customer?.name || selectedReturnOrder.address?.fullName || "Customer"}</span>
-                        {"  "}•{"  "}
-                        📱 <span className="text-brand-700 font-extrabold">{selectedReturnOrder.customer?.phone || selectedReturnOrder.address?.phone || "N/A"}</span>
-                      </p>
-                      <p className="text-[11px] text-slate-500">
-                        📍 Address: {selectedReturnOrder.address?.street || "Site Delivery"}, {selectedReturnOrder.address?.city || districtName}
-                      </p>
-                    </div>
-                    <div className="sm:text-right space-y-1">
-                      <p className="text-[11px] font-bold text-slate-400 uppercase">Order Bill Paid</p>
-                      <p className="text-lg font-black text-navy-900">₹{Number(selectedReturnOrder.totalAmount || 0).toLocaleString("en-IN")}</p>
-                      <p className="text-[11px] font-bold text-emerald-700">
-                        🎁 Cashback Earned on Order: ₹{Number(selectedReturnOrder.cashbackEarned || 0).toLocaleString("en-IN")}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Items List with [-] Qty [+] Counter */}
-                  <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
-                    <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex items-center justify-between">
-                      <h3 className="text-xs font-black text-navy-900 uppercase tracking-wider">
-                        📦 Step 1: Select Return Quantity (Ordered Items Auto-Loaded)
-                      </h3>
-                      <span className="text-[11px] text-slate-500 font-semibold">
-                        Use [ - ] [ + ] or type quantity directly
-                      </span>
-                    </div>
-
-                    <div className="divide-y divide-slate-100">
-                      {currentReturnItems.map((item) => (
-                        <div key={item.key} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/60 transition-colors">
-                          <div className="space-y-1 flex-1">
-                            <p className="text-sm font-extrabold text-navy-900">{item.productName || item.name}</p>
-                            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 font-semibold">
-                              <span className="bg-blue-50 text-blue-800 border border-blue-200 px-2.5 py-0.5 rounded-lg font-extrabold">
-                                Ordered / Delivered: {item.orderedQty} Units
-                              </span>
-                              <span>Rate: <strong>₹{item.unitPrice.toLocaleString("en-IN")}</strong> / unit</span>
-                              {item.vendorName && (
-                                <span className="text-brand-700">🏬 {item.vendorName}</span>
-                              )}
-                              {item.alreadyRetQty > 0 && (
-                                <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-lg text-[11px] font-bold">
-                                  Already Returned: {item.alreadyRetQty}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Quantity Counter Controls: [ - ] [ input ] [ + ] [All] */}
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
-                              <button
-                                type="button"
-                                disabled={item.selectedQty <= 0}
-                                onClick={() => handleReturnQtyChange(item.key, item.selectedQty - 1, item.maxReturnable)}
-                                className="w-8 h-8 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-40 text-navy-900 font-black text-base shadow-2xs flex items-center justify-center cursor-pointer active:scale-95 transition-all"
-                              >
-                                −
-                              </button>
-                              <input
-                                type="number"
-                                min="0"
-                                max={item.maxReturnable}
-                                value={item.selectedQty}
-                                onChange={(e) => handleReturnQtyChange(item.key, e.target.value, item.maxReturnable)}
-                                className="w-16 text-center bg-white border border-slate-200 rounded-lg py-1.5 text-xs font-black text-navy-900 outline-none focus:border-emerald-500"
-                              />
-                              <button
-                                type="button"
-                                disabled={item.selectedQty >= item.maxReturnable}
-                                onClick={() => handleReturnQtyChange(item.key, item.selectedQty + 1, item.maxReturnable)}
-                                className="w-8 h-8 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-40 text-navy-900 font-black text-base shadow-2xs flex items-center justify-center cursor-pointer active:scale-95 transition-all"
-                              >
-                                +
-                              </button>
-                            </div>
-
-                            <button
-                              type="button"
-                              disabled={item.maxReturnable <= 0}
-                              onClick={() => handleReturnQtyChange(item.key, item.maxReturnable, item.maxReturnable)}
-                              className="text-[11px] font-extrabold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1.5 rounded-lg cursor-pointer disabled:opacity-40 transition-colors"
-                            >
-                              All ({item.maxReturnable})
-                            </button>
-
-                            {item.selectedQty > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => handleReturnQtyChange(item.key, 0, item.maxReturnable)}
-                                className="text-[11px] font-bold text-slate-400 hover:text-rose-600 px-1.5 py-1 cursor-pointer"
-                              >
-                                Clear
-                              </button>
-                            )}
-
-                            <div className="min-w-[120px] text-right">
-                              <span className="block text-[10px] font-bold text-slate-400 uppercase">Item Return Value</span>
-                              <span className={`text-sm font-black ${item.lineReturnVal > 0 ? "text-emerald-700" : "text-slate-400"}`}>
-                                ₹{item.lineReturnVal.toLocaleString("en-IN")}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Reason & Bill Calculation Box */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {/* Left: Return Reason */}
-                    <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3 shadow-2xs">
-                      <label className="block text-xs font-black text-navy-900 uppercase tracking-wider">
-                        📝 Step 2: Return Reason / Notes
-                      </label>
-                      <select
-                        value={returnReason}
-                        onChange={(e) => setReturnReason(e.target.value)}
-                        className="w-full bg-slate-50 text-xs font-bold text-navy-900 border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-emerald-500"
-                      >
-                        <option value="Excess unused material leftover">Excess unused material leftover (Bacha hua samaan)</option>
-                        <option value="Damaged / Defective material">Damaged / Defective material</option>
-                        <option value="Wrong grade or brand delivered">Wrong grade or brand delivered</option>
-                        <option value="Customer cancelled partial items on site">Customer cancelled partial items on site</option>
-                      </select>
-
-                      <div className="pt-2">
-                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                          Wallet Cashback Deduction (₹) — Auto-detected from Order:
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={customCashbackDeduct}
-                          onChange={(e) => setCustomCashbackDeduct(e.target.value)}
-                          className="w-full bg-slate-50 text-xs font-black text-rose-700 border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-emerald-500"
-                          placeholder="0"
-                        />
-                        <p className="text-[10px] text-slate-400 mt-1">
-                          Customer ko is order par ₹{Number(selectedReturnOrder.cashbackEarned || 0)} cashback mila tha. Return karte waqt ye amount kaat liya jayega.
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Right: Auto-Hisaab Summary */}
-                    <div className="bg-white border-2 border-emerald-500/40 rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-xs">
-                      <div className="space-y-2">
-                        <h4 className="text-xs font-black text-navy-900 uppercase tracking-wider border-b border-slate-100 pb-2">
-                          💵 Step 3: Final Cash Refund Hisaab
-                        </h4>
-                        <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                          <span>Wapas Hue Samaan Ka Paisa (Return Value):</span>
-                          <span className="font-black text-navy-900">₹{totalReturnItemsVal.toLocaleString("en-IN")}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs font-bold text-rose-600">
-                          <span>(-) Wallet Cashback Deducted:</span>
-                          <span className="font-black">− ₹{effectiveCashbackDeduct.toLocaleString("en-IN")}</span>
-                        </div>
-                        <div className="border-t border-slate-200 pt-2.5 flex items-center justify-between">
-                          <span className="text-sm font-black text-emerald-800">
-                            Customer Ko Cash Wapas Dena Hai:
-                          </span>
-                          <span className="text-xl font-black text-emerald-700">
-                            ₹{netCashToRefund.toLocaleString("en-IN")}
-                          </span>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        disabled={isSubmittingReturn || totalReturnItemsVal <= 0}
-                        onClick={handleProcessReturn}
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] disabled:opacity-40 text-white text-xs font-black py-3 px-5 rounded-xl shadow-sm cursor-pointer transition-all flex items-center justify-center gap-2"
-                      >
-                        {isSubmittingReturn ? (
-                          <>
-                            <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            <span>Processing Return & Updating Stock...</span>
-                          </>
-                        ) : (
-                          <span>✓ Confirm Return, Deduct Cashback & Restore Vendor Stock</span>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Processed Returns History Table (Saved in DR Panel) */}
-            <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden p-5 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div>
-                  <h3 className="text-sm font-extrabold text-navy-900 flex items-center gap-2">
-                    <span>📋 Saved Return Records in {districtName}</span>
-                    <span className="bg-slate-100 text-slate-700 text-xs font-black px-2 py-0.5 rounded-full">
-                      {processedReturns.length} Records
-                    </span>
-                  </h3>
-                  <p className="text-xs text-slate-500">Complete log of all returns filed by DR, stock restored, and net cash refunded.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={fetchProcessedReturns}
-                  className="text-xs font-bold text-brand-600 hover:underline cursor-pointer"
-                >
-                  ↻ Refresh List
-                </button>
-              </div>
-
-              {loadingReturnsHistory ? (
-                <div className="text-center py-8 text-xs text-slate-400 font-semibold">Loading return records...</div>
-              ) : processedReturns.length === 0 ? (
-                <div className="text-center py-10 text-xs text-slate-400 font-medium">
-                  Abhi tak koi return record दर्ज nahi hua hai.
-                </div>
-              ) : (
-                <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-black text-slate-500 uppercase tracking-wider">
-                      <tr>
-                        <th className="py-3 px-4">Return Date & Order ID</th>
-                        <th className="py-3 px-4">Customer</th>
-                        <th className="py-3 px-4">Returned Items</th>
-                        <th className="py-3 px-4">Return Value</th>
-                        <th className="py-3 px-4">Cashback Cut</th>
-                        <th className="py-3 px-4">Net Cash Paid</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {processedReturns.map((ret) => {
-                        const rItems = Array.isArray(ret.returnItems) ? ret.returnItems : [];
-                        return (
-                          <tr key={ret.id} className="hover:bg-slate-50/80">
-                            <td className="py-3.5 px-4">
-                              <span className="font-extrabold text-brand-700 block">
-                                {formatShortId(ret.orderId || ret.order?.orderNumber, "ORD")}
-                              </span>
-                              <span className="text-[11px] text-slate-400">{formatDateTimeIST(ret.createdAt)}</span>
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <span className="font-bold text-navy-900 block">👤 {ret.customerName || "Customer"}</span>
-                              <span className="text-[11px] text-slate-500 font-semibold">📱 {ret.customerPhone}</span>
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <div className="space-y-1">
-                                {rItems.map((ri, i) => (
-                                  <div key={i} className="text-[11px]">
-                                    <span className="font-bold text-navy-900">• {ri.productName}</span>
-                                    <span className="text-emerald-700 font-black ml-1.5">
-                                      Returned: {ri.quantity} {ri.orderedQuantity ? `(of ${ri.orderedQuantity})` : ""}
-                                    </span>
-                                    <span className="text-slate-400 ml-1">@ ₹{ri.price}</span>
-                                  </div>
-                                ))}
-                                <span className="block text-[10px] text-slate-400 italic">Reason: {ret.returnReason}</span>
-                              </div>
-                            </td>
-                            <td className="py-3.5 px-4 font-bold text-slate-700">
-                              ₹{Number(ret.returnAmount || 0).toLocaleString("en-IN")}
-                            </td>
-                            <td className="py-3.5 px-4 font-bold text-rose-600">
-                              − ₹{Number(ret.cashbackDeducted || 0).toLocaleString("en-IN")}
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-black text-xs">
-                                ₹{Number(ret.netRefundCash || 0).toLocaleString("en-IN")}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
-      </main>
-
-      {/*  Add Vendor Modal */}
-      {showVendorModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-              <h3 className="font-bold text-navy-900 text-base">Add Vendor to {districtName}</h3>
-              <button
-                onClick={() => setShowVendorModal(false)}
-                className="text-slate-400 hover:text-navy-900 text-lg leading-none"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateVendor} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">
-                  Shop / Business Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Gupta Building Materials"
-                  value={vendorForm.shopName}
-                  onChange={(e) => setVendorForm({ ...vendorForm, shopName: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">
-                  Owner / Proprietor Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Ramesh Gupta"
-                  value={vendorForm.ownerName}
-                  onChange={(e) => setVendorForm({ ...vendorForm, ownerName: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">
-                  Mobile Number *
-                </label>
-                <input
-                  type="tel"
-                  required
-                  maxLength={10}
-                  placeholder="10-digit mobile number"
-                  value={vendorForm.phone}
-                  onChange={(e) =>
-                    setVendorForm({ ...vendorForm, phone: e.target.value.replace(/\D/g, "") })
-                  }
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">
-                  Assigned District / Region
-                </label>
-                <input
-                  type="text"
-                  disabled
-                  value={districtName}
-                  className="w-full bg-slate-100 text-slate-500 text-xs border border-slate-200 rounded-xl px-3 py-2.5 cursor-not-allowed font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">
-                  Set Vendor Login Password *
-                </label>
-                <input
-                  type="text"
-                  placeholder="Password (default: vendor123)"
-                  value={vendorForm.password}
-                  onChange={(e) =>
-                    setVendorForm({ ...vendorForm, password: e.target.value })
-                  }
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-mono"
-                />
-              </div>
-
-
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowVendorModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingVendor}
-                  className="px-5 py-2 text-xs font-semibold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmittingVendor ? (
-                    <>
-                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                      Saving Vendor to DB...
-                    </>
-                  ) : (
-                    "Save Vendor"
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {activeTab === "listings" && (
+        <DrApprovalsTab
+          districtName={districtName}
+          districtProducts={districtProducts}
+          filteredProducts={filteredProducts}
+          listingFilter={listingFilter}
+          setListingFilter={setListingFilter}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          busyListingAction={busyListingAction}
+          onListingAction={handleListingAction}
+        />
       )}
 
-      {/* Add Product Modal */}
-      {showProductModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-100 my-8">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-              <h3 className="font-bold text-navy-900 text-base">Add New Product ({districtName})</h3>
-              <button
-                onClick={() => setShowProductModal(false)}
-                className="text-slate-400 hover:text-navy-900 text-lg leading-none"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateProduct} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">
-                  Product Category *
-                </label>
-                <select
-                  required
-                  value={productForm.categoryId}
-                  onChange={(e) => setProductForm({ ...productForm, categoryId: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-bold"
-                >
-                  <option value="">-- Choose Category --</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">
-                  Product Name / Title *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. UltraTech Super PPC Cement"
-                  value={productForm.name}
-                  onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-navy-900 mb-1">
-                    Brand Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. UltraTech, Tata"
-                    value={productForm.brand}
-                    onChange={(e) => setProductForm({ ...productForm, brand: e.target.value })}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-navy-900 mb-1">
-                    Product Type
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. PPC Cement, TMT"
-                    value={productForm.type}
-                    onChange={(e) => setProductForm({ ...productForm, type: e.target.value })}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-navy-900 mb-1">
-                    Grade / Spec
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. OPC 53, Fe 550D"
-                    value={productForm.grade}
-                    onChange={(e) => setProductForm({ ...productForm, grade: e.target.value })}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-navy-900 mb-1">
-                    Unit Packaging
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 50kg Bag, Ton, Liter"
-                    value={productForm.unit}
-                    onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-navy-900 mb-1">
-                    Price (₹) *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    placeholder="390"
-                    value={productForm.price}
-                    onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-navy-900 mb-1">
-                    Stock Quantity
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="100"
-                    value={productForm.stockQty}
-                    onChange={(e) => setProductForm({ ...productForm, stockQty: e.target.value })}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">
-                  Product Images (Add 1 to 3 Images for Interactive Slider)
-                </label>
-                <div className="flex gap-2 mb-2 overflow-x-auto pb-1 no-scrollbar">
-                  {PRESET_IMAGES.map((img, i) => (
-                    <button
-                      type="button"
-                      key={i}
-                      onClick={() => {
-                        const currentList = (productForm.imageUrl || "").split(",").map(s => s.trim()).filter(Boolean);
-                        if (!currentList.includes(img.url)) {
-                          const newList = [...currentList, img.url].slice(0, 3);
-                          setProductForm({ ...productForm, imageUrl: newList.join(", ") });
-                        }
-                      }}
-                      className="text-[11px] px-2.5 py-1 rounded-lg border border-slate-200 text-slate-700 bg-white hover:bg-brand-50 hover:border-brand-300 font-semibold shrink-0 cursor-pointer"
-                    >
-                      + 📷 {img.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <input
-                    type="url"
-                    placeholder="Main Image 1 URL *"
-                    value={(productForm.imageUrl || "").split(",")[0]?.trim() || ""}
-                    onChange={(e) => {
-                      const parts = (productForm.imageUrl || "").split(",").map(s => s.trim());
-                      parts[0] = e.target.value;
-                      setProductForm({ ...productForm, imageUrl: parts.filter(Boolean).join(", ") });
-                    }}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-mono text-[11px]"
-                  />
-                  <input
-                    type="url"
-                    placeholder="Image 2 URL (Optional)"
-                    value={(productForm.imageUrl || "").split(",")[1]?.trim() || ""}
-                    onChange={(e) => {
-                      const parts = (productForm.imageUrl || "").split(",").map(s => s.trim());
-                      parts[1] = e.target.value;
-                      setProductForm({ ...productForm, imageUrl: parts.filter(Boolean).join(", ") });
-                    }}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-mono text-[11px]"
-                  />
-                  <input
-                    type="url"
-                    placeholder="Image 3 URL (Optional)"
-                    value={(productForm.imageUrl || "").split(",")[2]?.trim() || ""}
-                    onChange={(e) => {
-                      const parts = (productForm.imageUrl || "").split(",").map(s => s.trim());
-                      parts[2] = e.target.value;
-                      setProductForm({ ...productForm, imageUrl: parts.filter(Boolean).join(", ") });
-                    }}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-mono text-[11px]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">Product Description (Optional)</label>
-                <textarea
-                  rows={3}
-                  placeholder="Enter detailed product specifications, material grade, usage guidelines, etc."
-                  value={productForm.description || ""}
-                  onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-medium resize-y focus:bg-white transition-colors"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowProductModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingProduct}
-                  className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {isSubmittingProduct ? (
-                    <>
-                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Saving Product...</span>
-                    </>
-                  ) : (
-                    "Save Product"
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {activeTab === "vendors" && (
+        <DrVendorsTab
+          districtName={districtName}
+          filteredVendors={filteredVendors}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          onAddVendor={() => setShowVendorModal(true)}
+          onEditVendor={(v) => setEditingVendor(v)}
+          updatingVendorStatus={updatingVendorStatus}
+          onToggleVendorStatus={handleToggleVendorStatus}
+          deletingVendorId={deletingVendorId}
+          onDeleteVendor={handleDeleteVendor}
+        />
       )}
 
-      {/* EDIT VENDOR MODAL (DR) */}
-      {editingVendor && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-              <h3 className="font-bold text-navy-900 text-base">Edit District Vendor Details</h3>
-              <button onClick={() => setEditingVendor(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none">✕</button>
-            </div>
-            <form onSubmit={handleUpdateVendorSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">Shop / Business Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={editingVendor.shopName}
-                  onChange={(e) => setEditingVendor({ ...editingVendor, shopName: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">Owner Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={editingVendor.ownerName}
-                  onChange={(e) => setEditingVendor({ ...editingVendor, ownerName: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">Mobile Number *</label>
-                <input
-                  type="tel"
-                  required
-                  maxLength={10}
-                  value={editingVendor.phone}
-                  onChange={(e) => setEditingVendor({ ...editingVendor, phone: e.target.value.replace(/\D/g, "") })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">Vendor Login Password</label>
-                <input
-                  type="text"
-                  placeholder="Set / Change Login Password"
-                  value={editingVendor.password || ""}
-                  onChange={(e) => setEditingVendor({ ...editingVendor, password: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold font-mono"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                <button type="button" onClick={() => setEditingVendor(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingEditVendor}
-                  className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {isSubmittingEditVendor ? (
-                    <>
-                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Saving Changes...</span>
-                    </>
-                  ) : (
-                    "Save Changes"
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {(activeTab === "products" || activeTab === "masterCatalog") && (
+        <DrCatalogTab
+          districtName={districtName}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          districtProducts={districtProducts}
+          filteredProducts={filteredProducts}
+          masterProducts={masterProducts}
+          productsLoading={productsLoading}
+          listingFilter={listingFilter}
+          setListingFilter={setListingFilter}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          onAddProduct={() => setShowProductModal(true)}
+          onEditMasterProduct={handleEditMasterProduct}
+          busyListingAction={busyListingAction}
+          onListingAction={handleListingAction}
+        />
       )}
 
-      {/* EDIT PRODUCT MODAL (DR) */}
-      {editingProduct && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-100 max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-              <h3 className="font-bold text-navy-900 text-base">Edit Master Product</h3>
-              <button onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none cursor-pointer">✕</button>
-            </div>
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              const finalImgs = [
-                editingProduct.img1 !== undefined ? editingProduct.img1 : editingImages[0],
-                editingProduct.img2 !== undefined ? editingProduct.img2 : editingImages[1],
-                editingProduct.img3 !== undefined ? editingProduct.img3 : editingImages[2],
-              ].map((s) => (s || "").trim()).filter(Boolean);
-              const finalImageUrl = finalImgs.join(", ") || editingProduct.imageUrl || "";
-
-              const prodToSave = {
-                ...editingProduct,
-                imageUrl: finalImageUrl,
-                images: finalImgs,
-                description: editingProduct.description !== undefined ? (editingProduct.description?.trim() || null) : undefined,
-              };
-              delete prodToSave.img1;
-              delete prodToSave.img2;
-              delete prodToSave.img3;
-
-              setEditingProduct(null);
-              updateMasterProduct(prodToSave.id || prodToSave.masterProductId, prodToSave);
-              showAlert({ title: "Product Updated", message: `Product "${prodToSave.name}" updated successfully!`, type: "success" });
-            }} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">Product Title *</label>
-                <input
-                  type="text"
-                  required
-                  value={editingProduct.name}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-navy-900 mb-1">Brand</label>
-                  <input
-                    type="text"
-                    value={editingProduct.brand}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, brand: e.target.value })}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-navy-900 mb-1">Grade / Spec</label>
-                  <input
-                    type="text"
-                    value={editingProduct.grade}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, grade: e.target.value })}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-navy-900 mb-1">Price (₹) *</label>
-                  <input
-                    type="number"
-                    required
-                    value={editingProduct.suggestedPrice || editingProduct.price}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, suggestedPrice: e.target.value, price: e.target.value })}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-navy-900 mb-1">Unit Packaging</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 50kg Bag, Box, 20L"
-                    value={editingProduct.unit !== undefined ? editingProduct.unit : ""}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, unit: e.target.value })}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">
-                  Product Images (1 to 3 Images for Interactive Slider)
-                </label>
-                <div className="flex gap-2 overflow-x-auto pb-2 mb-2.5 no-scrollbar">
-                  {PRESET_IMAGES.map((preset, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => {
-                        const emptyIdx = editingImages.findIndex((s) => !s.trim());
-                        const targetIdx = emptyIdx !== -1 ? emptyIdx : 0;
-                        handleEditImageSlotChange(targetIdx, preset.url);
-                      }}
-                      className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-brand-50 hover:border-brand-300 text-[10px] font-semibold shrink-0 cursor-pointer"
-                    >
-                      + {preset.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="space-y-2">
-                  {[0, 1, 2].map((slotIdx) => {
-                    const slotValue = editingImages[slotIdx] || "";
-                    const isRequired = slotIdx === 0;
-                    const placeholder =
-                      slotIdx === 0
-                        ? "Main Image 1 URL *"
-                        : `Image ${slotIdx + 1} URL (Optional)`;
-
-                    return (
-                      <div key={slotIdx} className="flex items-center gap-2.5 bg-slate-50 p-2 rounded-xl border border-slate-200">
-                        <div className="w-10 h-10 rounded-lg overflow-hidden border border-slate-200 bg-white shrink-0 flex items-center justify-center">
-                          {slotValue && slotValue.trim() ? (
-                            <img
-                              src={slotValue}
-                              alt={`Slot ${slotIdx + 1}`}
-                              className="w-full h-full object-cover"
-                              onError={(e) => { e.currentTarget.style.display = "none"; }}
-                            />
-                          ) : (
-                            <span className="text-[10px] text-slate-400 font-extrabold">
-                              #{slotIdx + 1}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex-1">
-                          <input
-                            type="url"
-                            placeholder={placeholder}
-                            required={isRequired}
-                            value={slotValue}
-                            onChange={(e) => handleEditImageSlotChange(slotIdx, e.target.value)}
-                            className="w-full bg-white text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none font-medium font-mono text-[11px] focus:border-brand-500"
-                          />
-                        </div>
-
-                        {slotValue ? (
-                          <button
-                            type="button"
-                            onClick={() => handleEditImageSlotChange(slotIdx, "")}
-                            className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg text-xs cursor-pointer hover:bg-rose-50"
-                            title="Clear image"
-                          >
-                            ✕
-                          </button>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">
-                  Product Description
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="Enter detailed product description, specifications, usage guidelines..."
-                  value={editingProduct.description || ""}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none font-medium resize-y focus:border-brand-500 focus:bg-white transition-colors"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                <button type="button" onClick={() => setEditingProduct(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
-                <button type="submit" className="px-5 py-2 text-xs font-bold text-white bg-brand-500 rounded-xl hover:bg-brand-600 shadow-xs cursor-pointer">Save Changes</button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {activeTab === "returns" && (
+        <DrReturnsTab
+          districtName={districtName}
+          returnSearchQuery={returnSearchQuery}
+          setReturnSearchQuery={setReturnSearchQuery}
+          returnSearchMessage={returnSearchMessage}
+          setReturnSearchMessage={setReturnSearchMessage}
+          returnSearchResults={returnSearchResults}
+          selectedReturnOrder={selectedReturnOrder}
+          selectOrderForReturn={selectOrderForReturn}
+          isSearchingReturnOrder={isSearchingReturnOrder}
+          handleSearchReturnOrder={handleSearchReturnOrder}
+          returnQuantities={returnQuantities}
+          handleReturnQtyChange={handleReturnQtyChange}
+          returnReason={returnReason}
+          setReturnReason={setReturnReason}
+          customCashbackDeduct={customCashbackDeduct}
+          setCustomCashbackDeduct={setCustomCashbackDeduct}
+          isSubmittingReturn={isSubmittingReturn}
+          handleProcessReturn={handleProcessReturn}
+          processedReturns={processedReturns}
+          loadingReturnsHistory={loadingReturnsHistory}
+          fetchProcessedReturns={fetchProcessedReturns}
+        />
       )}
-    </div>
+
+      {activeTab === "profile" && (
+        <DrProfileTab
+          drName={user?.name || currentDr?.name || "District Representative"}
+          drPhone={user?.phone || currentDr?.phone || ""}
+          drEmail={user?.email || currentDr?.email || ""}
+          districtName={districtName}
+          stats={stats}
+          onAddVendor={() => setShowVendorModal(true)}
+          onAddProduct={() => setShowProductModal(true)}
+          onLogout={logout}
+        />
+      )}
+    </DrShell>
   );
 }

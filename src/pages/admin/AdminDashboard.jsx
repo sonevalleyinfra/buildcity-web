@@ -2170,41 +2170,35 @@ export default function AdminDashboard() {
                               return (
                                 <div className="flex items-center gap-2">
                                   <span className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold border ${statusStyle}`}>
-                                    {isLocked ? "🔒 COMPLETED" : (o.status || "PENDING")}
+                                    {isLocked ? "COMPLETED" : (o.status || "PENDING")}
                                   </span>
-                                  {isLocked ? (
-                                    <span className="text-[10px] font-bold text-slate-400 bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg select-none">
-                                      Locked
-                                    </span>
-                                  ) : (
-                                    updateOrderStatus && (
-                                      <select
-                                        value={stUpper}
-                                        onChange={(e) => {
-                                          const nextSt = e.target.value;
-                                          if (nextSt === "COMPLETED") {
-                                            showConfirm({
-                                              title: "Mark Order as COMPLETED (Locked)?",
-                                              message: "Once marked COMPLETED, this order status will be locked permanently and cannot be changed.",
-                                              type: "warning",
-                                              confirmText: "Yes, Mark Completed",
-                                              cancelText: "Cancel",
-                                              onConfirm: () => updateOrderStatus(o.id, "COMPLETED"),
-                                            });
-                                          } else {
-                                            updateOrderStatus(o.id, nextSt);
-                                          }
-                                        }}
-                                        className="text-[11px] font-bold bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 outline-none text-navy-900 cursor-pointer"
-                                      >
-                                        <option value="PENDING">PENDING</option>
-                                        <option value="PROCESSING">PROCESSING</option>
-                                        <option value="OUT_FOR_DELIVERY">OUT FOR DELIVERY</option>
-                                        <option value="DELIVERED">DELIVERED</option>
-                                        <option value="COMPLETED">🔒 COMPLETED (Lock)</option>
-                                        <option value="CANCELLED">CANCELLED</option>
-                                      </select>
-                                    )
+                                  {!isLocked && updateOrderStatus && (
+                                    <select
+                                      value={stUpper}
+                                      onChange={(e) => {
+                                        const nextSt = e.target.value;
+                                        if (nextSt === "COMPLETED") {
+                                          showConfirm({
+                                            title: "Mark Order as COMPLETED?",
+                                            message: "Once marked COMPLETED, this order status cannot be changed anymore.",
+                                            type: "warning",
+                                            confirmText: "Yes, Mark Completed",
+                                            cancelText: "Cancel",
+                                            onConfirm: () => updateOrderStatus(o.id, "COMPLETED"),
+                                          });
+                                        } else {
+                                          updateOrderStatus(o.id, nextSt);
+                                        }
+                                      }}
+                                      className="text-[11px] font-bold bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 outline-none text-navy-900 cursor-pointer"
+                                    >
+                                      <option value="PENDING">PENDING</option>
+                                      <option value="PROCESSING">PROCESSING</option>
+                                      <option value="OUT_FOR_DELIVERY">OUT FOR DELIVERY</option>
+                                      <option value="DELIVERED">DELIVERED</option>
+                                      <option value="COMPLETED">COMPLETED</option>
+                                      <option value="CANCELLED">CANCELLED</option>
+                                    </select>
                                   )}
                                 </div>
                               );

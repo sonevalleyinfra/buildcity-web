@@ -1,4 +1,4 @@
-import { authFetch } from "../../config/authFetch";
+import { authFetch, getToken } from "../../config/authFetch";
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, Navigate, useLocation } from "react-router-dom";
 import Navbar from "../../components/Navbar";
@@ -340,6 +340,17 @@ export default function Checkout() {
 
   // Order place karne ka main function - vendor aur address map karke
   const handlePlaceOrder = async () => {
+    if (!user || !getToken()) {
+      showAlert({
+        title: "Login Required",
+        message: "Your login session has expired. Please verify your mobile number to complete your order. Your cart items are safely saved.",
+        type: "warning",
+        buttonText: "Login Now",
+      });
+      navigate("/login?redirect=/checkout", { state: location.state });
+      return;
+    }
+
     const activeRegionName = region?.name || "Varanasi";
     const activeRegionId = region?.id || "2ab0f187-d170-4432-8eef-e0ac31ed21c3";
 

@@ -25,7 +25,13 @@ export const getToken = () => {
     const auth = localStorage.getItem(AUTH_KEY);
     if (auth) {
       const parsed = JSON.parse(auth);
-      if (parsed?.token) return parsed.token.trim();
+      if (parsed?.token && typeof parsed.token === "string" && parsed.token.trim()) {
+        const clean = parsed.token.trim();
+        try {
+          localStorage.setItem(TOKEN_KEY, clean);
+        } catch {}
+        return clean;
+      }
     }
     return "";
   } catch {
@@ -49,7 +55,7 @@ export const clearToken = () => {
  * - Implements dual-gateway fallback (Vercel Proxy <-> Railway) on network/DNS drops
  * - Automatically injects Authorization: Bearer <token>
  * - Default Content-Type: application/json (unless FormData)
- * - Handles 401 Unauthorized by clearing session and redirecting to /login
+ * - Handles 401 Unauthorized by retrying direct Railway gateway (in case proxy/redirect stripped Authorization header) and syncing AuthContext state if genuinely expired
  */
 export const authFetch = async (path, options = {}) => {
   let primaryUrl = path.startsWith("http://") || path.startsWith("https://")
@@ -115,14 +121,43 @@ export const authFetch = async (path, options = {}) => {
     }
   }
 
-  // If 401 Unauthorized occurs on an expired/invalid token, clear the invalid token
+  // If 401 occurs even though we had a token, a domain redirect (e.g. www.buildcity.in <-> buildcity.in on APK/Web)
+  // may have stripped the Authorization header. Retry directly against Railway backend once before declaring token invalid.
+  if (
+    response.status === 401 &&
+    token &&
+    typeof window !== "undefined" &&
+    !window.location.hostname.includes("localhost") &&
+    !primaryUrl.includes("buildcity-web-production-a5ca.up.railway.app")
+  ) {
+    const apiPath = primaryUrl.startsWith("http")
+      ? primaryUrl.replace(/^https?:\/\/[^/]+/, "")
+      : primaryUrl;
+    const directRailwayUrl = `${RAILWAY_API_URL}${apiPath.startsWith("/") ? "" : "/"}${apiPath}`;
+    try {
+      const retryRes = await fetch(directRailwayUrl, {
+        ...options,
+        headers,
+      });
+      if (retryRes.status !== 401) {
+        return retryRes;
+      }
+      response = retryRes;
+    } catch {}
+  }
+
+  // If 401 Unauthorized still occurs, sync logout state cleanly so the user is not stuck in a "ghost login" state
   if (response.status === 401 && token) {
     clearToken();
     try {
       localStorage.removeItem(AUTH_KEY);
     } catch {}
 
-    // Only redirect if actively inside a protected dashboard route
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("buildcity_auth_expired"));
+    }
+
+    // Only force redirect if actively inside a protected partner dashboard route
     if (
       typeof window !== "undefined" &&
       (window.location.pathname.startsWith("/admin") ||

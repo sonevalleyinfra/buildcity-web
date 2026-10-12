@@ -45,11 +45,19 @@ export function AlertProvider({ children }) {
     onCancel: null,
   });
 
-  const showAlert = ({ title, message, type = "warning", buttonText = "Understood" }) => {
+  const showAlert = (arg1, arg2, arg3) => {
+    const isObj = typeof arg1 === "object" && arg1 !== null;
+    const message = isObj ? (arg1.message || "") : String(arg1 || "");
+    const type = isObj ? (arg1.type || "warning") : (arg3 || "warning");
+    const title = isObj
+      ? (arg1.title || (type === "warning" ? "Notice" : type === "success" ? "Success" : "Notification"))
+      : (arg2 || (type === "warning" ? "Notice" : type === "success" ? "Success" : "Notification"));
+    const buttonText = isObj ? (arg1.buttonText || "Understood") : "Understood";
+
     setConfig({
       isOpen: true,
-      title: title || (type === "warning" ? "Notice" : type === "success" ? "Success" : "Notification"),
-      message: message || "",
+      title,
+      message,
       type,
       buttonText,
       isConfirm: false,

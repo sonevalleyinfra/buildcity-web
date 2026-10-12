@@ -46,7 +46,7 @@ export const ORDER_STATUS = {
     halo: "ring-emerald-500/20",
   },
   COMPLETED: {
-    label: "Completed (Locked)",
+    label: "Completed",
     tone: "bg-teal-50 text-teal-800 ring-teal-600/20",
     dot: "bg-teal-600",
     accent: "bg-teal-600",

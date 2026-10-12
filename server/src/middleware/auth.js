@@ -23,10 +23,11 @@ if (!JWT_SECRET) {
 function issueToken(user) {
   if (!user) throw new Error("Cannot issue JWT for undefined user");
 
+  const normalizedRole = String(user.role || "CUSTOMER").toUpperCase();
   const payload = {
     sub: String(user.id || user.userId),
     phone: user.phone || "",
-    role: String(user.role || "CUSTOMER").toUpperCase(),
+    role: normalizedRole,
     tv: user.tokenVersion || 1,
   };
 

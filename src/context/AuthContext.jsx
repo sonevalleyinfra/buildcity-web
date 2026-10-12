@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { API_BASE_URL } from "../config/api";
-import { authFetch, saveToken, clearToken } from "../config/authFetch";
+import { authFetch, saveToken, getToken, clearToken } from "../config/authFetch";
 import { unregisterVendorPushNotifications } from "../utils/pushNotifications";
 
 // ye auth context hai, yaha user ka login status, otp verification aur supabase sync sab manage hota hai
@@ -13,32 +13,67 @@ export function AuthProvider({ children }) {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && (parsed.id || parsed.phone)) return parsed;
+        const activeToken = getToken() || parsed?.token || "";
+        if (parsed && (parsed.id || parsed.phone) && activeToken) {
+          saveToken(activeToken);
+          return { ...parsed, token: activeToken };
+        }
+        // Agar user object hai par JWT token gayab hai (ghost login), toh clean kar do
+        localStorage.removeItem(STORAGE_KEY);
+        clearToken();
       }
     } catch {}
     return null;
   });
   const [loading, setLoading] = useState(false);
 
-  // jab app start hota hai toh background me supabase se latest user profile laake sync kar dete hai
+  // jab app start hota hai toh background me supabase se latest user profile aur sliding token sync kar dete hai
   useEffect(() => {
+    const handleAuthExpired = () => {
+      setUser(null);
+      clearToken();
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {}
+    };
+
+    window.addEventListener("buildcity_auth_expired", handleAuthExpired);
+
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
+    const activeToken = getToken();
+    if (saved && activeToken) {
       try {
         const parsed = JSON.parse(saved);
-        // background me user ki details fetch karke local storage me update karte hai
+        // background me user ki details fetch karke local storage aur token validity (7 days sliding) update karte hai
         authFetch(`/api/v1/users/me`)
-          .then((r) => r.json())
+          .then(async (r) => {
+            if (r.status === 401) {
+              handleAuthExpired();
+              return null;
+            }
+            const data = await r.json().catch(() => null);
+            if (r.status === 404 && data?.invalidSession) {
+              handleAuthExpired();
+              return null;
+            }
+            return data;
+          })
           .then((dbUser) => {
-            if (dbUser && dbUser.name) {
+            if (dbUser && (dbUser.id || dbUser.name)) {
+              const freshToken = dbUser.token || parsed.token || getToken();
+              if (freshToken) {
+                saveToken(freshToken);
+              }
               const refreshed = {
                 ...parsed,
-                name: dbUser.name,
+                id: dbUser.id || parsed.id,
+                name: dbUser.name || parsed.name,
                 email: dbUser.email || parsed.email,
                 preferredRegionId: dbUser.preferredRegionId || parsed.preferredRegionId,
                 preferredRegionName: dbUser.preferredRegionName || parsed.preferredRegionName,
                 referralCode: dbUser.referralCode || parsed.referralCode || null,
                 walletBalance: dbUser.walletBalance !== undefined ? Number(dbUser.walletBalance) : (parsed.walletBalance || 0),
+                token: freshToken,
               };
               setUser(refreshed);
               localStorage.setItem(STORAGE_KEY, JSON.stringify(refreshed));
@@ -63,11 +98,20 @@ export function AuthProvider({ children }) {
       }
     }
     setLoading(false);
+
+    return () => {
+      window.removeEventListener("buildcity_auth_expired", handleAuthExpired);
+    };
   }, []);
 
   const persist = (userObj) => {
-    setUser(userObj);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(userObj));
+    const activeToken = userObj?.token || getToken();
+    const withToken = activeToken ? { ...userObj, token: activeToken } : userObj;
+    if (activeToken) {
+      saveToken(activeToken);
+    }
+    setUser(withToken);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(withToken));
   };
 
   const getOtpEndpoint = (path) => {

@@ -1801,7 +1801,8 @@ app.get("/api/v1/users/me", requireAuth, async (req, res) => {
     }
 
     const { password, ...safeUser } = user;
-    res.json(safeUser);
+    const refreshedToken = issueToken(user);
+    res.json({ ...safeUser, token: refreshedToken });
   } catch (err) {
     sendServerError(res, err);
   }
@@ -3374,16 +3375,20 @@ app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", 
 // 7b. DR / ADMIN ORDER RETURNS & REFUND DESK ENDPOINTS (Staff Only)
 // ---------------------------------------------------------------------------
 
-// Search orders by Order ID / Order Number or Customer Phone for filing a return
+// Search order by Order ID or last 4 characters for filing a return
 app.get("/api/v1/returns/search", requireAuth, requireRole("DR", "ADMIN"), async (req, res) => {
   try {
     const rawQ = String(req.query.q || "").trim();
-    if (!rawQ) {
-      return res.status(400).json({ error: "Please enter an Order ID or Customer Mobile Number to search." });
-    }
+    const cleanShort = rawQ
+      .replace(/^#/g, "")
+      .replace(/^(ord)[-_]?/i, "")
+      .replace(/\*/g, "")
+      .replace(/-/g, "")
+      .trim();
 
-    const cleanDigits = rawQ.replace(/\D/g, "");
-    const cleanShort = rawQ.replace(/^#?ORD-?/i, "").trim();
+    if (!cleanShort || cleanShort.length < 2) {
+      return res.status(400).json({ error: "Please enter an Order ID or its last 4 characters." });
+    }
 
     let scopeWhere = {};
     if (req.auth.role === "DR") {
@@ -3394,14 +3399,15 @@ app.get("/api/v1/returns/search", requireAuth, requireRole("DR", "ADMIN"), async
     }
 
     const searchOr = [
-      { id: { contains: cleanShort, mode: "insensitive" } },
-      { orderNumber: { contains: cleanShort, mode: "insensitive" } },
+      { id: { endsWith: cleanShort, mode: "insensitive" } },
+      { orderNumber: { endsWith: cleanShort, mode: "insensitive" } },
+      { id: { equals: rawQ, mode: "insensitive" } },
+      { orderNumber: { equals: rawQ, mode: "insensitive" } },
     ];
-    if (cleanDigits.length >= 4) {
-      const phoneQuery = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
+    if (cleanShort.length >= 4) {
       searchOr.push(
-        { customer: { phone: { contains: phoneQuery } } },
-        { address: { phone: { contains: phoneQuery } } }
+        { id: { contains: cleanShort, mode: "insensitive" } },
+        { orderNumber: { contains: cleanShort, mode: "insensitive" } }
       );
     }
 
@@ -3447,8 +3453,23 @@ app.get("/api/v1/returns/search", requireAuth, requireRole("DR", "ADMIN"), async
           }
         }
 
+        const materialsSubtotal = Math.round(
+          (ord.items || []).reduce((sum, it) => sum + Number(it.quantity || 0) * Number(it.priceAtPurchase || 0), 0) * 100
+        ) / 100;
+        const deliveryFee = Math.max(0, Number(ord.deliveryFee || 0));
+        const walletDiscount = Math.max(0, Number(ord.walletDiscount || 0));
+        const discountAmount = Math.max(0, Number(ord.discountAmount || 0));
+        const totalAmount = Math.max(0, Number(ord.totalAmount || 0));
+        // Delivery fee is strictly non-refundable; max cash paid for materials is (totalAmount - deliveryFee)
+        const netMaterialsCashPaid = Math.max(0, Math.round((totalAmount - deliveryFee) * 100) / 100);
+
         return {
           ...ord,
+          materialsSubtotal,
+          deliveryFee,
+          walletDiscount,
+          discountAmount,
+          netMaterialsCashPaid,
           cashbackEarned,
           remainingCashbackToDeduct: Math.max(0, Math.round((cashbackEarned - totalAlreadyDeductedCashback) * 100) / 100),
           returnedQtyMap,
@@ -3481,6 +3502,9 @@ app.get("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req, 
             id: true,
             orderNumber: true,
             totalAmount: true,
+            deliveryFee: true,
+            walletDiscount: true,
+            discountAmount: true,
             status: true,
             createdAt: true,
             address: { select: { street: true, city: true, pincode: true } },
@@ -3518,6 +3542,11 @@ app.post("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req,
 
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
+    }
+
+    const orderStatusUpper = String(order.status || "").toUpperCase();
+    if (orderStatusUpper !== "DELIVERED" && orderStatusUpper !== "COMPLETED") {
+      return res.status(400).json({ error: "Only DELIVERED or COMPLETED orders can be returned." });
     }
 
     // Check DR district access
@@ -3612,6 +3641,23 @@ app.post("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req,
 
     totalReturnItemsValue = Math.round(totalReturnItemsValue * 100) / 100;
 
+    // Calculate actual cash paid by customer for the returned materials:
+    // 1. Delivery charge (order.deliveryFee) is strictly NON-REFUNDABLE.
+    // 2. Wallet Paid at checkout (order.walletDiscount) and Coupon Discount (order.discountAmount) were not paid in cash.
+    const orderMaterialsSubtotal = Math.round(
+      (order.items || []).reduce((sum, it) => sum + Number(it.quantity || 0) * Number(it.priceAtPurchase || 0), 0) * 100
+    ) / 100;
+    const orderDeliveryFee = Math.max(0, Number(order.deliveryFee || 0));
+    const orderTotalAmount = Math.max(0, Number(order.totalAmount || 0));
+    const netMaterialsCashPaid = Math.max(0, Math.round((orderTotalAmount - orderDeliveryFee) * 100) / 100);
+    const totalCheckoutDeductions = Math.max(0, Math.round((orderMaterialsSubtotal - netMaterialsCashPaid) * 100) / 100);
+
+    const checkoutDiscountOnReturn = orderMaterialsSubtotal > 0
+      ? Math.round((totalReturnItemsValue / orderMaterialsSubtotal) * totalCheckoutDeductions * 100) / 100
+      : 0;
+
+    const refundableMaterialCash = Math.max(0, Math.round((totalReturnItemsValue - checkoutDiscountOnReturn) * 100) / 100);
+
     // Check cashback earned on this order
     let orderCashback = Number(order.cashbackEarned || 0);
     if (!orderCashback) {
@@ -3623,10 +3669,10 @@ app.post("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req,
 
     const remainingCashback = Math.max(0, Math.round((orderCashback - alreadyDeductedCashback) * 100) / 100);
     const cashbackToDeduct = customCashbackDeduct !== undefined
-      ? Math.min(totalReturnItemsValue, Math.max(0, Number(customCashbackDeduct) || 0))
-      : Math.min(totalReturnItemsValue, remainingCashback);
+      ? Math.min(refundableMaterialCash, Math.max(0, Number(customCashbackDeduct) || 0))
+      : Math.min(refundableMaterialCash, remainingCashback);
 
-    const netRefundCash = Math.max(0, Math.round((totalReturnItemsValue - cashbackToDeduct) * 100) / 100);
+    const netRefundCash = Math.max(0, Math.round((refundableMaterialCash - cashbackToDeduct) * 100) / 100);
 
     const custPhone = order.customer?.phone || order.address?.phone || "";
     const custName = order.customer?.name || order.address?.fullName || "Customer";
@@ -3641,7 +3687,7 @@ app.post("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req,
           districtName: resolvedDistrict,
           customerPhone: custPhone,
           customerName: custName,
-          returnAmount: totalReturnItemsValue,
+          returnAmount: refundableMaterialCash,
           cashbackDeducted: cashbackToDeduct,
           netRefundCash,
           returnReason: String(returnReason || "Excess / Returned Material").trim(),
@@ -3690,7 +3736,9 @@ app.post("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req,
       success: true,
       returnRecord: createdReturn,
       summary: {
-        returnAmount: totalReturnItemsValue,
+        grossReturnItemsValue: totalReturnItemsValue,
+        checkoutDiscountDeducted: checkoutDiscountOnReturn,
+        returnAmount: refundableMaterialCash,
         cashbackDeducted: cashbackToDeduct,
         netRefundCash,
       },

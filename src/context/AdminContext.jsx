@@ -405,6 +405,12 @@ export function AdminProvider({ children }) {
             price: Number(l.price) || 100,
             stockQty: Number(l.stockQty) || 100,
             imageUrl: l.imageUrl || l.masterProduct?.imageUrl || matchedMaster.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80",
+            images: Array.isArray(l.images) && l.images.length > 0
+              ? l.images
+              : (l.imageUrl || l.masterProduct?.imageUrl || matchedMaster.imageUrl || "")
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean),
             approvalStatus: resolvedApproval,
             isActive: resolvedIsActive,
             isVendorSuspended: Boolean(isVendorSuspended),
@@ -767,6 +773,12 @@ export function AdminProvider({ children }) {
             mrp: resolvedMrp,
             stockQty: Number(l.stockQty) || 100,
             imageUrl: l.imageUrl || l.masterProduct?.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80",
+            images: Array.isArray(l.images) && l.images.length > 0
+              ? l.images
+              : (l.imageUrl || l.masterProduct?.imageUrl || "")
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean),
             approvalStatus: l.approvalStatus || "APPROVED",
             isActive: isListingApproved && l.isActive !== false && !isVendorSuspended,
             isVendorSuspended: Boolean(isVendorSuspended),

@@ -9,6 +9,7 @@ import { useRegion } from "../../context/RegionContext";
 import { useAuth } from "../../context/AuthContext";
 import { API_BASE_URL } from "../../config/api";
 import { authFetch } from "../../config/authFetch";
+import { cleanProductImage } from "../../utils/productImage";
 
 const AVAILABLE_COUPONS = [
   { code: "BUILDCITY100", title: "Flat ₹100 OFF", minOrder: 1000, discountAmount: 100, expiryDate: "2026-12-31", isActive: true, desc: "Valid on orders above ₹1,000" },
@@ -409,7 +410,15 @@ export default function Cart() {
                   }`}
                 >
                   <Link to={`/product/${item.id}`} className="h-16 w-16 sm:h-20 sm:w-20 shrink-0 rounded-xl overflow-hidden bg-slate-100 border border-slate-100 relative">
-                    <img src={item.img} alt={item.name} className={`w-full h-full object-cover ${isItemUnavailable ? "grayscale opacity-80" : ""}`} />
+                    <img
+                      src={cleanProductImage(item)}
+                      alt={item.name}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = "/categories/cement.png";
+                      }}
+                      className={`w-full h-full object-cover ${isItemUnavailable ? "grayscale opacity-80" : ""}`}
+                    />
                     {isItemUnavailable && (
                       <span className="absolute inset-x-0 bottom-0 bg-rose-600 text-white text-[8px] font-black text-center py-0.5 uppercase tracking-wider">
                         Unavailable

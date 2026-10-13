@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { formatShortId, formatDateTimeIST } from "../../../utils/formatId";
 import { SearchIcon } from "../../vendor/ui/icons";
 import { RotateCcwIcon } from "../DrShell";
@@ -27,6 +28,34 @@ export default function DrReturnsTab({
   loadingReturnsHistory,
   fetchProcessedReturns,
 }) {
+  const [showOrderList, setShowOrderList] = useState(false);
+
+  // If no order is selected yet, but search results exist, show the list so user can choose
+  const isOrderListVisible = showOrderList || (!selectedReturnOrder && returnSearchResults.length > 0);
+
+  const handleSelectOrder = (order) => {
+    selectOrderForReturn(order);
+    setShowOrderList(false);
+  };
+
+  const [visibleHistoryCount, setVisibleHistoryCount] = useState(15);
+  const displayedReturns = processedReturns.slice(0, visibleHistoryCount);
+  const hasMoreReturns = processedReturns.length > visibleHistoryCount;
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      if (typeof fetchProcessedReturns === "function") {
+        await fetchProcessedReturns();
+      }
+    } catch (err) {
+      console.error("Refresh returns error:", err);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 400);
+    }
+  };
+
   const currentReturnItems = (selectedReturnOrder?.items || []).map((it) => {
     const key = it.id || it.vendorProductId || it.productName;
     const orderedQty = Number(it.quantity || 1);
@@ -105,7 +134,7 @@ export default function DrReturnsTab({
               </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
-              Search by Customer Mobile Number (e.g. 7607650875) or Order ID (e.g. #ORD-*83F2) to view delivered orders, select returned items, and calculate the net cash refund.
+              Search by Customer Mobile Number (e.g. 9876543210) or Order ID (e.g. #ORD-*83F2) to view delivered orders, select returned items, and calculate the net cash refund.
             </p>
           </div>
         </div>
@@ -121,7 +150,7 @@ export default function DrReturnsTab({
                 setReturnSearchQuery(e.target.value);
                 if (returnSearchMessage) setReturnSearchMessage("");
               }}
-              placeholder="Enter Customer Mobile No. (e.g. 7607650875) or Order ID (#ORD-*83F2)"
+              placeholder="Enter Customer Mobile No. (e.g. 9876543210) or Order ID (#ORD-*83F2)"
               className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm font-medium text-slate-900 outline-none transition-[border-color,background-color,box-shadow] focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
             />
           </div>
@@ -148,8 +177,34 @@ export default function DrReturnsTab({
           </div>
         )}
 
+        {/* Selected Order Compact Banner (Shown when an order is selected to save space) */}
+        {selectedReturnOrder && returnSearchResults.length > 1 && !isOrderListVisible && (
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5 shadow-xs">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white shadow-xs">
+                ✓
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-slate-900 truncate">
+                  Order <span className="font-mono text-emerald-800">{formatShortId(selectedReturnOrder.id || selectedReturnOrder.orderNumber, "ORD")}</span> Selected for Return
+                </p>
+                <p className="text-[11px] text-slate-600 truncate">
+                  {selectedReturnOrder.customer?.name || selectedReturnOrder.address?.fullName || "Customer"} · Total {inr(selectedReturnOrder.totalAmount || 0)} · ({returnSearchResults.length} delivered orders found)
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowOrderList(true)}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 hover:border-slate-400 active:scale-95 transition-all cursor-pointer"
+            >
+              <span>Change Order ({returnSearchResults.length})</span>
+            </button>
+          </div>
+        )}
+
         {/* Matching Delivered Orders List - Selectable Cards */}
-        {returnSearchResults.length > 0 && (
+        {returnSearchResults.length > 0 && isOrderListVisible && (
           <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
@@ -160,9 +215,20 @@ export default function DrReturnsTab({
                   Matching Delivered Order{returnSearchResults.length > 1 ? "s" : ""} ({returnSearchResults.length})
                 </p>
               </div>
-              <span className="text-[11px] font-medium text-slate-500">
-                Click an order below to select & process return
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-medium text-slate-500">
+                  Click 'Select Order' to choose and process return
+                </span>
+                {selectedReturnOrder && (
+                  <button
+                    type="button"
+                    onClick={() => setShowOrderList(false)}
+                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                  >
+                    Hide List ✕
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
@@ -175,15 +241,13 @@ export default function DrReturnsTab({
                 const moreItemsCount = itemsCount > 1 ? itemsCount - 1 : 0;
 
                 return (
-                  <button
+                  <div
                     key={ro.id}
-                    type="button"
-                    onClick={() => selectOrderForReturn(ro)}
                     className={cx(
-                      "group relative flex flex-col justify-between text-left rounded-xl border p-3.5 transition-all cursor-pointer active:scale-[0.99]",
+                      "group relative flex flex-col justify-between text-left rounded-xl border p-3.5 transition-all bg-white shadow-xs",
                       isSel
-                        ? "border-emerald-600 bg-emerald-50/50 shadow-sm ring-2 ring-emerald-500/20"
-                        : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-xs"
+                        ? "border-emerald-600 bg-emerald-50/30 ring-2 ring-emerald-500/20"
+                        : "border-slate-200 hover:border-slate-300"
                     )}
                   >
                     <div className="space-y-1.5 w-full">
@@ -227,18 +291,20 @@ export default function DrReturnsTab({
                         <span className="text-[10px] text-slate-400 block uppercase">Total Paid</span>
                         <span className="text-xs font-bold text-slate-900">{inr(ro.totalAmount || 0)}</span>
                       </div>
-                      <span
+                      <button
+                        type="button"
+                        onClick={() => handleSelectOrder(ro)}
                         className={cx(
-                          "inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                          "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all cursor-pointer active:scale-95",
                           isSel
-                            ? "bg-emerald-600 text-white shadow-xs"
-                            : "bg-slate-100 text-slate-700 group-hover:bg-slate-200"
+                            ? "bg-emerald-600 text-white shadow-xs hover:bg-emerald-700"
+                            : "bg-navy-950 text-white hover:bg-[#0d224d] shadow-xs"
                         )}
                       >
                         {isSel ? "✓ Selected" : "Select Order →"}
-                      </span>
+                      </button>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -584,14 +650,16 @@ export default function DrReturnsTab({
           </div>
           <button
             type="button"
-            onClick={fetchProcessedReturns}
-            className="text-xs font-semibold text-brand-600 hover:underline cursor-pointer"
+            disabled={isRefreshing || loadingReturnsHistory}
+            onClick={handleRefresh}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 hover:border-slate-300 hover:text-brand-600 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
           >
-            Refresh List
+            <RotateCcwIcon className={cx("h-3.5 w-3.5 text-slate-500", (isRefreshing || loadingReturnsHistory) && "animate-spin text-brand-600")} />
+            <span>{isRefreshing || loadingReturnsHistory ? "Refreshing..." : "Refresh List"}</span>
           </button>
         </div>
 
-        {loadingReturnsHistory ? (
+        {loadingReturnsHistory && processedReturns.length === 0 ? (
           <div className="py-8 text-center text-xs font-medium text-slate-400">
             Loading return records...
           </div>
@@ -603,9 +671,9 @@ export default function DrReturnsTab({
           />
         ) : (
           <>
-            {/* Mobile Return Cards */}
-            <div className="space-y-3 md:hidden">
-              {processedReturns.map((ret) => {
+            {/* Mobile Return Cards - Scrollable container */}
+            <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1 md:hidden scrollbar-thin">
+              {displayedReturns.map((ret) => {
                 const rItems = Array.isArray(ret.returnItems) ? ret.returnItems : [];
                 return (
                   <div
@@ -656,10 +724,10 @@ export default function DrReturnsTab({
               })}
             </div>
 
-            {/* Desktop Return Records Table */}
-            <div className="hidden overflow-x-auto rounded-xl border border-slate-200 md:block">
+            {/* Desktop Return Records Table - Scrollable container */}
+            <div className="hidden max-h-[500px] overflow-y-auto rounded-xl border border-slate-200 md:block scrollbar-thin">
               <table className="w-full text-left text-xs">
-                <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500 shadow-xs">
                   <tr>
                     <th className="py-3 px-4">Return Date & Order ID</th>
                     <th className="py-3 px-4">Customer</th>
@@ -670,7 +738,7 @@ export default function DrReturnsTab({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {processedReturns.map((ret) => {
+                  {displayedReturns.map((ret) => {
                     const rItems = Array.isArray(ret.returnItems) ? ret.returnItems : [];
                     return (
                       <tr key={ret.id} className="hover:bg-slate-50/80">
@@ -719,6 +787,19 @@ export default function DrReturnsTab({
                 </tbody>
               </table>
             </div>
+
+            {/* Load More Button for Lazy-loaded History */}
+            {hasMoreReturns && (
+              <div className="pt-2 text-center">
+                <button
+                  type="button"
+                  onClick={() => setVisibleHistoryCount((prev) => prev + 15)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 hover:border-slate-300 active:scale-95 transition-all cursor-pointer"
+                >
+                  <span>Load More Return History ({processedReturns.length - visibleHistoryCount} more)</span>
+                </button>
+              </div>
+            )}
           </>
         )}
       </Card>

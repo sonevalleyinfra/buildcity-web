@@ -1,4 +1,5 @@
 import { formatShortId } from "../../../utils/formatId";
+import { cleanProductImage } from "../../../utils/productImage";
 import {
   PackageIcon,
   PlusIcon,
@@ -143,8 +144,12 @@ export default function DrCatalogTab({
                     <Card key={p.id} style={{ "--i": idx }} className="p-4 space-y-3">
                       <div className="flex items-start gap-3">
                         <img
-                          src={p.imageUrl}
+                          src={cleanProductImage(p)}
                           alt={p.name}
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = "/categories/cement.png";
+                          }}
                           className="h-14 w-14 shrink-0 rounded-xl border border-slate-200 object-cover bg-slate-100"
                         />
                         <div className="min-w-0 flex-1">
@@ -259,8 +264,12 @@ export default function DrCatalogTab({
                             <td className="py-3.5 px-4">
                               <div className="flex items-center gap-3">
                                 <img
-                                  src={p.imageUrl}
+                                  src={cleanProductImage(p)}
                                   alt={p.name}
+                                  onError={(e) => {
+                                    e.currentTarget.onerror = null;
+                                    e.currentTarget.src = "/categories/cement.png";
+                                  }}
                                   className="h-11 w-11 shrink-0 rounded-lg border border-slate-200 object-cover bg-slate-100"
                                 />
                                 <div>
@@ -389,8 +398,12 @@ export default function DrCatalogTab({
                   <Card key={p.id} style={{ "--i": idx }} className="p-4 space-y-3">
                     <div className="flex items-start gap-3">
                       <img
-                        src={p.imageUrl}
+                        src={cleanProductImage(p)}
                         alt={p.name}
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = "/categories/cement.png";
+                        }}
                         className="h-14 w-14 shrink-0 rounded-xl border border-slate-200 object-cover bg-slate-100"
                       />
                       <div className="min-w-0 flex-1">
@@ -449,8 +462,12 @@ export default function DrCatalogTab({
                           <td className="py-3.5 px-4">
                             <div className="flex items-center gap-3">
                               <img
-                                src={p.imageUrl}
+                                src={cleanProductImage(p)}
                                 alt={p.name}
+                                onError={(e) => {
+                                  e.currentTarget.onerror = null;
+                                  e.currentTarget.src = "/categories/cement.png";
+                                }}
                                 className="h-10 w-10 shrink-0 rounded-lg border border-slate-200 object-cover bg-slate-100"
                               />
                               <div>

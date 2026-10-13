@@ -6,6 +6,7 @@ import { useOrders } from "../../context/OrderContext";
 import { useAlert } from "../../context/AlertContext";
 import { useNotifications } from "../../context/NotificationContext";
 import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
+import { cleanProductImage } from "../../utils/productImage";
 import LoadMoreButton from "../../components/LoadMoreButton";
 import WalletSettingsTab from "./WalletSettingsTab";
 
@@ -1826,7 +1827,15 @@ export default function AdminDashboard() {
                       <tr key={p.id} className="hover:bg-slate-50">
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
-                            <img src={p.imageUrl} alt={p.name} className="w-10 h-10 object-cover rounded-lg border border-slate-200 shrink-0" />
+                            <img
+                              src={cleanProductImage(p)}
+                              alt={p.name}
+                              className="w-10 h-10 object-cover rounded-lg border border-slate-200 shrink-0"
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src = "/categories/cement.png";
+                              }}
+                            />
                             <div>
                               <div className="flex items-center gap-1.5">
                                 <span className="bg-navy-900 text-white font-mono text-[9px] font-bold px-1.5 py-0.5 rounded">
@@ -1949,7 +1958,15 @@ export default function AdminDashboard() {
                             🏬 {p.vendorName || "Shree Cement Traders"}
                           </td>
                           <td className="py-3.5 px-4 font-semibold text-slate-800 flex items-center gap-2">
-                            <img src={p.imageUrl} alt={p.name} className="h-8 w-8 rounded-lg object-cover border border-slate-200 shrink-0" />
+                            <img
+                              src={cleanProductImage(p)}
+                              alt={p.name}
+                              className="h-8 w-8 rounded-lg object-cover border border-slate-200 shrink-0"
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src = "/categories/cement.png";
+                              }}
+                            />
                             <span>{p.name}</span>
                           </td>
                           <td className="py-3.5 px-4 text-slate-600">

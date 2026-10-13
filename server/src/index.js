@@ -2573,10 +2573,11 @@ app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN", "DR")
         include: { category: true },
       });
 
-      // Synchronize price and description to existing vendor listings for this master product in DB
+      // Synchronize price, description, and imageUrl to existing vendor listings for this master product in DB
       const vendorUpdateData = {};
       if (targetPrice !== undefined && !isNaN(targetPrice)) vendorUpdateData.price = targetPrice;
       if (description !== undefined) vendorUpdateData.description = description;
+      if (imageUrl) vendorUpdateData.imageUrl = imageUrl;
 
       if (Object.keys(vendorUpdateData).length > 0) {
         await prisma.vendorProduct.updateMany({
@@ -2781,6 +2782,7 @@ app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "AD
       data: { productCount: { increment: 1 } },
     }).catch(() => null);
 
+    invalidateCache();
     res.status(201).json(newListing);
   } catch (err) {
     console.error("Vendor product listing error:", err);
@@ -2892,6 +2894,7 @@ app.patch("/api/v1/vendor/listings/:id/status", requireAuth, requireRole("ADMIN"
         },
       });
       console.log(`✓ Listing ${listing.id} status updated to ${approvalStatus} (isActive: ${isApproved})`);
+      invalidateCache();
       return res.json(updatedListing);
     }
 
@@ -3160,6 +3163,13 @@ const STAFF_ORDER_INCLUDE = {
       vendor: {
         select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true, region: true },
       },
+      vendorProduct: {
+        select: {
+          id: true,
+          imageUrl: true,
+          masterProduct: { select: { id: true, imageUrl: true } },
+        },
+      },
     },
   },
   customer: { select: SAFE_USER_SELECT },
@@ -3172,6 +3182,13 @@ const CUSTOMER_ORDER_INCLUDE = {
       vendor: {
         select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
       },
+      vendorProduct: {
+        select: {
+          id: true,
+          imageUrl: true,
+          masterProduct: { select: { id: true, imageUrl: true } },
+        },
+      },
     },
   },
   customer: { select: SAFE_USER_SELECT },
@@ -3181,10 +3198,25 @@ const CUSTOMER_ORDER_INCLUDE = {
 const withVendorNames = (orders) =>
   (orders || []).map((o) => ({
     ...o,
-    items: (o.items || []).map((it) => ({
-      ...it,
-      vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
-    })),
+    items: (o.items || []).map((it) => {
+      const rawImg =
+        it.vendorProduct?.imageUrl ||
+        it.vendorProduct?.masterProduct?.imageUrl ||
+        it.imageUrl ||
+        it.img ||
+        "";
+      const cleanImg =
+        typeof rawImg === "string"
+          ? rawImg.split(",").map((s) => s.trim()).filter(Boolean)[0] || ""
+          : "";
+
+      return {
+        ...it,
+        imageUrl: cleanImg || undefined,
+        img: cleanImg || undefined,
+        vendorName: it.vendor?.shopName || it.vendorName || "District Vendor",
+      };
+    }),
   }));
 
 // Orders a customer can see: placed by them, or delivered to their phone number

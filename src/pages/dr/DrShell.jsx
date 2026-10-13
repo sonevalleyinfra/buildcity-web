@@ -196,14 +196,10 @@ export default function DrShell({
                 ? activeOrdersCount
                 : key === "listings"
                 ? pendingApprovalsCount
-                : key === "returns"
-                ? returnsCount
                 : 0;
             const badgeTone =
               key === "listings"
                 ? "bg-amber-500 text-white"
-                : key === "returns"
-                ? "bg-emerald-600 text-white"
                 : "bg-brand-600 text-white";
 
             return (
@@ -397,14 +393,10 @@ export default function DrShell({
                 ? activeOrdersCount
                 : key === "listings"
                 ? pendingApprovalsCount
-                : key === "returns"
-                ? returnsCount
                 : 0;
             const badgeTone =
               key === "listings"
                 ? "bg-amber-500 text-white"
-                : key === "returns"
-                ? "bg-emerald-600 text-white"
                 : "bg-brand-600 text-white";
 
             return (

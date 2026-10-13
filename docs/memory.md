@@ -58,7 +58,10 @@ git push origin main
    - Once an order status is updated to `COMPLETED` by DR or Admin, it cannot be changed back to any other status.
 7. **Zero-Flicker LocalStorage Rule:**
    - Every dashboard and user state must hydrate immediately from `localStorage` on initial mount before waiting for backend API responses.
-8. **Prisma Atomic Writes:**
+8. **NEVER Auto-Commit or Auto-Push Code:**
+   - Always run and test changes locally first.
+   - Do NOT run `git commit` or `git push` automatically. Wait for the user to test and explicitly confirm with "commit" or "push".
+9. **Prisma Atomic Writes:**
    - Multiple database updates that depend on each other (e.g. creating return record + restoring stock + crediting wallet) must be wrapped inside `prisma.$transaction([...])`.
 
 ---

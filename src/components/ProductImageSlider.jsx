@@ -30,11 +30,11 @@ export default function ProductImageSlider({ images = [], name = "Product Image"
   return (
     <div className="space-y-3">
       {/* Main Feature Image Slider */}
-      <div className="relative w-full aspect-4/3 sm:aspect-square bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 group shadow-xs">
+      <div className="relative w-full aspect-4/3 sm:aspect-square bg-slate-50/90 rounded-2xl overflow-hidden border border-slate-200 group shadow-xs flex items-center justify-center p-4">
         <img
           src={imgList[activeIdx] || imgList[0]}
           alt={`${name} - Image ${activeIdx + 1}`}
-          className="w-full h-full object-cover transition-all duration-300 group-hover:scale-105"
+          className="w-full h-full object-contain transition-all duration-300 group-hover:scale-105"
         />
 
         {/* Counter Badge */}
@@ -75,11 +75,11 @@ export default function ProductImageSlider({ images = [], name = "Product Image"
               key={idx}
               type="button"
               onClick={() => setActiveIdx(idx)}
-              className={`relative w-14 h-14 rounded-xl overflow-hidden border-2 transition-all cursor-pointer shrink-0 ${
+              className={`relative w-14 h-14 rounded-xl overflow-hidden border-2 bg-slate-50 flex items-center justify-center p-1 transition-all cursor-pointer shrink-0 ${
                 activeIdx === idx ? "border-brand-500 ring-2 ring-brand-500/30 scale-105" : "border-slate-200 opacity-70 hover:opacity-100"
               }`}
             >
-              <img src={url} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
+              <img src={url} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-contain" />
             </button>
           ))}
         </div>

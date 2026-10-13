@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import { useAdmin } from "../context/AdminContext";
+import { cleanProductImage } from "../utils/productImage";
 
 export default function ProductCard({ product, className = "" }) {
   const { items, addItem, updateQty, removeItem } = useCart();
@@ -49,7 +50,7 @@ export default function ProductCard({ product, className = "" }) {
         name: product.name,
         price: price,
         brand: product.brand,
-        img: product.imageUrl || product.img,
+        img: cleanProductImage(product),
         vendorId: product.vendorId,
         vendorName: product.vendorName || "District Vendor",
         unit: product.unit,
@@ -82,7 +83,7 @@ export default function ProductCard({ product, className = "" }) {
     >
       {/* Product image aur link (pura edge to edge cover layout) */}
       <Link to={`/product/${product.id}`} className="block">
-        <div className="relative aspect-square w-full overflow-hidden bg-slate-100/80 flex items-center justify-center">
+        <div className="relative aspect-square w-full overflow-hidden bg-slate-50/90 flex items-center justify-center p-2.5">
           {/* Discount tag ya unavailable status */}
           {isUnavailable ? (
             <span className="absolute top-2 left-2 z-10 bg-rose-50 text-rose-700 border border-rose-200 font-black text-[9px] px-1.5 py-0.5 rounded-full shadow-2xs tracking-tight">
@@ -95,12 +96,13 @@ export default function ProductCard({ product, className = "" }) {
           ) : null}
 
           <img
-            src={product.imageUrl || product.img || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80"}
+            src={cleanProductImage(product)}
             alt={product.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ease-out"
+            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300 ease-out"
             loading="lazy"
             onError={(e) => {
-              e.target.src = "/categories/cement.png";
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = "/categories/cement.png";
             }}
           />
         </div>

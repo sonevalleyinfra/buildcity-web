@@ -29,19 +29,30 @@ const bundledAssetFor = (categoryName = "", productName = "") => {
 };
 
 export const resolveProductImage = (imageUrl, categoryName = "", productName = "") => {
-  if (!imageUrl || typeof imageUrl !== "string" || imageUrl.trim() === "") {
+  if (!imageUrl) {
+    return bundledAssetFor(categoryName, productName);
+  }
+  let clean = "";
+  if (Array.isArray(imageUrl) && imageUrl.length > 0) {
+    clean = String(imageUrl.filter(Boolean)[0] || "").trim();
+  } else if (typeof imageUrl === "string") {
+    // If comma-separated URLs, extract the first valid URL
+    const parts = imageUrl.split(",").map((s) => s.trim()).filter(Boolean);
+    clean = parts[0] || "";
+  }
+  if (!clean) {
     return bundledAssetFor(categoryName, productName);
   }
   // Already a local asset
-  if (imageUrl.startsWith("/") || imageUrl.startsWith("assets/")) {
-    return imageUrl;
+  if (clean.startsWith("/") || clean.startsWith("assets/")) {
+    return clean;
   }
   // Unsplash: request a small thumbnail so it loads fast
-  if (imageUrl.includes("images.unsplash.com")) {
-    const base = imageUrl.split("?")[0];
+  if (clean.includes("images.unsplash.com")) {
+    const base = clean.split("?")[0];
     return `${base}?auto=format&fit=crop&w=300&h=300&q=80`;
   }
-  return imageUrl;
+  return clean;
 };
 
 // Category bubble image resolver matching circular category tiles
@@ -60,10 +71,47 @@ export const resolveCategoryBubbleImage = (catName = "") => {
 };
 
 // Listed product image, falling back to its master-catalog image
-export const listingImage = (p, masterProducts = []) =>
-  resolveProductImage(
-    p.imageUrl || masterProducts.find((m) => m.id === p.masterProductId)?.imageUrl,
-    p.categoryName,
-    p.name
-  );
+export const listingImage = (p, masterProducts = []) => {
+  if (!p) return "/categories/cement.png";
+  let rawUrl = "";
+  if (Array.isArray(p.images) && p.images.filter(Boolean).length > 0) {
+    rawUrl = p.images.filter(Boolean)[0];
+  } else if (p.imageUrl) {
+    rawUrl = p.imageUrl;
+  } else if (p.img) {
+    rawUrl = p.img;
+  } else {
+    const matchedMaster = (masterProducts || []).find((m) => m.id === (p.masterProductId || p.id));
+    if (matchedMaster) {
+      if (Array.isArray(matchedMaster.images) && matchedMaster.images.filter(Boolean).length > 0) {
+        rawUrl = matchedMaster.images.filter(Boolean)[0];
+      } else {
+        rawUrl = matchedMaster.imageUrl;
+      }
+    }
+  }
+  return resolveProductImage(rawUrl, p.categoryName || p.category, p.name);
+};
+
+// Universal clean image helper for any product or item object
+export const cleanProductImage = (itemOrUrl, categoryName = "", productName = "") => {
+  if (!itemOrUrl) return bundledAssetFor(categoryName, productName);
+  if (typeof itemOrUrl === "string") {
+    return resolveProductImage(itemOrUrl, categoryName, productName);
+  }
+  const it = itemOrUrl;
+  let raw = "";
+  if (Array.isArray(it.images) && it.images.filter(Boolean).length > 0) {
+    raw = it.images.filter(Boolean)[0];
+  } else if (it.imageUrl) {
+    raw = it.imageUrl;
+  } else if (it.img) {
+    raw = it.img;
+  } else if (it.masterProduct?.imageUrl) {
+    raw = it.masterProduct.imageUrl;
+  } else if (it.vendorProduct?.imageUrl) {
+    raw = it.vendorProduct.imageUrl;
+  }
+  return resolveProductImage(raw, it.categoryName || it.category, it.name || it.productName);
+};
 

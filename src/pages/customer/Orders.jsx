@@ -8,6 +8,7 @@ import Navbar from "../../components/Navbar";
 import RegionPicker from "../../components/RegionPicker";
 import NotificationPanel from "../../components/NotificationPanel";
 import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
+import { cleanProductImage } from "../../utils/productImage";
 import LoadMoreButton from "../../components/LoadMoreButton";
 
 const TABS = ["All", "Pending", "Processing", "Out for Delivery", "Delivered", "Cancelled"];
@@ -271,9 +272,21 @@ export default function Orders() {
 
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
                       <div className="flex gap-3.5 sm:gap-4 items-center min-w-0 pl-1">
-                        {/* Product package icon container */}
-                        <div className="h-13 w-13 sm:h-14 sm:w-14 rounded-xl bg-white border border-slate-200/90 flex items-center justify-center text-2xl shrink-0 shadow-2xs group-hover:scale-105 group-hover:bg-brand-50 transition-all select-none">
-                          📦
+                        {/* Product package icon or product image */}
+                        <div className="h-13 w-13 sm:h-14 sm:w-14 rounded-xl bg-white border border-slate-200/90 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 overflow-hidden transition-all select-none">
+                          {firstItem ? (
+                            <img
+                              src={cleanProductImage(firstItem)}
+                              alt={firstItem.name || "Item"}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src = "/categories/cement.png";
+                              }}
+                            />
+                          ) : (
+                            <span className="text-2xl">📦</span>
+                          )}
                         </div>
 
                         <div className="space-y-1 min-w-0">

@@ -438,7 +438,14 @@ export default function DrDashboard() {
   const [customCashbackDeduct, setCustomCashbackDeduct] = useState("");
   const [isSearchingReturnOrder, setIsSearchingReturnOrder] = useState(false);
   const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
-  const [processedReturns, setProcessedReturns] = useState([]);
+  const [processedReturns, setProcessedReturns] = useState(() => {
+    try {
+      const saved = localStorage.getItem("buildcity_dr_processed_returns");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [loadingReturnsHistory, setLoadingReturnsHistory] = useState(false);
 
   const fetchProcessedReturns = async () => {
@@ -447,7 +454,12 @@ export default function DrDashboard() {
       const res = await authFetch(`${API_BASE_URL}/api/v1/returns`);
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data)) setProcessedReturns(data);
+        if (Array.isArray(data)) {
+          setProcessedReturns(data);
+          try {
+            localStorage.setItem("buildcity_dr_processed_returns", JSON.stringify(data.slice(0, 50)));
+          } catch {}
+        }
       }
     } catch (err) {
       console.warn("Fetch returns history note:", err.message);
@@ -515,14 +527,21 @@ export default function DrDashboard() {
 
       setReturnSearchMessage("");
       setReturnSearchResults(deliveredList);
-      const stillSelected = selectedReturnOrder && deliveredList.find((o) => o.id === selectedReturnOrder.id);
-      selectOrderForReturn(stillSelected || deliveredList[0]);
+      if (deliveredList.length === 1) {
+        selectOrderForReturn(deliveredList[0]);
+      } else {
+        setSelectedReturnOrder(null);
+      }
     } catch {
       setReturnSearchMessage("Unable to search order right now.");
     } finally {
       setIsSearchingReturnOrder(false);
     }
   };
+
+  useEffect(() => {
+    fetchProcessedReturns();
+  }, []);
 
   useEffect(() => {
     if (activeTab === "returns") {

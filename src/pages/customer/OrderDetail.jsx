@@ -4,6 +4,7 @@ import Navbar from "../../components/Navbar";
 import BottomNav from "../../components/BottomNav";
 import { useOrders } from "../../context/OrderContext";
 import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
+import { cleanProductImage } from "../../utils/productImage";
 
 const STATUS_MAP = {
   PENDING: {
@@ -253,7 +254,7 @@ export default function OrderDetail() {
               const itemName = item.productName || item.name || "Material Item";
               const itemQty = Number(item.quantity || item.qty || 1);
               const itemPrice = Number(item.priceAtPurchase || item.unitPrice || item.price || 100);
-              const itemImg = item.imageUrl || item.img || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80";
+              const itemImg = cleanProductImage(item);
               const itemTotal = item.totalPrice ? Number(item.totalPrice) : itemQty * itemPrice;
 
               return (

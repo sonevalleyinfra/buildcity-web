@@ -3457,7 +3457,7 @@ app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", 
 // 7b. DR / ADMIN ORDER RETURNS & REFUND DESK ENDPOINTS (Staff Only)
 // ---------------------------------------------------------------------------
 
-// Search order by Order ID or last 4 characters for filing a return
+// Search order by Order ID, last 4 characters, or Customer Phone Number for filing a return
 app.get("/api/v1/returns/search", requireAuth, requireRole("DR", "ADMIN"), async (req, res) => {
   try {
     const rawQ = String(req.query.q || "").trim();
@@ -3468,8 +3468,10 @@ app.get("/api/v1/returns/search", requireAuth, requireRole("DR", "ADMIN"), async
       .replace(/-/g, "")
       .trim();
 
-    if (!cleanShort || cleanShort.length < 2) {
-      return res.status(400).json({ error: "Please enter an Order ID or its last 4 characters." });
+    const cleanDigits = rawQ.replace(/\D/g, "");
+
+    if ((!cleanShort || cleanShort.length < 2) && cleanDigits.length < 3) {
+      return res.status(400).json({ error: "Please enter an Order ID, last 4 characters, or Customer Phone Number." });
     }
 
     let scopeWhere = {};
@@ -3480,16 +3482,38 @@ app.get("/api/v1/returns/search", requireAuth, requireRole("DR", "ADMIN"), async
       }
     }
 
-    const searchOr = [
-      { id: { endsWith: cleanShort, mode: "insensitive" } },
-      { orderNumber: { endsWith: cleanShort, mode: "insensitive" } },
-      { id: { equals: rawQ, mode: "insensitive" } },
-      { orderNumber: { equals: rawQ, mode: "insensitive" } },
-    ];
-    if (cleanShort.length >= 4) {
+    const searchOr = [];
+
+    if (cleanShort.length >= 2) {
+      searchOr.push(
+        { id: { endsWith: cleanShort, mode: "insensitive" } },
+        { orderNumber: { endsWith: cleanShort, mode: "insensitive" } },
+        { id: { equals: rawQ, mode: "insensitive" } },
+        { orderNumber: { equals: rawQ, mode: "insensitive" } }
+      );
+    }
+
+    if (cleanShort.length >= 3) {
       searchOr.push(
         { id: { contains: cleanShort, mode: "insensitive" } },
         { orderNumber: { contains: cleanShort, mode: "insensitive" } }
+      );
+    }
+
+    // Customer & Delivery Address Mobile Phone Search
+    if (cleanDigits.length >= 3) {
+      const phoneTerm = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
+      searchOr.push(
+        { customer: { phone: { contains: phoneTerm } } },
+        { address: { phone: { contains: phoneTerm } } }
+      );
+    }
+
+    // Customer Name Search
+    if (/[a-zA-Z]/.test(rawQ) && rawQ.length >= 3) {
+      searchOr.push(
+        { customer: { name: { contains: rawQ, mode: "insensitive" } } },
+        { address: { fullName: { contains: rawQ, mode: "insensitive" } } }
       );
     }
 
@@ -3507,7 +3531,7 @@ app.get("/api/v1/returns/search", requireAuth, requireRole("DR", "ADMIN"), async
         },
       },
       orderBy: { createdAt: "desc" },
-      take: 20,
+      take: 30,
     });
 
     // Attach cashback earned & existing returned quantities per item

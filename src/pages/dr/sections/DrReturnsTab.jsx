@@ -105,12 +105,12 @@ export default function DrReturnsTab({
               </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
-              Search an order by its Order ID or last 4 characters to select returned items, deduct wallet cashback, and calculate the net cash refund.
+              Search by Customer Mobile Number (e.g. 7607650875) or Order ID (e.g. #ORD-*83F2) to view delivered orders, select returned items, and calculate the net cash refund.
             </p>
           </div>
         </div>
 
-        {/* Search Bar (Order ID or Last 4 Characters Only) */}
+        {/* Search Bar (Phone Number or Order ID) */}
         <form onSubmit={handleSearchReturnOrder} className="flex flex-col sm:flex-row gap-2.5">
           <div className="relative flex-1">
             <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -121,7 +121,7 @@ export default function DrReturnsTab({
                 setReturnSearchQuery(e.target.value);
                 if (returnSearchMessage) setReturnSearchMessage("");
               }}
-              placeholder="Enter Order ID or last 4 characters (e.g. #ORD-*83F2 or 83F2)"
+              placeholder="Enter Customer Mobile No. (e.g. 7607650875) or Order ID (#ORD-*83F2)"
               className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm font-medium text-slate-900 outline-none transition-[border-color,background-color,box-shadow] focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
             />
           </div>
@@ -148,32 +148,96 @@ export default function DrReturnsTab({
           </div>
         )}
 
-        {/* If multiple delivered orders match last 4 characters, allow selecting */}
-        {returnSearchResults.length > 1 && (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Matching Delivered Orders ({returnSearchResults.length}) — Select an order:
-            </p>
-            <div className="flex flex-wrap gap-2">
+        {/* Matching Delivered Orders List - Selectable Cards */}
+        {returnSearchResults.length > 0 && (
+          <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white">
+                  {returnSearchResults.length}
+                </span>
+                <p className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                  Matching Delivered Order{returnSearchResults.length > 1 ? "s" : ""} ({returnSearchResults.length})
+                </p>
+              </div>
+              <span className="text-[11px] font-medium text-slate-500">
+                Click an order below to select & process return
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
               {returnSearchResults.map((ro) => {
                 const isSel = selectedReturnOrder?.id === ro.id;
+                const custName = ro.customer?.name || ro.address?.fullName || "Customer";
+                const custPhone = ro.customer?.phone || ro.address?.phone || "";
+                const itemsCount = Array.isArray(ro.items) ? ro.items.length : 0;
+                const firstItemName = ro.items?.[0]?.productName || ro.items?.[0]?.title || "";
+                const moreItemsCount = itemsCount > 1 ? itemsCount - 1 : 0;
+
                 return (
                   <button
                     key={ro.id}
                     type="button"
                     onClick={() => selectOrderForReturn(ro)}
                     className={cx(
-                      "flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-all cursor-pointer",
+                      "group relative flex flex-col justify-between text-left rounded-xl border p-3.5 transition-all cursor-pointer active:scale-[0.99]",
                       isSel
-                        ? "border-emerald-600 bg-emerald-600 text-white shadow-xs"
-                        : "border-slate-200 bg-white text-slate-900 hover:border-emerald-300"
+                        ? "border-emerald-600 bg-emerald-50/50 shadow-sm ring-2 ring-emerald-500/20"
+                        : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-xs"
                     )}
                   >
-                    <span>{formatShortId(ro.id || ro.orderNumber, "ORD")}</span>
-                    <span className="opacity-80">· {inr(ro.totalAmount || 0)}</span>
-                    <span className="rounded bg-black/10 px-1.5 py-0.5 text-[10px]">
-                      {ro.status === "COMPLETED" ? "Completed" : "Delivered"}
-                    </span>
+                    <div className="space-y-1.5 w-full">
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span
+                          className={cx(
+                            "font-mono text-xs font-bold",
+                            isSel ? "text-emerald-700" : "text-slate-900"
+                          )}
+                        >
+                          {formatShortId(ro.id || ro.orderNumber, "ORD")}
+                        </span>
+                        <span
+                          className={cx(
+                            "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                            ro.status === "COMPLETED"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-blue-100 text-blue-800"
+                          )}
+                        >
+                          {ro.status === "COMPLETED" ? "Completed" : "Delivered"}
+                        </span>
+                      </div>
+
+                      <div className="text-xs text-slate-700">
+                        <p className="font-semibold text-slate-900 truncate">{custName}</p>
+                        {custPhone && (
+                          <p className="text-[11px] font-mono text-slate-500 tabular-nums">📞 {custPhone}</p>
+                        )}
+                      </div>
+
+                      {firstItemName && (
+                        <p className="text-[11px] text-slate-600 truncate bg-slate-100/70 rounded px-1.5 py-0.5">
+                          📦 {firstItemName}{moreItemsCount > 0 ? ` +${moreItemsCount} more` : ""}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between w-full">
+                      <div className="tabular-nums">
+                        <span className="text-[10px] text-slate-400 block uppercase">Total Paid</span>
+                        <span className="text-xs font-bold text-slate-900">{inr(ro.totalAmount || 0)}</span>
+                      </div>
+                      <span
+                        className={cx(
+                          "inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                          isSel
+                            ? "bg-emerald-600 text-white shadow-xs"
+                            : "bg-slate-100 text-slate-700 group-hover:bg-slate-200"
+                        )}
+                      >
+                        {isSel ? "✓ Selected" : "Select Order →"}
+                      </span>
+                    </div>
                   </button>
                 );
               })}

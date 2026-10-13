@@ -477,7 +477,7 @@ export default function DrDashboard() {
     if (!q) {
       setReturnSearchResults([]);
       setSelectedReturnOrder(null);
-      setReturnSearchMessage("Please enter an Order ID or its last 4 characters.");
+      setReturnSearchMessage("Please enter a Customer Mobile Number or Order ID.");
       return;
     }
 
@@ -497,7 +497,7 @@ export default function DrDashboard() {
       if (matchedOrders.length === 0) {
         setReturnSearchResults([]);
         setSelectedReturnOrder(null);
-        setReturnSearchMessage("Order not found.");
+        setReturnSearchMessage("No orders found matching this Mobile Number or Order ID.");
         return;
       }
 
@@ -509,7 +509,7 @@ export default function DrDashboard() {
       if (deliveredList.length === 0) {
         setReturnSearchResults([]);
         setSelectedReturnOrder(null);
-        setReturnSearchMessage("Order not delivered");
+        setReturnSearchMessage("Orders found, but none are in DELIVERED or COMPLETED status.");
         return;
       }
 

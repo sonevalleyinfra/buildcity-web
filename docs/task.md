@@ -16,7 +16,8 @@
 - [x] **Live SMS Gateway Integration:** Direct HTTP/HTTPS transport to Aradhya SMS API with DLT template matching, timeout safety, and direct mobile delivery.
 
 ### DR Return & Refund Desk (`DrReturnsTab.jsx`)
-- [x] **Delivered Orders Fast Search:** Instant lookup by full Order ID or last 4 digits (`ORD-*359E` or `359E`).
+- [x] **Customer Phone Number & Order ID Search:** Search delivered orders by customer 10-digit mobile number, partial number, or Order ID (`#ORD-*83F2` / `83F2`).
+- [x] **Delivered Orders Selectable Card Grid:** Displays all matching delivered orders with Order ID, status badge, customer name, phone, item summary, and total amount, enabling one-click selection for returns.
 - [x] **Automated Stock Restoration:** Returned item quantities atomically credited back into `vendorProduct.stockQty` on return completion.
 - [x] **Whole Rupee Standard:** Converted all return calculations and display fields from fractional paise (`.4`, `.18`, `.22`) into clean whole rupees (`Math.round`).
 - [x] **3-Box Return Settlement System:**
@@ -34,8 +35,8 @@
 
 ## 2. In-Progress & Active Work
 
-- [ ] **Cross-Device Sync Verification:** Verifying local environment on newly migrated laptop (`C:\Users\Dell\Downloads\buildcity-web(Part 2 )`) with Git credentials and Node.js runtime.
-- [ ] **Comprehensive Documentation Suite:** Creating `prd.md`, `architecture.md`, `rules.md`, `design.md`, `task.md`, and `memory.md` in `docs/` for human team and AI onboarding.
+- [x] **Cross-Device Sync Verification:** Verified local environment on newly migrated laptop (`C:\Users\Dell\Downloads\buildcity-web(Part 2 )`) with Git credentials and Node.js runtime.
+- [x] **Comprehensive Documentation Suite:** Created `prd.md`, `architecture.md`, `rules.md`, `design.md`, `task.md`, and `memory.md` in `docs/` for human team and AI onboarding.
 
 ---
 

@@ -2578,9 +2578,9 @@ app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN", "DR")
         include: { category: true },
       });
 
-      // Synchronize price, description, and imageUrl to existing vendor listings for this master product in DB
+      // Synchronize description and imageUrl (catalog metadata) to existing vendor listings for this master product in DB.
+      // NOTE: We NEVER overwrite vendors' individual selling prices (targetPrice only updates master suggestedPrice).
       const vendorUpdateData = {};
-      if (targetPrice !== undefined && !isNaN(targetPrice)) vendorUpdateData.price = targetPrice;
       if (description !== undefined) vendorUpdateData.description = description;
       if (imageUrl) vendorUpdateData.imageUrl = imageUrl;
 

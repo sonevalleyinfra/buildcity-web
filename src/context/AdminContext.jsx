@@ -1942,7 +1942,6 @@ export function AdminProvider({ children }) {
     markRecentEdit(id, {
       ...updates,
       suggestedPrice: !isNaN(targetPrice) && targetPrice > 0 ? targetPrice : updates.suggestedPrice,
-      price: !isNaN(targetPrice) && targetPrice > 0 ? targetPrice : updates.price,
     });
 
     setMasterProducts((prev) => {
@@ -1963,7 +1962,8 @@ export function AdminProvider({ children }) {
             ...(updates.grade ? { grade: updates.grade } : {}),
             ...(updates.unit ? { unit: updates.unit } : {}),
             ...(updates.description !== undefined ? { description: updates.description } : {}),
-            ...(!isNaN(targetPrice) && targetPrice > 0 ? { price: targetPrice, suggestedPrice: targetPrice } : {}),
+            // NOTE: Master product edit only updates suggestedPrice reference; vendors retain their individual selling prices (p.price)
+            ...(!isNaN(targetPrice) && targetPrice > 0 ? { suggestedPrice: targetPrice } : {}),
           };
         }
         return p;

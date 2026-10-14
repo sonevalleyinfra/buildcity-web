@@ -535,7 +535,7 @@ export default function DrModals({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-slate-700">
-                    Price (INR) *
+                    Suggested Price (INR) *
                   </label>
                   <input
                     type="number"
@@ -545,11 +545,11 @@ export default function DrModals({
                       setEditingProduct({
                         ...editingProduct,
                         suggestedPrice: e.target.value,
-                        price: e.target.value,
                       })
                     }
                     className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold tabular-nums text-slate-900 outline-none focus:border-brand-500 focus:bg-white"
                   />
+                  <p className="mt-0.5 text-[10px] text-slate-400">Reference price for vendors adding this product</p>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-slate-700">

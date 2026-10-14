@@ -743,22 +743,8 @@ export default function AdminDashboard() {
         imageUrl: finalImageUrl,
         images: finalImgs,
         suggestedPrice: targetPrice,
-        price: targetPrice,
         description: prodToSave.description,
       });
-
-      if (prodToSave.vendorId || prodToSave.masterProductId) {
-        await updateVendorProductListing(prodToSave.id, {
-          name: prodToSave.name,
-          brand: prodToSave.brand,
-          grade: prodToSave.grade,
-          unit: prodToSave.unit,
-          price: targetPrice,
-          imageUrl: finalImageUrl,
-          images: finalImgs,
-          description: prodToSave.description,
-        }).catch(() => null);
-      }
     } catch (err) {
       console.warn("Background update product note:", err.message);
     }

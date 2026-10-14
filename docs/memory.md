@@ -46,8 +46,8 @@ git push origin main
      const { showAlert } = useAlert();
      showAlert({ title: "Title", message: "Details...", type: "success" });
      ```
-2. **NEVER allow decimal paise (`.4`, `.18`, `.22`) in financial settlement math:**
-   - All amounts (cart subtotal, wallet discounts, cashback, delivery fee, and return settlements) must be rounded to clean whole rupees via `Math.round()` or `Math.floor()`.
+2. **Exact Values in Return Settlements (No forced integer rounding):**
+   - In DR Return Desk and refund settlement math, do not force integer `Math.round()`. Show and calculate the exact values (including paise/decimals up to 2 places) so the refund hisaab matches the customer's actual paid amounts accurately.
 3. **Delivery charge is strictly NON-REFUNDABLE:**
    - On returns, never refund the delivery charge (`order.deliveryFee`) in cash or wallet.
 4. **Customers NEVER have passwords:**
@@ -61,7 +61,12 @@ git push origin main
 8. **NEVER Auto-Commit or Auto-Push Code:**
    - Always run and test changes locally first.
    - Do NOT run `git commit` or `git push` automatically. Wait for the user to test and explicitly confirm with "commit" or "push".
-9. **Prisma Atomic Writes:**
+9. **Strict Task Scoping & Role Isolation (Module Boundary Protection):**
+   - **Do ONLY what is asked for the specific role/module:** If the task is for Vendor, touch ONLY Vendor code. If for DR, touch ONLY DR code.
+   - **Never break unrelated logic:** Do not alter existing business logic, models, or components outside the current task's scope.
+   - **Mandatory Approval for Cross-Module Changes:** If fixing or modifying something in Vendor/DR requires changes in Admin, Database Schema, or another role, **NEVER edit Admin/other modules automatically on your own**.
+   - **Always ask first:** Clearly explain to the user: *"Is change ke liye Admin / dusre module me bhi edit karna hoga. Kya karein?"* Specify the reason and potential impact, and proceed ONLY after receiving explicit user confirmation.
+10. **Prisma Atomic Writes:**
    - Multiple database updates that depend on each other (e.g. creating return record + restoring stock + crediting wallet) must be wrapped inside `prisma.$transaction([...])`.
 
 ---

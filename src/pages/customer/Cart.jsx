@@ -255,7 +255,7 @@ export default function Cart() {
   };
 
   const baseDeliveryFee = Number(region?.baseDeliveryCharge) || 49;
-  const freeDeliveryThreshold = Number(walletSettings?.freeDeliveryMinAmount) || 25000;
+  const freeDeliveryThreshold = Number(walletSettings?.freeDeliveryMinAmount) || 2000;
   const isFreeDeliveryProgramActive = walletSettings?.freeDeliveryEnabled !== false;
   const isFreeDelivery = isFreeDeliveryProgramActive && subtotal >= freeDeliveryThreshold;
   const remainingForFreeDelivery = Math.max(0, freeDeliveryThreshold - subtotal);

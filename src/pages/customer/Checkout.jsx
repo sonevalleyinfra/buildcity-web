@@ -200,7 +200,7 @@ export default function Checkout() {
 
   const baseDeliveryFee = Number(region?.baseDeliveryCharge) || 49;
   const activeWalletSettings = walletData?.settings || adminWalletSettings || {};
-  const freeDeliveryThreshold = Number(activeWalletSettings.freeDeliveryMinAmount) || 25000;
+  const freeDeliveryThreshold = Number(activeWalletSettings.freeDeliveryMinAmount) || 2000;
   const isFreeDeliveryProgramActive = activeWalletSettings.freeDeliveryEnabled !== false;
   const isFreeDelivery = isFreeDeliveryProgramActive && checkoutSubtotal >= freeDeliveryThreshold;
   const remainingForFreeDelivery = Math.max(0, freeDeliveryThreshold - checkoutSubtotal);

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { formatShortId, formatDateTimeIST } from "../../../utils/formatId";
 import LoadMoreButton from "../../../components/LoadMoreButton";
 import {
@@ -14,8 +15,10 @@ import {
   ChipRow,
   StatusBadge,
   EmptyState,
+  Spinner,
 } from "../../vendor/ui/primitives";
-import { inr, avatarTone, cx } from "../../vendor/ui/format";
+import { inr, avatarTone, cx, ORDER_STATUS } from "../../vendor/ui/format";
+import ProgressTrack from "../../vendor/sections/order/ProgressTrack";
 
 const ORDER_FILTERS = [
   { key: "ALL", label: "All", dot: null },
@@ -26,6 +29,15 @@ const ORDER_FILTERS = [
   { key: "COMPLETED", label: "Completed", dot: "bg-teal-500" },
   { key: "CANCELLED", label: "Cancelled", dot: "bg-rose-400" },
 ];
+
+const STATUS_LABELS = {
+  PENDING: "Pending",
+  PROCESSING: "Processing",
+  OUT_FOR_DELIVERY: "Out for delivery",
+  DELIVERED: "Delivered",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+};
 
 export default function DrOrdersTab({
   districtName,
@@ -44,6 +56,8 @@ export default function DrOrdersTab({
   loadingMoreDirect,
   loadMoreDistrictOrders,
 }) {
+  const [statusTransition, setStatusTransition] = useState(null); // { orderId, targetStatus }
+
   const getFilterCount = (st) => {
     if (st === "ALL") {
       if (districtSummary?.byStatus) {
@@ -68,6 +82,21 @@ export default function DrOrdersTab({
 
   const handleOrderStatusSelect = (ord, nextSt) => {
     if (!updateOrderStatus) return;
+
+    const executeTransition = async () => {
+      const cleanId = String(ord.id);
+      setStatusTransition({ orderId: cleanId, targetStatus: nextSt });
+      try {
+        await updateOrderStatus(ord.id, nextSt);
+        // Crisp 350ms visual transition: instant feel, zero lag, zero flicker
+        await new Promise((res) => setTimeout(res, 350));
+      } catch (err) {
+        console.warn("Status change error in DR:", err);
+      } finally {
+        setStatusTransition(null);
+      }
+    };
+
     if (nextSt === "COMPLETED") {
       showConfirm({
         title: "Mark Order as Completed?",
@@ -75,13 +104,10 @@ export default function DrOrdersTab({
         type: "warning",
         confirmText: "Mark Completed",
         cancelText: "Cancel",
-        onConfirm: async () => {
-          await updateOrderStatus(ord.id, "COMPLETED");
-          fetchLiveOrdersDirect();
-        },
+        onConfirm: executeTransition,
       });
     } else {
-      updateOrderStatus(ord.id, nextSt).then(() => fetchLiveOrdersDirect());
+      executeTransition();
     }
   };
 
@@ -171,12 +197,30 @@ export default function DrOrdersTab({
                 .map((w) => w.charAt(0).toUpperCase())
                 .join("") || "C";
 
+            const isTransitioning = statusTransition && String(statusTransition.orderId) === String(ord.id);
+            const effectiveStatus = isTransitioning ? statusTransition.targetStatus : statusKey;
+            const statusCfg = ORDER_STATUS[effectiveStatus] || ORDER_STATUS.PENDING;
+
             return (
               <Card
                 key={ord.id}
                 style={{ "--i": idx }}
-                className="flex flex-col justify-between overflow-hidden p-4 sm:p-5 transition-shadow hover:shadow-[0_12px_28px_-18px_rgba(15,23,42,0.2)]"
+                className={cx(
+                  "relative flex flex-col justify-between overflow-hidden p-4 sm:p-5 pl-5 sm:pl-6 transition-all duration-300 hover:shadow-[0_12px_28px_-18px_rgba(15,23,42,0.2)]",
+                  statusCfg.tile,
+                  isTransitioning && "ring-2 ring-brand-500/30"
+                )}
               >
+                {/* Status colour down the leading edge */}
+                <span className={cx("absolute inset-y-0 left-0 w-1 transition-colors duration-500", statusCfg.accent)} aria-hidden="true" />
+
+                {/* Status Transition Top Progress Bar */}
+                {isTransitioning && (
+                  <span className="absolute inset-x-0 top-0 h-0.5 overflow-hidden z-10" aria-hidden="true">
+                    <span className="vd-indeterminate block h-full w-2/5 bg-gradient-to-r from-brand-500 to-amber-400" />
+                  </span>
+                )}
+
                 <div className="space-y-3.5">
                   {/* Top Bar: Order ID + Date + Status Badge */}
                   <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
@@ -186,7 +230,7 @@ export default function DrOrdersTab({
                       </span>
                       <p className="mt-0.5 text-xs text-slate-400">{dateStr}</p>
                     </div>
-                    <StatusBadge status={statusKey} />
+                    <StatusBadge status={effectiveStatus} />
                   </div>
 
                   {/* Customer Row + 1-Tap Call */}
@@ -269,55 +313,87 @@ export default function DrOrdersTab({
                   </div>
                 </div>
 
-                {/* Bottom Footer: Total Amount + Status Control */}
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3.5">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-base font-bold tabular-nums text-slate-900">
-                        {inr(displayAmt)}
-                      </span>
-                      <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
-                        COD
-                      </span>
-                    </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                      {ord.couponCode && (
-                        <span className="inline-flex items-center rounded bg-purple-50 px-1.5 py-0.2 text-[10px] font-semibold text-purple-700 ring-1 ring-inset ring-purple-600/20">
-                          {ord.couponCode}{" "}
-                          {Number(ord.discountAmount) > 0 ? `(-${inr(ord.discountAmount)})` : ""}
+                {/* Bottom Footer: Total Amount, Stepper & Status Control */}
+                <div className="mt-4 space-y-3 border-t border-slate-100 pt-3.5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-bold tabular-nums text-slate-900">
+                          {inr(displayAmt)}
                         </span>
-                      )}
-                      {Number(ord.walletDiscount) > 0 && (
-                        <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.2 text-[10px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/20">
-                          Wallet -{inr(ord.walletDiscount)}
+                        <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+                          COD
                         </span>
-                      )}
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                        {ord.couponCode && (
+                          <span className="inline-flex items-center rounded bg-purple-50 px-1.5 py-0.2 text-[10px] font-semibold text-purple-700 ring-1 ring-inset ring-purple-600/20">
+                            {ord.couponCode}{" "}
+                            {Number(ord.discountAmount) > 0 ? `(-${inr(ord.discountAmount)})` : ""}
+                          </span>
+                        )}
+                        {Number(ord.walletDiscount) > 0 && (
+                          <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.2 text-[10px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/20">
+                            Wallet -{inr(ord.walletDiscount)}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-2">
-                    {isCompletedLocked ? (
-                      <span className="inline-flex h-9 items-center rounded-xl bg-teal-50 px-3 text-xs font-semibold text-teal-800 ring-1 ring-inset ring-teal-600/20">
-                        Completed
-                      </span>
-                    ) : (
-                      updateOrderStatus && (
-                        <select
-                          value={statusKey}
-                          onChange={(e) => handleOrderStatusSelect(ord, e.target.value)}
-                          aria-label="Update Order Status"
-                          className="h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-800 outline-none transition-colors hover:bg-slate-100 focus:border-brand-500 cursor-pointer"
-                        >
-                          <option value="PENDING">PENDING</option>
-                          <option value="PROCESSING">PROCESSING</option>
-                          <option value="OUT_FOR_DELIVERY">OUT FOR DELIVERY</option>
-                          <option value="DELIVERED">DELIVERED</option>
-                          <option value="COMPLETED">COMPLETED</option>
-                          <option value="CANCELLED">CANCELLED</option>
-                        </select>
-                      )
+                    {!isTransitioning && (
+                      <div className="flex items-center gap-2">
+                        {isCompletedLocked ? (
+                          <span className="inline-flex h-11 items-center rounded-xl bg-teal-50 px-3.5 text-xs font-bold text-teal-800 ring-1 ring-inset ring-teal-600/20">
+                            Completed
+                          </span>
+                        ) : (
+                          updateOrderStatus && (
+                            <select
+                              value={statusKey}
+                              disabled={statusTransition !== null}
+                              onChange={(e) => handleOrderStatusSelect(ord, e.target.value)}
+                              aria-label="Update Order Status"
+                              className={cx(
+                                "h-11 rounded-xl px-3.5 text-xs font-bold ring-1 ring-inset outline-none transition-colors duration-300 cursor-pointer disabled:opacity-50",
+                                statusCfg.select
+                              )}
+                            >
+                              <option value="PENDING">Pending</option>
+                              <option value="PROCESSING">Processing</option>
+                              <option value="OUT_FOR_DELIVERY">Out for delivery</option>
+                              <option value="DELIVERED">Delivered</option>
+                              <option value="COMPLETED">Completed</option>
+                              <option value="CANCELLED">Cancelled</option>
+                            </select>
+                          )
+                        )}
+                      </div>
                     )}
                   </div>
+
+                  {/* ProgressTrack Stepper (Placed -> Processing -> Dispatched -> Delivered) */}
+                  <ProgressTrack
+                    status={
+                      effectiveStatus === "COMPLETED"
+                        ? "DELIVERED"
+                        : effectiveStatus
+                    }
+                  />
+
+                  {/* Full-width Updating Pill exactly matching Vendor during status change */}
+                  {isTransitioning && (
+                    <div
+                      className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-amber-50 text-sm font-medium text-amber-800 ring-1 ring-inset ring-amber-200"
+                      role="status"
+                    >
+                      <Spinner className="h-4 w-4 text-amber-700" />
+                      <span>
+                        Updating to{" "}
+                        {ORDER_STATUS[statusTransition.targetStatus]?.label.toLowerCase() ||
+                          statusTransition.targetStatus.toLowerCase()}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </Card>
             );

@@ -268,6 +268,8 @@ export function AdminProvider({ children }) {
     walletRedeemEnabled: true,
     maxWalletUsagePercent: 10.0,
     maxWalletUsageFlat: 500.0,
+    freeDeliveryEnabled: true,
+    freeDeliveryMinAmount: 2000.0,
   });
   const [walletUsers, setWalletUsers] = useState([]);
   const [loadingWalletSettings, setLoadingWalletSettings] = useState(false);
@@ -2218,6 +2220,9 @@ export function AdminProvider({ children }) {
   };
 
   const updateOrderStatus = async (orderId, newStatus) => {
+    // 1. Instant optimistic update (zero flicker, immediate UI update)
+    setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)));
+
     try {
       const res = await authFetch(`${API_BASE_URL}/api/v1/orders/${orderId}/status`, {
         method: "PATCH",
@@ -2225,12 +2230,12 @@ export function AdminProvider({ children }) {
         body: JSON.stringify({ status: newStatus }),
       });
       if (res.ok) {
-        await fetchCloudData();
+        window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
         return;
       }
-    } catch {}
-
-    setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)));
+    } catch (err) {
+      console.warn("Admin update status note:", err.message);
+    }
   };
 
   return (

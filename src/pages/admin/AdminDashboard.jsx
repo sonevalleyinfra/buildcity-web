@@ -215,6 +215,37 @@ export default function AdminDashboard() {
     }
   };
 
+  // Order Status Update Loading State
+  const [updatingOrderStatusId, setUpdatingOrderStatusId] = useState(null);
+
+  const handleAdminOrderStatusChange = async (orderId, nextSt) => {
+    if (!updateOrderStatus) return;
+    const execute = async () => {
+      setUpdatingOrderStatusId(orderId);
+      try {
+        await updateOrderStatus(orderId, nextSt);
+        await new Promise((res) => setTimeout(res, 300));
+      } catch (err) {
+        console.warn("Admin status update error:", err);
+      } finally {
+        setUpdatingOrderStatusId(null);
+      }
+    };
+
+    if (nextSt === "COMPLETED") {
+      showConfirm({
+        title: "Mark Order as COMPLETED?",
+        message: "Once marked COMPLETED, this order status cannot be changed anymore.",
+        type: "warning",
+        confirmText: "Yes, Mark Completed",
+        cancelText: "Cancel",
+        onConfirm: execute,
+      });
+    } else {
+      execute();
+    }
+  };
+
   // Forms
   const [drForm, setDrForm] = useState({ name: "", phone: "", regionId: "" });
   const [vendorForm, setVendorForm] = useState({ shopName: "", ownerName: "", phone: "", password: "", regionId: "", commissionRate: 10 });
@@ -222,40 +253,43 @@ export default function AdminDashboard() {
   const [regionForm, setRegionForm] = useState({ name: "", state: "Uttar Pradesh", baseDeliveryCharge: 49 });
   const [deliverySettings, setDeliverySettings] = useState({
     freeDeliveryEnabled: true,
-    freeDeliveryMinAmount: 25000,
+    freeDeliveryMinAmount: 2000,
   });
   const [savingDeliverySettings, setSavingDeliverySettings] = useState(false);
   const [deliverySaveSuccess, setDeliverySaveSuccess] = useState(false);
-  const deliveryInitializedRef = useRef(false);
 
   useEffect(() => {
     if (fetchWalletSettings) fetchWalletSettings();
   }, []);
 
   useEffect(() => {
-    if (walletSettings && !deliveryInitializedRef.current) {
+    if (walletSettings && walletSettings.freeDeliveryMinAmount !== undefined) {
       setDeliverySettings({
         freeDeliveryEnabled: walletSettings.freeDeliveryEnabled !== false,
-        freeDeliveryMinAmount: walletSettings.freeDeliveryMinAmount ?? 25000,
+        freeDeliveryMinAmount: Number(walletSettings.freeDeliveryMinAmount) || 2000,
       });
-      deliveryInitializedRef.current = true;
     }
-  }, [walletSettings]);
+  }, [walletSettings?.freeDeliveryMinAmount, walletSettings?.freeDeliveryEnabled]);
 
   const handleSaveDeliverySettings = async (e) => {
     e?.preventDefault?.();
     if (!updateWalletSettings) return;
     setSavingDeliverySettings(true);
+    const amountToSave = Math.max(0, Number(deliverySettings.freeDeliveryMinAmount) || 0);
     try {
       await updateWalletSettings({
         freeDeliveryEnabled: Boolean(deliverySettings.freeDeliveryEnabled),
-        freeDeliveryMinAmount: Number(deliverySettings.freeDeliveryMinAmount) || 0,
+        freeDeliveryMinAmount: amountToSave,
       });
+      setDeliverySettings((prev) => ({
+        ...prev,
+        freeDeliveryMinAmount: amountToSave,
+      }));
       setDeliverySaveSuccess(true);
       setTimeout(() => setDeliverySaveSuccess(false), 3000);
       showAlert({
         title: "Free Delivery Settings Saved",
-        message: "Delivery rules have been successfully updated across the storefront.",
+        message: `Delivery rules updated: Orders above ₹${amountToSave.toLocaleString("en-IN")} qualify for free delivery.`,
         type: "success",
       });
     } catch (err) {
@@ -2184,38 +2218,37 @@ export default function AdminDashboard() {
                             {(() => {
                               const stUpper = (o.status || "PENDING").toUpperCase();
                               const isLocked = stUpper === "COMPLETED";
+                              const isUpdatingThis = updatingOrderStatusId === o.id;
+
                               return (
                                 <div className="flex items-center gap-2">
                                   <span className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold border ${statusStyle}`}>
                                     {isLocked ? "COMPLETED" : (o.status || "PENDING")}
                                   </span>
-                                  {!isLocked && updateOrderStatus && (
-                                    <select
-                                      value={stUpper}
-                                      onChange={(e) => {
-                                        const nextSt = e.target.value;
-                                        if (nextSt === "COMPLETED") {
-                                          showConfirm({
-                                            title: "Mark Order as COMPLETED?",
-                                            message: "Once marked COMPLETED, this order status cannot be changed anymore.",
-                                            type: "warning",
-                                            confirmText: "Yes, Mark Completed",
-                                            cancelText: "Cancel",
-                                            onConfirm: () => updateOrderStatus(o.id, "COMPLETED"),
-                                          });
-                                        } else {
-                                          updateOrderStatus(o.id, nextSt);
-                                        }
-                                      }}
-                                      className="text-[11px] font-bold bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 outline-none text-navy-900 cursor-pointer"
-                                    >
-                                      <option value="PENDING">PENDING</option>
-                                      <option value="PROCESSING">PROCESSING</option>
-                                      <option value="OUT_FOR_DELIVERY">OUT FOR DELIVERY</option>
-                                      <option value="DELIVERED">DELIVERED</option>
-                                      <option value="COMPLETED">COMPLETED</option>
-                                      <option value="CANCELLED">CANCELLED</option>
-                                    </select>
+                                  {isUpdatingThis ? (
+                                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 border border-amber-200 px-2 py-1 text-[10px] font-bold text-amber-800 animate-pulse">
+                                      <svg className="animate-spin h-3 w-3 text-amber-600" viewBox="0 0 24 24" fill="none">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                                      </svg>
+                                      Updating...
+                                    </span>
+                                  ) : (
+                                    !isLocked && updateOrderStatus && (
+                                      <select
+                                        value={stUpper}
+                                        disabled={updatingOrderStatusId !== null}
+                                        onChange={(e) => handleAdminOrderStatusChange(o.id, e.target.value)}
+                                        className="text-[11px] font-bold bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 outline-none text-navy-900 cursor-pointer disabled:opacity-50"
+                                      >
+                                        <option value="PENDING">PENDING</option>
+                                        <option value="PROCESSING">PROCESSING</option>
+                                        <option value="OUT_FOR_DELIVERY">OUT FOR DELIVERY</option>
+                                        <option value="DELIVERED">DELIVERED</option>
+                                        <option value="COMPLETED">COMPLETED</option>
+                                        <option value="CANCELLED">CANCELLED</option>
+                                      </select>
+                                    )
                                   )}
                                 </div>
                               );
@@ -2382,7 +2415,7 @@ export default function AdminDashboard() {
                       value={deliverySettings.freeDeliveryMinAmount ?? ""}
                       onChange={(e) => setDeliverySettings((prev) => ({ ...prev, freeDeliveryMinAmount: e.target.value }))}
                       className="w-24 text-xs font-black text-navy-900 outline-none"
-                      placeholder="25000"
+                      placeholder="2000"
                     />
                   </div>
 

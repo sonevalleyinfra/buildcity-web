@@ -171,6 +171,21 @@ export default function DrDashboard() {
   const olderDirectLoadedRef = useRef(false);
   const districtRegionParamRef = useRef("");
 
+  // Instant optimistic order status update for DR (zero delay, zero flicker)
+  const handleDrUpdateOrderStatus = async (orderId, newStatus) => {
+    setDirectOrders((prev) => {
+      const updated = prev.map((o) => (String(o.id) === String(orderId) ? { ...o, status: newStatus } : o));
+      try {
+        localStorage.setItem("buildcity_dr_live_orders", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    if (updateOrderStatus) {
+      await updateOrderStatus(orderId, newStatus);
+    }
+  };
+
   // Direct live vendors state from DB with zero-flicker persistent cache
   const [directVendors, setDirectVendors] = useState(() => {
     try {
@@ -436,6 +451,8 @@ export default function DrDashboard() {
   const [returnQuantities, setReturnQuantities] = useState({});
   const [returnReason, setReturnReason] = useState("Excess unused material leftover");
   const [customCashbackDeduct, setCustomCashbackDeduct] = useState("");
+  const [deliveryDeductFee, setDeliveryDeductFee] = useState("");
+  const [deliveryDeductReason, setDeliveryDeductReason] = useState("Return Delivery / Logistics Charge");
   const [isSearchingReturnOrder, setIsSearchingReturnOrder] = useState(false);
   const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
   const [processedReturns, setProcessedReturns] = useState(() => {
@@ -476,12 +493,13 @@ export default function DrDashboard() {
       initialQtys[key] = 0;
     });
     setReturnQuantities(initialQtys);
-    const defaultCb = Math.round(
+    const defaultCb =
       ord?.remainingCashbackToDeduct !== undefined
         ? Number(ord.remainingCashbackToDeduct || 0)
-        : Number(ord?.cashbackEarned || 0)
-    );
+        : Number(ord?.cashbackEarned || 0);
     setCustomCashbackDeduct(defaultCb > 0 ? String(defaultCb) : "0");
+    setDeliveryDeductFee("0");
+    setDeliveryDeductReason("Return Delivery / Logistics Charge");
   };
 
   const searchOrderByIdForReturn = async (queryText = "") => {
@@ -590,6 +608,8 @@ export default function DrDashboard() {
           returnReason,
           districtName,
           customCashbackDeduct: customCashbackDeduct !== "" ? Number(customCashbackDeduct) : undefined,
+          deliveryFeeDeduct: deliveryDeductFee !== "" ? Number(deliveryDeductFee) : 0,
+          deliveryDeductReason: deliveryDeductReason?.trim() || "Return Delivery / Logistics Charge",
         }),
       });
       const data = await res.json();
@@ -1296,7 +1316,7 @@ export default function DrDashboard() {
           setOrderStatusFilter={setOrderStatusFilter}
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}
-          updateOrderStatus={updateOrderStatus}
+          updateOrderStatus={handleDrUpdateOrderStatus}
           fetchLiveOrdersDirect={fetchLiveOrdersDirect}
           showConfirm={showConfirm}
           directHasMore={directHasMore}
@@ -1372,6 +1392,10 @@ export default function DrDashboard() {
           setReturnReason={setReturnReason}
           customCashbackDeduct={customCashbackDeduct}
           setCustomCashbackDeduct={setCustomCashbackDeduct}
+          deliveryDeductFee={deliveryDeductFee}
+          setDeliveryDeductFee={setDeliveryDeductFee}
+          deliveryDeductReason={deliveryDeductReason}
+          setDeliveryDeductReason={setDeliveryDeductReason}
           isSubmittingReturn={isSubmittingReturn}
           handleProcessReturn={handleProcessReturn}
           processedReturns={processedReturns}

@@ -3,7 +3,17 @@ import { formatShortId, formatDateTimeIST } from "../../../utils/formatId";
 import { SearchIcon } from "../../vendor/ui/icons";
 import { RotateCcwIcon } from "../DrShell";
 import { Card, StatusBadge, EmptyState, Spinner } from "../../vendor/ui/primitives";
-import { inr, cx } from "../../vendor/ui/format";
+import { cx } from "../../vendor/ui/format";
+
+const toExact = (num) => Number(num || 0);
+
+const inr = (value) => {
+  const n = Number(value || 0);
+  return `₹${n.toLocaleString("en-IN", {
+    minimumFractionDigits: n % 1 !== 0 ? 2 : 0,
+    maximumFractionDigits: 2,
+  })}`;
+};
 
 export default function DrReturnsTab({
   districtName,
@@ -22,6 +32,10 @@ export default function DrReturnsTab({
   setReturnReason,
   customCashbackDeduct,
   setCustomCashbackDeduct,
+  deliveryDeductFee,
+  setDeliveryDeductFee,
+  deliveryDeductReason,
+  setDeliveryDeductReason,
   isSubmittingReturn,
   handleProcessReturn,
   processedReturns,
@@ -63,7 +77,7 @@ export default function DrReturnsTab({
     const maxReturnable = Math.max(0, orderedQty - alreadyRetQty);
     const selectedQty = Math.min(maxReturnable, Math.max(0, Number(returnQuantities[key] || 0)));
     const unitPrice = Number(it.priceAtPurchase || it.price || 0);
-    const lineReturnVal = Math.round(selectedQty * unitPrice * 100) / 100;
+    const lineReturnVal = selectedQty * unitPrice;
     return {
       ...it,
       key,
@@ -76,48 +90,49 @@ export default function DrReturnsTab({
     };
   });
 
-  const orderMaterialsSubtotal = Math.round(
+  const orderMaterialsSubtotal = toExact(
     currentReturnItems.reduce((sum, it) => sum + it.orderedQty * it.unitPrice, 0)
   );
 
-  const orderDeliveryFee = Math.round(Math.max(0, Number(selectedReturnOrder?.deliveryFee || 0)));
-  const orderWalletDiscount = Math.round(Math.max(0, Number(selectedReturnOrder?.walletDiscount || 0)));
-  const orderCouponDiscount = Math.round(Math.max(0, Number(selectedReturnOrder?.discountAmount || 0)));
-  const totalCheckoutDeductions = Math.min(orderMaterialsSubtotal, orderWalletDiscount + orderCouponDiscount);
-  const netMaterialsCashPaid = Math.max(0, orderMaterialsSubtotal - totalCheckoutDeductions);
-  const orderTotalCashPaid = netMaterialsCashPaid + orderDeliveryFee;
+  const orderDeliveryFee = toExact(Math.max(0, Number(selectedReturnOrder?.deliveryFee || 0)));
+  const orderWalletDiscount = toExact(Math.max(0, Number(selectedReturnOrder?.walletDiscount || 0)));
+  const orderCouponDiscount = toExact(Math.max(0, Number(selectedReturnOrder?.discountAmount || 0)));
+  const totalCheckoutDeductions = Math.min(orderMaterialsSubtotal, toExact(orderWalletDiscount + orderCouponDiscount));
+  const netMaterialsCashPaid = toExact(Math.max(0, orderMaterialsSubtotal - totalCheckoutDeductions));
+  const orderTotalCashPaid = toExact(netMaterialsCashPaid + orderDeliveryFee);
 
-  const totalReturnItemsVal = Math.round(
+  const totalReturnItemsVal = toExact(
     currentReturnItems.reduce((sum, it) => sum + it.lineReturnVal, 0)
   );
 
   const returnRatio =
     orderMaterialsSubtotal > 0 ? Math.min(1, totalReturnItemsVal / orderMaterialsSubtotal) : 0;
 
-  const checkoutDiscountOnReturn = Math.round(returnRatio * totalCheckoutDeductions);
-  const walletUsedOnReturn = Math.round(returnRatio * orderWalletDiscount);
+  const checkoutDiscountOnReturn = toExact(returnRatio * totalCheckoutDeductions);
+  const walletUsedOnReturn = toExact(returnRatio * orderWalletDiscount);
 
-  const refundableMaterialCash = Math.max(0, Math.round(totalReturnItemsVal - checkoutDiscountOnReturn));
+  const refundableMaterialCash = toExact(Math.max(0, totalReturnItemsVal - checkoutDiscountOnReturn));
 
-  const totalOrderCashback = Math.round(
+  const totalOrderCashback = toExact(
     Number(selectedReturnOrder?.remainingCashbackToDeduct ?? selectedReturnOrder?.cashbackEarned ?? 0)
   );
-  const proportionalCashback = Math.round(returnRatio * totalOrderCashback);
+  const proportionalCashback = toExact(returnRatio * totalOrderCashback);
 
   const cashbackOnReturn =
     customCashbackDeduct !== ""
-      ? Math.max(0, Math.round(Number(customCashbackDeduct || 0)))
+      ? toExact(Math.max(0, Number(customCashbackDeduct || 0)))
       : proportionalCashback;
 
   // Wallet Settlement:
   // 1. Customer's used wallet amount (e.g. ₹24) is credited back to Customer's Wallet (+₹24).
   // 2. Cashback earned on order (e.g. ₹23) is already in Customer's Wallet (₹23).
   // 3. Total in Customer's Wallet = ₹23 (Already) + ₹24 (We Add Now) = ₹47.
-  // 4. Cash Refund = Returned Material Value (₹488) - Wallet Added Back (₹24) - Cashback in Wallet (₹23) = ₹441.
+  // 4. Cash Refund = Returned Material Value (₹488) - Wallet Added Back (₹24) - Cashback in Wallet (₹23) - Delivery Fee Deduct = ₹441.
   const walletToCredit = walletUsedOnReturn;
-  const cashbackDeductFromCash = Math.min(refundableMaterialCash, cashbackOnReturn);
-  const totalWalletSettled = cashbackDeductFromCash + walletToCredit;
-  const netCashToRefund = Math.max(0, Math.round(refundableMaterialCash - cashbackDeductFromCash));
+  const cashbackDeductFromCash = toExact(Math.min(refundableMaterialCash, cashbackOnReturn));
+  const totalWalletSettled = toExact(cashbackDeductFromCash + walletToCredit);
+  const returnDeliveryDeduct = toExact(Math.max(0, Number(deliveryDeductFee || 0)));
+  const netCashToRefund = toExact(Math.max(0, refundableMaterialCash - cashbackDeductFromCash - returnDeliveryDeduct));
 
   return (
     <div className="space-y-5">
@@ -505,14 +520,57 @@ export default function DrReturnsTab({
                   <input
                     type="number"
                     min="0"
-                    step="1"
+                    step="any"
                     value={customCashbackDeduct}
                     onChange={(e) => setCustomCashbackDeduct(e.target.value)}
                     className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold tabular-nums text-rose-700 outline-none focus:border-emerald-500"
-                    placeholder="0"
+                    placeholder="0.00"
                   />
                   <p className="mt-1 text-[11px] text-slate-400">
                     Customer earned {inr(totalOrderCashback)} cashback on this order. It is automatically adjusted against the wallet used at checkout ({inr(walletUsedOnReturn)}).
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-800">
+                      Additional Deduction (Delivery / Logistics / Handling Fee):
+                    </label>
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                      Editable
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                    <div className="sm:col-span-8">
+                      <label className="mb-1 block text-[11px] font-semibold text-slate-600">
+                        Deduction Reason / Description:
+                      </label>
+                      <input
+                        type="text"
+                        value={deliveryDeductReason}
+                        onChange={(e) => setDeliveryDeductReason(e.target.value)}
+                        className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-900 outline-none focus:border-emerald-500"
+                        placeholder="e.g. Return Delivery / Logistics Charge, Vehicle Cost, Handling Fee"
+                      />
+                    </div>
+                    <div className="sm:col-span-4">
+                      <label className="mb-1 block text-[11px] font-semibold text-slate-600">
+                        Amount to Deduct (₹):
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={deliveryDeductFee}
+                        onChange={(e) => setDeliveryDeductFee(e.target.value)}
+                        className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold tabular-nums text-slate-900 outline-none focus:border-emerald-500"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Order par Free Delivery mili thi ya pickup/handling kharcha hua hai, toh reason aur amount dono customize kar sakte hain.
                   </p>
                 </div>
               </div>
@@ -524,7 +582,7 @@ export default function DrReturnsTab({
                     Step 3: Final Cash & Wallet Settlement Summary
                   </h4>
 
-                  {/* 1. Cash Hisaab: Total Order (with Delivery) (-) Delivery (-) Wallet Added (-) Cashback = Net Cash */}
+                  {/* 1. Cash Hisaab: Total Order (with Delivery) (-) Delivery (-) Wallet Added (-) Cashback (-) Return Delivery = Net Cash */}
                   <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-1.5">
                     <p className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
                       1. Cash Refund Calculation
@@ -559,6 +617,12 @@ export default function DrReturnsTab({
                       <div className="flex items-center justify-between text-xs font-medium text-rose-600">
                         <span>(-) Cashback (Already in Customer Wallet):</span>
                         <span className="font-bold">- {inr(cashbackDeductFromCash)}</span>
+                      </div>
+                    )}
+                    {returnDeliveryDeduct > 0 && (
+                      <div className="flex items-center justify-between text-xs font-medium text-rose-600">
+                        <span>(-) {deliveryDeductReason?.trim() || "Return Delivery / Logistics Fee"} Deducted:</span>
+                        <span className="font-bold">- {inr(returnDeliveryDeduct)}</span>
                       </div>
                     )}
                     <div className="border-t border-slate-200 pt-1.5 flex items-center justify-between text-xs font-bold text-emerald-800">
@@ -596,6 +660,12 @@ export default function DrReturnsTab({
                       <span className="text-xs font-bold text-emerald-900">Net Cash Refund (In Hand):</span>
                       <span className="text-lg font-bold text-emerald-700">{inr(netCashToRefund)}</span>
                     </div>
+                    {returnDeliveryDeduct > 0 && (
+                      <div className="flex items-center justify-between text-xs font-semibold text-rose-700">
+                        <span>+ {deliveryDeductReason?.trim() || "Delivery / Logistics Fee"} Deducted:</span>
+                        <span>{inr(returnDeliveryDeduct)}</span>
+                      </div>
+                    )}
                     {totalWalletSettled > 0 && (
                       <div className="flex items-center justify-between text-xs font-bold text-amber-800">
                         <span>+ Total in Wallet ({inr(cashbackDeductFromCash)} Cashback + {inr(walletToCredit)} Wallet):</span>
@@ -603,9 +673,9 @@ export default function DrReturnsTab({
                       </div>
                     )}
                     <div className="border-t border-emerald-200/80 pt-1.5 flex items-center justify-between text-xs font-bold text-slate-900">
-                      <span>Total Order Product Value Settled:</span>
+                      <span>Total Returned Value Accounted:</span>
                       <span>
-                        {inr(netCashToRefund)} Cash + {inr(totalWalletSettled)} Wallet = {inr(netCashToRefund + totalWalletSettled)}
+                        {inr(netCashToRefund)} Cash {returnDeliveryDeduct > 0 ? `+ ${inr(returnDeliveryDeduct)} ${deliveryDeductReason?.trim() || "Delivery"} ` : ""}+ {inr(totalWalletSettled)} Wallet = {inr(netCashToRefund + returnDeliveryDeduct + totalWalletSettled)}
                       </span>
                     </div>
                   </div>

@@ -54,7 +54,7 @@ const APPS = {
           appReadyTimeout: 10000,
           autoDeleteFailed: true,
           autoDeletePrevious: true,
-          resetWhenUpdate: true,
+          resetWhenUpdate: false, // PRESERVES localStorage across OTA updates!
         },
       },
     }),
@@ -62,7 +62,7 @@ const APPS = {
 };
 
 const app = process.argv[2];
-const bundled = process.argv.includes("--bundled");
+const bundled = !process.argv.includes("--live");
 if (!APPS[app]) {
   console.error("Usage: node scripts/android.mjs <customer|partner> [--bundled]");
   process.exit(1);

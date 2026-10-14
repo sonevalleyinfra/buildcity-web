@@ -1794,68 +1794,73 @@ app.get("/api/v1/users/me", requireAuth, async (req, res) => {
       user = await prisma.user.findUnique({ where: { phone: req.auth.phone } }).catch(() => null);
     }
 
-    // Fallback for DR or Vendor tokens whose `sub` was the dR.id or vendor.id
-    if (!user && req.auth.role === "DR") {
+    // Always attach DR profile details if user has DR role
+    if (req.auth.role === "DR" || user?.role === "DR") {
       const dr = await prisma.dR.findFirst({
         where: {
           OR: [
             ...(req.auth.userId ? [{ id: req.auth.userId }, { userId: req.auth.userId }] : []),
+            ...(user?.id ? [{ id: user.id }, { userId: user.id }] : []),
             ...(req.auth.phone ? [{ phone: req.auth.phone }] : []),
+            ...(user?.phone ? [{ phone: user.phone }] : []),
           ],
         },
         include: { region: true, user: true },
       }).catch(() => null);
 
-      if (dr) {
-        const { password, ...safeDr } = dr;
-        const drUser = dr.user || {
-          id: dr.userId || dr.id,
-          name: dr.name,
-          phone: dr.phone,
-          role: "DR",
-          regionId: dr.regionId || dr.region?.id,
-          regionName: dr.region?.name,
-        };
-        const { password: _up, ...safeUser } = drUser;
-        const refreshedToken = issueToken({ ...safeUser, role: "DR" });
-        return res.json({
+      if (dr || user) {
+        const safeDr = dr ? (({ password, ...rest }) => rest)(dr) : null;
+        const baseUser = user || dr?.user || {};
+        const { password: _dp, ...safeUser } = baseUser;
+        const drPayload = {
           ...safeUser,
+          id: safeUser.id || dr?.userId || dr?.id || req.auth.userId,
+          name: safeUser.name || dr?.name || "DR Partner",
+          phone: safeUser.phone || dr?.phone || req.auth.phone,
           role: "DR",
-          regionId: dr.regionId || dr.region?.id,
-          regionName: dr.region?.name,
+          regionId: safeUser.regionId || dr?.regionId || dr?.region?.id,
+          regionName: safeUser.regionName || dr?.region?.name,
           drInfo: safeDr,
+        };
+        const refreshedToken = issueToken(drPayload);
+        return res.json({
+          ...drPayload,
           token: refreshedToken,
         });
       }
     }
 
-    if (!user && req.auth.role === "VENDOR") {
+    // Always attach Vendor profile details if user has VENDOR role
+    if (req.auth.role === "VENDOR" || user?.role === "VENDOR") {
       const vendor = await prisma.vendor.findFirst({
         where: {
           OR: [
             ...(req.auth.userId ? [{ id: req.auth.userId }, { userId: req.auth.userId }] : []),
+            ...(user?.id ? [{ id: user.id }, { userId: user.id }] : []),
             ...(req.auth.phone ? [{ phone: req.auth.phone }] : []),
+            ...(user?.phone ? [{ phone: user.phone }] : []),
           ],
         },
         include: { region: true, user: true },
       }).catch(() => null);
 
-      if (vendor) {
-        const { password, ...safeVendor } = vendor;
-        const vUser = vendor.user || {
-          id: vendor.userId || vendor.id,
-          name: vendor.ownerName || vendor.shopName,
-          phone: vendor.phone,
-          role: "VENDOR",
-          regionId: vendor.regionId || vendor.region?.id,
-          regionName: vendor.region?.name,
-        };
-        const { password: _vp, ...safeUser } = vUser;
-        const refreshedToken = issueToken({ ...safeUser, role: "VENDOR" });
-        return res.json({
+      if (vendor || user) {
+        const safeVendor = vendor ? (({ password, ...rest }) => rest)(vendor) : null;
+        const baseUser = user || vendor?.user || {};
+        const { password: _vp, ...safeUser } = baseUser;
+        const vendorPayload = {
           ...safeUser,
+          id: safeUser.id || vendor?.userId || vendor?.id || req.auth.userId,
+          name: safeUser.name || vendor?.ownerName || vendor?.shopName || "Vendor Partner",
+          phone: safeUser.phone || vendor?.phone || req.auth.phone,
           role: "VENDOR",
+          regionId: safeUser.regionId || vendor?.regionId || vendor?.region?.id,
+          regionName: safeUser.regionName || vendor?.region?.name,
           vendorInfo: safeVendor,
+        };
+        const refreshedToken = issueToken(vendorPayload);
+        return res.json({
+          ...vendorPayload,
           token: refreshedToken,
         });
       }

@@ -18,7 +18,7 @@ if (!JWT_SECRET) {
 /**
  * Signs and issues a valid, tamper-proof JSON Web Token for the authenticated user
  * @param {Object} user - User object containing id, phone, role, and tokenVersion
- * @returns {string} - Signed JWT with 7 days expiry
+ * @returns {string} - Signed JWT with 15 days expiry
  */
 function issueToken(user) {
   if (!user) throw new Error("Cannot issue JWT for undefined user");
@@ -31,7 +31,9 @@ function issueToken(user) {
     tv: user.tokenVersion || 1,
   };
 
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" });
+  // Set to 15 days validity as requested
+  const expiresIn = "15d";
+  return jwt.sign(payload, JWT_SECRET, { expiresIn });
 }
 
 /**

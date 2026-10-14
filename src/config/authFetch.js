@@ -146,25 +146,39 @@ export const authFetch = async (path, options = {}) => {
     } catch {}
   }
 
-  // If 401 Unauthorized still occurs, sync logout state cleanly so the user is not stuck in a "ghost login" state
+  // If 401 Unauthorized occurs, verify if it's a genuine session expiry before clearing local credentials
   if (response.status === 401 && token) {
-    clearToken();
+    const isAuthVerifyCall = primaryUrl.includes("/api/v1/users/me");
+    let isExplicitExpiry = false;
+
     try {
-      localStorage.removeItem(AUTH_KEY);
+      const cloned = response.clone();
+      const body = await cloned.json().catch(() => null);
+      if (body?.invalidSession || (body?.error && String(body.error).toLowerCase().includes("session expired"))) {
+        isExplicitExpiry = true;
+      }
     } catch {}
 
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("buildcity_auth_expired"));
-    }
+    // Only purge credentials and redirect if server explicitly confirmed expired session or /users/me verification failed
+    if (isExplicitExpiry || isAuthVerifyCall) {
+      clearToken();
+      try {
+        localStorage.removeItem(AUTH_KEY);
+      } catch {}
 
-    // Only force redirect if actively inside a protected partner dashboard route
-    if (
-      typeof window !== "undefined" &&
-      (window.location.pathname.startsWith("/admin") ||
-       window.location.pathname.startsWith("/vendor") ||
-       window.location.pathname.startsWith("/dr"))
-    ) {
-      window.location.href = window.location.pathname.startsWith("/vendor") ? "/vendor/login" : "/login";
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("buildcity_auth_expired"));
+      }
+
+      // Only force redirect if actively inside a protected partner dashboard route
+      if (
+        typeof window !== "undefined" &&
+        (window.location.pathname.startsWith("/admin") ||
+         window.location.pathname.startsWith("/vendor") ||
+         window.location.pathname.startsWith("/dr"))
+      ) {
+        window.location.href = window.location.pathname.startsWith("/vendor") ? "/vendor/login" : "/login";
+      }
     }
   }
 

@@ -44,7 +44,7 @@ export function AuthProvider({ children }) {
     if (saved && activeToken) {
       try {
         const parsed = JSON.parse(saved);
-        // background me user ki details fetch karke local storage aur token validity (7 days sliding) update karte hai
+        // background me user ki details fetch karke local storage aur token validity (15 days sliding) update karte hai
         authFetch(`/api/v1/users/me`)
           .then(async (r) => {
             if (r.status === 401) {
@@ -61,14 +61,26 @@ export function AuthProvider({ children }) {
               if (freshToken) {
                 saveToken(freshToken);
               }
+              const resolvedVendorInfo = dbUser.vendorInfo || parsed.vendorInfo || null;
+              const resolvedDrInfo = dbUser.drInfo || parsed.drInfo || null;
+              const resolvedRole = (
+                resolvedVendorInfo || parsed.role?.toLowerCase() === "vendor" || dbUser.role?.toLowerCase() === "vendor"
+                  ? "vendor"
+                  : resolvedDrInfo || parsed.role?.toLowerCase() === "dr" || dbUser.role?.toLowerCase() === "dr"
+                  ? "dr"
+                  : parsed.role?.toLowerCase() === "admin" || dbUser.role?.toLowerCase() === "admin"
+                  ? "admin"
+                  : dbUser.role || parsed.role || "customer"
+              ).toLowerCase();
+
               const refreshed = {
                 ...parsed,
                 id: dbUser.id || parsed.id,
                 name: dbUser.name || parsed.name,
                 email: dbUser.email || parsed.email,
-                role: (parsed.role || dbUser.role || "customer").toLowerCase(),
-                drInfo: dbUser.drInfo || parsed.drInfo,
-                vendorInfo: dbUser.vendorInfo || parsed.vendorInfo,
+                role: resolvedRole,
+                drInfo: resolvedDrInfo,
+                vendorInfo: resolvedVendorInfo,
                 regionId: dbUser.regionId || parsed.regionId,
                 regionName: dbUser.regionName || parsed.regionName,
                 preferredRegionId: dbUser.preferredRegionId || parsed.preferredRegionId,

@@ -239,7 +239,7 @@ export default function ProductDetail() {
       }
       const mrp = resolvedMrp > 0
         ? resolvedMrp
-        : (realProd.masterProduct?.mrp ? Number(realProd.masterProduct.mrp) : realProd.masterProduct?.suggestedPrice ? Math.max(Number(realProd.masterProduct.suggestedPrice), price) : Math.round(price * 1.2));
+        : (realProd.masterProduct?.mrp ? Number(realProd.masterProduct.mrp) : 0);
 
       const extractedImages = getProductImages(realProd);
       const isSuspended =
@@ -580,8 +580,10 @@ export default function ProductDetail() {
   }, [user, reviewsList, targetProductId]);
 
   const currentDiscountPct = selectedPack
-    ? selectedPack.discountPct
-    : Math.round(((product.mrp - product.price) / product.mrp) * 100);
+    ? (selectedPack.discountPct || 0)
+    : (product?.mrp && Number(product.mrp) > Number(product.price))
+    ? Math.round(((Number(product.mrp) - Number(product.price)) / Number(product.mrp)) * 100)
+    : 0;
 
   const handleAddToCart = () => {
     if (!product?.isDeliverable) return;

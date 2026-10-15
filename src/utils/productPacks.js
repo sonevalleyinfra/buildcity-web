@@ -3,7 +3,7 @@ export function getDefaultPacksForProduct(product) {
   if (!product) return [];
 
   const basePrice = Number(product.price) || 100;
-  const baseMrp = Number(product.mrp) || Math.round(basePrice * 1.2);
+  const baseMrp = Number(product.mrp) || basePrice;
 
   // Category aur name ko normalize karte hai taaki category ke hisaab se unit set ho sake
   const catRaw = (
@@ -256,7 +256,7 @@ export function generateProductPacks(product) {
   }
 
   const basePrice = Number(product.price) || 100;
-  const baseMrp = Number(product.mrp) || Math.round(basePrice * 1.2);
+  const baseMrp = Number(product.mrp) || basePrice;
   const cleanUnit = product.unit || "Unit";
 
   // Base 1 unit option for customer selector

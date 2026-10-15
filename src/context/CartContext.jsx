@@ -380,7 +380,7 @@ export function CartProvider({ children }) {
   const subtotal = total;
   const mrpTotal = items.reduce((sum, item) => {
     const itemPrice = Number(item.price) || 0;
-    const itemMrp = Number(item.mrp) > itemPrice ? Number(item.mrp) : Math.round(itemPrice * 1.2);
+    const itemMrp = Number(item.mrp) > itemPrice ? Number(item.mrp) : itemPrice;
     return sum + itemMrp * (Number(item.qty) || 1);
   }, 0);
 

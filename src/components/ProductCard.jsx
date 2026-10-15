@@ -32,12 +32,11 @@ export default function ProductCard({ product, className = "" }) {
 
   // Price, discount aur bachat ka calculation
   const price = Number(product.price || product.suggestedPrice || 100);
-  let mrp = Number(product.mrp || product.masterProduct?.suggestedPrice || 0);
-  if (mrp <= price) {
-    mrp = Math.round(price * 1.2);
-  }
-  const discountPct = Math.max(5, Math.round(((mrp - price) / mrp) * 100));
-  const savings = mrp - price;
+  const rawMrp = Number(product.mrp || product.masterProduct?.mrp || 0);
+  const hasDiscount = rawMrp > price;
+  const mrp = hasDiscount ? rawMrp : 0;
+  const discountPct = (hasDiscount && mrp > 0) ? Math.round(((mrp - price) / mrp) * 100) : 0;
+  const savings = hasDiscount ? (mrp - price) : 0;
 
   const handleAdd = (e) => {
     e.preventDefault();

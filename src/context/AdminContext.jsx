@@ -382,9 +382,9 @@ export function AdminProvider({ children }) {
             ? parsedCp
             : (Array.isArray(fallbackCp) && fallbackCp.length > 0 ? fallbackCp : (l.masterProduct?.customPacks || null));
 
-          const rawMrp = Number(l.mrp || l.masterProduct?.mrp || l.masterProduct?.suggestedPrice || matchedMaster.mrp || matchedMaster.suggestedPrice || 0);
+          const rawMrp = Number(l.mrp || l.masterProduct?.mrp || matchedMaster.mrp || 0);
           const fallbackMrp = Number(storedMrpsMap[l.id] || 0);
-          const resolvedMrp = rawMrp > 0 ? rawMrp : (fallbackMrp > 0 ? fallbackMrp : Math.round((Number(l.price) || 100) * 1.2));
+          const resolvedMrp = rawMrp > 0 ? rawMrp : (fallbackMrp > 0 ? fallbackMrp : 0);
 
           return {
             id: l.id,
@@ -750,9 +750,9 @@ export function AdminProvider({ children }) {
             ? parsedCp
             : (Array.isArray(fallbackCp) && fallbackCp.length > 0 ? fallbackCp : (l.masterProduct?.customPacks || null));
 
-          const rawMrp = Number(l.mrp || l.masterProduct?.mrp || l.masterProduct?.suggestedPrice || 0);
+          const rawMrp = Number(l.mrp || l.masterProduct?.mrp || 0);
           const fallbackMrp = Number(storedMrpsMap[l.id] || 0);
-          const resolvedMrp = rawMrp > 0 ? rawMrp : (fallbackMrp > 0 ? fallbackMrp : Math.round((Number(l.price) || 100) * 1.2));
+          const resolvedMrp = rawMrp > 0 ? rawMrp : (fallbackMrp > 0 ? fallbackMrp : 0);
 
           let item = {
             id: l.id,
@@ -2034,7 +2034,7 @@ export function AdminProvider({ children }) {
       regionId: regionId || "r1",
       regionName: regName,
       districtName: regName,
-      mrp: Number(mrp) || Number(mp?.suggestedPrice) || Math.round((Number(price) || 100) * 1.2),
+      mrp: Number(mrp) || Number(mp?.mrp) || 0,
       price: Number(price) || (mp ? mp.suggestedPrice : 100),
       stockQty: Number(stockQty) || 100,
       customPacks: customPacks || null,

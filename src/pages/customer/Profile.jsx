@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import NotificationPanel from "../../components/NotificationPanel";
+import Footer from "../../components/Footer";
+import { Capacitor } from "@capacitor/core";
 import { useAuth } from "../../context/AuthContext";
 import { useCart } from "../../context/CartContext";
 import { useOrders } from "../../context/OrderContext";
@@ -130,7 +132,7 @@ export default function Profile() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-navy-900 pb-24 sm:pb-12 font-sans w-full max-w-full overflow-x-clip">
+    <div className="min-h-screen bg-slate-50 text-navy-900 font-sans w-full max-w-full overflow-x-clip flex flex-col justify-between">
       {/* Desktop Navbar */}
       <div className="hidden lg:block">
         <Navbar />
@@ -172,7 +174,7 @@ export default function Profile() {
         </div>
       </div>
 
-      <main className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+      <main className="max-w-2xl w-full mx-auto px-4 py-6 pb-24 sm:pb-12 space-y-5 flex-1">
         {successMsg && (
           <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold px-4 py-3 rounded-xl shadow-2xs flex items-center justify-between">
             <span>{successMsg}</span>
@@ -469,6 +471,9 @@ export default function Profile() {
           </div>
         </section>
       </main>
+
+      {/* Footer section (web pe dikhega, mobile app me hidden rahega) */}
+      {!Capacitor.isNativePlatform() && <Footer />}
 
       {/* ACTIVE COUPONS & OFFERS MODAL (Centered Pop-up) */}
       {showCouponsModal && (

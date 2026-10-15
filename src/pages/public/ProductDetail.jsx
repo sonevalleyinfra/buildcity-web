@@ -12,65 +12,7 @@ import { API_BASE_URL } from "../../config/api";
 import { authFetch } from "../../config/authFetch";
 import { generateProductPacks } from "../../utils/productPacks";
 
-// Agar context me product na mile toh local fallback data
-function generateProduct(id, priceFactor = 1, regionName = "Varanasi") {
-  const decoded = decodeURIComponent(id || "");
-  const hasSpaceOrWord = decoded.includes(" ") || (decoded.length > 15 && !/^[a-f0-9-]+$/i.test(decoded));
-  const displayName = hasSpaceOrWord
-    ? decoded
-    : "UltraTech Super PPC Cement";
 
-  const brand = "BuildCity Certified";
-  const baseMrp = 390;
-  const mrp = Math.round(baseMrp * priceFactor);
-  const discount = Math.round(mrp * 0.15);
-
-  let detectedCategory = "Cement";
-  let detectedUnit = "50 kg";
-  const lowerName = displayName.toLowerCase();
-  if (/paint|primer|emulsion|distemper|royale|apex|nerolac|berger/i.test(lowerName)) {
-    detectedCategory = "Paints";
-    detectedUnit = "1 Litre";
-  } else if (/steel|tmt|rebar|iron|tiscon|kamdhenu/i.test(lowerName)) {
-    detectedCategory = "Steel";
-    detectedUnit = "1 Ton";
-  } else if (/tile|marble|granite/i.test(lowerName)) {
-    detectedCategory = "Tiles";
-    detectedUnit = "1 Box";
-  } else if (/pipe|plumb/i.test(lowerName)) {
-    detectedCategory = "Plumbing";
-    detectedUnit = "1 Piece";
-  }
-
-  return {
-    id,
-    name: displayName,
-    brand,
-    category: detectedCategory,
-    images: [
-      "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=600&q=80",
-      "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=600&q=80",
-      "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80",
-    ],
-    mrp,
-    price: mrp - discount,
-    rating: 5.0,
-    reviews: 0,
-    inStock: true,
-    unit: detectedUnit,
-    description: `High-quality certified construction material. Supplied directly via BuildCity Certified Delivery Network across ${regionName}.`,
-    specs: [
-      { label: "Brand", value: brand },
-      { label: "Category", value: "Building Supplies" },
-      { label: "Unit Packaging", value: "50kg Bag" },
-      { label: "Warranty", value: "Manufacturer Warranty" },
-      { label: "Delivery", value: "Fast Site Delivery" },
-    ],
-    vendorId: `v-${id}`,
-    vendorName: "BuildCity Direct",
-    reviewsList: [],
-  };
-}
 
 const DEMO_NAMES = new Set([
   "rahul singh",
@@ -161,7 +103,7 @@ export default function ProductDetail() {
 
   const product = useMemo(() => {
     const decodedId = decodeURIComponent(id || "").trim();
-    const baseProd =
+    let baseProd =
       products.find(
         (p) =>
           p.id === id ||
@@ -169,6 +111,21 @@ export default function ProductDetail() {
           (p.name && p.name.toLowerCase() === decodedId.toLowerCase()) ||
           (p.name && encodeURIComponent(p.name) === id)
       ) || directProduct;
+
+    if (!baseProd) {
+      try {
+        const cached = JSON.parse(localStorage.getItem("buildcity_products") || "[]");
+        if (Array.isArray(cached) && cached.length > 0) {
+          baseProd = cached.find(
+            (p) =>
+              p.id === id ||
+              p.id === decodedId ||
+              (p.name && p.name.toLowerCase() === decodedId.toLowerCase()) ||
+              (p.name && encodeURIComponent(p.name) === id)
+          );
+        }
+      } catch {}
+    }
 
     // Helper: checks if a product listing belongs to the currently active customer region
     const activeRegName = String(region?.name || "Varanasi").toLowerCase().trim();
@@ -302,7 +259,7 @@ export default function ProductDetail() {
         reviewsList: [],
       };
     }
-    return generateProduct(id, region.priceFactor, region.name);
+    return null;
   }, [id, products, masterProducts, directProduct, region, syncTick]);
 
   // Check kar rahe hain ki vendor suspend toh nahi hai
@@ -708,14 +665,37 @@ export default function ProductDetail() {
     }
   };
 
-  if ((productsLoading && directLoading) || (!product && directLoading)) {
+  if ((productsLoading && !product) || (directLoading && !product)) {
     return (
       <div className="min-h-screen bg-surface pb-20 font-sans">
         <Navbar />
         <main className="max-w-6xl mx-auto px-4 sm:px-6 py-16 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <span className="w-8 h-8 border-3 border-brand-500 border-t-transparent rounded-full animate-spin"></span>
-            <p className="text-xs font-bold text-slate-500">Loading Product...</p>
+            <p className="text-xs font-bold text-slate-500">Loading Product Details...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (!product) {
+    return (
+      <div className="min-h-screen bg-surface pb-20 font-sans">
+        <Navbar />
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-16 flex items-center justify-center text-center">
+          <div className="bg-white rounded-3xl p-8 border border-slate-200/90 max-w-md w-full space-y-4 shadow-xs">
+            <span className="text-4xl block">🔍</span>
+            <h2 className="text-base font-black text-navy-950">Product Unavailable</h2>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Yeh product filhal offline ya unavailable hai. Kripya dusre products check karein ya internet connection verify karein.
+            </p>
+            <Link
+              to="/categories"
+              className="inline-block mt-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs rounded-xl transition-all shadow-xs"
+            >
+              Explore Available Materials →
+            </Link>
           </div>
         </main>
       </div>

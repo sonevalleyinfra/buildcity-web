@@ -4,6 +4,8 @@ import Navbar from "../../components/Navbar";
 import BottomNav from "../../components/BottomNav";
 import ProductCard from "../../components/ProductCard";
 import FilterSidebar from "../../components/FilterSidebar";
+import Footer from "../../components/Footer";
+import { Capacitor } from "@capacitor/core";
 import { useRegion } from "../../context/RegionContext";
 import { useAdmin } from "../../context/AdminContext";
 
@@ -132,10 +134,10 @@ export default function CategoryListing() {
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
-    <div className="min-h-screen bg-surface pb-20 sm:pb-0">
+    <div className="min-h-screen bg-surface flex flex-col justify-between">
       <Navbar />
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+      <main className="max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 pb-20 sm:pb-8 flex-1">
 
         {/* Breadcrumb navigation aur category heading */}
         <div className="mb-5">
@@ -304,7 +306,7 @@ export default function CategoryListing() {
         </div>
       )}
 
-     
+      {!Capacitor.isNativePlatform() && <Footer />}
     </div>
   );
 }

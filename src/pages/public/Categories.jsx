@@ -8,6 +8,8 @@ import Navbar from "../../components/Navbar";
 import RegionPicker from "../../components/RegionPicker";
 import NotificationPanel from "../../components/NotificationPanel";
 import ProductCard from "../../components/ProductCard";
+import Footer from "../../components/Footer";
+import { Capacitor } from "@capacitor/core";
 
 const bannerSlides = [
   {
@@ -241,7 +243,7 @@ export default function Categories() {
   }, [districtProducts]);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-28 font-sans w-full max-w-full overflow-x-clip">
+    <div className="min-h-screen bg-[#F8FAFC] font-sans w-full max-w-full overflow-x-clip flex flex-col justify-between">
       {/* Desktop navbar */}
       <div className="hidden lg:block">
         <Navbar />
@@ -296,7 +298,7 @@ export default function Categories() {
         </form>
       </div>
 
-      <main className="max-w-6xl mx-auto px-4 pt-4 sm:pt-6 space-y-6">
+      <main className="max-w-6xl w-full mx-auto px-4 pt-4 sm:pt-6 pb-24 sm:pb-12 space-y-6 flex-1">
 
         {/* 2. Shop by category cards grid */}
         <section className="space-y-2.5">
@@ -442,6 +444,7 @@ export default function Categories() {
           )}
         </section>
       </main>
+      {!Capacitor.isNativePlatform() && <Footer />}
     </div>
   );
 }

@@ -36,9 +36,14 @@ async function snapshot(prisma, ms) {
     const [{ n }] = await prisma.$queryRawUnsafe(`select count(*)::text as n from public.${t}`);
     out.counts[m.name] = n;
     for (const c of m.ts) {
-      const [{ v }] = await prisma.$queryRawUnsafe(
-        `select to_char(max(${q(c.col)}) at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as v from public.${t}`
-      );
+      // Prisma DateTime is timestamp(3) (no tz): "at time zone 'UTC'" makes it timestamptz, which to_char renders in the
+      // session TimeZone. Pin it to UTC so the value doesn't depend on each DB's default.
+      const [, [{ v }]] = await prisma.$transaction([
+        prisma.$executeRaw`select set_config('TimeZone', 'UTC', true)`,
+        prisma.$queryRawUnsafe(
+          `select to_char(max(${q(c.col)}) at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as v from public.${t}`
+        ),
+      ]);
       out.latest[`${m.name}.${c.label}`] = v === null ? "-" : v;
     }
   }

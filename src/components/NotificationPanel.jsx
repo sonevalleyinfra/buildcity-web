@@ -57,6 +57,9 @@ export default function NotificationPanel({ className }) {
 
   const handleOpen = () => {
     setOpen(true);
+    if (unreadCount > 0) {
+      markAllAsRead();
+    }
     requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)));
   };
 

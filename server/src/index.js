@@ -3481,6 +3481,53 @@ app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", 
       );
     }
 
+    // ⚡ Real-Time Customer Notification: Alert customer on EVERY order status change by vendor/admin/DR
+    if (status !== previousOrder.status && (updatedOrder?.customerId || previousOrder.customerId)) {
+      const targetCustId = updatedOrder?.customerId || previousOrder.customerId;
+      const cleanOrderNum = String(updatedOrder?.orderNumber || previousOrder.orderNumber || previousOrder.id).replace(/^#/g, "").slice(-4).toUpperCase();
+
+      const statusMap = {
+        CONFIRMED: { title: "Order Confirmed!", desc: `Your order #ORD-*${cleanOrderNum} has been confirmed by vendor.` },
+        PROCESSING: { title: "Order Processing", desc: `Your order #ORD-*${cleanOrderNum} is being prepared for dispatch.` },
+        SHIPPED: { title: "Order Dispatched 🚚", desc: `Your order #ORD-*${cleanOrderNum} has been dispatched from warehouse.` },
+        OUT_FOR_DELIVERY: { title: "Out for Delivery! 🚚", desc: `Your order #ORD-*${cleanOrderNum} is out for delivery to your site.` },
+        DELIVERED: { title: "Order Delivered! ✅", desc: `Your order #ORD-*${cleanOrderNum} has been successfully delivered.` },
+        COMPLETED: { title: "Order Completed 🎉", desc: `Your order #ORD-*${cleanOrderNum} is successfully completed.` },
+        CANCELLED: { title: "Order Cancelled ⚠️", desc: `Your order #ORD-*${cleanOrderNum} has been cancelled.` },
+      };
+
+      const info = statusMap[status] || {
+        title: `Order Status: ${status}`,
+        desc: `Status of your order #ORD-*${cleanOrderNum} changed to ${status}.`,
+      };
+
+      // 1. Create in-app notification in DB so customer sees it inside the bell icon
+      prisma.notification.create({
+        data: {
+          userId: targetCustId,
+          title: `📦 ${info.title}`,
+          message: info.desc,
+          isRead: false,
+        },
+      }).catch((ne) => console.warn("Customer DB notification save notice:", ne.message));
+
+      // 2. High-priority push notification delivered to customer's mobile device (even when app is killed)
+      try {
+        const { sendCustomerOrderStatusPushNotification } = require("./pushService");
+        sendCustomerOrderStatusPushNotification({
+          userId: targetCustId,
+          phone: updatedOrder?.customer?.phone || previousOrder.customer?.phone || previousOrder.address?.phone,
+          orderId: previousOrder.id,
+          orderNumber: cleanOrderNum,
+          status,
+          title: `📦 ${info.title}`,
+          body: info.desc,
+        }).catch((pe) => console.warn("Customer push send notice:", pe.message));
+      } catch (pushErr) {
+        console.warn("Customer push dispatch notice:", pushErr.message);
+      }
+    }
+
     // Invalidate sync cache so live dashboard stats reflect the new status immediately
     invalidateCache();
 
@@ -4715,7 +4762,6 @@ app.post("/api/v1/notifications", requireAuth, requireRole("ADMIN"), async (req,
 app.patch("/api/v1/notifications/:id/read", requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    // Users can only mark their own notifications; admin broadcasts stay unread for everyone else
     await prisma.notification.updateMany({
       where: req.auth.role === "ADMIN" ? { id } : { id, userId: req.auth.userId },
       data: { isRead: true },
@@ -4723,6 +4769,38 @@ app.patch("/api/v1/notifications/:id/read", requireAuth, async (req, res) => {
     res.json({ success: true, id });
   } catch (err) {
     sendServerError(res, err);
+  }
+});
+
+app.patch("/api/v1/notifications/read-all", requireAuth, async (req, res) => {
+  try {
+    const targetUserId = req.auth?.userId;
+    if (targetUserId) {
+      await prisma.notification.updateMany({
+        where: { userId: targetUserId },
+        data: { isRead: true },
+      }).catch(() => null);
+    }
+    res.json({ success: true, message: "All notifications marked as read" });
+  } catch (err) {
+    sendServerError(res, err);
+  }
+});
+
+app.post("/api/v1/notifications/device-token", optionalAuth, async (req, res) => {
+  try {
+    const { token, phone, userId } = req.body;
+    const targetUserId = req.auth?.userId || userId;
+    const targetPhone = req.auth?.phone || phone;
+    if (token && (targetUserId || targetPhone)) {
+      const { saveCustomerToken } = require("./pushService");
+      await saveCustomerToken(targetUserId || targetPhone, token, targetPhone);
+      console.log(`✅ Customer device FCM token saved: ${targetUserId || targetPhone}`);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.warn("Save customer device token error:", err.message);
+    res.json({ success: false });
   }
 });
 

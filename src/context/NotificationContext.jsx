@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useState, useMemo } from "react";
 import { authFetch } from "../config/authFetch";
 import { useAuth } from "./AuthContext";
 import { API_BASE_URL } from "../config/api";
+import { playOrderAlertChime } from "../utils/orderAlertSound";
+import { initCustomerPushNotifications } from "../utils/pushNotifications";
 
 const NotificationContext = createContext(null);
 
@@ -67,6 +69,13 @@ export function NotificationProvider({ children }) {
     try {
       localStorage.setItem(seenToastsKey, JSON.stringify(Array.from(seenSet)));
     } catch {}
+
+    // Audio chime on web & app for customer notifications
+    try {
+      playOrderAlertChime();
+    } catch (e) {
+      console.warn("Chime audio playback note:", e);
+    }
 
     setToastNotif(notif);
     setTimeout(() => {
@@ -198,12 +207,12 @@ export function NotificationProvider({ children }) {
 
     fetchDbNotifications();
 
-    // Tab visible hone par hi polling karo
+    // Tab visible hone par real-time polling (every 20s for fresh order updates)
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
         fetchDbNotifications();
       }
-    }, 300000);
+    }, 20000);
 
     const handleFocus = () => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
@@ -214,14 +223,23 @@ export function NotificationProvider({ children }) {
     window.addEventListener("focus", handleFocus);
     window.addEventListener("visibilitychange", handleFocus);
     window.addEventListener("buildcity_notifications_updated", handleFocus);
+    window.addEventListener("buildcity_orders_updated", handleFocus);
 
     return () => {
       clearInterval(interval);
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("visibilitychange", handleFocus);
       window.removeEventListener("buildcity_notifications_updated", handleFocus);
+      window.removeEventListener("buildcity_orders_updated", handleFocus);
     };
   }, [storageKey, user]);
+
+  // Customer push notification registration with backend (for native app & background pushes)
+  useEffect(() => {
+    if (user?.id && !isStaff) {
+      initCustomerPushNotifications(user.id, { phone: user.phone || "" }).catch(() => {});
+    }
+  }, [user?.id, user?.phone, isStaff]);
 
   // Naya order confirm ya event notification add karne ka function
   const addNotification = ({ id, title, message, type = "info", link = null }) => {
@@ -325,6 +343,7 @@ export function NotificationProvider({ children }) {
   };
 
   const markAsRead = async (id) => {
+    if (!id) return;
     try {
       const readIds = JSON.parse(localStorage.getItem(readKey) || "[]");
       if (!readIds.includes(id)) {
@@ -348,10 +367,12 @@ export function NotificationProvider({ children }) {
     }
   };
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
     try {
-      const readIds = notifications.map((n) => n.id);
-      localStorage.setItem(readKey, JSON.stringify(readIds));
+      const currentIds = notifications.map((n) => n.id).filter(Boolean);
+      const prevIds = JSON.parse(localStorage.getItem(readKey) || "[]");
+      const merged = Array.from(new Set([...prevIds, ...currentIds]));
+      localStorage.setItem(readKey, JSON.stringify(merged));
     } catch {}
 
     setNotifications((prev) => {
@@ -361,6 +382,14 @@ export function NotificationProvider({ children }) {
       }
       return updated;
     });
+
+    if (user) {
+      try {
+        await authFetch(`${API_BASE_URL}/api/v1/notifications/read-all`, { method: "PATCH" });
+      } catch (err) {
+        console.warn("Backend mark-all-read notice:", err.message);
+      }
+    }
   };
 
   // saare notifications ko permanently clear karne ka logic, taaki dubara na dikhe

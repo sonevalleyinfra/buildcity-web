@@ -34,6 +34,7 @@ dist-ssr
 # Scratch scripts & temporary test files (Prevent sensitive data leakage)
 *.apk
 *.aab
+release-artifacts/
 scratch_*
 *.bat
 server/scratch_*

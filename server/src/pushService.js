@@ -67,7 +67,15 @@ async function ensureTokenTable(p) {
         token TEXT NOT NULL,
         phone TEXT,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      );
+      )
+    `);
+    await p.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS customer_fcm_tokens (
+        user_id TEXT PRIMARY KEY,
+        token TEXT NOT NULL,
+        phone TEXT,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
     `);
     tableChecked = true;
   } catch (e) {
@@ -430,6 +438,136 @@ async function sendVendorOrderPushNotification({ vendorId, phone, orderNumber, a
   }
 }
 
+// In-memory cache for customer tokens
+const customerMemoryTokens = {};
+
+async function saveCustomerToken(userId, token, phone = null) {
+  if (!userId || !token) return false;
+  const uIdStr = String(userId).trim();
+  const tokenStr = String(token).trim();
+  const phoneStr = phone ? String(phone).trim() : null;
+
+  customerMemoryTokens[uIdStr] = {
+    token: tokenStr,
+    phone: phoneStr,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const p = getPrisma();
+  if (p) {
+    try {
+      await ensureTokenTable(p);
+      await p.$executeRawUnsafe(
+        `INSERT INTO customer_fcm_tokens (user_id, token, phone, updated_at)
+         VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (user_id)
+         DO UPDATE SET token = EXCLUDED.token, phone = COALESCE(EXCLUDED.phone, customer_fcm_tokens.phone), updated_at = NOW()`,
+        uIdStr,
+        tokenStr,
+        phoneStr
+      ).catch(() => null);
+    } catch (e) {
+      console.warn("Save customer token note:", e.message);
+    }
+  }
+  return true;
+}
+
+async function getTokenForCustomer(userId, phone = null) {
+  const uIdStr = userId ? String(userId).trim() : "";
+  const phoneStr = phone ? String(phone).trim() : null;
+
+  if (uIdStr && customerMemoryTokens[uIdStr]?.token) {
+    return customerMemoryTokens[uIdStr].token;
+  }
+
+  const p = getPrisma();
+  if (p) {
+    try {
+      await ensureTokenTable(p);
+      if (uIdStr) {
+        const rows = await p.$queryRawUnsafe(
+          `SELECT token FROM customer_fcm_tokens WHERE user_id = $1 LIMIT 1`,
+          uIdStr
+        );
+        if (rows && rows.length > 0 && rows[0].token) {
+          customerMemoryTokens[uIdStr] = { token: rows[0].token };
+          return rows[0].token;
+        }
+      }
+      const cleanPhone = (phoneStr || "").replace(/\D/g, "").slice(-10);
+      if (cleanPhone.length >= 7) {
+        const phoneRows = await p.$queryRawUnsafe(
+          `SELECT token FROM customer_fcm_tokens WHERE phone LIKE $1 LIMIT 1`,
+          `%${cleanPhone}%`
+        );
+        if (phoneRows && phoneRows.length > 0 && phoneRows[0].token) {
+          return phoneRows[0].token;
+        }
+      }
+    } catch (e) {
+      console.warn("Get customer token note:", e.message);
+    }
+  }
+  return null;
+}
+
+/**
+ * Sends a high-priority background push notification to customer's phone on order status updates.
+ * Wakes up device even if the app is killed or swiped away.
+ */
+async function sendCustomerOrderStatusPushNotification({ userId, phone, orderId, orderNumber, status, title, body }) {
+  const fcmToken = await getTokenForCustomer(userId, phone);
+  if (!fcmToken) {
+    console.log(`ℹ️ No FCM push token registered for customer: ${userId || phone}. Push skipped.`);
+    return { success: false, reason: "no_fcm_token" };
+  }
+
+  if (!initFirebase()) {
+    return { success: false, reason: "firebase_not_initialized" };
+  }
+
+  const message = {
+    token: fcmToken,
+    notification: {
+      title,
+      body,
+    },
+    data: {
+      orderId: String(orderId || ""),
+      orderNumber: String(orderNumber || ""),
+      type: "ORDER_STATUS_CHANGE",
+      status: String(status || ""),
+      title: String(title || ""),
+      body: String(body || ""),
+      link: `/orders/${orderId}`,
+    },
+    android: {
+      priority: "high", // Wakes up killed / sleeping device
+      notification: {
+        channelId: "customer_order_updates",
+        icon: "ic_stat_order",
+        color: "#059669",
+        sound: "default",
+        defaultSound: true,
+        defaultVibrateTimings: true,
+        priority: "max",
+        visibility: "public",
+      },
+    },
+  };
+
+  try {
+    const messaging = typeof admin.messaging === "function" ? admin.messaging() : getMessaging();
+    const response = await messaging.send(message);
+    console.log(`✅ Customer Push Notification delivered for order ${orderNumber} (${status}):`, response);
+    return { success: true, messageId: response };
+  } catch (err) {
+    console.error(`❌ Customer Push send error for order ${orderNumber}:`, err.message);
+    return { success: false, error: err.message };
+  }
+}
+
 module.exports = {
   initFirebase,
   setPrismaClient,
@@ -437,4 +575,7 @@ module.exports = {
   removeToken,
   getTokenForVendor,
   sendVendorOrderPushNotification,
+  saveCustomerToken,
+  getTokenForCustomer,
+  sendCustomerOrderStatusPushNotification,
 };

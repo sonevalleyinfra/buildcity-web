@@ -25,6 +25,25 @@ export function markFcmTokenSynced(vendorId, token) {
   if (vendorId && token) lastSyncedTokenKey = `${vendorId}|${token}`;
 }
 
+let lastSyncedCustomerTokenKey = null;
+
+export function syncCustomerTokenWithBackend(userId, token, phone) {
+  const key = `${userId}|${token}`;
+  if (lastSyncedCustomerTokenKey === key) return Promise.resolve();
+  lastSyncedCustomerTokenKey = key;
+  return fetch(`${API_BASE_URL}/api/v1/notifications/device-token`, {
+    method: "POST",
+    headers: pushApiHeaders(),
+    body: JSON.stringify({ userId, token, phone }),
+  }).then((res) => {
+    if (!res.ok && lastSyncedCustomerTokenKey === key) lastSyncedCustomerTokenKey = null;
+    return res;
+  }, (err) => {
+    if (lastSyncedCustomerTokenKey === key) lastSyncedCustomerTokenKey = null;
+    throw err;
+  });
+}
+
 function syncTokenWithBackend(vendorId, token, phone) {
   const key = `${vendorId}|${token}`;
   if (lastSyncedTokenKey === key) return Promise.resolve();
@@ -309,3 +328,113 @@ export async function unregisterVendorPushNotifications(vendorId) {
   lastSyncedTokenKey = null;
   console.log(`🔒 Vendor FCM token successfully unlinked on logout for vendor: ${vendorId || "current"}`);
 }
+
+let isCustomerRegistered = false;
+let currentRegisteredCustomerId = null;
+
+/**
+ * Initializes and registers FCM Push Notifications for the logged-in customer.
+ * Saves customer FCM token with backend /api/v1/notifications/device-token.
+ * Receives background order status alerts even when app is killed!
+ */
+export async function initCustomerPushNotifications(userId, meta = {}) {
+  if (!userId) return;
+  const phone = meta.phone || "";
+
+  // 0. If token was already cached on device, sync immediately!
+  try {
+    const cachedToken =
+      localStorage.getItem("buildcity_permanent_device_token") ||
+      localStorage.getItem("customer_fcm_token") ||
+      localStorage.getItem("vendor_fcm_token");
+    if (cachedToken) {
+      syncCustomerTokenWithBackend(userId, cachedToken, phone).catch(() => {});
+    }
+  } catch (e) {}
+
+  if (!Capacitor.isNativePlatform()) return;
+  if (isCustomerRegistered && currentRegisteredCustomerId === userId) return;
+  currentRegisteredCustomerId = userId;
+
+  try {
+    let perm = await PushNotifications.checkPermissions();
+    if (perm.receive !== "granted") {
+      perm = await PushNotifications.requestPermissions();
+    }
+
+    if (perm.receive === "granted") {
+      try {
+        await PushNotifications.createChannel({
+          id: "customer_order_updates",
+          name: "Order Updates & Tracking",
+          description: "Alerts when your order status updates (Confirmed, Shipped, Out for Delivery, Delivered)",
+          importance: 5,
+          visibility: 1,
+          vibration: true,
+        });
+      } catch (_) {}
+
+      try {
+        await LocalNotifications.createChannel({
+          id: "customer_order_updates",
+          name: "Order Updates & Tracking",
+          description: "Alerts when your order status updates (Confirmed, Shipped, Out for Delivery, Delivered)",
+          importance: 5,
+          visibility: 1,
+          vibration: true,
+        });
+      } catch (_) {}
+
+      await PushNotifications.addListener("registration", async (token) => {
+        if (!token?.value) return;
+        console.log("📱 Customer FCM Registration Token ready:", token.value.substring(0, 15) + "...");
+        try {
+          localStorage.setItem("customer_fcm_token", token.value);
+          localStorage.setItem("buildcity_permanent_device_token", token.value);
+        } catch (_) {}
+        try {
+          await syncCustomerTokenWithBackend(userId, token.value, phone);
+        } catch (_) {}
+      });
+
+      await PushNotifications.addListener("pushNotificationReceived", async (notification) => {
+        console.log("🔔 Customer push notification received (Foreground):", notification.title);
+        playOrderAlertChime();
+        triggerOrderVibration();
+
+        const data = notification.data || {};
+        try {
+          const notifId = (Date.now() % 100000) + Math.floor(Math.random() * 100);
+          await LocalNotifications.schedule({
+            notifications: [
+              {
+                id: notifId,
+                title: notification.title || "Order Update",
+                body: notification.body || "Your order status has been updated",
+                channelId: "customer_order_updates",
+                sound: "default",
+                extra: data,
+                smallIcon: "ic_stat_order",
+                iconColor: "#2563EB",
+              },
+            ],
+          });
+        } catch (localErr) {}
+
+        window.dispatchEvent(new CustomEvent("buildcity_notifications_updated"));
+        window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
+      });
+
+      await PushNotifications.addListener("pushNotificationActionPerformed", () => {
+        window.dispatchEvent(new CustomEvent("buildcity_notifications_updated"));
+        window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
+      });
+
+      await PushNotifications.register();
+      isCustomerRegistered = true;
+    }
+  } catch (err) {
+    console.warn("Customer push notification setup note:", err.message);
+  }
+}
+

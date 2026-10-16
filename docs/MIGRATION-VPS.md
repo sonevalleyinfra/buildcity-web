@@ -22,8 +22,9 @@ Our shipped apps (customer 1.2.4, partner 1.2) call **`www.buildcity.in/api/v1`*
 backend through one line in `vercel.json` (the `/api/v1/:path*` rewrite). At cutover we change **only the
 destination of that line**. The apps never notice, and **no app update is needed**.
 
-One catch: the old apps also have the Railway address built in as a fallback. So **Railway must stay up for about 14
-days** after the move (Phase C).
+One catch: the old apps also have the Railway address built in as a fallback. So **Railway stays stopped (not deleted) for about 14
+days** after the move (Phase C). The old apps' Railway fallback then just fails, and their primary path
+`www.buildcity.in` keeps working.
 
 The move has three phases:
 
@@ -428,10 +429,12 @@ curl -fsS https://www.buildcity.in/api/v1/health
 
 Then repeat the checklist from **A8** on the **real site** `https://www.buildcity.in`, and then on the apps:
 
-- [ ] **Web**: login with OTP, catalogue, cart, one COD order, wallet.
+- [ ] **Web**: login with one real customer OTP (a real phone, a real SMS), catalogue, cart, one COD order, wallet.
 - [ ] **Customer app** (the installed APK, the old version 1.2.4): open it, log in, browse, place a COD order.
 - [ ] **Partner app** (installed, 1.2): log in as a vendor, see the new order, change status; check the push arrives.
 - [ ] Coolify → `buildcity-api` → **Logs**: orders and requests are coming in, no repeated errors.
+  For the first hour also watch for **429** responses: behind Vercel and Traefik, `trust proxy 1` can make the OTP
+  IP limiter key on the Vercel edge IP, so many customers would share one limit.
 
 ### B7. Watch for 30 minutes
 
@@ -515,7 +518,9 @@ Once C1 is done, the **Invoices work can start**.
 
 ### C2. Turn Railway off after about 14 days
 
-Keep Railway **stopped** (or running, if you prefer), but **do not delete** it, for about 14 days. During this time:
+Keep Railway **stopped** and **do not delete** it, for about 14 days. **Never run Railway against Supabase after B2**:
+old apps would write to the stale database (split-brain, silent data loss). Its only use is a full rollback (see the
+Rollback section). During this time:
 
 - Coolify → `buildcity-api` → **Logs**: look for errors every day or two.
 - Old apps with Railway built in as a fallback will only use it if `www.buildcity.in` fails. If you see no problems

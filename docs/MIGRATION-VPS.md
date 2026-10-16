@@ -65,7 +65,7 @@ SHOW server_version;
 ```
 
 Write down the **major** number (for example `15` from `15.8`). `buildcity-db` must use the **same major** (or newer,
-never older). `server/scripts/migration/dump.sh` refuses to run if your `pg_dump` is older than the source.
+never older). **Ours: 17** (Supabase reports 17.6), so use `postgres:17` everywhere below. `server/scripts/migration/dump.sh` refuses to run if your `pg_dump` is older than the source.
 
 ### 0.3 Tools on the machine that runs the scripts
 
@@ -121,7 +121,7 @@ Railway**. You can repeat Phase A as many times as you like.
 2. **+ New** → **Database** → **PostgreSQL**.
 3. Set:
    - **Name**: `buildcity-db`
-   - **Image**: `postgres:<major>`, the major from step 0.2 (e.g. `postgres:16-alpine`).
+   - **Image**: `postgres:17` (ours is 17; if step 0.2 ever shows a newer major, use that; `postgres:17-alpine` is fine).
    - **Initial database**: `buildcity`
    - Leave the generated username and password. Coolify creates them.
 4. **Persistent storage**: leave the default volume on. This is where the data lives.
@@ -243,13 +243,13 @@ npm ci
 cd scripts/migration
 ```
 
-Run the next commands from a path **without spaces**. Replace `<major>` with the Postgres major from step 0.2 (the
-same one `buildcity-db` uses):
+Run the next commands from a path **without spaces**. The image is `postgres:17`, the major from step 0.2 (the
+same one `buildcity-db` uses; if 0.2 shows a different major, replace `17` below):
 
 ```sh
-export PG_DUMP='docker run --rm --network coolify -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE -e PGSSLMODE postgres:<major> pg_dump'
-export PSQL='docker run --rm --network coolify -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE -e PGSSLMODE postgres:<major> psql'
-export PG_RESTORE="docker run --rm --network coolify -v $PWD:$PWD -w $PWD -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE -e PGSSLMODE postgres:<major> pg_restore"
+export PG_DUMP='docker run --rm --network coolify -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE -e PGSSLMODE postgres:17 pg_dump'
+export PSQL='docker run --rm --network coolify -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE -e PGSSLMODE postgres:17 psql'
+export PG_RESTORE="docker run --rm --network coolify -v $PWD:$PWD -w $PWD -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE -e PGSSLMODE postgres:17 pg_restore"
 ```
 
 The `coolify` network can still reach the internet, so `pg_dump` reaches Supabase too. `verify.js` also needs to
@@ -271,11 +271,21 @@ type `unset HISTFILE` first:
 
 ```sh
 unset HISTFILE
-read -rs SOURCE_DATABASE_URL && export SOURCE_DATABASE_URL     # Supabase DIRECT connection (port 5432, not the pooler), paste, Enter
+read -rs SOURCE_DATABASE_URL && export SOURCE_DATABASE_URL     # Supabase SESSION POOLER (port 5432), paste, Enter
 read -rs TARGET_DATABASE_URL && export TARGET_DATABASE_URL     # buildcity-db, INTERNAL URL from A1.6, paste, Enter
 ```
 
-(Supabase dashboard → **Project Settings** → **Database** → **Connection string** → **URI**, the direct one.)
+Use the **Session pooler** URL: Supabase dashboard → **Connect** → **Session pooler**
+(`postgres://postgres.<ref>:***@aws-0-<region>.pooler.supabase.com:5432/postgres`, user `postgres.<ref>`). It supports
+`pg_dump` and works over IPv4. The **direct** host `db.<ref>.supabase.co` is IPv6-only unless the paid IPv4 add-on is
+on, and containers on the `coolify` network have no IPv6, so the dump fails with "Network is unreachable". Use the
+direct URL only if the test below works with it. **Never** the transaction pooler (port 6543): it breaks `pg_dump`.
+
+Test the source from the same network the dump uses (it must print `1`):
+
+```sh
+docker run --rm --network coolify -e SOURCE_DATABASE_URL postgres:17 sh -c 'psql "$SOURCE_DATABASE_URL" -c "select 1"'
+```
 
 Dump (this only reads from Supabase), then restore:
 

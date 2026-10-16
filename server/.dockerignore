@@ -7,3 +7,6 @@ tests
 *.log
 Dockerfile
 .dockerignore
+*firebase-service-account*.json
+*.pem
+*.key

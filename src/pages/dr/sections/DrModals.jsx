@@ -25,6 +25,7 @@ export default function DrModals({
   setEditingProduct,
   editingImages,
   handleEditImageSlotChange,
+  setEditImageSlotCount,
   onSaveEditedMasterProduct,
 }) {
   return (
@@ -566,9 +567,14 @@ export default function DrModals({
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-700">
-                  Product Images (1 to 3 Images)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Product Images (1 to 6 Images)
+                  </label>
+                  <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                    {editingImages.filter(Boolean).length} / {editingImages.length} Slots Filled
+                  </span>
+                </div>
                 <div className="mb-2 flex gap-2 overflow-x-auto pb-1 no-scrollbar">
                   {presetImages.map((preset, idx) => (
                     <button
@@ -576,8 +582,17 @@ export default function DrModals({
                       type="button"
                       onClick={() => {
                         const emptyIdx = editingImages.findIndex((s) => !s.trim());
-                        const targetIdx = emptyIdx !== -1 ? emptyIdx : 0;
-                        handleEditImageSlotChange(targetIdx, preset.url);
+                        if (emptyIdx !== -1) {
+                          handleEditImageSlotChange(emptyIdx, preset.url);
+                        } else if (editingImages.length < 6) {
+                          const nextIdx = editingImages.length;
+                          if (typeof setEditImageSlotCount === "function") {
+                            setEditImageSlotCount(nextIdx + 1);
+                          }
+                          handleEditImageSlotChange(nextIdx, preset.url);
+                        } else {
+                          handleEditImageSlotChange(0, preset.url);
+                        }
                       }}
                       className="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-slate-700 hover:border-brand-300 hover:bg-brand-50 cursor-pointer"
                     >
@@ -587,8 +602,7 @@ export default function DrModals({
                 </div>
 
                 <div className="space-y-2">
-                  {[0, 1, 2].map((slotIdx) => {
-                    const slotValue = editingImages[slotIdx] || "";
+                  {editingImages.map((slotValue, slotIdx) => {
                     const isRequired = slotIdx === 0;
                     const placeholder =
                       slotIdx === 0 ? "Main Image 1 URL *" : `Image ${slotIdx + 1} URL (Optional)`;
@@ -638,6 +652,20 @@ export default function DrModals({
                     );
                   })}
                 </div>
+
+                {editingImages.length < 6 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof setEditImageSlotCount === "function") {
+                        setEditImageSlotCount((c) => Math.min(6, Math.max(editingImages.length + 1, c + 1)));
+                      }
+                    }}
+                    className="mt-2.5 w-full py-2 px-3 border border-dashed border-brand-300 hover:border-brand-500 bg-brand-50/50 hover:bg-brand-50 text-brand-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.99]"
+                  >
+                    <span>+ Add More Image ({editingImages.length}/6)</span>
+                  </button>
+                )}
               </div>
 
               <div>

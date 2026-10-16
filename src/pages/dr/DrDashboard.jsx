@@ -690,6 +690,23 @@ export default function DrDashboard() {
     };
   }, [showVendorModal, showProductModal, editingVendor, editingProduct]);
 
+  const [drEditImageSlotCount, setDrEditImageSlotCount] = useState(3);
+
+  useEffect(() => {
+    if (editingProduct) {
+      const list =
+        Array.isArray(editingProduct.images) && editingProduct.images.length > 0
+          ? editingProduct.images.filter(Boolean)
+          : (editingProduct.imageUrl || "")
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean);
+      setDrEditImageSlotCount(Math.min(6, Math.max(3, list.length)));
+    } else {
+      setDrEditImageSlotCount(3);
+    }
+  }, [editingProduct?.id]);
+
   const editingImages = useMemo(() => {
     if (!editingProduct) return ["", "", ""];
     const list =
@@ -699,26 +716,30 @@ export default function DrDashboard() {
             .split(",")
             .map((s) => s.trim())
             .filter(Boolean);
-    return [
-      editingProduct.img1 !== undefined ? editingProduct.img1 : list[0] || "",
-      editingProduct.img2 !== undefined ? editingProduct.img2 : list[1] || "",
-      editingProduct.img3 !== undefined ? editingProduct.img3 : list[2] || "",
-    ];
-  }, [editingProduct]);
+
+    const count = Math.min(6, Math.max(3, drEditImageSlotCount, list.length));
+    const slots = [];
+    for (let i = 0; i < count; i++) {
+      const explicitVal = editingProduct[`img${i + 1}`];
+      slots.push(explicitVal !== undefined ? explicitVal : list[i] || "");
+    }
+    return slots;
+  }, [editingProduct, drEditImageSlotCount]);
 
   const handleEditImageSlotChange = (slotIdx, val) => {
     if (!editingProduct) return;
     const nextSlots = [...editingImages];
     nextSlots[slotIdx] = val;
     const validList = nextSlots.map((s) => (s || "").trim()).filter(Boolean);
-    setEditingProduct({
+    const updatedProps = {
       ...editingProduct,
-      img1: nextSlots[0],
-      img2: nextSlots[1],
-      img3: nextSlots[2],
       imageUrl: validList.join(", "),
       images: validList,
+    };
+    nextSlots.forEach((v, idx) => {
+      updatedProps[`img${idx + 1}`] = v;
     });
+    setEditingProduct(updatedProps);
   };
 
   // Forms
@@ -1237,13 +1258,7 @@ export default function DrDashboard() {
   const handleSaveEditedMasterProduct = (e) => {
     e.preventDefault();
     if (!editingProduct) return;
-    const finalImgs = [
-      editingProduct.img1 !== undefined ? editingProduct.img1 : editingImages[0],
-      editingProduct.img2 !== undefined ? editingProduct.img2 : editingImages[1],
-      editingProduct.img3 !== undefined ? editingProduct.img3 : editingImages[2],
-    ]
-      .map((s) => (s || "").trim())
-      .filter(Boolean);
+    const finalImgs = editingImages.map((s) => (s || "").trim()).filter(Boolean);
     const finalImageUrl = finalImgs.join(", ") || editingProduct.imageUrl || "";
 
     const prodToSave = {
@@ -1252,9 +1267,9 @@ export default function DrDashboard() {
       images: finalImgs,
       description: editingProduct.description !== undefined ? editingProduct.description?.trim() || null : undefined,
     };
-    delete prodToSave.img1;
-    delete prodToSave.img2;
-    delete prodToSave.img3;
+    for (let i = 1; i <= 6; i++) {
+      delete prodToSave[`img${i}`];
+    }
 
     setEditingProduct(null);
     updateMasterProduct(prodToSave.id || prodToSave.masterProductId, prodToSave);
@@ -1301,6 +1316,7 @@ export default function DrDashboard() {
           setEditingProduct={setEditingProduct}
           editingImages={editingImages}
           handleEditImageSlotChange={handleEditImageSlotChange}
+          setEditImageSlotCount={setDrEditImageSlotCount}
           onSaveEditedMasterProduct={handleSaveEditedMasterProduct}
         />
       }

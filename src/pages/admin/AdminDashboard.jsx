@@ -496,7 +496,10 @@ export default function AdminDashboard() {
     price: "",
     stockQty: "",
     description: "",
+    imageUrl: "",
   });
+  const [productImageSlotCount, setProductImageSlotCount] = useState(3);
+  const [editImageSlotCount, setEditImageSlotCount] = useState(3);
 
   const [isSubmittingVendor, setIsSubmittingVendor] = useState(false);
   const [isSubmittingEditVendor, setIsSubmittingEditVendor] = useState(false);
@@ -665,7 +668,8 @@ export default function AdminDashboard() {
         addedBy: "Admin",
       });
 
-      setProductForm({ name: "", categoryId: "", brand: "", type: "", grade: "", unit: "", price: "", stockQty: "", description: "" });
+      setProductForm({ name: "", categoryId: "", brand: "", type: "", grade: "", unit: "", price: "", stockQty: "", description: "", imageUrl: "" });
+      setProductImageSlotCount(3);
       setShowProductForm(false);
       showAlert({ title: "Master Product Created", message: `Master product "${productForm.name.trim()}" saved to Database successfully!`, type: "success" });
     } catch (err) {
@@ -675,18 +679,33 @@ export default function AdminDashboard() {
     }
   };
 
-  // Edit modal me product ki 3 images manage karne ke liye helper state
+  // Edit modal open hone par existing images count ke hisaab se minimum 3 ya existing count set karte hain (upto 6)
+  useEffect(() => {
+    if (editingProduct) {
+      const list = Array.isArray(editingProduct.images) && editingProduct.images.length > 0
+        ? editingProduct.images.filter(Boolean)
+        : (editingProduct.imageUrl || "").split(",").map((s) => s.trim()).filter(Boolean);
+      setEditImageSlotCount(Math.min(6, Math.max(3, list.length)));
+    } else {
+      setEditImageSlotCount(3);
+    }
+  }, [editingProduct?.id]);
+
+  // Edit modal me product ki images (upto 6) manage karne ke liye helper state
   const editingImages = useMemo(() => {
     if (!editingProduct) return ["", "", ""];
     const list = Array.isArray(editingProduct.images) && editingProduct.images.length > 0
       ? editingProduct.images.filter(Boolean)
       : (editingProduct.imageUrl || "").split(",").map((s) => s.trim()).filter(Boolean);
-    return [
-      editingProduct.img1 !== undefined ? editingProduct.img1 : (list[0] || ""),
-      editingProduct.img2 !== undefined ? editingProduct.img2 : (list[1] || ""),
-      editingProduct.img3 !== undefined ? editingProduct.img3 : (list[2] || ""),
-    ];
-  }, [editingProduct]);
+
+    const count = Math.min(6, Math.max(3, editImageSlotCount, list.length));
+    const slots = [];
+    for (let i = 0; i < count; i++) {
+      const explicitVal = editingProduct[`img${i + 1}`];
+      slots.push(explicitVal !== undefined ? explicitVal : (list[i] || ""));
+    }
+    return slots;
+  }, [editingProduct, editImageSlotCount]);
 
   // Homepage hero carousel banners sorted by user-selected displayOrder sequence
   const sortedBanners = useMemo(() => {
@@ -698,27 +717,23 @@ export default function AdminDashboard() {
     const nextSlots = [...editingImages];
     nextSlots[slotIdx] = val;
     const validList = nextSlots.map((s) => (s || "").trim()).filter(Boolean);
-    setEditingProduct({
+    const updatedProps = {
       ...editingProduct,
-      img1: nextSlots[0],
-      img2: nextSlots[1],
-      img3: nextSlots[2],
       imageUrl: validList.join(", "),
       images: validList,
+    };
+    nextSlots.forEach((v, idx) => {
+      updatedProps[`img${idx + 1}`] = v;
     });
+    setEditingProduct(updatedProps);
   };
 
   const handleUpdateProductSubmit = async (e) => {
     e.preventDefault();
     if (!editingProduct) return;
 
-    // Saari 3 images ko clean karke combine karte hai
-    const finalImgs = [
-      editingProduct.img1 !== undefined ? editingProduct.img1 : editingImages[0],
-      editingProduct.img2 !== undefined ? editingProduct.img2 : editingImages[1],
-      editingProduct.img3 !== undefined ? editingProduct.img3 : editingImages[2],
-    ].map((s) => (s || "").trim()).filter(Boolean);
-
+    // Saari images (upto 6) ko clean karke combine karte hai
+    const finalImgs = editingImages.map((s) => (s || "").trim()).filter(Boolean);
     const finalImageUrl = finalImgs.join(", ") || editingProduct.imageUrl || "";
 
     const prodToSave = {
@@ -727,9 +742,9 @@ export default function AdminDashboard() {
       images: finalImgs,
       description: editingProduct.description !== undefined ? (editingProduct.description?.trim() || null) : undefined,
     };
-    delete prodToSave.img1;
-    delete prodToSave.img2;
-    delete prodToSave.img3;
+    for (let i = 1; i <= 6; i++) {
+      delete prodToSave[`img${i}`];
+    }
 
     setEditingProduct(null);
     showAlert({ title: "Product Updated", message: "Product details aur images successfully update ho gaye!", type: "success" });
@@ -1740,7 +1755,14 @@ export default function AdminDashboard() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-navy-900 mb-1">Product Images (Add 1 to 3 Images for Interactive Slider)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-navy-900">
+                      Product Images (1 to 6 Images for Interactive Slider)
+                    </label>
+                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                      {Math.max(1, (productForm.imageUrl || "").split(",").map((s) => s.trim()).filter(Boolean).length)} / {productImageSlotCount} Slots Filled
+                    </span>
+                  </div>
                   <div className="flex gap-2 overflow-x-auto pb-2 mb-2 no-scrollbar">
                     {PRESET_IMAGES.map((preset, idx) => (
                       <button
@@ -1749,7 +1771,8 @@ export default function AdminDashboard() {
                         onClick={() => {
                           const currentList = (productForm.imageUrl || "").split(",").map(s => s.trim()).filter(Boolean);
                           if (!currentList.includes(preset.url)) {
-                            const newList = [...currentList, preset.url].slice(0, 3);
+                            const newList = [...currentList, preset.url].slice(0, 6);
+                            setProductImageSlotCount((c) => Math.min(6, Math.max(c, newList.length)));
                             setProductForm({ ...productForm, imageUrl: newList.join(", ") });
                           }
                         }}
@@ -1759,41 +1782,73 @@ export default function AdminDashboard() {
                       </button>
                     ))}
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <input
-                      type="url"
-                      placeholder="Main Image 1 URL *"
-                      value={(productForm.imageUrl || "").split(",")[0]?.trim() || ""}
-                      onChange={(e) => {
-                        const parts = (productForm.imageUrl || "").split(",").map(s => s.trim());
-                        parts[0] = e.target.value;
-                        setProductForm({ ...productForm, imageUrl: parts.filter(Boolean).join(", ") });
-                      }}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-mono text-[11px]"
-                    />
-                    <input
-                      type="url"
-                      placeholder="Image 2 URL (Optional)"
-                      value={(productForm.imageUrl || "").split(",")[1]?.trim() || ""}
-                      onChange={(e) => {
-                        const parts = (productForm.imageUrl || "").split(",").map(s => s.trim());
-                        parts[1] = e.target.value;
-                        setProductForm({ ...productForm, imageUrl: parts.filter(Boolean).join(", ") });
-                      }}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-mono text-[11px]"
-                    />
-                    <input
-                      type="url"
-                      placeholder="Image 3 URL (Optional)"
-                      value={(productForm.imageUrl || "").split(",")[2]?.trim() || ""}
-                      onChange={(e) => {
-                        const parts = (productForm.imageUrl || "").split(",").map(s => s.trim());
-                        parts[2] = e.target.value;
-                        setProductForm({ ...productForm, imageUrl: parts.filter(Boolean).join(", ") });
-                      }}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-brand-500 font-mono text-[11px]"
-                    />
+                  <div className="space-y-2">
+                    {Array.from({ length: productImageSlotCount }).map((_, slotIdx) => {
+                      const parts = (productForm.imageUrl || "").split(",").map((s) => s.trim());
+                      const slotVal = parts[slotIdx] || "";
+                      const isRequired = slotIdx === 0;
+                      const placeholder = slotIdx === 0 ? "Main Image 1 URL *" : `Image ${slotIdx + 1} URL (Optional)`;
+
+                      return (
+                        <div key={slotIdx} className="flex items-center gap-2.5 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                          <div className="w-10 h-10 rounded-lg overflow-hidden border border-slate-200 bg-white shrink-0 flex items-center justify-center">
+                            {slotVal && slotVal.trim() ? (
+                              <img
+                                src={slotVal}
+                                alt={`Slot ${slotIdx + 1}`}
+                                className="w-full h-full object-cover"
+                                onError={(e) => { e.currentTarget.style.display = "none"; }}
+                              />
+                            ) : (
+                              <span className="text-[10px] text-slate-400 font-extrabold">
+                                #{slotIdx + 1}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex-1">
+                            <input
+                              type="url"
+                              placeholder={placeholder}
+                              required={isRequired}
+                              value={slotVal}
+                              onChange={(e) => {
+                                const nextParts = [...parts];
+                                nextParts[slotIdx] = e.target.value;
+                                setProductForm({ ...productForm, imageUrl: nextParts.filter(Boolean).join(", ") });
+                              }}
+                              className="w-full bg-white text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none font-medium font-mono text-[11px] focus:border-brand-500"
+                            />
+                          </div>
+
+                          {slotVal ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextParts = [...parts];
+                                nextParts[slotIdx] = "";
+                                setProductForm({ ...productForm, imageUrl: nextParts.filter(Boolean).join(", ") });
+                              }}
+                              className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg text-xs cursor-pointer hover:bg-rose-50"
+                              title="Clear image"
+                            >
+                              ✕
+                            </button>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
+
+                  {productImageSlotCount < 6 && (
+                    <button
+                      type="button"
+                      onClick={() => setProductImageSlotCount((c) => Math.min(6, c + 1))}
+                      className="mt-2.5 w-full py-2 px-3 border border-dashed border-brand-300 hover:border-brand-500 bg-brand-50/50 hover:bg-brand-50 text-brand-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.99]"
+                    >
+                      <span>+ Add More Image ({productImageSlotCount}/6)</span>
+                    </button>
+                  )}
                 </div>
 
                 <div>
@@ -3645,9 +3700,14 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">
-                  Product Images (1 to 3 Images for Interactive Slider)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-navy-900">
+                    Product Images (1 to 6 Images for Interactive Slider)
+                  </label>
+                  <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                    {editingImages.filter(Boolean).length} / {editingImages.length} Slots Filled
+                  </span>
+                </div>
                 <div className="flex gap-2 overflow-x-auto pb-2 mb-2.5 no-scrollbar">
                   {PRESET_IMAGES.map((preset, idx) => (
                     <button
@@ -3655,8 +3715,15 @@ export default function AdminDashboard() {
                       type="button"
                       onClick={() => {
                         const emptyIdx = editingImages.findIndex((s) => !s.trim());
-                        const targetIdx = emptyIdx !== -1 ? emptyIdx : 0;
-                        handleEditImageSlotChange(targetIdx, preset.url);
+                        if (emptyIdx !== -1) {
+                          handleEditImageSlotChange(emptyIdx, preset.url);
+                        } else if (editingImages.length < 6) {
+                          const nextIdx = editingImages.length;
+                          setEditImageSlotCount(nextIdx + 1);
+                          handleEditImageSlotChange(nextIdx, preset.url);
+                        } else {
+                          handleEditImageSlotChange(0, preset.url);
+                        }
                       }}
                       className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-brand-50 hover:border-brand-300 text-[10px] font-semibold shrink-0 cursor-pointer"
                     >
@@ -3666,8 +3733,7 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="space-y-2">
-                  {[0, 1, 2].map((slotIdx) => {
-                    const slotValue = editingImages[slotIdx] || "";
+                  {editingImages.map((slotValue, slotIdx) => {
                     const isRequired = slotIdx === 0;
                     const placeholder =
                       slotIdx === 0
@@ -3716,6 +3782,16 @@ export default function AdminDashboard() {
                     );
                   })}
                 </div>
+
+                {editingImages.length < 6 && (
+                  <button
+                    type="button"
+                    onClick={() => setEditImageSlotCount((c) => Math.min(6, Math.max(editingImages.length + 1, c + 1)))}
+                    className="mt-2.5 w-full py-2 px-3 border border-dashed border-brand-300 hover:border-brand-500 bg-brand-50/50 hover:bg-brand-50 text-brand-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.99]"
+                  >
+                    <span>+ Add More Image ({editingImages.length}/6)</span>
+                  </button>
+                )}
               </div>
 
               <div>

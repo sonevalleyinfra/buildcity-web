@@ -15,7 +15,7 @@ export PG_DUMP='docker run --rm --network host -e PGHOST -e PGPORT -e PGUSER -e 
 export PG_RESTORE="docker run --rm --network host -v $PWD:$PWD -w $PWD -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE -e PGSSLMODE postgres:<major> pg_restore"
 ```
 `PG_RESTORE` mounts the current directory: run `restore.sh` from the directory holding the dump. `PSQL` can be
-overridden the same way.
+overridden the same way. The `$PWD` mount breaks on paths containing spaces: run from a path without them.
 
 ## 1. Dump (read-only on source)
 ```bash
@@ -27,10 +27,14 @@ export SOURCE_DATABASE_URL='postgresql://...'
 Target should be an empty database (do **not** run `prisma db push` first; the dump creates the tables).
 Refused (exit 2): any `supabase.co` / `supabase.com` host, and a target with the same host, port and database as
 `SOURCE_DATABASE_URL` when that is set.
+The same-target check compares host/port/database **as text**: a DNS name and an IP of the same database are not
+detected as equal. Set `TARGET_DATABASE_URL` to the Coolify DB's internal host (the service name shown in Coolify),
+and never to a name/IP that resolves to the source. Hosts must be a single hostname or IP (no comma lists); any
+inherited `PG*` env vars (`PGSERVICE`, `PGHOSTADDR`, `PGOPTIONS`, ...) are ignored.
 ```bash
 export TARGET_DATABASE_URL='postgresql://...'
 ./restore.sh buildcity.dump                 # if public has tables: shows host + db, asks you to type the db name
-./restore.sh --clean buildcity.dump         # drop + recreate existing objects (destructive, same prompt)
+./restore.sh --clean buildcity.dump         # drop + recreate existing objects (destructive, same prompt, one transaction)
 ./restore.sh --yes ...                      # skip the prompt; required when non-interactive
 ```
 
@@ -43,4 +47,4 @@ serial ids vs `max(id)`. Exit 0 = PASS, 1 = mismatch (table printed), 2 = usage/
 Run it during a write freeze, otherwise live traffic causes expected mismatches.
 
 ## Tests
-`npm run test:migration` (from `server/`): shim-based, no network or DB.
+`npm run test:migration` (from `server/`): shim-based, no network or DB; includes a pty run of the typed db-name prompt.

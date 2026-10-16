@@ -45,7 +45,7 @@ list="$(mktemp "$file.list.XXXXXX")"; trap 'rm -f "$list"' EXIT
 "${pg_restore[@]}" -l "$file" | grep -v -E '^[0-9]+; [0-9]+ [0-9]+ SCHEMA - public ' >"$list"
 
 args=(--use-list="$list" --no-owner --no-acl --exit-on-error --dbname="$PGDATABASE")
-[ "$clean" = 1 ] && args+=(--clean --if-exists)
+[ "$clean" = 1 ] && args+=(--clean --if-exists --single-transaction)
 echo "Restoring $file into $PGHOST/$PGDATABASE ..."
 "${pg_restore[@]}" "${args[@]}" "$file"
 echo "Done. Run verify.js next."

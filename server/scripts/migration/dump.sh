@@ -2,6 +2,7 @@
 # Dump the public schema of a Postgres DB to a custom-format file.
 # Usage: SOURCE_DATABASE_URL=... ./dump.sh <output.dump>
 set -euo pipefail
+umask 077   # the dump holds the whole DB: owner-only
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=_lib.sh
 . "$here/_lib.sh"

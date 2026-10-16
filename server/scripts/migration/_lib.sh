@@ -3,7 +3,7 @@
 # URLs reach python via the MIG_URL / MIG_SOURCE_URL env vars; clients connect with libpq PG* env vars only.
 
 _PGURL_PY=$(cat <<'PY'
-import os, shlex, sys
+import os, re, shlex, sys
 from urllib.parse import urlsplit, parse_qsl, unquote
 
 def die(msg):
@@ -29,6 +29,9 @@ def parse(var, label):
            "PGDATABASE": unquote(u.path.lstrip("/"))}
     if not env["PGHOST"] or not env["PGDATABASE"]:
         die(label + " URL needs a host and a database name")
+    # No multi-host lists (libpq would try each) or anything odd: plain hostname / IP only.
+    if not re.fullmatch(r"[A-Za-z0-9.:-]+", env["PGHOST"]):
+        die(label + " URL host must be a single hostname or IP ([A-Za-z0-9.:-] only)")
     for k, v in parse_qsl(u.query, keep_blank_values=True):
         if k in PRISMA:
             continue
@@ -68,6 +71,11 @@ PY
 load_pg_env() {
   local s
   s="$(MIG_URL="$1" python3 -c "$_PGURL_PY" export)" || exit 2
+  # Drop every inherited libpq var (PGSERVICE, PGHOSTADDR, PGOPTIONS, ...) so only the URL decides the target.
+  local v
+  while read -r v; do
+    case "$v" in PG_DUMP|PG_RESTORE) ;; PG*) unset "$v" ;; esac
+  done < <(compgen -e)
   eval "$s"
 }
 

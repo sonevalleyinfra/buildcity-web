@@ -31,9 +31,11 @@ export default function SplashScreen({ minDuration = 1400, onFinished }) {
       <h1 className="mt-5 text-2xl font-semibold tracking-tight">
         Build<span className="text-brand-500">City</span>
       </h1>
-      <p className="mt-1 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
-        {isVendorApp ? "Partner" : "India's Building Material Superstore"}
-      </p>
+      {isVendorApp && (
+        <p className="mt-1 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+          Partner
+        </p>
+      )}
     </div>
   );
 }

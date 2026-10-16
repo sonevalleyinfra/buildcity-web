@@ -10,6 +10,8 @@ COPY . .
 RUN mkdir -p /data && chown -R node:node /data /app
 USER node
 EXPOSE 5000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD wget -qO- "http://127.0.0.1:${PORT:-5000}/health" >/dev/null || exit 1
+# wget stays: while Coolify's UI healthcheck is on it ignores this HEALTHCHECK and runs `curl || wget || exit 1`.
+# This node check is the fallback when the UI healthcheck is off. /health returns 503 when the DB is down.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=2 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||5000)+'/health',{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
 CMD ["node", "src/index.js"]

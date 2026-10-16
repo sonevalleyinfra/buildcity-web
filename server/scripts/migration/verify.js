@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Compare source and target DBs: per-model row counts, latest created/updated
+/* Compare source and target DBs: per-model row counts, non-Prisma public tables (count + md5), latest created/updated
  * timestamps, and sequences. Model list comes from the Prisma DMMF.
  * Usage: SOURCE_DATABASE_URL=... TARGET_DATABASE_URL=... node verify.js
  * Exit 0 = match, 1 = mismatch, 2 = usage/connection error. Never prints URLs. */
@@ -30,7 +30,7 @@ function models() {
 }
 
 async function snapshot(prisma, ms) {
-  const out = { counts: {}, latest: {}, seq: {}, seqVsMax: {} };
+  const out = { counts: {}, latest: {}, seq: {}, seqVsMax: {}, extra: {} };
   for (const m of ms) {
     const t = q(m.table);
     const [{ n }] = await prisma.$queryRawUnsafe(`select count(*)::text as n from public.${t}`);
@@ -41,6 +41,22 @@ async function snapshot(prisma, ms) {
       );
       out.latest[`${m.name}.${c.label}`] = v === null ? "-" : v;
     }
+  }
+  // Tables created outside Prisma (e.g. raw SQL in pushService.js): every other public base table.
+  const known = new Set(ms.map((m) => m.table));
+  const tbls = await prisma.$queryRawUnsafe(
+    `select table_name as name from information_schema.tables where table_schema='public' and table_type='BASE TABLE' order by 1`
+  );
+  for (const { name } of tbls) {
+    if (known.has(name)) continue;
+    // Pin TimeZone and byte-order collation so the md5 doesn't depend on server locale or timezone.
+    const [, [r]] = await prisma.$transaction([
+      prisma.$executeRaw`select set_config('TimeZone', 'UTC', true)`,
+      prisma.$queryRawUnsafe(
+        `select count(*)::text as n, md5(coalesce(string_agg(t::text, E'\\n' order by t::text collate "C"), '')) as h from public.${q(name)} t`
+      ),
+    ]);
+    out.extra[name] = `${r.n} rows md5=${r.h}`;
   }
   const seqs = await prisma.$queryRawUnsafe(
     `select s.sequencename as name, s.last_value::text as v from pg_sequences s where s.schemaname='public' order by 1`
@@ -86,6 +102,7 @@ async function main() {
   const rows = [];
   const add = (kind, key, x, y) => rows.push({ kind, key, x: x ?? "(missing)", y: y ?? "(missing)", ok: x === y });
   for (const m of ms) add("count", m.name, sa.counts[m.name], sb.counts[m.name]);
+  for (const k of new Set([...Object.keys(sa.extra), ...Object.keys(sb.extra)])) add("raw-table", k, sa.extra[k], sb.extra[k]);
   for (const k of Object.keys(sa.latest)) add("latest", k, sa.latest[k], sb.latest[k]);
   for (const k of new Set([...Object.keys(sa.seq), ...Object.keys(sb.seq)])) add("sequence", k, sa.seq[k], sb.seq[k]);
   for (const k of Object.keys(sb.seqVsMax)) add("seq-vs-max", k, sa.seqVsMax[k], sb.seqVsMax[k]);

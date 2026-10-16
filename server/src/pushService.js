@@ -84,7 +84,7 @@ async function ensureTokenTable(p) {
 }
 
 // Ensure data directory exists for secondary backup token storage
-const dataDir = path.join(__dirname, "../data");
+const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, "../data");
 if (!fs.existsSync(dataDir)) {
   try { fs.mkdirSync(dataDir, { recursive: true }); } catch {}
 }

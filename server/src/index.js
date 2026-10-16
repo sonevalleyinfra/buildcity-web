@@ -358,9 +358,15 @@ function invalidateCache(prefix) {
   }
 }
 
-// Health Check & Render Keep-Alive Endpoint (0ms response)
-app.get(["/health", "/api/v1/health"], (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString(), memoryUsage: process.memoryUsage().heapUsed });
+// Health check (Coolify/Railway healthcheck): cheap DB round-trip, 503 when the DB is unreachable
+app.get(["/health", "/api/v1/health"], async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: "ok", timestamp: new Date().toISOString(), memoryUsage: process.memoryUsage().heapUsed });
+  } catch (err) {
+    console.error("[health] DB check failed:", err.message);
+    res.status(503).json({ status: "error", db: "unavailable", timestamp: new Date().toISOString() });
+  }
 });
 
 // Database & Environment Diagnostic Check
@@ -397,18 +403,16 @@ app.get("/api/v1/db-check", requireAuth, requireRole("ADMIN"), async (req, res) 
   });
 });
 
-// Automatic Self-Ping Keep-Alive to Prevent Render Free-Tier Sleep (Runs every 8 minutes)
-const RENDER_APP_URL = process.env.RENDER_EXTERNAL_URL || "https://buildcity-web.onrender.com";
-setInterval(async () => {
-  try {
-    const res = await fetch(`${RENDER_APP_URL}/health`);
-    if (res.ok) {
-      console.log(`[Keep-Alive Ping] Successfully warmed Render instance at ${new Date().toLocaleTimeString()}`);
+// Optional self-ping keep-alive for sleeping free-tier hosts (e.g. Render). Off unless KEEP_ALIVE_URL is set.
+if (process.env.KEEP_ALIVE_URL) {
+  setInterval(async () => {
+    try {
+      await fetch(`${process.env.KEEP_ALIVE_URL}/health`);
+    } catch (err) {
+      // ignore ping errors
     }
-  } catch (err) {
-    // silently catch local dev ping errors
-  }
-}, 8 * 60 * 1000);
+  }, 8 * 60 * 1000);
+}
 
 let couponsList = [
   { id: "cp-1", code: "BUILDCITY100", title: "Flat ₹100 OFF", minOrder: 1000, discountAmount: 100, expiryDate: "2026-12-31", isActive: true, desc: "Valid on orders above ₹1,000" },

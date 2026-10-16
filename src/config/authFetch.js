@@ -1,4 +1,4 @@
-import { API_BASE_URL, RAILWAY_API_URL, PRODUCTION_WEB_URL } from "./api";
+import { API_BASE_URL, BACKEND_DIRECT_URL, PRODUCTION_WEB_URL } from "./api";
 import { Capacitor } from "@capacitor/core";
 
 const TOKEN_KEY = "buildcity_token";
@@ -52,24 +52,24 @@ export const clearToken = () => {
  * Authenticated Fetch Wrapper:
  * - Automatically prefixes API_BASE_URL for relative paths
  * - Automatically routes through Vercel edge reverse-proxy on web
- * - Implements dual-gateway fallback (Vercel Proxy <-> Railway) on network/DNS drops
+ * - Implements dual-gateway fallback (Vercel Proxy <-> direct backend) on network/DNS drops
  * - Automatically injects Authorization: Bearer <token>
  * - Default Content-Type: application/json (unless FormData)
- * - Handles 401 Unauthorized by retrying direct Railway gateway (in case proxy/redirect stripped Authorization header) and syncing AuthContext state if genuinely expired
+ * - Handles 401 Unauthorized by retrying direct backend gateway (in case proxy/redirect stripped Authorization header) and syncing AuthContext state if genuinely expired
  */
 export const authFetch = async (path, options = {}) => {
   let primaryUrl = path.startsWith("http://") || path.startsWith("https://")
     ? path
     : `${API_BASE_URL}${path.startsWith("/") ? "" : "/"}${path}`;
 
-  // In web browsers, if primaryUrl was explicitly prefixed with Railway domain,
+  // In web browsers, if primaryUrl was explicitly prefixed with the direct backend domain,
   // normalize it to relative /api/v1/... so it routes through Vercel edge reverse proxy.
   if (
     typeof window !== "undefined" &&
     !Capacitor.isNativePlatform() &&
-    primaryUrl.includes("buildcity-web-production-a5ca.up.railway.app")
+    primaryUrl.includes(BACKEND_DIRECT_URL)
   ) {
-    primaryUrl = primaryUrl.replace("https://buildcity-web-production-a5ca.up.railway.app", "");
+    primaryUrl = primaryUrl.replace(BACKEND_DIRECT_URL, "");
     if (!primaryUrl.startsWith("/")) primaryUrl = `/${primaryUrl}`;
   }
 
@@ -100,11 +100,11 @@ export const authFetch = async (path, options = {}) => {
     // attempt automatic failover to the secondary gateway!
     let fallbackUrl = null;
     if (primaryUrl.startsWith("/")) {
-      fallbackUrl = `${RAILWAY_API_URL}${primaryUrl}`;
-    } else if (primaryUrl.includes("buildcity-web-production-a5ca.up.railway.app")) {
-      fallbackUrl = primaryUrl.replace(RAILWAY_API_URL, PRODUCTION_WEB_URL);
+      fallbackUrl = `${BACKEND_DIRECT_URL}${primaryUrl}`;
+    } else if (primaryUrl.includes(BACKEND_DIRECT_URL)) {
+      fallbackUrl = primaryUrl.replace(BACKEND_DIRECT_URL, PRODUCTION_WEB_URL);
     } else if (primaryUrl.includes("buildcity.in")) {
-      fallbackUrl = primaryUrl.replace(PRODUCTION_WEB_URL, RAILWAY_API_URL);
+      fallbackUrl = primaryUrl.replace(PRODUCTION_WEB_URL, BACKEND_DIRECT_URL);
     }
 
     if (fallbackUrl && fallbackUrl !== primaryUrl) {
@@ -122,20 +122,20 @@ export const authFetch = async (path, options = {}) => {
   }
 
   // If 401 occurs even though we had a token, a domain redirect (e.g. www.buildcity.in <-> buildcity.in on APK/Web)
-  // may have stripped the Authorization header. Retry directly against Railway backend once before declaring token invalid.
+  // may have stripped the Authorization header. Retry directly against the direct backend once before declaring token invalid.
   if (
     response.status === 401 &&
     token &&
     typeof window !== "undefined" &&
     !window.location.hostname.includes("localhost") &&
-    !primaryUrl.includes("buildcity-web-production-a5ca.up.railway.app")
+    !primaryUrl.includes(BACKEND_DIRECT_URL)
   ) {
     const apiPath = primaryUrl.startsWith("http")
       ? primaryUrl.replace(/^https?:\/\/[^/]+/, "")
       : primaryUrl;
-    const directRailwayUrl = `${RAILWAY_API_URL}${apiPath.startsWith("/") ? "" : "/"}${apiPath}`;
+    const directBackendUrl = `${BACKEND_DIRECT_URL}${apiPath.startsWith("/") ? "" : "/"}${apiPath}`;
     try {
-      const retryRes = await fetch(directRailwayUrl, {
+      const retryRes = await fetch(directBackendUrl, {
         ...options,
         headers,
       });

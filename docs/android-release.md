@@ -200,3 +200,12 @@ needed). Here is what happens, like a delivery service:
 4. **Safety net:** when the new screens start, `src/main.jsx` says "I started fine!"
    (`CapacitorUpdater.notifyAppReady()`). If it doesn't say that within 10 seconds, the app goes back to the
    old screens, so a broken update can't break the app.
+
+### Note for the next Customer release: forced updates
+
+Not built yet. When the next customer app release is cut, add:
+
+- **Play In-App Updates, immediate flow**, so users on an old native shell must update before continuing.
+- **A server min-version check**: the server exposes a minimum supported app version and the app compares it on
+  launch, forcing the update when it is lower. OTA bundles cannot change the native shell, so this is the only way
+  to retire old builds (for example ones that still point at the old backend URL).

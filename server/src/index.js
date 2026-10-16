@@ -4804,6 +4804,20 @@ app.post("/api/v1/notifications/device-token", optionalAuth, async (req, res) =>
   }
 });
 
+app.post("/api/v1/notifications/device-token/deregister", optionalAuth, async (req, res) => {
+  try {
+    const { token, userId } = req.body;
+    const targetUserId = req.auth?.userId || userId;
+    const { removeCustomerToken } = require("./pushService");
+    await removeCustomerToken(targetUserId, token);
+    console.log(`🔒 Customer device FCM token unlinked on logout for: ${targetUserId || token}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.warn("Deregister customer device token error:", err.message);
+    res.json({ success: false });
+  }
+});
+
 app.delete("/api/v1/notifications", requireAuth, async (req, res) => {
   try {
     const userRole = (req.auth?.role || "").toUpperCase();

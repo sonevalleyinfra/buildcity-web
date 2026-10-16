@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { API_BASE_URL } from "../config/api";
 import { authFetch, saveToken, getToken, clearToken } from "../config/authFetch";
-import { unregisterVendorPushNotifications } from "../utils/pushNotifications";
+import { unregisterVendorPushNotifications, unregisterCustomerPushNotifications } from "../utils/pushNotifications";
 
 // ye auth context hai, yaha user ka login status, otp verification aur supabase sync sab manage hota hai
 const AuthContext = createContext(null);
@@ -396,6 +396,9 @@ export function AuthProvider({ children }) {
     if (user) {
       const vId = user.vendorInfo?.id || user.vendorId || user.id;
       unregisterVendorPushNotifications(vId).catch(() => {});
+      unregisterCustomerPushNotifications(user.id).catch(() => {});
+    } else {
+      unregisterCustomerPushNotifications(null).catch(() => {});
     }
     setUser(null);
     clearToken();
@@ -407,12 +410,17 @@ export function AuthProvider({ children }) {
           k &&
           (k.startsWith("buildcity_vendor_orders_") ||
             k === "buildcity_last_vendor_orders" ||
-            k === "vendor_fcm_token")
+            k === "vendor_fcm_token" ||
+            k === "customer_fcm_token" ||
+            k.startsWith("buildcity_notifs_") ||
+            k.startsWith("buildcity_order_notifs_"))
         ) {
           localStorage.removeItem(k);
         }
       }
     } catch (_) {}
+    window.dispatchEvent(new CustomEvent("buildcity_notifications_updated"));
+    window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
   };
 
   return (

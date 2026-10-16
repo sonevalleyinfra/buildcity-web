@@ -438,3 +438,31 @@ export async function initCustomerPushNotifications(userId, meta = {}) {
   }
 }
 
+/**
+ * Cleanly unlinks and unregisters the FCM Push Token from the customer on logout.
+ * Ensures the logged-out customer will NEVER receive notifications on this phone!
+ */
+export async function unregisterCustomerPushNotifications(userId) {
+  try {
+    const cachedToken =
+      localStorage.getItem("customer_fcm_token") ||
+      localStorage.getItem("buildcity_permanent_device_token");
+    if (cachedToken || userId) {
+      await fetch(`${API_BASE_URL}/api/v1/notifications/device-token/deregister`, {
+        method: "POST",
+        headers: pushApiHeaders(),
+        body: JSON.stringify({ userId, token: cachedToken }),
+      }).catch(() => {});
+    }
+  } catch (e) {}
+
+  try {
+    localStorage.removeItem("customer_fcm_token");
+  } catch (e) {}
+
+  isCustomerRegistered = false;
+  currentRegisteredCustomerId = null;
+  lastSyncedCustomerTokenKey = null;
+  console.log(`🔒 Customer FCM token successfully unlinked on logout for: ${userId || "current"}`);
+}
+

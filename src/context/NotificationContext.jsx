@@ -53,7 +53,7 @@ export function NotificationProvider({ children }) {
 
   // Sirf customer ko popup toast dikhana aur ek bar hi dikhana
   const showToast = (notif) => {
-    if (isStaff || !notif) return;
+    if (!user || isStaff || !notif) return;
 
     let seenSet = new Set();
     try {
@@ -85,6 +85,10 @@ export function NotificationProvider({ children }) {
 
   // Database se notifications fetch karne ka function
   const fetchDbNotifications = async (showLoading = false) => {
+    if (!user) {
+      setNotifications([]);
+      return;
+    }
     if (showLoading) setIsLoadingNotifs(true);
     try {
       let dbList = [];
@@ -188,6 +192,11 @@ export function NotificationProvider({ children }) {
 
   // App start par notifications load karna aur polling setup
   useEffect(() => {
+    if (!user) {
+      setNotifications([]);
+      return;
+    }
+
     const dismissedSet = getDismissedSet();
     try {
       const saved = localStorage.getItem(storageKey);

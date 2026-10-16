@@ -447,6 +447,13 @@ async function saveCustomerToken(userId, token, phone = null) {
   const tokenStr = String(token).trim();
   const phoneStr = phone ? String(phone).trim() : null;
 
+  // 1. Purge any other customer who previously had this device token from memory
+  for (const [k, val] of Object.entries(customerMemoryTokens)) {
+    if (val?.token === tokenStr && k !== uIdStr) {
+      delete customerMemoryTokens[k];
+    }
+  }
+
   customerMemoryTokens[uIdStr] = {
     token: tokenStr,
     phone: phoneStr,
@@ -457,6 +464,7 @@ async function saveCustomerToken(userId, token, phone = null) {
   if (p) {
     try {
       await ensureTokenTable(p);
+      // 2. Save token for this current user
       await p.$executeRawUnsafe(
         `INSERT INTO customer_fcm_tokens (user_id, token, phone, updated_at)
          VALUES ($1, $2, $3, NOW())
@@ -466,8 +474,68 @@ async function saveCustomerToken(userId, token, phone = null) {
         tokenStr,
         phoneStr
       ).catch(() => null);
+
+      // 3. CRITICAL: Unlink this physical device token from ANY other customer account
+      // (e.g. User A logged out or switched numbers on this phone)
+      await p.$executeRawUnsafe(
+        `DELETE FROM customer_fcm_tokens WHERE token = $1 AND user_id != $2`,
+        tokenStr,
+        uIdStr
+      ).catch(() => null);
+
+      console.log(`✅ Customer device FCM token bound exclusively to user: ${uIdStr}`);
     } catch (e) {
       console.warn("Save customer token note:", e.message);
+    }
+  }
+  return true;
+}
+
+/**
+ * Removes / unlinks customer FCM token when customer logs out.
+ * Ensures signed-out customer NEVER receives notifications on this device!
+ */
+async function removeCustomerToken(userId, token = null) {
+  const uIdStr = userId ? String(userId).trim() : "";
+  const tokenStr = token ? String(token).trim() : "";
+
+  // 1. Remove from in-memory cache
+  if (uIdStr && customerMemoryTokens[uIdStr]) {
+    delete customerMemoryTokens[uIdStr];
+  }
+  if (tokenStr) {
+    for (const [k, val] of Object.entries(customerMemoryTokens)) {
+      if (val?.token === tokenStr) {
+        delete customerMemoryTokens[k];
+      }
+    }
+  }
+
+  // 2. Remove from database table customer_fcm_tokens
+  const p = getPrisma();
+  if (p) {
+    try {
+      await ensureTokenTable(p);
+      if (uIdStr && tokenStr) {
+        await p.$executeRawUnsafe(
+          `DELETE FROM customer_fcm_tokens WHERE user_id = $1 OR token = $2`,
+          uIdStr,
+          tokenStr
+        ).catch(() => null);
+      } else if (uIdStr) {
+        await p.$executeRawUnsafe(
+          `DELETE FROM customer_fcm_tokens WHERE user_id = $1`,
+          uIdStr
+        ).catch(() => null);
+      } else if (tokenStr) {
+        await p.$executeRawUnsafe(
+          `DELETE FROM customer_fcm_tokens WHERE token = $1`,
+          tokenStr
+        ).catch(() => null);
+      }
+      console.log(`🔒 Customer FCM push token completely removed for user: ${uIdStr || tokenStr}`);
+    } catch (e) {
+      console.warn("Remove customer token note:", e.message);
     }
   }
   return true;
@@ -477,15 +545,15 @@ async function getTokenForCustomer(userId, phone = null) {
   const uIdStr = userId ? String(userId).trim() : "";
   const phoneStr = phone ? String(phone).trim() : null;
 
-  if (uIdStr && customerMemoryTokens[uIdStr]?.token) {
-    return customerMemoryTokens[uIdStr].token;
-  }
-
-  const p = getPrisma();
-  if (p) {
-    try {
-      await ensureTokenTable(p);
-      if (uIdStr) {
+  // If userId is provided, look up strictly for this logged-in user!
+  if (uIdStr) {
+    if (customerMemoryTokens[uIdStr]?.token) {
+      return customerMemoryTokens[uIdStr].token;
+    }
+    const p = getPrisma();
+    if (p) {
+      try {
+        await ensureTokenTable(p);
         const rows = await p.$queryRawUnsafe(
           `SELECT token FROM customer_fcm_tokens WHERE user_id = $1 LIMIT 1`,
           uIdStr
@@ -494,9 +562,21 @@ async function getTokenForCustomer(userId, phone = null) {
           customerMemoryTokens[uIdStr] = { token: rows[0].token };
           return rows[0].token;
         }
+      } catch (e) {
+        console.warn("Get customer token note:", e.message);
       }
-      const cleanPhone = (phoneStr || "").replace(/\D/g, "").slice(-10);
-      if (cleanPhone.length >= 7) {
+    }
+    // If not found for this userId, it means this user is SIGNED OUT! Do not send push!
+    return null;
+  }
+
+  // If userId was NOT provided (phone only), check phone strictly
+  const cleanPhone = (phoneStr || "").replace(/\D/g, "").slice(-10);
+  if (cleanPhone.length >= 7) {
+    const p = getPrisma();
+    if (p) {
+      try {
+        await ensureTokenTable(p);
         const phoneRows = await p.$queryRawUnsafe(
           `SELECT token FROM customer_fcm_tokens WHERE phone LIKE $1 LIMIT 1`,
           `%${cleanPhone}%`
@@ -504,11 +584,10 @@ async function getTokenForCustomer(userId, phone = null) {
         if (phoneRows && phoneRows.length > 0 && phoneRows[0].token) {
           return phoneRows[0].token;
         }
-      }
-    } catch (e) {
-      console.warn("Get customer token note:", e.message);
+      } catch (e) {}
     }
   }
+
   return null;
 }
 
@@ -519,7 +598,7 @@ async function getTokenForCustomer(userId, phone = null) {
 async function sendCustomerOrderStatusPushNotification({ userId, phone, orderId, orderNumber, status, title, body }) {
   const fcmToken = await getTokenForCustomer(userId, phone);
   if (!fcmToken) {
-    console.log(`ℹ️ No FCM push token registered for customer: ${userId || phone}. Push skipped.`);
+    console.log(`ℹ️ No active FCM push token registered for customer: ${userId || phone} (user signed out or no device). Push skipped.`);
     return { success: false, reason: "no_fcm_token" };
   }
 
@@ -576,6 +655,7 @@ module.exports = {
   getTokenForVendor,
   sendVendorOrderPushNotification,
   saveCustomerToken,
+  removeCustomerToken,
   getTokenForCustomer,
   sendCustomerOrderStatusPushNotification,
 };

@@ -21,62 +21,19 @@ export default function SplashScreen({ minDuration = 1400, onFinished }) {
 
   if (!visible) return null;
 
-  if (isVendorApp) {
-    return (
-      <div
-        className={`fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-[#0A192F] text-white select-none transition-opacity duration-500 ease-out ${
-          fading ? "opacity-0 pointer-events-none" : "opacity-100"
-        }`}
-      >
-        <img src="/buildcity-roof-logo.png" alt="BuildCity" className="h-20 w-20 object-contain" />
-        <h1 className="mt-5 text-2xl font-semibold tracking-tight">
-          Build<span className="text-brand-500">City</span>
-        </h1>
-        <p className="mt-1 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Partner</p>
-      </div>
-    );
-  }
-
   return (
     <div
-      className={`fixed inset-0 z-[99999] flex flex-col items-center justify-between p-6 bg-gradient-to-b from-slate-950 via-slate-900 to-navy-950 text-white select-none transition-opacity duration-500 ease-out ${
+      className={`fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-[#0A192F] text-white select-none transition-opacity duration-500 ease-out ${
         fading ? "opacity-0 pointer-events-none" : "opacity-100"
       }`}
     >
-      {/* Ambient background glow */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-brand-500/15 rounded-full blur-3xl pointer-events-none" />
-
-      {/* Top spacer */}
-      <div className="w-full h-8" />
-
-      {/* Center Branded Identity */}
-      <div className="relative flex flex-col items-center text-center -mt-8">
-        {/* Logo Card with Breathing Glow */}
-        <div className="relative mb-6">
-          <div className="absolute inset-0 bg-brand-500/30 rounded-3xl blur-2xl scale-125 animate-pulse pointer-events-none" />
-          <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-3xl bg-white/5 backdrop-blur-xl border border-white/10 p-5 shadow-2xl flex items-center justify-center animate-splash-logo">
-            <img
-              src="/buildcity-roof-logo.png"
-              alt="BuildCity Logo"
-              className="w-full h-full object-contain"
-            />
-          </div>
-        </div>
-
-        {/* App Title */}
-        <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white mb-2">
-          Build<span className="text-brand-500">City</span>
-        </h1>
-
-        {/* Subtitle / Mode Badge */}
-        <p className="text-xs sm:text-sm font-semibold text-slate-300 tracking-wide max-w-xs">
-          India&apos;s Building Material Superstore
-        </p>
-
-       
-      </div>
-
-     
+      <img src="/buildcity-roof-logo.png" alt="BuildCity" className="h-20 w-20 object-contain" />
+      <h1 className="mt-5 text-2xl font-semibold tracking-tight">
+        Build<span className="text-brand-500">City</span>
+      </h1>
+      <p className="mt-1 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+        {isVendorApp ? "Partner" : "India's Building Material Superstore"}
+      </p>
     </div>
   );
 }

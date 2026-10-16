@@ -49,9 +49,13 @@ async function snapshot(prisma, ms) {
   );
   for (const { name } of tbls) {
     if (known.has(name)) continue;
-    const [r] = await prisma.$queryRawUnsafe(
-      `select count(*)::text as n, md5(coalesce(string_agg(t::text, E'\\n' order by t::text), '')) as h from public.${q(name)} t`
-    );
+    // Pin TimeZone and byte-order collation so the md5 doesn't depend on server locale or timezone.
+    const [, [r]] = await prisma.$transaction([
+      prisma.$executeRaw`select set_config('TimeZone', 'UTC', true)`,
+      prisma.$queryRawUnsafe(
+        `select count(*)::text as n, md5(coalesce(string_agg(t::text, E'\\n' order by t::text collate "C"), '')) as h from public.${q(name)} t`
+      ),
+    ]);
     out.extra[name] = `${r.n} rows md5=${r.h}`;
   }
   const seqs = await prisma.$queryRawUnsafe(

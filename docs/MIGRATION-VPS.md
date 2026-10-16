@@ -177,7 +177,9 @@ HTTPS certificate on its own.
 | Retries       | `3`       |
 | Start period  | `30` s    |
 
-The image already carries the same check. `/health` runs a quick database query (cached for 5 s) and returns
+While this is on, Coolify ignores the image's own `HEALTHCHECK` and runs `curl`/`wget` against the path above
+(the image keeps `wget` for this). The image's built-in check (node, every 10 s, 4 s timeout, 2 retries) only applies
+if you leave this off. Either way `/health` runs a quick database query (cached for 5 s) and returns
 `200` when fine, `503` when the database is down.
 
 **Restart policy.** Docker restarts the container only when the app **crashes**, not when a health check fails.

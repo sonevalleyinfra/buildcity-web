@@ -1,7 +1,8 @@
 import { Capacitor } from "@capacitor/core";
 
-// backend railway url aur verified custom domain yaha define hai
-export const RAILWAY_API_URL = "https://buildcity-web-production-a5ca.up.railway.app";
+// direct backend url (Coolify VPS); override with VITE_BACKEND_DIRECT_URL
+export const BACKEND_DIRECT_URL =
+  import.meta.env.VITE_BACKEND_DIRECT_URL || "https://api.buildcity.cloud";
 export const PRODUCTION_WEB_URL = "https://www.buildcity.in";
 
 // browser me relative path chalega taaki vercel reverse proxy se cors ka issue na aaye

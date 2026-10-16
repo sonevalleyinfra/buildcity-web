@@ -86,17 +86,25 @@ secret and endpoint ready. Do not paste them in chat or in this repo.
 
 Merge order matters:
 
-1. PR **#11** (Coolify-ready backend) and the `/health` hardening **#14**: **already merged**.
-2. PR **#13** (migration scripts): merge it **before Phase A**. It has passed QA and gatekeeper.
-3. PR **#12** (the app uses one `BACKEND_DIRECT_URL` constant): merge it **only at cutover** (Phase B).
+1. PRs **#11** (Coolify-ready backend), **#14** (`/health` hardening) and **#13** (migration scripts): **already
+   merged**. Nothing to do.
+2. PR **#12** (the app uses one `BACKEND_DIRECT_URL` constant) **plus the `vercel.json` rewrite**: merge them
+   **only at cutover**, step B5.
+3. PR **#15** (this guide): docs only, merge any time.
 
-> **Railway does not redeploy by itself when `main` changes.** We saw it still serving the old code 7 minutes after
-> #11 merged. So merging to `main` has not changed production on Railway. That is fine for this plan: Phase A
-> builds a fresh copy on Coolify, and we never depend on Railway picking up new code.
+> **Railway does not redeploy by itself when `main` changes.** On 16 Oct it was still serving the old code 7
+> minutes after #11 merged (and #13, #14 changed nothing there either). Merging to `main` has not changed
+> production on Railway. That is fine for this plan: Phase A builds a fresh copy on Coolify, and we never depend on
+> Railway picking up new code.
+>
+> **"Redeploy" on Railway rebuilds the same commit it was built from, not `main`.** Redeploying a removed or old
+> deployment brings back the old, known-good code. That is exactly what we want for rollback. Do not expect it to
+> pick up the merged PRs.
 
 Before anything else, check **Railway → your service → Settings → Healthcheck Path**. The new `/health` returns
-**503 when the database is unreachable**. If that path is set to `/health` and you ever redeploy Railway, a Supabase
-blip could make Railway restart in a loop. Either clear the path (empty is fine) or accept the risk knowingly.
+**503 when the database is unreachable**. If that path is set to `/health` and you ever redeploy Railway from a build
+that has the new `/health`, a Supabase blip could make Railway restart in a loop. Either clear the path (empty is
+fine) or accept the risk knowingly.
 
 ---
 
@@ -122,16 +130,20 @@ Railway**. You can repeat Phase A as many times as you like.
    only other Coolify apps can reach. Keep it somewhere private. You will paste it into the API's env below and
    into your shell as `TARGET_DATABASE_URL`.
 
-### A2. Open the database for the migration scripts (temporary)
+### A2. Reach the database from the VPS shell (keep it private)
 
-The scripts run on the VPS shell, which is outside Coolify's private network. Allow it in for now:
+The migration scripts run on the VPS shell, outside Coolify's private network. **Do not open the production
+database to the internet.** Instead, run the Postgres tools and `verify.js` in Docker containers joined to Coolify's
+private Docker network, called `coolify`. (Check it exists: `docker network ls | grep coolify`.)
 
-1. On the `buildcity-db` page → **Make it publicly available** → on, with a port such as `54329`.
-2. Click **Save** / **Restart** if asked.
-3. The URL for the shell is the same URL as A1 but with the **VPS public IP/hostname and the public port** instead of
-   the internal host.
+That means `TARGET_DATABASE_URL` is simply the **internal URL from A1.6**, with its long internal host name. The
+scripts accept internal host names; only `supabase.co`/`supabase.com` and the source's own host are refused.
 
-**Turn this off again at the end of Phase B** (step B9). A database open to the internet is a risk.
+> **Fallback only if the private network does not work** (for example the `coolify` network name differs and you
+> cannot find it): on the `buildcity-db` page → **Make it publicly available** with a port such as `54329`, and use
+> the VPS public IP + that port in `TARGET_DATABASE_URL`, with plain `--network host` wrappers. Then **first** limit
+> that port to your own IP in the Hostinger firewall, and **turn it off again in step B9 (mandatory)**. A database
+> open to the internet is a real risk.
 
 > The restore script refuses to copy into a `supabase.co`/`supabase.com` address, or into the same host/port/database
 > as the source. It compares them as text, so a name and an IP of the same database are not seen as equal. Always
@@ -178,6 +190,9 @@ backup), in `DATA_DIR`. The image uses `/data`. Without a volume it is wiped on 
 1. Configuration → **Persistent Storage** → **+ Add** → **Volume Mount**.
 2. **Name**: `buildcity-api-data`, **Destination Path**: `/data`.
 3. Save.
+
+After the first deploy, check **Logs** for `EACCES` (permission denied on `/data`). If it appears, the volume is
+not writable by the app user; tell the Office Manager before cutover, since vendor push tokens would not be saved.
 
 **Environment variables.** Configuration → **Environment Variables** → add each one. Names only here; get the values
 from the places in the table. Never write the values into this repo or into chat.
@@ -231,10 +246,20 @@ Run the next commands from a path **without spaces**. Replace `<major>` with the
 same one `buildcity-db` uses):
 
 ```sh
-export PG_DUMP='docker run --rm --network host -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE -e PGSSLMODE postgres:<major> pg_dump'
-export PSQL='docker run --rm --network host -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE -e PGSSLMODE postgres:<major> psql'
-export PG_RESTORE="docker run --rm --network host -v $PWD:$PWD -w $PWD -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE -e PGSSLMODE postgres:<major> pg_restore"
+export PG_DUMP='docker run --rm --network coolify -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE -e PGSSLMODE postgres:<major> pg_dump'
+export PSQL='docker run --rm --network coolify -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE -e PGSSLMODE postgres:<major> psql'
+export PG_RESTORE="docker run --rm --network coolify -v $PWD:$PWD -w $PWD -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE -e PGSSLMODE postgres:<major> pg_restore"
 ```
+
+The `coolify` network can still reach the internet, so `pg_dump` reaches Supabase too. `verify.js` also needs to
+see the private network, so it runs in a `node:22` container on it. Define a helper once (from
+`server/scripts/migration`):
+
+```sh
+export VERIFY="docker run --rm --network coolify -v $PWD/../..:/app -w /app/scripts/migration -e SOURCE_DATABASE_URL -e TARGET_DATABASE_URL node:22 node verify.js"
+```
+
+(Fallback with a public port: use `--network host` instead of `--network coolify` everywhere, or just `node verify.js`.)
 
 The passwords stay in environment variables; they are never printed or put in a command line.
 
@@ -246,7 +271,7 @@ type `unset HISTFILE` first:
 ```sh
 unset HISTFILE
 read -rs SOURCE_DATABASE_URL && export SOURCE_DATABASE_URL     # Supabase DIRECT connection (port 5432, not the pooler), paste, Enter
-read -rs TARGET_DATABASE_URL && export TARGET_DATABASE_URL     # buildcity-db, public host + public port (step A2), paste, Enter
+read -rs TARGET_DATABASE_URL && export TARGET_DATABASE_URL     # buildcity-db, INTERNAL URL from A1.6, paste, Enter
 ```
 
 (Supabase dashboard → **Project Settings** → **Database** → **Connection string** → **URI**, the direct one.)
@@ -271,7 +296,7 @@ code in `main` may have a newer schema than Supabase has. Check for differences 
 
 ```sh
 cd ../..       # back to server/
-DATABASE_URL="$TARGET_DATABASE_URL" DIRECT_URL="$TARGET_DATABASE_URL" \
+docker run --rm --network coolify -v "$PWD":/app -w /app -e DATABASE_URL="$TARGET_DATABASE_URL" -e DIRECT_URL="$TARGET_DATABASE_URL" node:22 \
   npx prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --exit-code
 echo "exit code: $?"
 ```
@@ -288,7 +313,7 @@ Never use `--accept-data-loss`.
 
 ```sh
 cd scripts/migration
-node verify.js
+$VERIFY
 ```
 
 It compares both databases: row count and newest row for every table, all sequences, and the highest id of each
@@ -334,13 +359,19 @@ Pick a quiet time (after midnight). Have this guide, the Railway dashboard, Cool
 ### Before the night
 
 - [ ] Phase A fully passed.
-- [ ] Merge **PR #13** (scripts) if you have not.
+- [ ] PRs #11, #13 and #14 are merged (nothing to do). Only #12 + the rewrite wait for B5.
 - [ ] Prepare, **but do not merge**, a branch with the `vercel.json` change: in the line with
       `"source": "/api/v1/:path*"` change the `destination` to
       `https://api.buildcity.cloud/api/v1/:path*`. Ask the Office Manager to open it as a PR together with PR #12.
       Keeping the rewrite in the same merge as #12 means one merge does both.
-- [ ] Know how to bring Railway back: Railway → service → **Deployments**: you can **Redeploy** the last good one.
-- [ ] Tell the vendors/DRs there will be a 10-minute pause, if you want to be polite.
+- [ ] Know how to bring Railway back: Railway → service → **Deployments** → **Redeploy** the last good one. This
+      rebuilds the **same commit** it was built from (not `main`), which is the known-good code. Railway does not
+      auto-deploy from `main`, so there is no surprise new code.
+- [ ] Pick the quietest hour: Railway → service → **Metrics** → request graph, look at the last 2 weeks and choose the
+      lowest-traffic hour (probably 1-3 am).
+- [ ] Send a one-line notice to customers and vendors/DRs a day ahead, with the downtime window, for example:
+      "BuildCity will be briefly unavailable on <date> between <start> and <start + 30 min> for maintenance."
+      (The work itself takes about 10 minutes; the window leaves room.)
 
 ### B1. Pause writes
 
@@ -349,7 +380,7 @@ Stop the Railway backend so nobody can write to Supabase:
 1. Railway → the backend service → **Deployments** → the active deployment → **⋯** → **Remove** (this stops it).
 2. Check: `curl -sS -o /dev/null -w "%{http_code}\n" https://www.buildcity.in/api/v1/health` no longer returns `200`.
 
-From now until B6 the website and apps show errors. That is the ~10 minute downtime. Old apps' direct-to-Railway
+Railway stays stopped, not deleted, and the removed deployment can be redeployed later. From now until B6 the website and apps show errors. That is the ~10 minute downtime. Old apps' direct-to-Railway
 fallback fails too, for the same reason.
 
 ### B2. Final dump and restore
@@ -365,7 +396,7 @@ rm -f buildcity.dump                      # delete the rehearsal dump
 ### B3. Verify with writes paused
 
 ```sh
-node verify.js
+$VERIFY
 ```
 
 It must say **PASS** (exit 0). **If it does not, stop**: go to Rollback, and tell the Office Manager.
@@ -410,9 +441,11 @@ Keep the Coolify logs open. If real customers are placing orders and everything 
 
 Tell the Office Manager "cutover done". Railway stays **stopped but not deleted** (see Phase C).
 
-### B9. Close the temporary hole
+### B9. Close any temporary hole
 
-Coolify → `buildcity-db` → turn **Make it publicly available** **off** → **Save**. Then on the VPS:
+If you used the public-port fallback in A2: Coolify → `buildcity-db` → turn **Make it publicly available**
+**off** → **Save**, and remove the Hostinger firewall rule. **This is mandatory then.** With the private network you
+never opened it, so just confirm the toggle is off. Then on the VPS:
 
 ```sh
 rm -f ~/buildcity-web/server/scripts/migration/buildcity.dump
@@ -426,14 +459,16 @@ unset SOURCE_DATABASE_URL TARGET_DATABASE_URL
 ## Rollback (if something is wrong in Phase B)
 
 **Before B5** (the rewrite not yet merged): just bring Railway back. Railway → **Deployments** → **Redeploy** the last
-good one. Supabase still has all the data; nothing was changed there. Total downtime: a few minutes.
+good one (it rebuilds the same commit as before, not `main`; that is the known-good code). Supabase still has all the data; nothing was changed there. Total downtime: a few minutes.
 
 **After B5** (the rewrite is live):
 
 1. Revert the rewrite: on GitHub open the merged PR → **Revert**, and merge the revert PR. Wait for the Vercel
    deployment to be Ready. (Faster alternative: Vercel → **Deployments** → the last deployment before the switch
    → **⋯** → **Promote to Production** / **Instant Rollback**.)
-2. Bring Railway back: **Redeploy** as above. It still points at Supabase.
+2. Bring Railway back: **Redeploy** as above (same old commit, not `main`). It still points at Supabase. Remember
+   Railway has no auto-deploy from `main`, so it will not pick up newer code on its own. If its Healthcheck Path is
+   `/health`, see the pre-check in step 0.5.
 3. Smoke test `https://www.buildcity.in` again.
 
 **Orders written on the new database in the meantime are not on Supabase.** Before you go back, list them:
@@ -472,7 +507,7 @@ Never run `restore.sh` into Supabase; it refuses to anyway.
    major version.
 2. Download the newest backup from the bucket, then restore it into `restore-test` with `restore.sh`
    (use its own URL as `TARGET_DATABASE_URL`).
-3. Run `node verify.js` with `SOURCE_DATABASE_URL` = `buildcity-db` and `TARGET_DATABASE_URL` = `restore-test`.
+3. Run `$VERIFY` with `SOURCE_DATABASE_URL` = `buildcity-db` and `TARGET_DATABASE_URL` = `restore-test`.
    It should say PASS (small differences are fine if orders came in since the backup).
 4. Delete `restore-test` in Coolify.
 
@@ -506,5 +541,5 @@ Tell the Office Manager when each is done, so `docs` and the monitor stop mentio
 | New API | https://api.buildcity.cloud (health: `/health`) |
 | Website | https://www.buildcity.in (Vercel) |
 | Scripts | `server/scripts/migration/` (`dump.sh`, `restore.sh`, `verify.js`, `README.md`) |
-| Merge order | #11, #14 (done) → #13 → A → B: #12 + `vercel.json` rewrite |
+| Merge order | #11, #14, #13 merged (done) → A → B5: #12 + `vercel.json` rewrite; #15 (this guide) any time |
 | Time budget | Phase A: 1-2 hours, Phase B: ~10 minutes of downtime, Phase C: spread over 30 days |

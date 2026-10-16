@@ -358,15 +358,36 @@ function invalidateCache(prefix) {
   }
 }
 
-// Health check (Coolify/Railway healthcheck): cheap DB round-trip, 503 when the DB is unreachable
-app.get(["/health", "/api/v1/health"], async (req, res) => {
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    res.json({ status: "ok", timestamp: new Date().toISOString(), memoryUsage: process.memoryUsage().heapUsed });
-  } catch (err) {
-    console.error("[health] DB check failed:", err.message);
-    res.status(503).json({ status: "error", db: "unavailable", timestamp: new Date().toISOString() });
+// Health check (Coolify/Railway healthcheck): cheap DB round-trip, 503 when the DB is unreachable.
+// The DB result is cached ~5s (and concurrent checks share one query) so anonymous probe floods
+// can't drain the Prisma pool.
+const HEALTH_CACHE_MS = 5000;
+let healthCache = { at: 0, ok: false, error: null };
+let healthInflight = null;
+async function checkDbHealth() {
+  if (Date.now() - healthCache.at < HEALTH_CACHE_MS) return healthCache;
+  if (!healthInflight) {
+    healthInflight = (async () => {
+      try {
+        await prisma.$queryRaw`SELECT 1`;
+        healthCache = { at: Date.now(), ok: true, error: null };
+      } catch (err) {
+        healthCache = { at: Date.now(), ok: false, error: err.message };
+      } finally {
+        healthInflight = null;
+      }
+      return healthCache;
+    })();
   }
+  return healthInflight;
+}
+app.get(["/health", "/api/v1/health"], async (req, res) => {
+  const h = await checkDbHealth();
+  if (h.ok) {
+    return res.json({ status: "ok", timestamp: new Date().toISOString(), memoryUsage: process.memoryUsage().heapUsed });
+  }
+  console.error("[health] DB check failed:", h.error);
+  res.status(503).json({ status: "error", db: "unavailable", timestamp: new Date().toISOString() });
 });
 
 // Database & Environment Diagnostic Check

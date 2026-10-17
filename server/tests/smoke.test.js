@@ -138,7 +138,7 @@ const req = async (method, p, { token, body, raw } = {}) => {
   ok(nf.status === 404 && nf.body.error === "Not found", "unknown API route -> JSON 404");
   ok((await req("GET", "/db-check", { token: admin })).status === 200, "admin can use db-check");
   const envInfo = await req("GET", "/env");
-  ok(envInfo.status === 200 && envInfo.body.env === "test" && envInfo.body.db === "test", "public /env reports test/test", envInfo.body);
+  ok(envInfo.status === 200 && envInfo.body.env === "test" && envInfo.body.db === null, "public /env reports test/db=null (unmarked)", envInfo.body);
 
   // OTP request path (SMS send happens in background; gateway unreachable in test env)
   const otpReq = await req("POST", "/auth/otp/request", { body: { phone: "1000099600", type: "register" } });

@@ -30,13 +30,13 @@ function unitTests() {
     ["staging + marker staging", R("staging", REMOTE_URL, "staging"), "staging"],
     ["staging + marker production", R("staging", REMOTE_URL, "production"), null],
     ["staging + no marker", R("staging", REMOTE_URL, null), null],
-    ["test + localhost", R("test", "postgresql://u:p@localhost:5432/x", null), "test"],
-    ["test + 127.0.0.1", R("test", "postgresql://u:p@127.0.0.1:5432/x", null), "test"],
+    ["test + localhost", R("test", "postgresql://u:p@localhost:5432/x", "test"), "test"],
+    ["test + 127.0.0.1", R("test", "postgresql://u:p@127.0.0.1:5432/x", "test"), "test"],
     ["test + remote host", R("test", REMOTE_URL, null), null],
     ["test + remote host even with marker", R("test", REMOTE_URL, "test"), null],
     ["test + missing URL", R("test", undefined, null), null],
     ["test + unparseable URL", R("test", "not a url", null), null],
-    ["development + localhost", R("development", "postgresql://u@localhost/x", null), "development"],
+    ["development + localhost", R("development", "postgresql://u@localhost/x", "development"), "development"],
     ["development + remote host", R("development", REMOTE_URL, null), null],
   ];
   for (const [name, input, db] of rows) {
@@ -50,6 +50,9 @@ function unitTests() {
         `evaluateBoot: ${name} reason has no secret/host/raw value`, r.reason);
     }
   }
+  const unmarked = appEnv.evaluateBoot(R("development", "postgresql://u@localhost/x", null));
+  ok(unmarked.ok === true && unmarked.db === null, "evaluateBoot: development + localhost + unmarked -> ok db=null", unmarked);
+  ok(appEnv.evaluateBoot(R("development", "postgresql://u@localhost/x", "production")).reason === "APP_ENV=development but the database is marked production or staging", "marker refusal reason is fixed");
   ok(appEnv.evaluateBoot({}).reason === "APP_ENV must be one of production|staging|test|development", "invalid APP_ENV reason is fixed");
   ok(appEnv.evaluateBoot(R("production", REMOTE_URL, null)).reason === "APP_ENV=production but the database marker is not 'production'", "production reason is fixed");
 }
@@ -104,8 +107,20 @@ async function enforceTests() {
   const untouched = fakePrisma("production");
   r = await boot({ APP_ENV: "test", DATABASE_URL: REMOTE_URL }, untouched);
   ok(r.exits[0] === 1 && untouched.calls === 0, "enforceBoot: test + remote host exits without querying", { exits: r.exits, calls: untouched.calls });
-  r = await boot({ APP_ENV: "test", DATABASE_URL: "postgresql://u@localhost/x" }, untouched);
-  ok(r.exits.length === 0 && untouched.calls === 0 && r.logs[0] === "[boot] env=test db=test", "enforceBoot: test + localhost boots without querying", r);
+  const LOC = "postgresql://u@localhost/x";
+  r = await boot({ APP_ENV: "development", DATABASE_URL: LOC }, fakePrisma("production"));
+  ok(r.exits[0] === 1 && r.errors.length === 1 && r.errors[0] === "[boot] refusing to start: APP_ENV=development but the database is marked production or staging", "enforceBoot: development + localhost + marker production exits 1", r);
+  r = await boot({ APP_ENV: "test", DATABASE_URL: LOC }, fakePrisma("staging"));
+  ok(r.exits[0] === 1 && r.errors.length === 1, "enforceBoot: test + localhost + marker staging exits 1", r);
+  r = await boot({ APP_ENV: "development", DATABASE_URL: LOC }, fakePrisma(null));
+  ok(r.exits.length === 0 && r.logs[0] === "[boot] env=development db=none", "enforceBoot: development + unmarked boots", r);
+  ok(appEnv.getEnvInfo().db === null, "getEnvInfo().db is null when unmarked");
+  r = await boot({ APP_ENV: "test", DATABASE_URL: LOC }, fakePrisma("test"));
+  ok(r.exits.length === 0 && r.logs[0] === "[boot] env=test db=test" && appEnv.getEnvInfo().db === "test", "enforceBoot: test + marker test reports db=test", r);
+  const warns = [];
+  const ow = console.warn; console.warn = (...a) => warns.push(a.join(" "));
+  try { r = await boot({ APP_ENV: "test", DATABASE_URL: LOC }, throwing); } finally { console.warn = ow; }
+  ok(r.exits.length === 0 && warns.length === 1 && !warns[0].includes(SENTINEL) && r.logs[0] === "[boot] env=test db=none", "enforceBoot: test + marker read failure boots and logs", { r, warns });
   ok(appEnv.isProduction() === false, "isProduction() false after test boot");
   appEnv._resetForTests();
 }
@@ -178,7 +193,7 @@ async function expectBoot(name, extra, expected) {
       if (body === null) await new Promise((r) => setTimeout(r, 200));
     }
     ok(body !== null && JSON.stringify(body) === JSON.stringify(expected), `${name}: boots and /api/v1/env = ${JSON.stringify(expected)}`, { body, stderr: s.out.stderr });
-    ok(s.out.stdout.includes(`[boot] env=${expected.env} db=${expected.db}`), `${name}: logs the [boot] line`, s.out.stdout);
+    ok(s.out.stdout.includes(`[boot] env=${expected.env} db=${expected.db || "none"}`), `${name}: logs the [boot] line`, s.out.stdout);
   } finally {
     s.child.kill("SIGTERM");
     if ((await Promise.race([s.exited, timeout(12000)])) === "timeout") s.child.kill("SIGKILL");
@@ -201,11 +216,13 @@ async function processTests() {
     await expectRefusal("production + DB without marker", { APP_ENV: "production", DATABASE_URL: LOCAL_URL }, [localPw, mainDb]);
     await expectRefusal("staging + DB marked production", { APP_ENV: "staging", DATABASE_URL: dbUrl(prodDb) }, [localPw, prodDb]);
     await expectRefusal("test + remote DATABASE_URL", { APP_ENV: "test", DATABASE_URL: REMOTE_URL }, [SENTINEL, "secretdb", "db.example.com"]);
+    await expectRefusal("development + localhost DB marked production", { APP_ENV: "development", DATABASE_URL: dbUrl(prodDb) }, [localPw, prodDb]);
+    await expectRefusal("test + localhost DB marked staging", { APP_ENV: "test", DATABASE_URL: dbUrl(stgDb) }, [localPw, stgDb]);
     await expectRefusal("missing APP_ENV", { DATABASE_URL: LOCAL_URL }, [localPw, mainDb]);
 
     await expectBoot("production + marker production", { APP_ENV: "production", DATABASE_URL: dbUrl(prodDb) }, { env: "production", db: "production", commit: null });
     await expectBoot("staging + marker staging", { APP_ENV: "staging", DATABASE_URL: dbUrl(stgDb) }, { env: "staging", db: "staging", commit: null });
-    await expectBoot("test + localhost", { APP_ENV: "test", DATABASE_URL: LOCAL_URL, SOURCE_COMMIT: "abc123" }, { env: "test", db: "test", commit: "abc123" });
+    await expectBoot("test + localhost", { APP_ENV: "test", DATABASE_URL: LOCAL_URL, SOURCE_COMMIT: "abc123" }, { env: "test", db: null, commit: "abc123" });
   } finally {
     for (const db of [prodDb, stgDb]) {
       await admin.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${db}" WITH (FORCE)`).catch((e) => { fail++; console.log("FAIL drop", db, e.message); });

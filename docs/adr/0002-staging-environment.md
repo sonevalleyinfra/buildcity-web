@@ -22,6 +22,8 @@ Code facts this design depends on:
 | FCM: credentials come from `FIREBASE_SERVICE_ACCOUNT`; tokens are stored in `vendor_fcm_tokens`, `customer_fcm_tokens` and the `DATA_DIR` JSON file | `server/src/pushService.js` | A prod copy carries real device tokens. |
 | No other outbound side effects (`KEEP_ALIVE_URL` is unset; no mail, no payments) | `server/src/index.js` | SMS and FCM are the only things to neutralise. |
 | OTP accepts any `^\d{10}$`; real Indian mobiles start with 6-9; `9999999999` / `7777777777` are hardcoded staff numbers | `index.js:1622`, `Login.jsx:168` | Numbers starting with `1` are valid input but can never be real phones, so they work as a test range. |
+| Admin login exists only for the hardcoded `9999999999`: password check against that `users` row's bcrypt `password`. Any other phone falls through to the DR/vendor lookup, and OTP is refused for both staff numbers | `index.js:690-710` (`POST /api/v1/auth/vendor/login`), `index.js:1633` | The only way to have an ADMIN on staging is to give the `9999999999` row a staging password. A separate admin test number can't log in. |
+| Admins and DRs can create users, DRs and vendors with any 10-digit phone | `index.js:2059` (`/users`), `:2097` (`/drs`), `:2236` (`/vendors`) | A `1…` number in prod is not by itself proof that a test wrote to prod (§2 step 4). |
 | PII columns: `users.phone/name/email/password`, `vendors.ownerName/phone/password`, `district_representatives.name/phone/password`, `addresses.fullName/phone/street`, `order_returns.customerPhone/customerName/drPhone`, `reviews.name`, `audit_logs.details`, `notifications.message`, `otp_verifications`, both FCM token tables | `server/prisma/schema.prisma`, `pushService.js` | This is the anonymiser's scope. |
 | Android: one project, flavours `customer` (`com.buildcity.app`, bundled) and `partner` (`com.buildcity.vendor`, webview of `www.buildcity.in/vendor/login`, OTA from `www.buildcity.in/api/ota-vendor`) | `scripts/android.mjs`, `src/utils/otaUpdater.js` | Staging app builds need their own IDs and URLs. |
 | Shipped Android apps call `www.buildcity.in` | `api.js` | The API must stay backward compatible with the current web and app builds. |
@@ -125,6 +127,13 @@ arrives without a `production` marker.
 A failed boot is safe: Coolify's rolling deploy keeps the old container when the new one is unhealthy. The guard ships
 only after `APP_ENV=production` and the prod marker are set ([§8](#8-owner-actions-one-batch) items 1-2).
 
+**Disaster recovery consequence.** Because the marker doesn't travel with a dump, restoring a prod backup (the hourly
+R2 backups, a `restore.sh` rollback) produces an unmarked database, and the prod API then refuses to boot until
+someone runs `ALTER DATABASE buildcity SET buildcity.env = 'production';` on it. That is deliberate (a restored copy
+must never become "prod" by accident), so the step goes into the prod restore runbook (S2), and `restore.sh` prints the
+target's marker state and the exact command when it finishes. Nothing sets the `production` marker automatically. A
+restore *test* database (`restore-test`) is left unmarked.
+
 New public endpoint `GET /api/v1/env` → `{ "env": APP_ENV, "db": <marker or "test">, "commit": SOURCE_COMMIT|null }`.
 It holds no secrets (the repo is public anyway).
 
@@ -138,8 +147,11 @@ It holds no secrets (the repo is public anyway).
 3. Write probe in the suite: register test customer `10000NNNNN` (unique per run) through the preview or staging web,
    then read it back with the staging admin API.
 4. Read-only prod check (Office Manager, after the first green preview and after any change to `vercel.json`):
-   `SELECT count(*) FROM users WHERE phone LIKE '1%';` on `buildcity-db` must return `0`.
-   No test number can exist in prod unless a test wrote to prod.
+   `SELECT phone, role, "createdAt" FROM users WHERE phone ~ '^10000[0-9]{5}$';` on `buildcity-db` must return no
+   rows. Self-registered customers in prod are OTP-verified, and OTP to a `10000…` number can never be delivered in
+   prod, so such a customer can only come from a test writing to prod. Admin/DR forms can create any 10-digit phone
+   (see Context), so if a row appears, check its `role` and `createdAt` before calling it a leak; a `CUSTOMER` row is
+   a leak.
 
 Rejected:
 - *Vercel Preview env `VITE_API_URL` + staging CORS only*: the static rewrite still proxies relative calls to prod,
@@ -165,7 +177,9 @@ production ◀── fast-forward to a SHA with green e2e-staging (owner-approve
   This is the pre-merge "full app" test, and it needs no shared environment.
 - **Staging** tests what CI can't: the real Coolify image, Vercel rewrites, the anonymised real catalog, and
   migrations against real data shapes. It runs on the merged SHA, which is exactly the code that would ship.
-- **Required checks:** `main`: PR required + `ci`, `e2e-local`, `preview-isolation`. `production`: status `e2e-staging`
+- **Required checks:** `main`: PR required + `ci`, `e2e-local`, `preview-isolation`, each added only after the PR that
+  creates it has merged (§8 items 8a-8c); requiring a check that doesn't exist yet would make every PR unmergeable,
+  including the ones that add it. `production`: status `e2e-staging`
   required, admins included, no force push, no deletion. GitHub enforces required checks on direct pushes, so an
   untested SHA can't land on `production`. Bots never push to `production` (office rule, like "never merge").
 - **Promotion:** `scripts/promote.sh <sha>` (Office Manager, after the owner says ship): checks that the SHA is on
@@ -201,14 +215,16 @@ mistake.
 **Pipeline** (`server/scripts/staging/refresh.sh`, run on the VPS by the Office Manager or owner. Raw data never
 leaves the VPS):
 1. `migration/dump.sh` from `buildcity-db` (read-only).
-2. Restore into a **new temporary database** `buildcity_staging_tmp` on `buildcity-db-staging`. This reuses
-   `restore.sh`'s guards. It also refuses when the target host is `buildcity-db`'s service name or IP, when the
-   target server is the source server, or when the target database has marker `production`.
+2. Create a **new temporary database** `buildcity_staging_tmp` on `buildcity-db-staging`, set its marker
+   (`ALTER DATABASE buildcity_staging_tmp SET buildcity.env='staging'`; the setting survives the restore and the later
+   rename), then restore into it. This reuses `restore.sh`'s guards. It also refuses when the target host is
+   `buildcity-db`'s service name or IP, when the target server is the source server, or when the target database has
+   marker `production`.
 3. `anonymise.sql` in one transaction.
 4. `verify-anon.sql`: every check must return 0, or the tmp database is dropped and the refresh exits non-zero.
-5. `seed-test-accounts.js`: E2E accounts and catalog (below).
-6. Swap: stop `buildcity-api-staging`, drop `buildcity_staging`, rename tmp → `buildcity_staging`,
-   `ALTER DATABASE buildcity_staging SET buildcity.env='staging'`, start the API. Delete the dump file.
+5. `seed-test-accounts.js`: E2E accounts and catalog (below). Its own guard sees marker `staging` on the tmp DB.
+6. Swap: stop `buildcity-api-staging`, drop `buildcity_staging`, rename tmp → `buildcity_staging`, check
+   `buildcity.env` reads `staging` in a new session, start the API. Delete the dump file.
 
 **Rules (`anonymise.sql`):**
 
@@ -218,7 +234,7 @@ leaves the VPS):
 | `vendors.shopName` | kept (public storefront names) |
 | All phones (users, vendors, DRs, addresses, order_returns.customerPhone/drPhone) | one mapping table over distinct normalised 10-digit numbers: `'2' \|\| lpad(n, 9, '0')`. Updates join on `right(regexp_replace(phone,'\D','','g'),10)`, so links across tables survive (vendor↔user by phone). `9999999999`, `7777777777` kept (hardcoded fake staff numbers). |
 | `users.name` → `Test User <n>`; `users.email` → `u<n>@example.invalid` or null; `users.password` → null | |
-| `vendors.ownerName` → `Owner <n>`; `district_representatives.name` → `DR <n>`; all staff `password` → null (only seeded test staff can log in) | |
+| `vendors.ownerName` → `Owner <n>`; `district_representatives.name` → `DR <n>`; all staff `password` → null, including the `9999999999` admin row (prod's admin password hash never reaches staging; the seed then sets a staging-only one) | |
 | `addresses.fullName` → `Customer <n>`, `street` → `Street <n>` (city, state, pincode kept) | |
 | `order_returns.customerName` → mapped name; `reviews.name` → `Reviewer <n>` | |
 | `otp_verifications`, `vendor_fcm_tokens`, `customer_fcm_tokens`, `audit_logs`, `notifications` | `TRUNCATE` |
@@ -228,8 +244,15 @@ Staging's `DATA_DIR` volume is its own, so it never holds prod's `vendor-fcm-tok
 
 **Seed (`seed-test-accounts.js`, idempotent; also used by `e2e-local` on an empty DB):** region `E2E Region`; vendor
 `1000000001` (approved, password `E2E_VENDOR_PASSWORD`) with product `E2E Test Cement 50kg` priced above
-`minOrderForCashback`; DR `1000000002` (`E2E_DR_PASSWORD`) in the same region; admin `1000000003`
-(`E2E_ADMIN_PASSWORD`). Customers are registered by the tests themselves.
+`minOrderForCashback`; DR `1000000002` (`E2E_DR_PASSWORD`) in the same region; admin = the hardcoded `9999999999`
+`users` row (upserted with `role ADMIN`, name `E2E Admin`), its `password` set to bcrypt(`E2E_ADMIN_PASSWORD`). That
+is the only phone the admin login accepts (`index.js:690`), and the anonymiser nulled its password. There is no
+`1000000003` admin: a separate admin number couldn't log in. Customers are registered by the tests themselves.
+
+Because the seed sets the super-admin password, it must never touch prod. Before writing anything it requires either
+DB marker `staging`, or `APP_ENV=test` with a `localhost`/`127.0.0.1` `DATABASE_URL` host (`e2e-local`). Anything
+else (marker `production`, no marker on a remote host, `APP_ENV=production`) exits 2 with no writes. The existing
+`server/src/seed.js` (`npm run db:seed`) is unrelated and not changed.
 
 **"No real phone" verification (`verify-anon.sql`), must return 0 rows:**
 
@@ -364,44 +387,55 @@ own backend); *E2E on prod* (writes real orders, which office rules forbid).
 
 ## 8. Owner actions (one batch)
 
-Ordered by when they are needed. Nothing here is done by bots.
+Ordered by when they are needed. Worker bots do none of them. Owner decision (2026-10-17): items marked
+**[OM]** are run by the Office Manager with the owner's delegated access, after the owner OKs the batch; items marked
+**[owner]** need the owner's own login (DNS, Vercel, Firebase). Item 12 is the Office Manager's read-only check.
 
 **Batch A: before the backend guard PRs merge (prod, small):**
-1. Coolify `buildcity-api` → Environment: add `APP_ENV=production`. No redeploy needed until the next merge.
-2. Prod DB marker (the Office Manager can run it with delegated access, or the owner):
-   `ALTER DATABASE buildcity SET buildcity.env = 'production';`, then check it with
+1. **[OM]** Coolify `buildcity-api` → Environment: add `APP_ENV=production`. No redeploy needed until the next merge.
+2. **[OM]** Prod DB marker: `ALTER DATABASE buildcity SET buildcity.env = 'production';`, then check it with
    `SELECT current_setting('buildcity.env', true);` in a new session → `production`.
 
 **Batch B: staging resources (no prod impact):**
-3. Coolify: new **Postgres 17** `buildcity-db-staging`, database `buildcity_staging`, memory limit 512 MB, **no**
-   S3 backup. Then `ALTER DATABASE buildcity_staging SET buildcity.env = 'staging';`.
-4. Coolify: new **application** `buildcity-api-staging` (new resource, **not "Clone"**, because a clone copies
+3. **[OM]** Coolify: new **Postgres 17** `buildcity-db-staging`, database `buildcity_staging`, memory limit 512 MB,
+   **no** S3 backup. Then `ALTER DATABASE buildcity_staging SET buildcity.env = 'staging';`.
+4. **[OM]** Coolify: new **application** `buildcity-api-staging` (new resource, **not "Clone"**, because a clone copies
    prod env). Repo `sonevalleyinfra/buildcity-web`, branch `main`, base dir `/server`, Dockerfile, domain
    `https://api-staging.buildcity.cloud`, healthcheck as prod, memory limit 768 MB, persistent volume `/data`,
    **Include Source Commit in Build: on**. Env: `APP_ENV=staging`, `DATABASE_URL` + `DIRECT_URL` = the internal URL
    of `buildcity-db-staging`, `JWT_SECRET` = **new** random value (never prod's: with the same secret, a staging
    token would work on prod, because user IDs are copied), `PORT=5000`, `DATA_DIR=/data`. **Do not add** `SMS_*`,
    `SMS_RELAY_SECRET`, `FIREBASE_SERVICE_ACCOUNT` or `KEEP_ALIVE_URL`.
-5. GitHub repo secrets: `E2E_VENDOR_PASSWORD`, `E2E_DR_PASSWORD`, `E2E_ADMIN_PASSWORD` (random). Give the same values
-   to whoever runs the refresh (env on the VPS, never in chat).
-6. Data refresh access: either (a) the Office Manager runs `refresh.sh` with scoped delegated SSH (prod read +
-   staging write) for that run only, or (b) the owner runs one command. Pick one.
-7. DNS: `staging.buildcity.in` CNAME `cname.vercel-dns.com` (at the buildcity.in DNS host). Vercel → project →
-   Domains: add `staging.buildcity.in`, git branch `main`. Settings → Environment Variables: confirm "Automatically
-   expose System Environment Variables" is on. No new env vars.
-8. GitHub branch protection `main`: require a PR, required checks `ci`, `e2e-local`, `preview-isolation`.
+5. **[OM]** GitHub repo secrets: `E2E_VENDOR_PASSWORD`, `E2E_DR_PASSWORD`, `E2E_ADMIN_PASSWORD` (random, generated
+   on the box, never shown in chat). The same values go into the refresh env on the VPS. `E2E_ADMIN_PASSWORD` becomes
+   the staging password of `9999999999`, so it must differ from prod's admin password.
+6. **[OM]** Data refresh: the Office Manager runs `refresh.sh` with its delegated SSH (prod read + staging write),
+   one run at a time.
+7. **[owner]** DNS: `staging.buildcity.in` CNAME `cname.vercel-dns.com` (at the buildcity.in DNS host). Vercel →
+   project → Domains: add `staging.buildcity.in`, git branch `main`. Settings → Environment Variables: confirm
+   "Automatically expose System Environment Variables" is on. No new env vars.
 
-**Batch C: the flip (once staging is green on previews; one sitting, same minutes):**
-9. Create branch `production` at the current green `main` SHA. Protection: required check `e2e-staging`, include
-   administrators, block force pushes and deletion.
-10. Vercel → Settings → Git → Production Branch: `main` → `production`.
-11. Coolify `buildcity-api` → Git branch: `main` → `production`.
+**Item 8: `main` branch protection, staged (each step only after the named PR has merged and its check has run
+green at least once on `main` or a PR):**
+- 8a. **[OM]** after S5 merges: protect `main`: require a PR, required check `ci`.
+- 8b. **[OM]** after S6a merges: add required check `e2e-local`.
+- 8c. **[OM]** after S7 merges and `preview-isolation` is green on a PR preview (needs Batch B live): add required
+  check `preview-isolation`.
+
+Never add a check name before its workflow exists: GitHub would wait forever for it and block every PR, including
+the one that adds it.
+
+**Batch C: the flip (once 8c is done and staging is green; one sitting, owner and Office Manager together):**
+9. **[OM]** Create branch `production` at the current green `main` SHA. Protection: required check `e2e-staging`,
+   include administrators, block force pushes and deletion.
+10. **[owner]** Vercel → Settings → Git → Production Branch: `main` → `production`.
+11. **[OM]** Coolify `buildcity-api` → Git branch: `main` → `production`, right after item 10.
 12. Afterwards, the Office Manager verifies: a merge to `main` deploys only staging; `www.buildcity.in/api/v1/env` =
     `production/production`; `staging.buildcity.in/api/v1/env` = `staging/staging`; a staging JWT gets 401 on prod
-    `/api/v1/orders/me`; the prod query from §2 step 4 returns 0.
+    `/api/v1/orders/me`; the prod query from §2 step 4 returns no rows.
 
 **Phase 2 (mobile):**
-13. Firebase project `buildcity-staging` with Android apps `com.buildcity.app.staging` and
+13. **[owner]** Firebase project `buildcity-staging` with Android apps `com.buildcity.app.staging` and
     `com.buildcity.vendor.staging`; App Distribution testers; staging service account → `buildcity-api-staging`
     `FIREBASE_SERVICE_ACCOUNT`.
 
@@ -410,7 +444,10 @@ SMS: nothing to configure. Staging never sends SMS.
 ## Risks
 
 - **Flip ordering:** if Coolify is switched to `production` but Vercel isn't (or the reverse), web and API ship from
-  different branches. Do items 10-11 together and verify with item 12.
+  different branches. Item 10 is the owner's and item 11 the Office Manager's, so do them in one sitting, back to
+  back, and verify with item 12.
+- **Prod restore without the marker:** after S2, a restored prod database boots nothing until the marker is re-set
+  (§2 layer 3). Covered by the restore runbook step in S2; the cost is one extra command during an incident.
 - **Previews lose their API** between task S1 and staging going live (gateway error). This is intended (fail closed),
   but anyone looking at UI on previews meanwhile sees empty data.
 - **`buildcity-web-part-2.vercel.app` is used as the production alias** by the SMS relay. It is listed as a prod host
@@ -434,7 +471,8 @@ Each task is under half a day. Each needs a qa task after it (key `buildcity-web
   - [ ] `vercel.json` has the 4 `/api/v1` rules from §2 in that order, the SPA and `/api/sms` rules unchanged, plus
         `X-Robots-Tag: noindex` for host `staging.buildcity.in`.
   - [ ] `node scripts/check-vercel-routes.mjs` (new, run in `npm run lint`) asserts: prod hosts → prod API, any
-        other host → staging API, and no rule sends an unlisted host to `api.buildcity.cloud`.
+        other host → staging API, no rule sends an unlisted host to `api.buildcity.cloud`, and the SPA catch-all and
+        `/api/sms` rules keep their current content and relative order.
   - [ ] `VERCEL=1 VERCEL_ENV=preview npm run build` passes, and `grep -r "api.buildcity.cloud\|https://www.buildcity.in" dist/assets/*.js` finds nothing.
   - [ ] `VERCEL=1 VERCEL_ENV=preview VITE_API_URL=https://api.buildcity.cloud npm run build` **fails** with a clear
         message, and so does `VERCEL=1` without `VERCEL_ENV`.
@@ -445,7 +483,7 @@ Each task is under half a day. Each needs a qa task after it (key `buildcity-web
         (gateway error until staging exists).
 - Out of scope: backend, staging resources, Android.
 
-**S2. `Staging: APP_ENV + DB marker boot guard and /api/v1/env`** (GK: env handling). Merge gated on owner Batch A
+**S2. `Staging: APP_ENV + DB marker boot guard and /api/v1/env`** (GK: env handling). Merge gated on Batch A
 items 1-2 being done.
 - Goal: the API refuses to boot unless `APP_ENV` matches the DB marker (§2 layer 3).
 - Context: `server/src/index.js` boot, new `server/src/appEnv.js`, `server/tests/run.js` (set `APP_ENV=test`).
@@ -456,6 +494,13 @@ items 1-2 being done.
   - [ ] `isProduction()` is exported, and is true only after a successful production boot check.
   - [ ] `npm run test:security` and `npm run test:migration` pass. The README env table and `.env.example` list
         `APP_ENV`.
+  - [ ] Prod restore runbook: `docs/MIGRATION-VPS.md` gets a "Restoring `buildcity-db` from a backup" section (R2
+        backup or `restore.sh`) whose last steps are `ALTER DATABASE buildcity SET buildcity.env = 'production';`,
+        a new-session check that `current_setting('buildcity.env', true)` = `production`, then the API restart and
+        `/api/v1/env` = `production/production`. The C1 restore *test* says to leave `restore-test` unmarked.
+  - [ ] `restore.sh` (prod-target path included) ends by printing the target database's `buildcity.env` (or
+        "none") and, when it is none, the exact `ALTER DATABASE <db> SET buildcity.env = '<env>';` line to run. It
+        never sets the marker itself. Covered by a shim test in `server/scripts/migration/test/`.
 - Out of scope: SMS/FCM changes (S3).
 
 **S3. `Staging: fail-closed SMS/FCM sandbox, test-number OTP, outbox`** (GK: auth/OTP, env). Depends on S2.
@@ -493,6 +538,12 @@ items 1-2 being done.
   - [ ] Dry run against two local containers: the tmp DB is created, anonymised, verified, swapped and marked
         `staging`. A failed verify drops tmp and leaves the old staging DB untouched.
   - [ ] The seed is idempotent and creates the §4 accounts and product. Passwords come only from env, never printed.
+  - [ ] Admin login works on seeded data: on an anonymised fixture (where `9999999999`'s password is null),
+        after the seed, `POST /api/v1/auth/vendor/login` with `9999999999` + `E2E_ADMIN_PASSWORD` returns
+        `role: ADMIN`, and that token can call an ADMIN route. No `1000000003` user is created.
+  - [ ] The seed refuses (exit 2, no rows written, checked by row counts) on a DB with marker `production`, on an
+        unmarked DB on a non-loopback host, and with `APP_ENV=production`. It runs on marker `staging`, and on
+        `APP_ENV=test` with a loopback `DATABASE_URL`.
   - [ ] README: an owner-runnable single command; the dump file is deleted on exit (trap).
 - Out of scope: running it against prod (Office Manager/owner after Batch B).
 
@@ -501,6 +552,7 @@ items 1-2 being done.
 - Acceptance:
   - [ ] Green on its own PR: lint, build, `test:security` against a `postgres:17` service, `test:migration`.
   - [ ] Node version pinned to the Dockerfile's (22). `permissions: contents: read`. No secrets used.
+  - [ ] PR body asks the Office Manager for §8 item 8a (require `ci`) after merge, not before.
 - Out of scope: Playwright.
 
 **S6a. `Staging: Playwright harness + e2e-local + customer specs`** (GK: workflows). Depends on S2, S3, S5, and the
@@ -511,6 +563,7 @@ S4b seed (or a local copy of it).
         (test: point it at a stub that returns `production` → the run fails with 0 tests executed).
   - [ ] `e2e-local` is green on the PR and runs under 8 min. Report artifact retention 7 days, trace on failure only.
   - [ ] `npm run e2e` runs locally against the same stack (documented in `e2e/README.md`).
+  - [ ] PR body asks the Office Manager for §8 item 8b (require `e2e-local`) after merge.
 - Out of scope: partner specs (S6b), staging workflow (S7).
 
 **S6b. `Staging: partner E2E specs (vendor accept, DR deliver/return, wallet)`**. Depends on S6a.
@@ -528,6 +581,7 @@ S6b, owner Batch B, and the first refresh.
         the commit. Run it in `workflow_dispatch` mode first, before Batch C.
   - [ ] `scripts/promote.sh` refuses a SHA that isn't on `main`, a SHA without green `e2e-staging`, and a
         non-fast-forward. It prints the push command it would run in `--dry-run`. Tested with `gh` stubbed.
+  - [ ] PR body asks the Office Manager for §8 item 8c (require `preview-isolation`) once it is green on a PR.
 - Out of scope: running the flip (owner Batch C).
 
 **S8 (phase 2). `Staging: Android staging flavours (customer + partner)`** (GK: build/signing config). Depends on S1
@@ -536,7 +590,8 @@ and owner item 13.
   The partner app opens `staging.buildcity.in/vendor/login`. OTA points at staging. Prod builds are byte-identical in
   config to before (diff the generated `capacitor.config.json`).
 
-**Office Manager / non-dev steps (not dev tasks):** Batch A/B/C owner asks (one message). First refresh run. The §2
+**Office Manager / non-dev steps (not dev tasks):** one owner message covering the [owner] items (7, 10, 13) and the
+OK for the [OM] batches. Running the [OM] items, including 8a-8c after S5, S6a and S7 merge. First refresh run. The §2
 step 4 prod check. Lifting the preview hard rule after `preview-isolation` is green.
 
 ### dev-office skill changes (task `Staging: update dev-office skill`, Office Manager)

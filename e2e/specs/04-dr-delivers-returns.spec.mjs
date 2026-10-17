@@ -1,8 +1,9 @@
-import { test, expect, pickRegionIfAsked } from "../fixtures.mjs";
+import { test, expect, autoPickRegion } from "../fixtures.mjs";
 import { ADMIN, DR, REGION_NAME, apiFetch, partnerToken, passwordFor } from "../api.mjs";
 import { customerPhone, readState, writeState } from "../state.mjs";
 
 test("DR sends the order out, marks it delivered and records a 1-item return", async ({ page }) => {
+  await autoPickRegion(page, REGION_NAME);
   const { orderId } = readState();
   expect(orderId, "spec 2 must have placed an order").toBeTruthy();
 
@@ -12,9 +13,7 @@ test("DR sends the order out, marks it delivered and records a 1-item return", a
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/dr\/dashboard/);
 
-  await pickRegionIfAsked(page, REGION_NAME);
-
-  // Orders tab: narrow to our order by id, then Processing -> Out for delivery.
+    // Orders tab: narrow to our order by id, then Processing -> Out for delivery.
   await expect(page.getByRole("heading", { name: /Customer Orders in/ })).toBeVisible();
   await page.getByPlaceholder("Search order ID, customer, phone...").fill(orderId);
   const select = page.getByLabel("Update Order Status");

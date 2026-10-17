@@ -1,4 +1,4 @@
-import { test, expect, pickRegionIfAsked } from "../fixtures.mjs";
+import { test, expect, autoPickRegion } from "../fixtures.mjs";
 import { ADMIN, REGION_NAME, VENDOR, apiFetch, customerToken, partnerToken, passwordFor } from "../api.mjs";
 import { readState, runId } from "../state.mjs";
 
@@ -6,6 +6,7 @@ import { readState, runId } from "../state.mjs";
 test.use({ userAgent: "Mozilla/5.0 (Linux; Android 14; E2E) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36 BuildCityPartner/1.0" });
 
 test("vendor accepts the customer order and the customer push lands in the outbox", async ({ page }) => {
+  await autoPickRegion(page, REGION_NAME);
   const { orderId } = readState();
   expect(orderId, "spec 2 must have placed an order").toBeTruthy();
 
@@ -24,9 +25,7 @@ test("vendor accepts the customer order and the customer push lands in the outbo
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/vendor\/dashboard/);
 
-  await pickRegionIfAsked(page, REGION_NAME, 3000);
-
-  // The order from spec 2 is on the vendor's board, still pending.
+    // The order from spec 2 is on the vendor's board, still pending.
   const card = page.locator(`#vendor-order-${orderId}`);
   await expect(card).toBeVisible();
   await expect(card).toContainText("E2E Test Cement 50kg");

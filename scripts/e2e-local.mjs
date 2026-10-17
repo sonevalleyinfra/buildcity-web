@@ -77,6 +77,11 @@ try {
   const marker = rows[0] && rows[0].env;
   if (marker === "production" || marker === "staging") die("the database is marked production or staging");
   if (marker && marker !== "test") die("the database carries an unknown buildcity.env marker");
+  if (!marker) {
+    // Unmarked: only an empty database may be claimed as a test database.
+    const { rows: tables } = await client.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_schema = 'public'");
+    if (tables[0].n > 0) die("the database is unmarked but already has tables; refusing to claim it as a test database");
+  }
   // Mark it so /api/v1/env reports db=test (the isolation guard needs it).
   const dbName = (await client.query("SELECT current_database() AS n")).rows[0].n;
   await client.query(`ALTER DATABASE "${dbName.replace(/"/g, '""')}" SET buildcity.env = 'test'`);

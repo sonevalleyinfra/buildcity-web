@@ -125,3 +125,52 @@ test("playwright runs when the stub reports test", async () => {
     assert.equal(ran, true);
   } finally { s.close(); }
 });
+
+test("refuses a redirecting host instead of following it to a safe one", async () => {
+  const safe = await stub({ env: "test", db: "test" });
+  const hop = http.createServer((req, res) => {
+    res.writeHead(302, { location: `${safe.url}/api/v1/env` });
+    res.end();
+  });
+  await new Promise((r) => hop.listen(0, "127.0.0.1", r));
+  try {
+    await assert.rejects(assertSafeTarget(`http://127.0.0.1:${hop.address().port}`), GuardError);
+    assert.deepEqual(safe.seen, [], "the redirect target must never be requested");
+  } finally { hop.close(); safe.close(); }
+});
+
+// e2e-local must only claim an EMPTY unmarked database. Needs a loopback Postgres (CI service or the local
+// bc-e2e-pg container); skipped without one.
+test("e2e-local refuses an unmarked database that already has tables", async (t) => {
+  const url = process.env.DATABASE_URL;
+  let host;
+  try { host = new URL(url).hostname; } catch { return t.skip("no DATABASE_URL"); }
+  if (!["localhost", "127.0.0.1"].includes(host)) return t.skip("DATABASE_URL is not loopback");
+  const { createRequire } = await import("node:module");
+  const { Client } = createRequire(path.join(root, "package.json"))("pg");
+  const name = `bc_guard_unmarked_${process.pid}`;
+  const admin = new Client({ connectionString: url });
+  await admin.connect();
+  await admin.query(`CREATE DATABASE ${name}`);
+  const scratchUrl = new URL(url);
+  scratchUrl.pathname = `/${name}`;
+  try {
+    const c = new Client({ connectionString: scratchUrl.toString() });
+    await c.connect();
+    await c.query("CREATE TABLE leftover (id int)");
+    await c.end();
+    const r = await new Promise((resolve) => {
+      const child = spawn("node", ["scripts/e2e-local.mjs"], { cwd: root, env: { ...process.env, DATABASE_URL: scratchUrl.toString() } });
+      let out = "";
+      child.stdout.on("data", (d) => (out += d));
+      child.stderr.on("data", (d) => (out += d));
+      child.on("close", (status) => resolve({ status, out }));
+    });
+    assert.equal(r.status, 2, r.out);
+    assert.match(r.out, /e2e refused/);
+    assert.doesNotMatch(r.out, /prisma|seeded/i, "nothing may run before the refusal");
+  } finally {
+    await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+    await admin.end();
+  }
+});

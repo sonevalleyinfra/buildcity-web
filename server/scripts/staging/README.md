@@ -61,7 +61,7 @@ The database markers are the real guard; the host-name checks are best-effort (C
 
 ## Seed (`seed-test-accounts.js`)
 
-Idempotent. Creates region `E2E Region`; approved vendor `1000000001` and DR `1000000002` (same region) with
+Idempotent. Creates region `E2E Varanasi`; approved vendor `1000000001` and DR `1000000002` (same region) with
 `E2E_VENDOR_PASSWORD` / `E2E_DR_PASSWORD`; the super-admin row `9999999999` (role ADMIN, `E2E_ADMIN_PASSWORD`, the only
 phone the admin login accepts); and `E2E Test Cement 50kg`, priced above `minOrderForCashback`. Passwords are read from
 env only and never printed. It writes only to a database marked `staging`, or with `APP_ENV=test` on a loopback

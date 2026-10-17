@@ -9,7 +9,10 @@ const PASSWORD_VARS = ["E2E_VENDOR_PASSWORD", "E2E_DR_PASSWORD", "E2E_ADMIN_PASS
 const LOOPBACK = ["localhost", "127.0.0.1", "::1", "[::1]"];
 
 const PHONES = { vendor: "1000000001", dr: "1000000002", admin: "9999999999" };
-const REGION_NAME = "E2E Region";
+// The name contains "Varanasi" on purpose: the DR dashboard only lists orders of districts it can canonicalise
+// (Varanasi, Mirzapur, Prayagraj, Jaunpur) and files everything else under Varanasi, so a district with an
+// unrelated name would show the DR no orders.
+const REGION_NAME = "E2E Varanasi";
 const CATEGORY_NAME = "E2E Category";
 const PRODUCT_NAME = "E2E Test Cement 50kg";
 const DEFAULT_MIN_CASHBACK = 5000;

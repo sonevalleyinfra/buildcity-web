@@ -6,12 +6,36 @@ const fs = require("fs");
 
 let firebaseInitialized = false;
 
+// Accepts raw JSON, JSON wrapped in quotes, JSON with backslash-escaped quotes
+// (common when pasted into PaaS env UIs), or base64 of the JSON.
+function parseServiceAccountEnv(raw) {
+  let v = String(raw).trim();
+  const candidates = [v];
+  if (/^(["']).*\1$/s.test(v)) candidates.push(v.slice(1, -1).trim());
+  const unescaped = candidates[candidates.length - 1].replace(/\\"/g, '"');
+  candidates.push(unescaped);
+  if (/^[A-Za-z0-9+/=\s]+$/.test(v)) candidates.push(Buffer.from(v, "base64").toString("utf8"));
+  let lastErr;
+  for (const c of candidates) {
+    try {
+      const obj = JSON.parse(c);
+      if (obj && typeof obj === "object") {
+        if (typeof obj.private_key === "string") obj.private_key = obj.private_key.replace(/\\n/g, "\n");
+        return obj;
+      }
+    } catch (e) {
+      lastErr = lastErr || e;
+    }
+  }
+  throw lastErr;
+}
+
 function initFirebase() {
   if (firebaseInitialized) return true;
   try {
     const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || path.join(__dirname, "../firebase-service-account.json");
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+      const serviceAccount = parseServiceAccountEnv(process.env.FIREBASE_SERVICE_ACCOUNT);
       admin.initializeApp({
         credential: cert(serviceAccount),
       });

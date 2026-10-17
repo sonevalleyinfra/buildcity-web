@@ -95,7 +95,8 @@ async function walk(p, token, limit) {
 
   // Summary: exact totals regardless of paging
   const dbCount2 = await prisma.order.count();
-  const dbSum2 = Number((await prisma.order.aggregate({ _sum: { totalAmount: true } }))._sum.totalAmount);
+  // totalRevenue is delivered/completed orders only (revenueBasis: delivered_orders_total)
+  const dbSum2 = Number((await prisma.order.aggregate({ where: { status: { in: ["DELIVERED", "COMPLETED"] } }, _sum: { totalAmount: true } }))._sum.totalAmount || 0);
   const sum = await get("/orders/summary", admin);
   ok(sum.body.totalOrders === dbCount2 && Math.abs(sum.body.totalRevenue - dbSum2) < 0.001, "admin summary matches DB count and revenue", { sum: sum.body, dbCount2, dbSum2 });
   const dbOpen = await prisma.order.count({ where: { status: { notIn: ["DELIVERED", "CANCELLED"] } } });

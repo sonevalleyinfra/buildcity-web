@@ -1,10 +1,12 @@
 // Official BuildCity Legal Policies & Company Compliance Information
 // Verbatim legal source from BuildCity regulatory documentation
 
+import { WEB_URL } from "../config/api";
+
 export const COMPANY_CONTACT = {
   companyName: "BuildCity",
   tagline: "India's Leading B2B & B2C Construction & Building Materials Platform",
-  website: "https://www.buildcity.in/",
+  website: `${WEB_URL}/`,
   email: "sonevalleyinfra@gmail.com",
   address: "Ganeshpuri Colony, Suswahi, Chitaipur",
   city: "Varanasi",
@@ -206,7 +208,7 @@ export const POLICIES = {
       {
         heading: "15. Contact Information",
         content:
-          "BuildCity Corporate Office\nWebsite: https://www.buildcity.in/\nAddress: Ganeshpuri Colony, Suswahi, Chitaipur\nEmail: sonevalleyinfra@gmail.com\n\nBy registering, accessing, or using BuildCity, all users agree to these Terms & Conditions.",
+          "BuildCity Corporate Office\nWebsite: " + WEB_URL + "/\nAddress: Ganeshpuri Colony, Suswahi, Chitaipur\nEmail: sonevalleyinfra@gmail.com\n\nBy registering, accessing, or using BuildCity, all users agree to these Terms & Conditions.",
       },
     ],
   },

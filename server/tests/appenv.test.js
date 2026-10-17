@@ -136,7 +136,7 @@ async function startServer(extra) {
   const port = await freePort();
   const env = {
     PATH: process.env.PATH,
-    JWT_SECRET: process.env.JWT_SECRET || ["local", "test", "jwt", "value", "000000"].join("-"),
+    JWT_SECRET: process.env.JWT_SECRET || ["local", "test", "jwt", "value", "local", "test", "jwt", "value", "000000"].join("-"),
     PORT: String(port),
     SMS_USERNAME: "test",
     SMS_APIKEY: "test",

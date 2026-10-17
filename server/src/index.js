@@ -8,7 +8,11 @@ const bcrypt = require("bcryptjs");
 const compression = require("compression");
 const { PrismaClient } = require("@prisma/client");
 const { issueToken, requireAuth, optionalAuth, requireRole, requireSelfOrAdmin } = require("./middleware/auth");
-const { enforceBoot, getEnvInfo } = require("./appEnv");
+const appEnv = require("./appEnv");
+const { enforceBoot, getEnvInfo } = appEnv;
+const outbox = require("./outbox");
+const STAGING_OTP = "246810";
+const TEST_PHONE_RE = /^10000\d{5}$/;
 
 const app = express();
 app.set("trust proxy", 1);
@@ -395,6 +399,9 @@ app.get(["/health", "/api/v1/health"], async (req, res) => {
 app.get("/api/v1/env", (req, res) => {
   res.json(getEnvInfo());
 });
+
+// Sandbox outbox (SMS/push that were not sent). 404 in production; ADMIN only elsewhere.
+app.get("/api/v1/_staging/outbox", outbox.notInProduction(() => appEnv.isProduction()), requireAuth, requireRole("ADMIN"), outbox.listHandler);
 
 // Database & Environment Diagnostic Check
 app.get("/api/v1/db-check", requireAuth, requireRole("ADMIN"), async (req, res) => {
@@ -1635,6 +1642,11 @@ app.post("/api/v1/auth/otp/request", otpRequestIpLimiter, otpRequestLimiter, asy
     // Clean 10-digit mobile number
     const cleanPhone = phone.trim().replace(/\D/g, "").slice(-10);
 
+    // Off-production only the reserved test numbers may request an OTP (no real user is ever messaged).
+    if (!appEnv.isProduction() && !TEST_PHONE_RE.test(cleanPhone)) {
+      return res.status(403).json({ error: "Staging: use a test number" });
+    }
+
     // Fast Partner Phone Check
     const isSpecialAdminOrDr = cleanPhone === "9999999999" || cleanPhone === "7777777777";
     if (isSpecialAdminOrDr) {
@@ -1682,7 +1694,7 @@ app.post("/api/v1/auth/otp/request", otpRequestIpLimiter, otpRequestLimiter, asy
 
     // Generate 6-digit OTP code instantly
     // Cryptographically secure OTP (Math.random is predictable)
-    const generatedOtp = crypto.randomInt(100000, 1000000).toString();
+    const generatedOtp = appEnv.isProduction() ? crypto.randomInt(100000, 1000000).toString() : STAGING_OTP;
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins expiry
 
     // Replace any older OTPs for this phone, then save the new one in background (Non-blocking)

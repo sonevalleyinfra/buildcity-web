@@ -2,6 +2,7 @@
 # Dry run of refresh.sh + seed-test-accounts.js against two throwaway postgres:17 containers
 # (loopback ports only, DUMMYPASS, fixture data). Needs docker, host psql and server/node_modules.
 set -uo pipefail
+unset APP_ENV DATABASE_URL   # CI sets both job-wide; the seed refusal cases need them absent
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 stg="$(dirname "$here")"
 server="$(cd "$stg/../.." && pwd)"

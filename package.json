@@ -12,7 +12,7 @@
     "android:partner": "node scripts/android.mjs partner",
     "cap:sync": "cap sync android",
     "cap:open": "cap open android",
-    "lint": "oxlint",
+    "lint": "node scripts/check-vercel-routes.mjs && oxlint",
     "preview": "vite preview",
     "prepare": "husky"
   },

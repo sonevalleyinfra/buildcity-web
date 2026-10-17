@@ -1,4 +1,4 @@
-import { API_BASE_URL, BACKEND_DIRECT_URL, PRODUCTION_WEB_URL } from "./api";
+import { API_BASE_URL, BACKEND_DIRECT_URL, WEB_URL } from "./api";
 import { Capacitor } from "@capacitor/core";
 
 const TOKEN_KEY = "buildcity_token";
@@ -102,9 +102,9 @@ export const authFetch = async (path, options = {}) => {
     if (primaryUrl.startsWith("/")) {
       fallbackUrl = `${BACKEND_DIRECT_URL}${primaryUrl}`;
     } else if (primaryUrl.includes(BACKEND_DIRECT_URL)) {
-      fallbackUrl = primaryUrl.replace(BACKEND_DIRECT_URL, PRODUCTION_WEB_URL);
-    } else if (primaryUrl.includes("buildcity.in")) {
-      fallbackUrl = primaryUrl.replace(PRODUCTION_WEB_URL, BACKEND_DIRECT_URL);
+      fallbackUrl = primaryUrl.replace(BACKEND_DIRECT_URL, WEB_URL);
+    } else if (primaryUrl.includes(WEB_URL)) {
+      fallbackUrl = primaryUrl.replace(WEB_URL, BACKEND_DIRECT_URL);
     }
 
     if (fallbackUrl && fallbackUrl !== primaryUrl) {

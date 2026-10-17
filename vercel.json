@@ -1,9 +1,67 @@
 {
   "buildCommand": "npm run build",
-  "regions": ["bom1"],
+  "regions": [
+    "bom1"
+  ],
   "rewrites": [
-    { "source": "/api/sms", "destination": "/api/sms.js" },
-    { "source": "/api/v1/:path*", "destination": "https://api.buildcity.cloud/api/v1/:path*" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    {
+      "source": "/api/sms",
+      "destination": "/api/sms.js"
+    },
+    {
+      "source": "/api/v1/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.buildcity.in"
+        }
+      ],
+      "destination": "https://api.buildcity.cloud/api/v1/:path*"
+    },
+    {
+      "source": "/api/v1/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "buildcity.in"
+        }
+      ],
+      "destination": "https://api.buildcity.cloud/api/v1/:path*"
+    },
+    {
+      "source": "/api/v1/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "buildcity-web-part-2.vercel.app"
+        }
+      ],
+      "destination": "https://api.buildcity.cloud/api/v1/:path*"
+    },
+    {
+      "source": "/api/v1/:path*",
+      "destination": "https://api-staging.buildcity.cloud/api/v1/:path*"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.buildcity.in"
+        }
+      ],
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex"
+        }
+      ]
+    }
   ]
 }

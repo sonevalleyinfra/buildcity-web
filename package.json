@@ -16,7 +16,8 @@
     "preview": "vite preview",
     "prepare": "husky",
     "e2e": "node scripts/e2e-local.mjs",
-    "e2e:guard": "node --test e2e/guard.test.mjs"
+    "e2e:guard": "node --test e2e/guard.test.mjs",
+    "test:ci-scripts": "node --test scripts/ci/ci-scripts.test.mjs && bash scripts/promote.test.sh"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.1",

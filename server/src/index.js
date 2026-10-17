@@ -8,6 +8,7 @@ const bcrypt = require("bcryptjs");
 const compression = require("compression");
 const { PrismaClient } = require("@prisma/client");
 const { issueToken, requireAuth, optionalAuth, requireRole, requireSelfOrAdmin } = require("./middleware/auth");
+const { enforceBoot, getEnvInfo } = require("./appEnv");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -388,6 +389,11 @@ app.get(["/health", "/api/v1/health"], async (req, res) => {
   }
   console.error("[health] DB check failed:", h.error);
   res.status(503).json({ status: "error", db: "unavailable", timestamp: new Date().toISOString() });
+});
+
+// Which environment this API runs as (set at boot from APP_ENV + the DB marker). Public, no secrets.
+app.get("/api/v1/env", (req, res) => {
+  res.json(getEnvInfo());
 });
 
 // Database & Environment Diagnostic Check
@@ -4889,21 +4895,27 @@ process.on("unhandledRejection", (reason) => {
   console.error("Unhandled promise rejection:", reason);
 });
 
-// Start Express Server
-const server = app.listen(PORT, () => {
-  console.log(`🚀 BuildCity Express Gateway running live on http://localhost:${PORT}`);
+// Start Express Server, only once APP_ENV matches the database marker
+let server = null;
+let shuttingDown = false;
+enforceBoot(prisma).then(() => {
+  if (shuttingDown) return;
+  server = app.listen(PORT, () => {
+    console.log(`🚀 BuildCity Express Gateway running live on http://localhost:${PORT}`);
+  });
 });
 
 // Graceful shutdown: finish in-flight requests (e.g. checkouts) before the platform stops the container
-let shuttingDown = false;
 function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`${signal} received: closing HTTP server...`);
-  server.close(async () => {
+  const done = async () => {
     await prisma.$disconnect().catch(() => null);
     process.exit(0);
-  });
+  };
+  if (server) server.close(done);
+  else done();
   setTimeout(() => process.exit(1), 10000).unref();
 }
 process.on("SIGTERM", () => shutdown("SIGTERM"));

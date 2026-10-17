@@ -19,6 +19,7 @@ case "$name:$*" in
   pg_dump:--version) echo "pg_dump (PostgreSQL) ${SHIM_PGDUMP_MAJOR:-16}.4" ;;
   pg_dump:*) echo FAKEDUMP ;;
   psql:*server_version_num*) echo 160004 ;;
+  psql:*buildcity.env*) echo "${SHIM_MARKER:-}" ;;
   psql:*count*) echo "${SHIM_TABLES:-0}" ;;
   pg_restore:-l*) printf '1; 2615 2200 SCHEMA - public owner\n2; 1259 1 TABLE public users owner\n' ;;
 esac
@@ -69,6 +70,17 @@ check "restore --yes exits 0" '[ "$(rc restore)" = 0 ]'
 check "restore calls pg_restore with db name only" 'grep -q "^pg_restore PGPASSWORD=set PGHOST=db2.example.com PGDATABASE=app .*--dbname=app a.dump" "$SHIM_LOG"'
 check "restore list skips CREATE SCHEMA public" '! grep -q "SCHEMA - public" "$SHIM_LOG.list" && grep -q "TABLE public users" "$SHIM_LOG.list"'
 check "restore removes its list file" '! ls "$t/work" | grep -q list'
+check "unmarked target: prints marker none" 'grep -qxF "Target database marker (buildcity.env): none" "$t/out/restore.out"'
+check "unmarked target: prints ALTER line with db name" 'grep -qxF "ALTER DATABASE app SET buildcity.env = '"'"'<env>'"'"';" "$t/out/restore.out"'
+check "restore never sends ALTER/set to psql" '! grep "^psql " "$SHIM_LOG" | grep -qi -e ALTER -e set_config -e "SET buildcity"'
+
+# restore into a marked target
+: >"$SHIM_LOG"
+run marked env TARGET_DATABASE_URL="$DST" SHIM_MARKER=production bash "$mig/restore.sh" --yes a.dump
+check "marked target: restore exits 0" '[ "$(rc marked)" = 0 ]'
+check "marked target: prints marker value" 'grep -qxF "Target database marker (buildcity.env): production" "$t/out/marked.out"'
+check "marked target: no ALTER hint" '! grep -q ALTER "$t/out/marked.out"'
+check "marked target: never sends ALTER to psql" '! grep "^psql " "$SHIM_LOG" | grep -qi ALTER'
 
 # restore non-interactive with existing tables and no --yes
 : >"$SHIM_LOG"

@@ -77,9 +77,7 @@ export default function OrderDetail() {
   const { getOrder, orders } = useOrders();
   const order = getOrder(id) || orders.find((o) => o.id === id);
 
-  if (!order) return <Navigate to="/orders" replace />;
-
-  const rawStatus = (order.status || "PENDING").toUpperCase();
+  const rawStatus = (order?.status || "PENDING").toUpperCase();
   const statusInfo = STATUS_MAP[rawStatus] || STATUS_MAP.PENDING;
   const isDelivered = rawStatus === "DELIVERED" || rawStatus === "COMPLETED";
 
@@ -104,6 +102,8 @@ export default function OrderDetail() {
     }, 120);
     return () => clearTimeout(timer);
   }, [order?.id, currentStepIndex, isDelivered]);
+
+  if (!order) return <Navigate to="/orders" replace />;
 
   const orderDateStr = order.date || order.createdAt || new Date().toISOString();
   const matSubtotal = (order.items || []).reduce((sum, it) => sum + (Number(it.totalPrice) || (Number(it.quantity || 1) * Number(it.priceAtPurchase || 100))), 0);

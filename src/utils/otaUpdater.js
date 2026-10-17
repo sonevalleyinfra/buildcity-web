@@ -1,5 +1,6 @@
 import { Capacitor } from "@capacitor/core";
 import { App } from "@capacitor/app";
+import { WEB_URL } from "../config/api";
 import { isVendorApp } from "../config/appMode";
 
 let isChecking = false;
@@ -46,7 +47,7 @@ async function checkForUpdates(CapacitorUpdater) {
     } catch {}
 
     // Check with server endpoint for latest available bundle
-    const response = await fetch("https://www.buildcity.in/api/ota-vendor", {
+    const response = await fetch(`${WEB_URL}/api/ota-vendor`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

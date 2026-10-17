@@ -4,7 +4,12 @@ import { Sheet, Field, Button, ApprovalBadge, Spinner } from "../ui/primitives";
 import { inr } from "../ui/format";
 import { getDefaultPacksForProduct } from "../../../utils/productPacks";
 
-export default function EditListingSheet({
+export default function EditListingSheet(props) {
+  if (!props.product) return null;
+  return <EditListingSheetInner {...props} />;
+}
+
+function EditListingSheetInner({
   product,
   image,
   onClose,
@@ -16,8 +21,6 @@ export default function EditListingSheet({
   onCustomPacksChange,
   isSaving,
 }) {
-  if (!product) return null;
-
   const price = Number(product.price || 0);
   const mrp = Number(product.mrp || 0);
   const discount = Number(product.discountPct || 0);

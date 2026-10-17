@@ -6,6 +6,11 @@ const httpsAgent = new https.Agent({ keepAlive: true, timeout: 8000, rejectUnaut
 
 // Server-to-server relay for the backend's OTP SMS. Browsers never call it, so no CORS headers.
 export default async function handler(req, res) {
+  // Only the production deployment may send SMS; previews and staging answer 404.
+  if (process.env.VERCEL_ENV !== "production") {
+    return res.status(404).json({ error: "Not found" });
+  }
+
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }

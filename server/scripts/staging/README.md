@@ -64,12 +64,14 @@ The database markers are the real guard; the host-name checks are best-effort (C
 Idempotent. Creates region `E2E Varanasi`; approved vendor `1000000001` and DR `1000000002` (same region) with
 `E2E_VENDOR_PASSWORD` / `E2E_DR_PASSWORD`; the super-admin row `9999999999` (role ADMIN, `E2E_ADMIN_PASSWORD`, the only
 phone the admin login accepts); and `E2E Test Cement 50kg`, priced above `minOrderForCashback`. Passwords are read from
-env only and never printed. It writes only to a database marked `staging`, or with `APP_ENV=test` on a loopback
-`DATABASE_URL`; otherwise it exits 2 with no writes. For `e2e-local`:
+env only and never printed. It writes only to a database marked `staging`, or marked `test` with `APP_ENV=test` on a
+loopback `DATABASE_URL`; otherwise it exits 2 with no writes. An unmarked database is always refused (a plain
+`pg_dump` restore drops the marker). For `e2e-local`, `npm run e2e` marks the DB `test` first; to seed by hand run
+`ALTER DATABASE <db> SET buildcity.env = 'test'` first, then
 `APP_ENV=test DATABASE_URL=postgresql://...@localhost/... node scripts/staging/seed-test-accounts.js`.
 
 ## Tests
 
-`npm run test:staging` runs the anonymiser tests, `refresh-shim.sh` (every refusal, no DB) and `refresh-dryrun.sh`
+`npm run test:staging` runs `seed-decide.test.js` (the seed's refusal rules, no DB), the anonymiser tests, `refresh-shim.sh` (every refusal, no DB) and `refresh-dryrun.sh`
 (two throwaway `postgres:17` containers on loopback: failed verify, full swap, admin login on the result, seed
 idempotency and refusals, swapped URLs, a stray production DB, a failed rename-back). The dry run needs docker and host `psql`.

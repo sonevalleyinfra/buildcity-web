@@ -106,6 +106,7 @@ rows() { tq "$1" -c "select (select count(*) from users) + (select count(*) from
 udb() { echo "postgresql://postgres:DUMMYPASS@127.0.0.1:$TP/$1"; }
 seed_db sd_prod; tq postgres -c "ALTER DATABASE sd_prod SET buildcity.env='production'"
 seed_db sd_none; seed_db sd_stg; tq postgres -c "ALTER DATABASE sd_stg SET buildcity.env='staging'"
+seed_db sd_test; tq postgres -c "ALTER DATABASE sd_test SET buildcity.env='test'"
 runseed() { (cd "$server" && env DATABASE_URL="$(udb "$1")" "${@:2}" node scripts/staging/seed-test-accounts.js) >/dev/null 2>"$work/seed.err"; }
 runseed sd_prod; rc=$?; check "seed refuses marker production (exit 2, no rows)" '[ $rc -eq 2 ] && [ "$(rows sd_prod)" = 0 ]'
 runseed sd_prod APP_ENV=test; rc=$?; check "seed refuses marker production even with APP_ENV=test" '[ $rc -eq 2 ] && [ "$(rows sd_prod)" = 0 ]'
@@ -113,9 +114,11 @@ runseed sd_none; rc=$?; check "seed refuses an unmarked DB without APP_ENV=test"
 runseed sd_stg APP_ENV=production; rc=$?; check "seed refuses APP_ENV=production on a staging DB" '[ $rc -eq 2 ] && [ "$(rows sd_stg)" = 0 ]'
 runseed sd_stg E2E_ADMIN_PASSWORD=; rc=$?; check "seed refuses a missing password env" '[ $rc -eq 2 ] && [ "$(rows sd_stg)" = 0 ]'
 runseed sd_stg; rc=$?; check "seed runs on marker staging" '[ $rc -eq 0 ] && [ "$(rows sd_stg)" -gt 0 ]'
-runseed sd_none APP_ENV=test; rc=$?; check "seed runs on APP_ENV=test with a loopback host (empty DB)" '[ $rc -eq 0 ] && [ "$(rows sd_none)" -gt 0 ]'
-check "the seed does not trip the unique constraints on an empty DB (role counts)" '[ "$(tq sd_none -c "select string_agg(role::text, '"','"' order by role::text) from users")" = "ADMIN,DR,VENDOR" ]'
-for d in sd_prod sd_none sd_stg; do tq postgres -c "DROP DATABASE $d"; done   # sd_prod would trip the marker guard
+runseed sd_none APP_ENV=test; rc=$?; check "seed refuses an unmarked DB even with APP_ENV=test on loopback" '[ $rc -eq 2 ] && [ "$(rows sd_none)" = 0 ]'
+runseed sd_test; rc=$?; check "seed refuses marker test without APP_ENV=test" '[ $rc -eq 2 ] && [ "$(rows sd_test)" = 0 ]'
+runseed sd_test APP_ENV=test; rc=$?; check "seed runs on marker test with APP_ENV=test on loopback" '[ $rc -eq 0 ] && [ "$(rows sd_test)" -gt 0 ]'
+check "the seed does not trip the unique constraints on an empty DB (role counts)" '[ "$(tq sd_test -c "select string_agg(role::text, '"','"' order by role::text) from users")" = "ADMIN,DR,VENDOR" ]'
+for d in sd_prod sd_none sd_stg sd_test; do tq postgres -c "DROP DATABASE $d"; done   # sd_prod would trip the marker guard
 
 dbs() { dq "$1" postgres -c "select string_agg(datname, ',' order by datname) from pg_database"; }
 rm -f "$work/api-stopped" "$work/api-started"

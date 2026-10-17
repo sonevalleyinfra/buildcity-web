@@ -194,10 +194,6 @@ export default function Checkout() {
     }
   }, [user, contextAddresses, region?.name]);
 
-  if (checkoutItems.length === 0 && !successOrder) {
-    return <Navigate to="/cart" replace />;
-  }
-
   const baseDeliveryFee = Number(region?.baseDeliveryCharge) || 49;
   const activeWalletSettings = walletData?.settings || adminWalletSettings || {};
   const freeDeliveryThreshold = Number(activeWalletSettings.freeDeliveryMinAmount) || 2000;
@@ -227,6 +223,10 @@ export default function Checkout() {
     const orderRemaining = Math.max(0, checkoutSubtotal + deliveryCharge - couponDiscount);
     return Math.min(walletBalance, Math.floor(percentLimit), maxFlat, orderRemaining);
   }, [walletRedeemEnabled, walletBalance, walletSettings, checkoutSubtotal, deliveryCharge, couponDiscount]);
+
+  if (checkoutItems.length === 0 && !successOrder) {
+    return <Navigate to="/cart" replace />;
+  }
 
   const appliedWalletDiscount = useWallet ? maxWalletApplicable : 0;
   const total = Math.max(0, checkoutSubtotal + deliveryCharge - couponDiscount - appliedWalletDiscount);

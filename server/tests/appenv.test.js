@@ -72,7 +72,7 @@ async function withEnv(vars, fn) {
 }
 
 async function enforceTests() {
-  const fakePrisma = (env) => ({ calls: 0, async $queryRaw() { this.calls++; return [{ env }]; } });
+  const fakePrisma = (env) => ({ calls: 0, async $queryRawUnsafe() { this.calls++; return [{ env }]; } });
   const boot = async (vars, prisma) => withEnv(vars, async (out) => {
     const exits = [];
     await appEnv.enforceBoot(prisma, { exit: (c) => exits.push(c) });
@@ -99,7 +99,7 @@ async function enforceTests() {
   ok(withEnvSync({ SOURCE_COMMIT: "abc123" }, appEnv.getEnvInfo).commit === "abc123", "getEnvInfo() commit from SOURCE_COMMIT");
 
   appEnv._resetForTests();
-  const throwing = { async $queryRaw() { throw new Error(`connect failed ${REMOTE_URL}`); } };
+  const throwing = { async $queryRawUnsafe() { throw new Error(`connect failed ${REMOTE_URL}`); } };
   r = await boot({ APP_ENV: "production", DATABASE_URL: REMOTE_URL }, throwing);
   ok(r.exits[0] === 1 && r.errors.length === 1 && r.errors[0] === "[boot] refusing to start: could not read the database environment marker", "enforceBoot: query error -> fixed reason", r.errors);
   ok(!r.errors.join("").includes(SENTINEL), "enforceBoot: query error message (with URL) never printed");
@@ -141,11 +141,23 @@ const freePort = () => new Promise((resolve, reject) => {
   s.listen(0, "127.0.0.1", () => { const { port } = s.address(); s.close(() => resolve(port)); });
 });
 
-function dbUrl(name) {
+function dbUrl(name, search = "") {
   const u = new URL(LOCAL_URL);
   u.pathname = "/" + name;
+  u.search = search;
   return u.toString();
 }
+
+// Same server and DB, but logged in as a throwaway role.
+function roleUrl(name, role, password, search = "") {
+  const u = new URL(dbUrl(name, search));
+  u.username = role;
+  u.password = password;
+  return u.toString();
+}
+
+// Session GUC overrides (Prisma and node-pg pass `options` to the server): must never satisfy the guard.
+const SPOOF = (env) => `?options=-c%20buildcity.env%3D${env}`;
 
 async function startServer(extra) {
   const port = await freePort();
@@ -206,12 +218,21 @@ async function processTests() {
   const localPw = decodeURIComponent(main.password || "");
   const prodDb = `buildcity_appenv_${process.pid}_prod`;
   const stgDb = `buildcity_appenv_${process.pid}_stg`;
+  const noneDb = `buildcity_appenv_${process.pid}_none`;
+  const spoofRole = `buildcity_appenv_${process.pid}_spoof`; // role-level buildcity.env = 'staging'
+  const plainRole = `buildcity_appenv_${process.pid}_plain`; // no settings, not a superuser
+  const rolePw = ["DUMMYPASS", "role", String(process.pid)].join("-");
   const admin = new PrismaClient({ datasources: { db: { url: dbUrl("postgres") } } });
   try {
-    for (const [db, marker] of [[prodDb, "production"], [stgDb, "staging"]]) {
+    for (const [db, marker] of [[prodDb, "production"], [stgDb, "staging"], [noneDb, null]]) {
       await admin.$executeRawUnsafe(`CREATE DATABASE "${db}"`);
-      await admin.$executeRawUnsafe(`ALTER DATABASE "${db}" SET buildcity.env = '${marker}'`);
+      if (marker) await admin.$executeRawUnsafe(`ALTER DATABASE "${db}" SET buildcity.env = '${marker}'`);
     }
+    for (const role of [spoofRole, plainRole]) {
+      await admin.$executeRawUnsafe(`CREATE ROLE "${role}" LOGIN NOSUPERUSER PASSWORD '${rolePw}'`);
+      for (const db of [prodDb, stgDb, noneDb]) await admin.$executeRawUnsafe(`GRANT CONNECT ON DATABASE "${db}" TO "${role}"`);
+    }
+    await admin.$executeRawUnsafe(`ALTER ROLE "${spoofRole}" SET buildcity.env = 'staging'`);
 
     await expectRefusal("production + DB without marker", { APP_ENV: "production", DATABASE_URL: LOCAL_URL }, [localPw, mainDb]);
     await expectRefusal("staging + DB marked production", { APP_ENV: "staging", DATABASE_URL: dbUrl(prodDb) }, [localPw, prodDb]);
@@ -220,12 +241,32 @@ async function processTests() {
     await expectRefusal("test + localhost DB marked staging", { APP_ENV: "test", DATABASE_URL: dbUrl(stgDb) }, [localPw, stgDb]);
     await expectRefusal("missing APP_ENV", { DATABASE_URL: LOCAL_URL }, [localPw, mainDb]);
 
+    // Spoofed markers: only the ALTER DATABASE catalog row counts. First prove the spoofs do set the session GUC.
+    for (const [name, url, want] of [["?options", dbUrl(noneDb, SPOOF("production")), "production"], ["role-level", roleUrl(noneDb, spoofRole, rolePw), "staging"]]) {
+      const p = new PrismaClient({ datasources: { db: { url } } });
+      try {
+        const rows = await p.$queryRawUnsafe("SELECT current_setting('buildcity.env', true) AS env");
+        ok(rows[0].env === want, `spoof sanity: ${name} sets the session GUC`, rows[0].env);
+      } finally {
+        await p.$disconnect();
+      }
+    }
+    await expectRefusal("staging + DB marked production + ?options staging", { APP_ENV: "staging", DATABASE_URL: dbUrl(prodDb, SPOOF("staging")) }, [localPw, prodDb]);
+    await expectRefusal("production + unmarked DB + ?options production", { APP_ENV: "production", DATABASE_URL: dbUrl(noneDb, SPOOF("production")) }, [localPw, noneDb]);
+    await expectRefusal("staging + unmarked DB + role-level staging", { APP_ENV: "staging", DATABASE_URL: roleUrl(noneDb, spoofRole, rolePw) }, [rolePw, noneDb]);
+    await expectRefusal("development + localhost DB marked production + ?options test", { APP_ENV: "development", DATABASE_URL: dbUrl(prodDb, SPOOF("test")) }, [localPw, prodDb]);
+
     await expectBoot("production + marker production", { APP_ENV: "production", DATABASE_URL: dbUrl(prodDb) }, { env: "production", db: "production", commit: null });
     await expectBoot("staging + marker staging", { APP_ENV: "staging", DATABASE_URL: dbUrl(stgDb) }, { env: "staging", db: "staging", commit: null });
     await expectBoot("test + localhost", { APP_ENV: "test", DATABASE_URL: LOCAL_URL, SOURCE_COMMIT: "abc123" }, { env: "test", db: null, commit: "abc123" });
+    // A plain (non-superuser) role can read pg_db_role_setting.
+    await expectBoot("staging + marker staging as a plain role", { APP_ENV: "staging", DATABASE_URL: roleUrl(stgDb, plainRole, rolePw) }, { env: "staging", db: "staging", commit: null });
   } finally {
-    for (const db of [prodDb, stgDb]) {
+    for (const db of [prodDb, stgDb, noneDb]) {
       await admin.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${db}" WITH (FORCE)`).catch((e) => { fail++; console.log("FAIL drop", db, e.message); });
+    }
+    for (const role of [spoofRole, plainRole]) {
+      await admin.$executeRawUnsafe(`DROP ROLE IF EXISTS "${role}"`).catch((e) => { fail++; console.log("FAIL drop role", role, e.message); });
     }
     await admin.$disconnect();
   }

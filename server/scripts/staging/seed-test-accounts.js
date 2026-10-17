@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 // Seeds the E2E accounts and catalog (ADR 0002 section 4). Idempotent: safe to re-run.
 //   DATABASE_URL=... E2E_VENDOR_PASSWORD=... E2E_DR_PASSWORD=... E2E_ADMIN_PASSWORD=... node seed-test-accounts.js
-// Writes only when the database is marker 'staging', or APP_ENV=test on a loopback host.
-// Anything else exits 2 with no writes. Passwords come from env only and are never printed.
+// Writes only when the database is marked 'staging', or marked 'test' with APP_ENV=test on a loopback host.
+// The marker is read from the catalog (src/dbMarker.js), never from a spoofable session setting.
+// An unmarked database, a failed marker read or anything else exits 2 with no writes. Passwords come from env only and are never printed.
 "use strict";
+
+const { readDbMarker } = require("../../src/dbMarker");
 
 const PASSWORD_VARS = ["E2E_VENDOR_PASSWORD", "E2E_DR_PASSWORD", "E2E_ADMIN_PASSWORD"];
 const LOOPBACK = ["localhost", "127.0.0.1", "::1", "[::1]"];
@@ -22,22 +25,31 @@ function decide({ appEnv, marker, databaseUrl, passwords }) {
   for (const k of PASSWORD_VARS) {
     if (!passwords || !passwords[k]) return { ok: false, reason: `${k} is not set` };
   }
-  if (appEnv === "production") return { ok: false, reason: "APP_ENV=production" };
-  if (marker === "production") return { ok: false, reason: "database marker is production" };
+  if (String(appEnv || "").trim().toLowerCase() === "production") return { ok: false, reason: "APP_ENV=production" };
+  if (!marker) {
+    return {
+      ok: false,
+      reason:
+        "database is not marked (buildcity.env unset); mark a local test DB with ALTER DATABASE ... SET buildcity.env = 'test'",
+    };
+  }
+  if (String(marker).toLowerCase() === "production") return { ok: false, reason: "database marker is production" };
   if (marker === "staging") return { ok: true };
+  if (marker !== "test") return { ok: false, reason: "database marker is not staging or test" };
+  if (appEnv !== "test") return { ok: false, reason: "database marker is test but APP_ENV is not test" };
+  // The marker (read from the connected DB) is the guard; node-pg honours ?host=, so the hostname is best-effort.
   let host = null;
   try {
     host = new URL(databaseUrl).hostname;
   } catch {
     host = null;
   }
-  if (appEnv === "test" && host && LOOPBACK.includes(host)) return { ok: true };
-  return { ok: false, reason: "database is not marked staging and is not APP_ENV=test on a loopback host" };
+  if (host && LOOPBACK.includes(host)) return { ok: true };
+  return { ok: false, reason: "database marker is test but DATABASE_URL is not a loopback host" };
 }
 
-async function readMarker(prisma) {
-  const rows = await prisma.$queryRaw`SELECT current_setting('buildcity.env', true) AS env`;
-  return (rows && rows[0] && rows[0].env) || null;
+function readMarker(prisma) {
+  return readDbMarker(prisma);
 }
 
 async function seed(prisma, bcrypt, passwords) {

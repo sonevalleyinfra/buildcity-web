@@ -101,8 +101,9 @@ const cases = [
   ["unmarked, loopback, no APP_ENV", { appEnv: undefined, marker: null, databaseUrl: "postgresql://u@localhost/x", passwords: p }, false],
   ["APP_ENV=production, marker staging", { appEnv: "production", marker: "staging", databaseUrl: "postgresql://u@localhost/x", passwords: p }, false],
   ["marker staging", { appEnv: undefined, marker: "staging", databaseUrl: "postgresql://u@db.example.com/x", passwords: p }, true],
-  ["APP_ENV=test, 127.0.0.1", { appEnv: "test", marker: null, databaseUrl: "postgresql://u@127.0.0.1:5432/x", passwords: p }, true],
-  ["APP_ENV=test, localhost.evil.com", { appEnv: "test", marker: null, databaseUrl: "postgresql://u@localhost.evil.com/x", passwords: p }, false],
+  ["APP_ENV=test, 127.0.0.1, unmarked", { appEnv: "test", marker: null, databaseUrl: "postgresql://u@127.0.0.1:5432/x", passwords: p }, false],
+  ["APP_ENV=test, 127.0.0.1, marker test", { appEnv: "test", marker: "test", databaseUrl: "postgresql://u@127.0.0.1:5432/x", passwords: p }, true],
+  ["APP_ENV=test, localhost.evil.com, marker test", { appEnv: "test", marker: "test", databaseUrl: "postgresql://u@localhost.evil.com/x", passwords: p }, false],
   ["missing password", { appEnv: "test", marker: "staging", databaseUrl: "postgresql://u@localhost/x", passwords: { ...p, E2E_DR_PASSWORD: "" } }, false],
 ];
 let bad = 0;

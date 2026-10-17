@@ -1,5 +1,8 @@
-// Boot guard: APP_ENV must match the database's own marker (ALTER DATABASE <db> SET buildcity.env = '<env>').
+// Boot guard: APP_ENV must match the database's own marker (ALTER DATABASE <db> SET buildcity.env = '<env>'),
+// read from the catalog only (dbMarker.js); session, role and server-level settings never count.
 // Reasons are fixed strings: never the DATABASE_URL, password, host or raw APP_ENV value.
+const { readDbMarker } = require("./dbMarker");
+
 const APP_ENVS = ["production", "staging", "test", "development"];
 const LOCAL_HOSTS = ["localhost", "127.0.0.1"];
 
@@ -31,9 +34,8 @@ function evaluateBoot({ appEnv, databaseUrl, marker }) {
   return { ok: true, env: appEnv, db: marker || null };
 }
 
-async function readMarker(prisma) {
-  const rows = await prisma.$queryRaw`SELECT current_setting('buildcity.env', true) AS env`;
-  return (rows && rows[0] && rows[0].env) || null;
+function readMarker(prisma) {
+  return readDbMarker(prisma);
 }
 
 async function enforceBoot(prisma, { exit = process.exit } = {}) {

@@ -6,9 +6,11 @@
 BEGIN;
 
 -- Prod guard: refuse to run on anything but a database marked as staging
--- (ALTER DATABASE <db> SET buildcity.env = 'staging').
+-- (ALTER DATABASE <db> SET buildcity.env = 'staging'), read from the catalog: session/role settings never count.
 DO $$
-DECLARE m text := current_setting('buildcity.env', true);
+DECLARE m text := (SELECT substr(s, 15) FROM pg_db_role_setting r CROSS JOIN LATERAL unnest(r.setconfig) s
+        WHERE r.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database())
+          AND r.setrole = 0 AND s LIKE 'buildcity.env=%' LIMIT 1);
 BEGIN
   IF m IS DISTINCT FROM 'staging' THEN
     RAISE EXCEPTION 'anonymise refused: buildcity.env marker is %, expected staging', coalesce(nullif(m, ''), 'unset');

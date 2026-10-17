@@ -51,7 +51,8 @@ echo "Restoring $file into $PGHOST/$PGDATABASE ..."
 echo "Done. Run verify.js next."
 
 # The API boots only if APP_ENV matches this per-database setting. pg_restore never copies it; this script never sets it.
-if ! marker="$("${psql[@]}" -X -Atq -c "select coalesce(current_setting('buildcity.env', true), '')")"; then
+# Read from the catalog (the ALTER DATABASE row), not the session setting that role/session settings override.
+if ! marker="$("${psql[@]}" -X -Atq -c "select coalesce((select substr(s, 15) from pg_db_role_setting r cross join unnest(r.setconfig) s where r.setdatabase = (select oid from pg_database where datname = current_database()) and r.setrole = 0 and s like 'buildcity.env=%' limit 1), '')")"; then
   echo "warning: could not read the target database marker (buildcity.env)" >&2
   exit 0
 fi

@@ -32,6 +32,8 @@ SRC="postgresql://postgres:DUMMYPASS@127.0.0.1:$SP/appsrc"
 STG="postgresql://postgres:DUMMYPASS@127.0.0.1:$TP/postgres"
 dq() { docker exec -i "$1" psql -U postgres -X -q -At -v ON_ERROR_STOP=1 -d "$2" "${@:3}"; }   # dq <container> <db> [args]
 sq() { dq "$S" "$@"; }; tq() { dq "$T" "$@"; }
+# The ALTER DATABASE marker of <db> on the staging server, from the catalog (never a session setting).
+cat_marker() { tq postgres -c "select coalesce((select substr(s, 15) from pg_db_role_setting r cross join unnest(r.setconfig) s where r.setdatabase = (select oid from pg_database where datname = '$1') and r.setrole = 0 and s like 'buildcity.env=%' limit 1), '')"; }
 
 (cd "$server" && npx --no-install prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script) >"$work/ddl.sql" 2>"$work/ddl.err" \
   || { cat "$work/ddl.err"; echo "prisma DDL failed (run npm ci in server/)"; exit 1; }
@@ -68,7 +70,7 @@ sq appsrc -c "UPDATE vendor_products SET description = NULL"
 check "refresh exits 0" '[ $rc -eq 0 ]'
 [ $rc -eq 0 ] || { cat "$work/r2.err"; tail -5 "$work/r2.out"; }
 check "API stopped then started" '[ -e "$work/api-stopped" ] && [ -e "$work/api-started" ]'
-check "new staging DB marked staging in a new session" '[ "$(tq buildcity_staging -c "select current_setting('"'buildcity.env'"', true)")" = staging ]'
+check "new staging DB marked staging (catalog)" '[ "$(cat_marker buildcity_staging)" = staging ]'
 check "old data replaced, tmp and old DBs gone" '[ "$(tq postgres -c "select count(*) from pg_database where datname in ('"'buildcity_staging_tmp','buildcity_staging_old'"')")" = 0 ] && [ "$(tq buildcity_staging -c "select to_regclass('"'public.old_marker'"') is null")" = t ]'
 tq buildcity_staging -f - <"$stg/verify-anon.sql" >/dev/null 2>"$work/vfy.err"; vrc=$?
 check "staging phones are anonymised and verify passes" '[ $vrc -eq 0 ] && [ "$(tq buildcity_staging -c "select count(*) from users where phone !~ '"'^(2[0-9]{9}|9999999999|7777777777|10000[0-9]{5})$'"'")" = 0 ]'
@@ -118,7 +120,41 @@ runseed sd_none APP_ENV=test; rc=$?; check "seed refuses an unmarked DB even wit
 runseed sd_test; rc=$?; check "seed refuses marker test without APP_ENV=test" '[ $rc -eq 2 ] && [ "$(rows sd_test)" = 0 ]'
 runseed sd_test APP_ENV=test; rc=$?; check "seed runs on marker test with APP_ENV=test on loopback" '[ $rc -eq 0 ] && [ "$(rows sd_test)" -gt 0 ]'
 check "the seed does not trip the unique constraints on an empty DB (role counts)" '[ "$(tq sd_test -c "select string_agg(role::text, '"','"' order by role::text) from users")" = "ADMIN,DR,VENDOR" ]'
+
+# 5b. Spoofed markers (session ?options, role-level settings) never satisfy a guard: only the ALTER DATABASE row counts
+SPOOF_PW=DUMMYPASS-r
+for r in sd_spoof_stg sd_spoof_test; do
+  tq postgres -c "CREATE ROLE $r LOGIN PASSWORD '$SPOOF_PW'"
+  for d in sd_prod sd_none; do tq postgres -c "GRANT CONNECT ON DATABASE $d TO $r"; done
+done
+tq postgres -c "ALTER ROLE sd_spoof_stg SET buildcity.env='staging'"
+tq postgres -c "ALTER ROLE sd_spoof_test SET buildcity.env='test'"
+opt() { echo "?options=-c%20buildcity.env%3D$1"; }
+rdb() { echo "postgresql://$1:$SPOOF_PW@127.0.0.1:$TP/$2"; }   # rdb <role> <db>
+runseedu() { (cd "$server" && env DATABASE_URL="$1" "${@:2}" node scripts/staging/seed-test-accounts.js) >/dev/null 2>>"$work/seed.err"; }
+runseedu "$(udb sd_prod)$(opt staging)"; rc=$?; check "seed refuses marker production with ?options staging (exit 2, no rows)" '[ $rc -eq 2 ] && [ "$(rows sd_prod)" = 0 ]'
+runseedu "$(rdb sd_spoof_stg sd_prod)"; rc=$?; check "seed refuses marker production as a role with role-level staging (exit 2, no rows)" '[ $rc -eq 2 ] && [ "$(rows sd_prod)" = 0 ]'
+runseedu "$(udb sd_none)$(opt staging)"; rc=$?; check "seed refuses an unmarked DB with ?options staging (exit 2, no rows)" '[ $rc -eq 2 ] && [ "$(rows sd_none)" = 0 ]'
+runseedu "$(udb sd_none)$(opt test)" APP_ENV=test; rc=$?; check "seed refuses an unmarked DB with ?options test and APP_ENV=test (exit 2, no rows)" '[ $rc -eq 2 ] && [ "$(rows sd_none)" = 0 ]'
+
+# npm run e2e step 1 on a production-marked loopback DB with a spoofed 'test': refused before ALTER DATABASE or db push
+root="$(cd "$server/.." && pwd)"
+if [ -d "$root/node_modules/pg" ]; then
+  rune2e() { (cd "$root" && env DATABASE_URL="$1" E2E_SKIP_BUILD=1 timeout 60 node scripts/e2e-local.mjs) >"$work/e2e.out" 2>"$work/e2e.err"; }
+  rune2e "$(udb sd_prod)$(opt test)"; rc=$?
+  check "e2e-local refuses marker production with ?options test (exit 2, still production, no rows)" '[ $rc -eq 2 ] && [ "$(cat_marker sd_prod)" = production ] && [ "$(rows sd_prod)" = 0 ]'
+  check "e2e-local refusal prints no password or URL" '! grep -q -e DUMMYPASS -e postgresql:// "$work/e2e.out" "$work/e2e.err"'
+  rune2e "$(rdb sd_spoof_test sd_prod)"; rc=$?
+  check "e2e-local refuses marker production as a role with role-level test (exit 2, still production)" '[ $rc -eq 2 ] && [ "$(cat_marker sd_prod)" = production ] && [ "$(rows sd_prod)" = 0 ]'
+elif [ -n "${CI:-}" ]; then
+  ko "e2e-local spoof checks need root node_modules/pg (npm ci at the repo root)"
+else
+  echo "skip - e2e-local spoof checks (no root node_modules/pg)"
+fi
+check "spoof refusals print no password or URL" '! grep -q -e DUMMYPASS -e postgresql:// "$work/seed.err"'
+
 for d in sd_prod sd_none sd_stg sd_test; do tq postgres -c "DROP DATABASE $d"; done   # sd_prod would trip the marker guard
+for r in sd_spoof_stg sd_spoof_test; do tq postgres -c "DROP ROLE $r"; done
 
 dbs() { dq "$1" postgres -c "select string_agg(datname, ',' order by datname) from pg_database"; }
 rm -f "$work/api-stopped" "$work/api-started"

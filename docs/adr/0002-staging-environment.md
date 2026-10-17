@@ -111,8 +111,9 @@ allowed, but the build **fails** if a `staging` build names a prod host or a `pr
 `localhost` is allowed for both. No Vercel env vars are needed.
 
 **Layer 3: API boot guard (backend).** New required env `APP_ENV` ∈ `production | staging | test | development`.
-At boot the API reads the database's own marker: `SELECT current_setting('buildcity.env', true)`, set once per
-database with `ALTER DATABASE ... SET buildcity.env = '<env>'`. A database-level setting is **not** copied by
+At boot the API reads the database's own marker, set once per database with
+`ALTER DATABASE ... SET buildcity.env = '<env>'`, from the catalog (`pg_db_role_setting`, `setrole = 0`; see
+`server/src/dbMarker.js`), never `current_setting()`, which role, session and `?options=` settings override. A database-level setting is **not** copied by
 `pg_dump`/`pg_restore` without `--create`, which restore.sh doesn't use (checked on a local postgres:17: the restored
 database returned no marker while the source returned `production`). A raw prod dump restored anywhere therefore
 arrives without a `production` marker.
@@ -394,7 +395,7 @@ Ordered by when they are needed. Worker bots do none of them. Owner decision (20
 **Batch A: before the backend guard PRs merge (prod, small):**
 1. **[OM]** Coolify `buildcity-api` → Environment: add `APP_ENV=production`. No redeploy needed until the next merge.
 2. **[OM]** Prod DB marker: `ALTER DATABASE buildcity SET buildcity.env = 'production';`, then check it with
-   `SELECT current_setting('buildcity.env', true);` in a new session → `production`.
+   the catalog query in `docs/MIGRATION-VPS.md` ("Restoring `buildcity-db`", step 5) → `production`.
 
 **Batch B: staging resources (no prod impact):**
 3. **[OM]** Coolify: new **Postgres 17** `buildcity-db-staging`, database `buildcity_staging`, memory limit 512 MB,
@@ -496,7 +497,7 @@ items 1-2 being done.
         `APP_ENV`.
   - [ ] Prod restore runbook: `docs/MIGRATION-VPS.md` gets a "Restoring `buildcity-db` from a backup" section (R2
         backup or `restore.sh`) whose last steps are `ALTER DATABASE buildcity SET buildcity.env = 'production';`,
-        a new-session check that `current_setting('buildcity.env', true)` = `production`, then the API restart and
+        a catalog check (`pg_db_role_setting`, `setrole = 0`) that the marker is `production`, then the API restart and
         `/api/v1/env` = `production/production`. The C1 restore *test* says to leave `restore-test` unmarked.
   - [ ] `restore.sh` (prod-target path included) ends by printing the target database's `buildcity.env` (or
         "none") and, when it is none, the exact `ALTER DATABASE <db> SET buildcity.env = '<env>';` line to run. It

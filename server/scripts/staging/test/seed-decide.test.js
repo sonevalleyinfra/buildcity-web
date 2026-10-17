@@ -69,6 +69,16 @@ test("APP_ENV=production is refused on staging and test markers", () => {
   }
 });
 
+test("APP_ENV=production in any case is refused", () => {
+  for (const appEnv of ["Production", "PRODUCTION", " production "]) {
+    for (const marker of ["staging", "test"]) {
+      const v = run({ appEnv, marker });
+      assert.equal(v.ok, false, `${appEnv}/${marker}`);
+      assert.equal(v.reason, "APP_ENV=production");
+    }
+  }
+});
+
 test("unknown marker is refused", () => {
   assert.equal(run({ appEnv: "test", marker: "dev" }).ok, false);
 });

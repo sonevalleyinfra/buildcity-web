@@ -162,7 +162,7 @@ if db_exists "$LIVE_DB"; then msql -c "ALTER DATABASE $LIVE_DB RENAME TO $OLD_DB
 msql -c "ALTER DATABASE $TMP_DB RENAME TO $LIVE_DB"; swapped=1; tmp_exists=0
 msql -c "ALTER DATABASE $LIVE_DB SET buildcity.env = 'staging'"
 live_url="$(with_db "$STAGING_DATABASE_URL" "$LIVE_DB")"
-marker="$(psql_url "$live_url" -c "select coalesce(current_setting('buildcity.env', true), '')")" || fail "could not read the marker of $LIVE_DB"
+marker="$(psql_url "$live_url" -c "select coalesce((select substr(s, 15) from pg_db_role_setting r cross join unnest(r.setconfig) s where r.setdatabase = (select oid from pg_database where datname = current_database()) and r.setrole = 0 and s like 'buildcity.env=%' limit 1), '')")" || fail "could not read the marker of $LIVE_DB"
 [ "$marker" = staging ] || fail "$LIVE_DB marker reads '${marker:-none}', expected staging"
 "${api_start[@]}" || fail "starting the staging API failed"
 finished=1

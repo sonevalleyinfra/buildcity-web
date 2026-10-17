@@ -68,13 +68,20 @@ async function waitFor(url, what, tries = 100) {
   die(`${what} did not start`, 1);
 }
 
-// 1. Database marker: refuse a production/staging-marked DB (e.g. an ssh tunnel) BEFORE any schema push.
+// 1. Database marker (catalog only, see server/src/dbMarker.js): refuse a production/staging-marked DB
+// (e.g. an ssh tunnel) BEFORE any schema push. A failed read refuses.
 const { Client } = require("pg");
+const { MARKER_SQL } = require(path.join(serverDir, "src", "dbMarker.js"));
 const client = new Client({ connectionString: dbUrl });
 try {
   await client.connect();
-  const { rows } = await client.query("SELECT current_setting('buildcity.env', true) AS env");
-  const marker = rows[0] && rows[0].env;
+  let marker;
+  try {
+    const { rows } = await client.query(MARKER_SQL);
+    marker = (rows[0] && rows[0].env) || null;
+  } catch {
+    die("could not read the database marker");
+  }
   if (marker === "production" || marker === "staging") die("the database is marked production or staging");
   if (marker && marker !== "test") die("the database carries an unknown buildcity.env marker");
   if (!marker) {

@@ -520,10 +520,12 @@ a database setting, not data, so `pg_dump`/`pg_restore` do not copy it: after a 
    ALTER DATABASE buildcity SET buildcity.env = 'production';
    ```
 
-5. Quit psql (`\q`), open it again (the setting only shows in a new session), and check:
+5. Check the catalog row (what the API reads; `current_setting()` can be overridden per role or session):
 
    ```sql
-   select current_setting('buildcity.env', true);
+   select substr(s, 15) from pg_db_role_setting r cross join unnest(r.setconfig) s
+   where r.setdatabase = (select oid from pg_database where datname = current_database())
+     and r.setrole = 0 and s like 'buildcity.env=%';
    ```
 
    It must print `production`.

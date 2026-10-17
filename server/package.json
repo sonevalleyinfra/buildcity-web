@@ -15,7 +15,7 @@
     "db:studio": "prisma studio",
     "test:security": "node tests/run.js",
     "test:migration": "bash scripts/migration/test/run.sh",
-    "test:staging": "node --test scripts/staging/test/seed-decide.test.js && bash scripts/staging/test/run.sh && bash scripts/staging/test/refresh-shim.sh && bash scripts/staging/test/refresh-dryrun.sh"
+    "test:staging": "node --test scripts/staging/test/seed-decide.test.js scripts/staging/test/marker-static.test.js && bash scripts/staging/test/run.sh && bash scripts/staging/test/refresh-shim.sh && bash scripts/staging/test/refresh-dryrun.sh"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

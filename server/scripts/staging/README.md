@@ -46,6 +46,8 @@ that, including psql, dump, restore and API stop/start errors; a signal keeps it
 ## Refusals (exit 2)
 
 The database markers are the real guard; the host-name checks are best-effort (Coolify hostnames are UUIDs).
+Every guard (API boot, seed, anonymiser, refresh, `npm run e2e`) reads the marker from the `pg_db_role_setting`
+row of `ALTER DATABASE`, never `current_setting()`, which a role, session or `?options=` setting can override.
 
 - any database on the staging server is marked `buildcity.env = 'production'` (any role or database, any case)
 - the source database is not marked `production` (unmarked or `staging`: the URLs are probably swapped)

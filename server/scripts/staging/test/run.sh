@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Tests anonymise.sql / verify-anon.sql on a throwaway postgres:17 container (no network port,
+# DUMMYPASS, no real data). Needs docker and server/node_modules (prisma, for the schema DDL).
+set -uo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+stg="$(dirname "$here")"
+server="$(cd "$stg/../.." && pwd)"
+C="buildcity-anon-test-$$"
+work="$(mktemp -d)"
+pass=0; fail=0
+ok() { pass=$((pass + 1)); echo "ok   - $1"; }
+ko() { fail=$((fail + 1)); echo "FAIL - $1"; }
+check() { if eval "$2"; then ok "$1"; else ko "$1"; fi; }
+cleanup() { docker stop "$C" >/dev/null 2>&1; }
+trap cleanup EXIT
+
+q() { docker exec -i "$C" psql -U postgres -X -q -At -v ON_ERROR_STOP=1 -d "$@"; }   # q <db> [psql args]
+
+docker run --rm -d --name "$C" -e POSTGRES_PASSWORD=DUMMYPASS postgres:17 >/dev/null || { echo "docker run failed"; exit 1; }
+for i in $(seq 1 60); do docker exec "$C" pg_isready -U postgres >/dev/null 2>&1 && break; sleep 1; done
+# the entrypoint restarts postgres once after init; wait for a real query to succeed
+for i in $(seq 1 60); do q postgres -c 'select 1' >/dev/null 2>&1 && break; sleep 1; done
+
+(cd "$server" && npx --no-install prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script) >"$work/ddl.sql" 2>"$work/ddl.err" \
+  || { cat "$work/ddl.err"; echo "prisma DDL failed (run npm ci in server/)"; exit 1; }
+q postgres -c 'CREATE DATABASE fx' && q fx <"$work/ddl.sql" && q fx <"$here/fixture.sql" || { echo "fixture load failed"; exit 1; }
+q postgres -c 'CREATE DATABASE fx_collide TEMPLATE fx'
+
+snap() { q "$1" -c "SELECT table_name || ' ' || (xpath('/row/c/text()', query_to_xml(format('select md5(coalesce(string_agg(t::text, ''|'' order by t::text), '''')) as c from %I t', table_name), false, true, '')))[1]::text FROM information_schema.tables WHERE table_schema = 'public' ORDER BY 1"; }
+inv() { q "$1" -c "SELECT (SELECT count(*) FROM regions), (SELECT count(*) FROM categories), (SELECT count(*) FROM product_masters), (SELECT count(*) FROM product_images), (SELECT count(*) FROM vendor_products), (SELECT count(*) FROM banners), (SELECT count(*) FROM coupons), (SELECT count(*) FROM app_settings), (SELECT sum(\"totalAmount\") FROM orders), (SELECT sum(\"totalPrice\") FROM order_items), (SELECT sum(amount) FROM wallet_transactions), (SELECT sum(\"walletBalance\") FROM users), (SELECT sum(\"netRefundCash\") FROM order_returns), (SELECT count(*) FROM users), (SELECT count(*) FROM vendors), (SELECT count(*) FROM addresses)"; }
+
+# 1. Before: verify fails and names every offending column
+q fx <"$stg/verify-anon.sql" >"$work/v0.out" 2>"$work/v0.err"; rc=$?
+check "verify fails on un-anonymised data" '[ $rc -ne 0 ]'
+for col in users.phone vendors.phone district_representatives.phone addresses.phone \
+           order_returns.customerPhone order_returns.drPhone vendor_fcm_tokens.phone customer_fcm_tokens.phone \
+           otp_verifications.phone users.email notifications.message audit_logs.details \
+           reviews.comment wallet_transactions.description order_returns.returnReason \
+           'table not empty: otp_verifications' 'table not empty: vendor_fcm_tokens' \
+           'table not empty: customer_fcm_tokens' 'table not empty: audit_logs' 'table not empty: notifications'; do
+  check "verify names $col" 'grep -qF -- "$col" "$work/v0.err"'
+done
+check "verify ignores the catalog 10-digit non-mobile value" '! grep -q "vendor_products.description" "$work/v0.err"'
+
+inv fx >"$work/inv0"; snap fx >"$work/snap0"
+q fx -c "SELECT id, phone FROM users ORDER BY id" >"$work/users0"
+
+# 2. Anonymise: one transaction, then verify passes
+check "anonymise.sql has exactly one BEGIN and one COMMIT" '[ "$(grep -c "^BEGIN;" "$stg/anonymise.sql")" = 1 ] && [ "$(grep -c "^COMMIT;" "$stg/anonymise.sql")" = 1 ]'
+q fx <"$stg/anonymise.sql" >"$work/a1.out" 2>"$work/a1.err"; rc=$?
+check "anonymise.sql succeeds" '[ $rc -eq 0 ]'
+[ $rc -eq 0 ] || cat "$work/a1.err"
+q fx <"$stg/verify-anon.sql" >"$work/v1.out" 2>"$work/v1.err"; rc=$?
+check "verify passes after anonymise" '[ $rc -eq 0 ]'
+[ $rc -eq 0 ] || cat "$work/v1.err"
+
+# 3. Links, uniqueness, staff numbers, PII gone
+inv fx >"$work/inv1"
+check "catalog row counts and order/wallet sums unchanged" 'cmp -s "$work/inv0" "$work/inv1"'
+check "vendor phone == its user's phone" '[ "$(q fx -c "SELECT count(*) FROM vendors v JOIN users u ON u.id = v.\"userId\" WHERE v.phone = u.phone")" = 1 ]'
+check "DR phone (+91 form) == its user's phone" '[ "$(q fx -c "SELECT count(*) FROM district_representatives d JOIN users u ON u.id = d.\"userId\" WHERE d.phone = u.phone")" = 1 ]'
+check "address phone == customer phone (leading 0 / spaces / +91 forms)" '[ "$(q fx -c "SELECT count(*) FROM addresses a JOIN users u ON u.id = a.\"userId\" WHERE a.id = '"'a1'"' AND a.phone = u.phone")" = 1 ]'
+check "return customerPhone == customer phone, drPhone == DR phone" '[ "$(q fx -c "SELECT count(*) FROM order_returns r JOIN orders o ON o.id = r.\"orderId\" JOIN users u ON u.id = o.\"customerId\" JOIN district_representatives d ON d.id = r.\"drId\" WHERE r.\"customerPhone\" = u.phone AND r.\"drPhone\" = d.phone")" = 1 ]'
+check "users.phone still unique, none lost" '[ "$(q fx -c "SELECT count(DISTINCT phone) = count(*) FROM users")" = t ]'
+check "9999999999 and 7777777777 kept" '[ "$(q fx -c "SELECT count(*) FROM users WHERE phone IN ('"'9999999999','7777777777'"')")" = 2 ]'
+check "mapped phones follow 2<9 digits>" '[ "$(q fx -c "SELECT count(*) FROM users WHERE phone !~ '"'^(2[0-9]{9}|9999999999|7777777777)$'"'")" = 0 ]'
+check "all passwords null" '[ "$(q fx -c "SELECT (SELECT count(*) FROM users WHERE password IS NOT NULL) + (SELECT count(*) FROM vendors WHERE password IS NOT NULL) + (SELECT count(*) FROM district_representatives WHERE password IS NOT NULL)")" = 0 ]'
+check "names, emails and streets replaced" '[ "$(q fx -c "SELECT count(*) FROM users WHERE name !~ '"'^Test User '"' OR email !~ '"'^u.+@example.invalid$'"'")" = 0 ] && [ "$(q fx -c "SELECT count(*) FROM vendors WHERE \"ownerName\" !~ '"'^Owner '"' OR \"addedByDr\" = '"'Suresh Kumar'"'")" = 0 ] && [ "$(q fx -c "SELECT count(*) FROM addresses WHERE \"fullName\" !~ '"'^Customer '"' OR street !~ '"'^Street '"'")" = 0 ]'
+check "shop names kept, pincodes kept" '[ "$(q fx -c "SELECT \"shopName\" FROM vendors")" = "Sharma Cement Store" ] && [ "$(q fx -c "SELECT count(*) FROM addresses WHERE pincode IN ('"'221010','221002','226001'"')")" = 3 ]'
+check "free text scrubbed, other text kept" '[ "$(q fx -c "SELECT comment FROM reviews WHERE id = '"'rv1'"'")" = "Good. Call [phone] or mail redacted@example.invalid" ] && [ "$(q fx -c "SELECT comment FROM reviews WHERE id = '"'rv2'"'")" = "Fast delivery" ]'
+check "tokens / otp / logs / notifications emptied" '[ "$(q fx -c "SELECT (SELECT count(*) FROM otp_verifications)+(SELECT count(*) FROM vendor_fcm_tokens)+(SELECT count(*) FROM customer_fcm_tokens)+(SELECT count(*) FROM audit_logs)+(SELECT count(*) FROM notifications)")" = 0 ]'
+
+# 4. Re-run is a no-op and still verifies
+snap fx >"$work/snap1"
+q fx <"$stg/anonymise.sql" >"$work/a2.out" 2>"$work/a2.err"; rc=$?
+check "second anonymise run succeeds" '[ $rc -eq 0 ]'
+snap fx >"$work/snap2"
+check "second run changes nothing" 'cmp -s "$work/snap1" "$work/snap2"'
+q fx <"$stg/verify-anon.sql" >/dev/null 2>"$work/v2.err"; rc=$?
+check "verify passes after second run" '[ $rc -eq 0 ]'
+check "before/after snapshots differ (the anonymiser did something)" '! cmp -s "$work/snap0" "$work/snap1"'
+
+# 5. New rows added to an anonymised DB get numbers that do not collide with existing ones
+q fx -c "INSERT INTO users (id, phone, name, \"updatedAt\") VALUES ('u9', '8123456780', 'Late Joiner', now())" >/dev/null
+q fx <"$stg/anonymise.sql" >/dev/null 2>"$work/a3.err"; rc=$?
+check "late-added user anonymised without clashing" '[ $rc -eq 0 ] && [ "$(q fx -c "SELECT count(DISTINCT phone) = count(*) FROM users")" = t ]'
+q fx <"$stg/verify-anon.sql" >/dev/null 2>&1; rc=$?
+check "verify passes after late-added user" '[ $rc -eq 0 ]'
+
+# 6. Failure rolls everything back (two users whose numbers normalise to the same digits)
+q fx_collide -c "INSERT INTO users (id, phone, \"updatedAt\") VALUES ('uc1', '9000000001', now()), ('uc2', '+919000000001', now())" >/dev/null
+snap fx_collide >"$work/c0"
+q fx_collide <"$stg/anonymise.sql" >/dev/null 2>"$work/c.err"; rc=$?
+check "colliding phones make anonymise fail on the unique key" '[ $rc -ne 0 ] && grep -q "duplicate key" "$work/c.err"'
+snap fx_collide >"$work/c1"
+check "failed run leaves the database untouched" 'cmp -s "$work/c0" "$work/c1"'
+
+rm -rf "$work"
+echo "passed=$pass failed=$fail"
+[ "$fail" = 0 ]

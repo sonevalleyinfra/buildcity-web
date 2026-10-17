@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 export const STATE_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), ".state");
 export const OTP = process.env.STAGING_OTP || "246810";
 export const PRODUCT_NAME = "E2E Test Cement 50kg";
-export const REGION_NAME = "E2E Region";
+export const REGION_NAME = "E2E Varanasi";
 
 export function newRunId() {
   return Date.now().toString(36);

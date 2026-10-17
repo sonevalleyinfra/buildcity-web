@@ -242,7 +242,7 @@ leaves the VPS):
 
 Staging's `DATA_DIR` volume is its own, so it never holds prod's `vendor-fcm-tokens.json`.
 
-**Seed (`seed-test-accounts.js`, idempotent; also used by `e2e-local` on an empty DB):** region `E2E Region`; vendor
+**Seed (`seed-test-accounts.js`, idempotent; also used by `e2e-local` on an empty DB):** region `E2E Varanasi`; vendor
 `1000000001` (approved, password `E2E_VENDOR_PASSWORD`) with product `E2E Test Cement 50kg` priced above
 `minOrderForCashback`; DR `1000000002` (`E2E_DR_PASSWORD`) in the same region; admin = the hardcoded `9999999999`
 `users` row (upserted with `role ADMIN`, name `E2E Admin`), its `password` set to bcrypt(`E2E_ADMIN_PASSWORD`). That
@@ -360,7 +360,7 @@ status bar and the back button.
 - Global setup = the isolation guard from §2 (aborts unless `env/db ∈ {staging,test}`; refuses prod hosts).
 - Smoke specs, in order, sharing one run id:
   1. `customer-auth`: register and log in with OTP as `10000` + 5 digits from the run id, using `STAGING_OTP`.
-  2. `browse-cart-cod`: home → category → `E2E Test Cement 50kg` → cart → checkout with a new address in `E2E Region`
+  2. `browse-cart-cod`: home → category → `E2E Test Cement 50kg` → cart → checkout with a new address in `E2E Varanasi`
      → COD → order placed. Writes the order id to the shared state.
   3. `vendor-accepts`: `/vendor/login` with the partner UA, as vendor `1000000001` → order visible → accept. The
      outbox has a push for that order.

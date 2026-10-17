@@ -40,7 +40,7 @@ export async function assertSafeTarget(url, label = "target", fetchImpl = fetch)
   const timer = setTimeout(() => ctl.abort(), 10_000);
   let info;
   try {
-    const res = await fetchImpl(endpoint, { method: "GET", signal: ctl.signal, headers: { accept: "application/json" } });
+    const res = await fetchImpl(endpoint, { method: "GET", redirect: "error", signal: ctl.signal, headers: { accept: "application/json" } });
     if (!res.ok) throw new GuardError(`isolation guard: ${label} /api/v1/env returned HTTP ${res.status}`);
     info = await res.json();
   } catch (err) {

@@ -36,7 +36,7 @@ those hosts. Do not weaken either.
 ## Specs
 
 1. `01-customer-auth`: register and log in as `10000` + 5 digits from the run id with the fixed OTP.
-2. `02-browse-cart-cod`: home, category, `E2E Test Cement 50kg`, cart, checkout with a new address in `E2E Region`, COD; the order id goes to the shared state.
+2. `02-browse-cart-cod`: home, category, `E2E Test Cement 50kg`, cart, checkout with a new address in `E2E Varanasi`, COD; the order id goes to the shared state.
 
 CI: `.github/workflows/e2e-local.yml` (check `e2e-local`). Trace is kept on failure only; the HTML report is an
 artifact for 7 days (staging/test data only).

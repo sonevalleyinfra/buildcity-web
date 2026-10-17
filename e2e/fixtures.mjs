@@ -12,3 +12,13 @@ export const test = base.extend({
   },
 });
 export { expect };
+
+// The storefront-wide delivery-location picker opens a moment after the first page load (once regions are
+// fetched) and blocks every click until a region is chosen. Pick the seeded one if it shows up.
+export async function pickRegionIfAsked(page, regionName, timeout = 8000) {
+  const heading = page.getByRole("heading", { name: "Choose Delivery Location" });
+  if (await heading.isVisible({ timeout }).catch(() => false)) {
+    await page.getByRole("button", { name: regionName, exact: true }).click();
+    await expect(heading).toBeHidden();
+  }
+}

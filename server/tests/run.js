@@ -20,6 +20,7 @@ const env = {
   SMS_APIKEY: "test",
   SMS_RELAY_SECRET: "",
   NODE_ENV: "test",
+  APP_ENV: "test",
 };
 const root = path.join(__dirname, "..");
 
@@ -42,7 +43,7 @@ async function waitForHealth() {
   let failed = false;
   try {
     await waitForHealth();
-    for (const suite of ["security.test.js", "smoke.test.js", "pagination.test.js"]) {
+    for (const suite of ["security.test.js", "smoke.test.js", "pagination.test.js", "appenv.test.js"]) {
       console.log(`\n=== ${suite} ===`);
       try {
         execFileSync("node", [path.join(__dirname, suite)], { env, stdio: "inherit" });

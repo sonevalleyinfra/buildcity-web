@@ -2,6 +2,16 @@
 
 Android apps (customer + partner), release steps and over-the-air updates: see [docs/android-release.md](docs/android-release.md).
 
+## Server environment
+
+Required variables for the API in `server/` (full list: `server/.env.example`).
+
+| Name | Notes |
+|------|-------|
+| `APP_ENV` | Required. One of `production`, `staging`, `test`, `development`. `production`/`staging` also need the matching DB marker (`ALTER DATABASE <db> SET buildcity.env = '<env>'`); `test`/`development` need a localhost `DATABASE_URL`. The API refuses to boot otherwise. |
+| `DATABASE_URL` | Postgres connection URL. |
+| `JWT_SECRET` | Token signing secret. |
+
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.

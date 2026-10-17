@@ -49,3 +49,14 @@ args=(--use-list="$list" --no-owner --no-acl --exit-on-error --dbname="$PGDATABA
 echo "Restoring $file into $PGHOST/$PGDATABASE ..."
 "${pg_restore[@]}" "${args[@]}" "$file"
 echo "Done. Run verify.js next."
+
+# The API boots only if APP_ENV matches this per-database setting. pg_restore never copies it; this script never sets it.
+if ! marker="$("${psql[@]}" -X -Atq -c "select coalesce(current_setting('buildcity.env', true), '')")"; then
+  echo "warning: could not read the target database marker (buildcity.env)" >&2
+  exit 0
+fi
+echo "Target database marker (buildcity.env): ${marker:-none}"
+if [ -z "$marker" ]; then
+  echo "To mark it, run in psql on the target (use 'production' only for the real prod database):"
+  echo "ALTER DATABASE $PGDATABASE SET buildcity.env = '<env>';"
+fi

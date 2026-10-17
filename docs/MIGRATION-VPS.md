@@ -206,6 +206,7 @@ from the places in the table. Never write the values into this repo or into chat
 | `DIRECT_URL` | The same internal URL (we have no pooler). |
 | `JWT_SECRET` | **Must be the exact same value as Railway**, or every logged-in user is logged out. Railway → service → **Variables** → `JWT_SECRET` → copy. |
 | `ALLOWED_ORIGINS` | Copy from Railway **Variables**. It is the comma-separated list of allowed websites (it must include `https://www.buildcity.in`). |
+| `APP_ENV` | `production`. Required: the API refuses to boot unless the database marker matches (see "Restoring `buildcity-db` from a backup"). |
 | `NODE_ENV` | `production` (the image sets it too). |
 | `PORT` | `5000` |
 | `DATA_DIR` | `/data` (the image sets it too). |
@@ -504,6 +505,33 @@ Never run `restore.sh` into Supabase; it refuses to anyway.
 
 ---
 
+## Restoring `buildcity-db` from a backup
+
+The API only starts when `APP_ENV` matches a marker stored on the database itself (`buildcity.env`). The marker is
+a database setting, not data, so `pg_dump`/`pg_restore` do not copy it: after a restore you must set it again.
+
+1. Stop `buildcity-api` in Coolify.
+2. Restore the backup into `buildcity-db` with `restore.sh` (`TARGET_DATABASE_URL` = its URL, add `--clean`).
+   At the end it prints `Target database marker (buildcity.env): none`.
+3. Run `$VERIFY` as in A7. It must say PASS.
+4. Coolify → `buildcity-db` → **Terminal**, open `psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"`, then run:
+
+   ```sql
+   ALTER DATABASE buildcity SET buildcity.env = 'production';
+   ```
+
+5. Quit psql (`\q`), open it again (the setting only shows in a new session), and check:
+
+   ```sql
+   select current_setting('buildcity.env', true);
+   ```
+
+   It must print `production`.
+6. Restart `buildcity-api`.
+7. Check `curl https://api.buildcity.cloud/api/v1/env` returns `{"env":"production","db":"production",...}`.
+
+---
+
 ## Phase C: Clean up
 
 ### C1. Nightly backups to the cloud bucket (do it the same week)
@@ -521,7 +549,8 @@ Never run `restore.sh` into Supabase; it refuses to anyway.
 1. Create a throwaway database in Coolify (`+ New` → Database → PostgreSQL, name `restore-test`) with the same
    major version.
 2. Download the newest backup from the bucket, then restore it into `restore-test` with `restore.sh`
-   (use its own URL as `TARGET_DATABASE_URL`).
+   (use its own URL as `TARGET_DATABASE_URL`). Leave `restore-test` unmarked: do not run the `ALTER DATABASE` line
+   that `restore.sh` prints.
 3. Run `$VERIFY` with `SOURCE_DATABASE_URL` = `buildcity-db` and `TARGET_DATABASE_URL` = `restore-test`.
    It should say PASS (small differences are fine if orders came in since the backup).
 4. Delete `restore-test` in Coolify.

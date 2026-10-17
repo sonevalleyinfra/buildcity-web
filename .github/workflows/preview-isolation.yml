@@ -25,9 +25,10 @@ jobs:
       EXPECT_DB: staging
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
     steps:
+      # PR code must never run with VERCEL_AUTOMATION_BYPASS_SECRET in env; the deployed commit is only probed over HTTP.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.deployment.sha }}
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:

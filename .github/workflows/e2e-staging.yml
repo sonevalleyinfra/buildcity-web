@@ -1,7 +1,7 @@
 name: e2e-staging
 
 # Smoke suite against https://staging.buildcity.in on the merged SHA (ADR 0002 sections 3 and 7).
-# The `e2e-staging` check on the commit is what scripts/promote.sh and the `production` branch rule read.
+# scripts/promote.sh reads this workflow's push run on the commit; the `production` branch rule reads its check.
 on:
   push:
     branches: [main]
@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 35
     env:
       CI: "true"
+      E2E_TRACE: "off"
       E2E_BASE_URL: https://staging.buildcity.in
       E2E_VENDOR_PASSWORD: ${{ secrets.E2E_VENDOR_PASSWORD }}
       E2E_DR_PASSWORD: ${{ secrets.E2E_DR_PASSWORD }}
@@ -50,15 +51,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/ci/wait-for-staging.mjs "$GITHUB_SHA"
+      # No artifacts on purpose: the repo is public, and traces/reports would leak secrets.
       - name: E2E (staging)
-        run: npx playwright test -c e2e/playwright.config.mjs
-      - name: Upload report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report-staging
-          path: |
-            e2e/report
-            e2e/results
-          retention-days: 7
-          if-no-files-found: ignore
+        run: npx playwright test -c e2e/playwright.config.mjs --trace=off

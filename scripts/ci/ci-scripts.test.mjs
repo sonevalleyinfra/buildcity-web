@@ -1,6 +1,8 @@
 // node --test scripts/ci/ci-scripts.test.mjs
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { checkEnv } from "./check-env.mjs";
 import { pollOnce } from "./wait-for-staging.mjs";
 import { bypassHeadersFor } from "../../e2e/bypass.mjs";
@@ -57,4 +59,31 @@ test("bypass header goes to the origin under test only", () => {
   assert.deepEqual(bypassHeadersFor("https://staging.buildcity.in/api/v1/env", env), { "x-vercel-protection-bypass": "s" });
   assert.deepEqual(bypassHeadersFor("https://fonts.googleapis.com/x", env), {});
   assert.deepEqual(bypassHeadersFor("https://staging.buildcity.in/", { E2E_BASE_URL: env.E2E_BASE_URL }), {});
+});
+
+const repoFile = (p) => readFileSync(fileURLToPath(new URL(`../../${p}`, import.meta.url)), "utf8");
+test("e2e-staging never keeps or uploads traces/reports (public repo)", () => {
+  const y = repoFile(".github/workflows/e2e-staging.yml");
+  for (const bad of ["upload-artifact", "e2e/results", "e2e/report", "retain-on-failure"]) assert.ok(!y.includes(bad), bad);
+  assert.doesNotMatch(y, /trace["']?\s*[:=\s]\s*["']?on\b/i);
+  assert.ok(y.includes('E2E_TRACE: "off"'));
+  assert.ok(y.includes("--trace=off"));
+});
+test("playwright config turns traces off when E2E_TRACE=off", async () => {
+  const cfg = "../../e2e/playwright.config.mjs";
+  const prev = process.env.E2E_TRACE;
+  try {
+    process.env.E2E_TRACE = "off";
+    assert.equal((await import(`${cfg}?t=off${Date.now()}`)).default.use.trace, "off");
+    delete process.env.E2E_TRACE;
+    assert.equal((await import(`${cfg}?t=on${Date.now()}`)).default.use.trace, "retain-on-failure");
+  } finally {
+    if (prev === undefined) delete process.env.E2E_TRACE;
+    else process.env.E2E_TRACE = prev;
+  }
+});
+test("preview-isolation checks out the default branch, never the deployed sha", () => {
+  const y = repoFile(".github/workflows/preview-isolation.yml");
+  assert.doesNotMatch(y, /ref:.*deployment\.sha/);
+  assert.ok(y.includes("ref: ${{ github.event.repository.default_branch }}"));
 });

@@ -2,6 +2,8 @@
 # scripts/promote.sh <sha> [--dry-run]
 # Fast-forward `production` to <sha> (ADR 0002 section 3). Office Manager only, after the owner says "ship".
 # Refuses unless: <sha> is on main, `e2e-staging` succeeded on it, and production -> <sha> is a fast-forward.
+# e2e-staging is read from Actions workflow runs (push to main, by workflow path), not check-runs: any workflow
+# token with checks:write can create a check-run named e2e-staging, but it can't fake a push-triggered run.
 # --dry-run runs every check and prints the push instead of running it.
 # Env: PROMOTE_REPO (default sonevalleyinfra/buildcity-web), PROMOTE_REMOTE (default origin).
 set -euo pipefail
@@ -22,6 +24,11 @@ done
 
 git fetch --quiet "$REMOTE" main production
 SHA="$(git rev-parse --verify --quiet "$SHA_IN^{commit}")" || { echo "refused: $SHA_IN is not a known commit" >&2; exit 1; }
+# a branch/tag named like hex would win over the commit prefix
+if [[ "${SHA,,}" != "${SHA_IN,,}"* ]]; then
+  echo "refused: $SHA_IN resolved to $SHA (a ref name?), pass the full 40-char SHA" >&2
+  exit 1
+fi
 
 # 1. on main
 if ! git merge-base --is-ancestor "$SHA" "$REMOTE/main"; then
@@ -29,11 +36,11 @@ if ! git merge-base --is-ancestor "$SHA" "$REMOTE/main"; then
   exit 1
 fi
 
-# 2. green e2e-staging on that exact commit (latest run by the GitHub Actions app)
-CONCLUSION="$(gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" \
-  --jq '[.check_runs[] | select(.name=="e2e-staging" and .app.slug=="github-actions")] | sort_by(.started_at) | last | .conclusion // "none"')"
-if [ "$CONCLUSION" != "success" ]; then
-  echo "refused: e2e-staging on $SHA is '$CONCLUSION', need 'success'" >&2
+# 2. green e2e-staging on that exact commit (latest push-to-main run of the workflow file; $SHA is validated hex)
+RESULT="$(gh api "repos/$REPO/actions/runs?head_sha=$SHA&event=push&per_page=100" \
+  --jq '[.workflow_runs[] | select(.path==".github/workflows/e2e-staging.yml" and .head_branch=="main" and .head_sha=="'"$SHA"'")] | sort_by(.run_started_at // .created_at) | last | if . == null then "none" else "\(.status)/\(.conclusion)" end')"
+if [ "$RESULT" != "completed/success" ]; then
+  echo "refused: e2e-staging run on $SHA is '$RESULT', need 'completed/success'" >&2
   exit 1
 fi
 

@@ -8,7 +8,7 @@ DECLARE
   bad bigint := 0;
   cols text[] := ARRAY[]::text[];
   allowed constant text := '^(2[0-9]{9}|10000[0-9]{5}|9999999999|7777777777)$';
-  mobile  constant text := '(^|[^0-9])(91|0)?[6-9][0-9]{9}([^0-9]|$)';
+  mobile  constant text := '(?<![0-9])(?:(?:91|0)[ .-]?)?[6-9](?:[ .-]?[0-9]){9}(?![0-9])';
   email   constant text := '[a-z0-9._%+-]+@[a-z0-9-]+\.[a-z.]{2,}';
 BEGIN
   -- 1. Known phone columns: only anonymised, test or hardcoded staff numbers

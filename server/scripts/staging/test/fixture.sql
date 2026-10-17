@@ -40,13 +40,15 @@ INSERT INTO order_items (id, "orderId", "vendorProductId", "vendorId", "productN
  ('oi2', 'o2', 'vp1', 'v1', 'OPC 53 Grade 50kg', 400, 3, 1200);
 -- customer phone stored with a leading 0, DR phone with spaces: both must still link
 INSERT INTO order_returns (id, "orderId", "drId", "drPhone", "customerPhone", "customerName", "returnAmount", "netRefundCash", "returnReason", "returnItems") VALUES
- ('or1', 'o1', 'd1', '+91 87654 00003', '09876500001', 'Anil Verma', 400, 390, 'Customer Anil called 9876500001 for pickup', '[{"productName": "OPC 53 Grade 50kg", "vendorName": "Sharma Cement Store"}]');
+ ('or1', 'o1', 'd1', '+91 87654 00003', '09876500001', 'Anil Verma', 400, 390, 'Customer Anil called 9876500001 or 98765-00001 for pickup', '[{"productName": "OPC 53 Grade 50kg", "vendorName": "Sharma Cement Store"}]');
 INSERT INTO reviews (id, "productId", name, comment) VALUES
  ('rv1', 'pm1', 'Anil V', 'Good. Call 9812345678 or mail anil.verma@gmail.com'),
- ('rv2', 'pm1', 'Sunita', 'Fast delivery');
+ ('rv2', 'pm1', 'Sunita', 'Fast delivery'),
+ ('rv3', 'pm1', 'Mohan', 'Call 98123 45003 or 98123-45004 or 98123.45005 or +91 98123 45006 ok');
 INSERT INTO wallet_transactions (id, "userId", amount, type, description) VALUES
  ('w1', 'u1', 150.50, 'ORDER_CASHBACK', 'Cashback for order'),
- ('w2', 'u6', 99.25, 'ADMIN_ADJUST', 'Credited after call from 6123456789');
+ ('w2', 'u6', 99.25, 'ADMIN_ADJUST', 'Credited after call from 6123456789'),
+ ('w3', 'u6', 0, 'ADMIN_ADJUST', 'Spoke to 61234 56789 and 61234-56788');
 
 INSERT INTO notifications (id, "userId", title, message) VALUES ('n1', 'u1', 'Order', 'Hi Anil, OTP sent to 9876500001');
 INSERT INTO audit_logs (id, "userId", action, details, "ipAddress") VALUES ('al1', 'u4', 'LOGIN', 'admin login from phone 9999999999 and 9876500001', '203.0.113.9');

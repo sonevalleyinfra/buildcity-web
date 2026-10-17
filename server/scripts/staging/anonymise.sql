@@ -50,10 +50,11 @@ $$ SELECT newph FROM phone_map WHERE norm = pg_temp.norm(p) $$;
 CREATE FUNCTION pg_temp.lbl(p text, id text) RETURNS text LANGUAGE sql STABLE AS
 $$ SELECT coalesce((SELECT label FROM phone_map WHERE norm = pg_temp.norm(p)), left(id, 8)) $$;
 
--- Free text that may carry a phone or an email typed by a person.
+-- Free text that may carry a phone or an email typed by a person. A phone may have one space,
+-- dash or dot between any two digits (98123 45003, 98123-45004, +91 98123.45005).
 CREATE FUNCTION pg_temp.scrub(t text) RETURNS text LANGUAGE sql IMMUTABLE AS
 $$ SELECT regexp_replace(
-     regexp_replace(t, '(^|[^0-9])(91|0)?[6-9][0-9]{9}(?![0-9])', '\1[phone]', 'g'),
+     regexp_replace(t, '(?<![0-9])(?:(?:91|0)[ .-]?)?[6-9](?:[ .-]?[0-9]){9}(?![0-9])', '[phone]', 'g'),
      '[a-z0-9._%+-]+@[a-z0-9-]+\.[a-z.]{2,}', 'redacted@example.invalid', 'gi') $$;
 
 -- Customers / staff users

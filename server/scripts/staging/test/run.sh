@@ -95,6 +95,43 @@ check "colliding phones make anonymise fail on the unique key" '[ $rc -ne 0 ] &&
 snap fx_collide >"$work/c1"
 check "failed run leaves the database untouched" 'cmp -s "$work/c0" "$work/c1"'
 
+# 7. Separators inside free text: scrubbed, and verify catches them in a catalog column
+check "separated phones scrubbed in reviews" '[ "$(q fx -c "SELECT comment FROM reviews WHERE id = '"'rv3'"'")" = "Call [phone] or [phone] or [phone] or +[phone] ok" ]'
+check "separated phones scrubbed in returnReason" '[ "$(q fx -c "SELECT \"returnReason\" FROM order_returns")" = "Customer Anil called [phone] or [phone] for pickup" ]'
+check "separated phones scrubbed in wallet description" '[ "$(q fx -c "SELECT description FROM wallet_transactions WHERE id = '"'w3'"'")" = "Spoke to [phone] and [phone]" ]'
+q fx -c "UPDATE vendor_products SET description = 'call 98123 45007 now'" >/dev/null
+q fx <"$stg/verify-anon.sql" >/dev/null 2>"$work/v3.err"; rc=$?
+check "verify fails on a separated phone in a catalog column" '[ $rc -ne 0 ] && grep -qF -- "vendor_products.description" "$work/v3.err"'
+for v in '98123-45007' '98123.45007' '+91 98123 45007' '091-98123-45007'; do
+  q fx -c "UPDATE vendor_products SET description = 'x $v y'" >/dev/null
+  q fx <"$stg/verify-anon.sql" >/dev/null 2>&1; rc=$?
+  check "verify fails on catalog phone form: $v" '[ $rc -ne 0 ]'
+done
+q fx -c "UPDATE vendor_products SET description = 'Batch 1234567890 certified, 12 34 56 78 90, 400-500'" >/dev/null
+q fx <"$stg/verify-anon.sql" >/dev/null 2>&1; rc=$?
+check "verify ignores non-mobile digit groups" '[ $rc -eq 0 ]'
+
+# 8. 256 KB adversarial input. Near-miss inputs (nine digits then a break, so nothing matches and the
+# engine backtracks at every start) must stay under 100 ms; match-dense inputs (one replacement per
+# ~10 bytes, ~9 us each in postgres regexp_replace, same as the old pattern) get a 1000 ms linear-time guard.
+awk '/CREATE FUNCTION pg_temp.scrub/{f=1} f{print} f&&/\$\$;/{exit}' "$stg/anonymise.sql" >"$work/scrub.sql"
+mobile_re="$(sed -n "s/^ *mobile  constant text := \(.*\);$/\1/p" "$stg/verify-anon.sql")"
+check "extracted scrub function and mobile pattern" '[ -s "$work/scrub.sql" ] && [ -n "$mobile_re" ]'
+for gen in "repeat('98765 4321,', 23831)" "repeat('9-9-9-9-9-9-9-9-9,', 14563)" "repeat('9 ', 4) || repeat('x', 262000)" "repeat('91 0 91 0 ', 21845)" "repeat('9.', 131072)" "repeat('9', 262144)" "repeat('98123-', 43690)"; do
+  ms="$(q fx <<SQL | tail -1
+$(cat "$work/scrub.sql")
+CREATE TEMP TABLE adv AS SELECT $gen AS t;
+CREATE TEMP TABLE tm AS SELECT clock_timestamp() AS t0;
+SELECT count(*) FROM adv WHERE length(pg_temp.scrub(t)) > 0 \gset
+CREATE TEMP TABLE tm2 AS SELECT clock_timestamp() AS t1;
+SELECT count(*) FROM adv WHERE t ~ $mobile_re \gset
+SELECT round(extract(epoch FROM ((SELECT t1 FROM tm2) - (SELECT t0 FROM tm))) * 1000) + round(extract(epoch FROM (clock_timestamp() - (SELECT t1 FROM tm2))) * 1000);
+SQL
+)"
+  lim=100; case "$gen" in "repeat('9.', 131072)"|"repeat('9', 262144)"|"repeat('98123-', 43690)") lim=1000;; esac
+  check "256 KB adversarial $gen: scrub+verify ${ms} ms < $lim" '[ -n "$ms" ] && [ "$ms" -lt "$lim" ]'
+done
+
 rm -rf "$work"
 echo "passed=$pass failed=$fail"
 [ "$fail" = 0 ]

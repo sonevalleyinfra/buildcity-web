@@ -25,7 +25,7 @@ INSERT INTO vendors (id, "userId", "shopName", "ownerName", phone, password, "re
 INSERT INTO district_representatives (id, "userId", name, phone, password, "regionId") VALUES
  ('d1', 'u3', 'Suresh Kumar', '+918765400003', '$2a$10$realhash3', 'r1');
 INSERT INTO vendor_products (id, "masterProductId", "vendorId", "regionId", name, "categoryId", "categoryName", brand, type, grade, unit, price, "imageUrl", description, "approvalStatus", "isActive") VALUES
- ('vp1', 'pm1', 'v1', 'r1', 'OPC 53 Grade 50kg', 'c1', 'Cement', 'Generic', 'OPC', '53', 'Bag', 400, 'https://img.example/pm1.webp', 'Batch 1234567890 certified', 'APPROVED', true);
+ ('vp1', 'pm1', 'v1', 'r1', 'OPC 53 Grade 50kg', 'c1', 'Cement', 'Generic', 'OPC', '53', 'Bag', 400, 'https://img.example/pm1.webp', 'Batch 123456789 certified', 'APPROVED', true);
 
 INSERT INTO addresses (id, "userId", "regionId", "fullName", phone, street, pincode) VALUES
  ('a1', 'u1', 'r1', 'Anil Verma', '9876500001', '12 Gandhi Road, Sigra', '221010'),
@@ -44,7 +44,10 @@ INSERT INTO order_returns (id, "orderId", "drId", "drPhone", "customerPhone", "c
 INSERT INTO reviews (id, "productId", name, comment) VALUES
  ('rv1', 'pm1', 'Anil V', 'Good. Call 9812345678 or mail anil.verma@gmail.com'),
  ('rv2', 'pm1', 'Sunita', 'Fast delivery'),
- ('rv3', 'pm1', 'Mohan', 'Call 98123 45003 or 98123-45004 or 98123.45005 or +91 98123 45006 ok');
+ ('rv3', 'pm1', 'Mohan', 'Call 98123 45003 or 98123-45004 or 98123.45005 or +91 98123 45006 ok'),
+ ('rv4', 'pm1', 'Geeta', 'Phone (981) 234-5003 anytime'),
+ ('rv5', 'pm1', 'Hari', 'Try +91 (98123) 45003 or 98 12 34 50 03 today'),
+ ('rv6', 'pm1', 'Ira', 'Deliver to 226001 for 12,500.00 total, ref 4500.00');
 INSERT INTO wallet_transactions (id, "userId", amount, type, description) VALUES
  ('w1', 'u1', 150.50, 'ORDER_CASHBACK', 'Cashback for order'),
  ('w2', 'u6', 99.25, 'ADMIN_ADJUST', 'Credited after call from 6123456789'),

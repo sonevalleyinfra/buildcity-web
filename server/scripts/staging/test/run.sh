@@ -99,17 +99,19 @@ check "failed run leaves the database untouched" 'cmp -s "$work/c0" "$work/c1"'
 check "separated phones scrubbed in reviews" '[ "$(q fx -c "SELECT comment FROM reviews WHERE id = '"'rv3'"'")" = "Call [phone] or [phone] or [phone] or +[phone] ok" ]'
 check "separated phones scrubbed in returnReason" '[ "$(q fx -c "SELECT \"returnReason\" FROM order_returns")" = "Customer Anil called [phone] or [phone] for pickup" ]'
 check "separated phones scrubbed in wallet description" '[ "$(q fx -c "SELECT description FROM wallet_transactions WHERE id = '"'w3'"'")" = "Spoke to [phone] and [phone]" ]'
-q fx -c "UPDATE vendor_products SET description = 'call 98123 45007 now'" >/dev/null
+check "bracketed, grouped and sentence phones scrubbed" '[ "$(q fx -c "SELECT comment FROM reviews WHERE id = '"'rv4'"'")" = "Phone ([phone] anytime" ] && [ "$(q fx -c "SELECT comment FROM reviews WHERE id = '"'rv5'"'")" = "Try +[phone] or [phone] today" ]'
+check "pincode and amounts left alone" '[ "$(q fx -c "SELECT comment FROM reviews WHERE id = '"'rv6'"'")" = "Deliver to 226001 for 12,500.00 total, ref 4500.00" ]'
+q fx -c "UPDATE vendor_products SET description = 'call 98123 45007 now'">/dev/null
 q fx <"$stg/verify-anon.sql" >/dev/null 2>"$work/v3.err"; rc=$?
 check "verify fails on a separated phone in a catalog column" '[ $rc -ne 0 ] && grep -qF -- "vendor_products.description" "$work/v3.err"'
-for v in '98123-45007' '98123.45007' '+91 98123 45007' '091-98123-45007'; do
+for v in '98123-45007' '98123.45007' '+91 98123 45007' '091-98123-45007' '(981) 234-5003' '+91 (98123) 45003' '98 12 34 50 03' '1234567890' '61234 56789'; do
   q fx -c "UPDATE vendor_products SET description = 'x $v y'" >/dev/null
   q fx <"$stg/verify-anon.sql" >/dev/null 2>&1; rc=$?
   check "verify fails on catalog phone form: $v" '[ $rc -ne 0 ]'
 done
-q fx -c "UPDATE vendor_products SET description = 'Batch 1234567890 certified, 12 34 56 78 90, 400-500'" >/dev/null
+q fx -c "UPDATE vendor_products SET description = 'Batch 123456789 certified, 12 34 56 78, 400-500, 226001, 12,500.00'" >/dev/null
 q fx <"$stg/verify-anon.sql" >/dev/null 2>&1; rc=$?
-check "verify ignores non-mobile digit groups" '[ $rc -eq 0 ]'
+check "verify ignores short digit groups, pincode and amounts" '[ $rc -eq 0 ]'
 
 # 8. 256 KB adversarial input. Near-miss inputs (nine digits then a break, so nothing matches and the
 # engine backtracks at every start) must stay under 100 ms; match-dense inputs (one replacement per

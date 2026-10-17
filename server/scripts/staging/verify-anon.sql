@@ -8,7 +8,7 @@ DECLARE
   bad bigint := 0;
   cols text[] := ARRAY[]::text[];
   allowed constant text := '^(2[0-9]{9}|10000[0-9]{5}|9999999999|7777777777)$';
-  mobile  constant text := '(?<![0-9])(?:(?:91|0)[ .-]?)?[6-9](?:[ .-]?[0-9]){9}(?![0-9])';
+  mobile  constant text := '(?<![0-9])(?:[0-9][ .()\s-]{0,5}){9,}[0-9]';
   email   constant text := '[a-z0-9._%+-]+@[a-z0-9-]+\.[a-z.]{2,}';
 BEGIN
   -- 1. Known phone columns: only anonymised, test or hardcoded staff numbers
@@ -27,16 +27,20 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- 2. Every text/varchar/json/jsonb column in public: no 6-9 mobile, no real-looking email
+  -- 2. Every text/varchar/json/jsonb column in public: no run of 10+ digits (any separators), no real-looking email
   FOR r IN SELECT c.table_name AS t, c.column_name AS c
            FROM information_schema.columns c
            JOIN information_schema.tables x
              ON x.table_schema = c.table_schema AND x.table_name = c.table_name AND x.table_type = 'BASE TABLE'
            WHERE c.table_schema = 'public' AND c.data_type IN ('text', 'character varying', 'json', 'jsonb')
            ORDER BY 1, 2 LOOP
-    EXECUTE format(
-      'SELECT count(*) FROM public.%I WHERE (%I)::text ~ $1 AND (%I)::text !~ ''^(9999999999|7777777777)$''',
-      r.t, r.c, r.c) INTO n USING mobile;
+    -- Explicit false-positive rule: image URLs (Prisma default, Unsplash) carry long digit ids.
+    n := 0;
+    IF r.c <> 'imageUrl' THEN
+      EXECUTE format(
+        'SELECT count(*) FROM public.%I WHERE (%I)::text ~ $1 AND (%I)::text !~ $2',
+        r.t, r.c, r.c) INTO n USING mobile, allowed;
+    END IF;
     IF n > 0 THEN
       RAISE WARNING 'phone-like value: %.% (% rows)', r.t, r.c, n;
       bad := bad + n; cols := cols || (r.t || '.' || r.c);

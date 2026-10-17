@@ -22,7 +22,9 @@ test("customer registers, logs out and logs back in with OTP", async ({ page, co
 
   await page.getByPlaceholder("e.g. Ramesh Kumar").fill(CUSTOMER_NAME);
   await page.getByPlaceholder("10-digit mobile number").fill(phone);
+  const registerOtpSent = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/v1/auth/otp/request");
   await page.getByRole("button", { name: /Send Verification OTP/ }).click();
+  expect((await registerOtpSent).ok()).toBeTruthy();
 
   await page.getByPlaceholder("Enter 6-digit SMS OTP").fill(OTP);
   await page.getByRole("button", { name: /Verify OTP & Create Account/ }).click();
@@ -36,7 +38,10 @@ test("customer registers, logs out and logs back in with OTP", async ({ page, co
   await expect(logout).toBeHidden();
 
   await page.getByPlaceholder("Enter 10-digit mobile number").fill(phone);
+  // Wait for the OTP to be stored before typing it: filling early races the request on a slow runner.
+  const otpSent = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/v1/auth/otp/request");
   await page.getByRole("button", { name: "Continue with OTP" }).click();
+  expect((await otpSent).ok()).toBeTruthy();
   await page.getByPlaceholder("Enter 6-digit OTP").fill(OTP);
   await page.getByRole("button", { name: "Verify & Login" }).click();
 

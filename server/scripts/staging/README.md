@@ -33,19 +33,30 @@ Run it from a directory without spaces in its path (the `$PWD` mount). `PSQL` ne
 5. `seed-test-accounts.js` seeds the E2E accounts and the test product.
 6. Stops the staging API, renames `buildcity_staging` to `buildcity_staging_old`, renames the tmp DB to
    `buildcity_staging`, sets and re-reads the marker in a new session, starts the API, then drops the old DB.
-   If anything fails before the swap completes, the old DB is renamed back and the API is restarted.
+   If anything fails before the swap completes, the old DB is renamed back and the API is restarted. If the
+   rename-back itself fails, the API stays stopped and it prints: `the previous staging data is in
+   buildcity_staging_old, buildcity_staging does not exist ... Fix by hand: ALTER DATABASE buildcity_staging_old
+   RENAME TO buildcity_staging`.
 
-The dump is deleted by an exit trap on every path (success, failure, Ctrl-C). Exit 2 means it refused before
-touching anything.
+The dump is deleted by an exit trap on every path (success, failure, Ctrl-C).
+
+Exit codes: 2 = refused before touching anything (no dump, create, drop, rename or API stop); 1 = any failure after
+that, including psql, dump, restore and API stop/start errors; a signal keeps its own code.
 
 ## Refusals (exit 2)
 
+The database markers are the real guard; the host-name checks are best-effort (Coolify hostnames are UUIDs).
+
+- any database on the staging server is marked `buildcity.env = 'production'` (any role or database, any case)
+- the source database is not marked `production` (unmarked or `staging`: the URLs are probably swapped)
+- a marker or existence query fails (never fails open)
+- `buildcity_staging_old` exists but `buildcity_staging` does not (a previous run stranded it; rename it back by hand)
 - a missing `SOURCE_DATABASE_URL`, `STAGING_DATABASE_URL`, `STAGING_API_STOP`, `STAGING_API_START` or `E2E_*` password
 - the staging host:port equals the source host:port, or both URLs reach the same Postgres server (same
   `system_identifier`, so a name and an IP of one server are caught)
 - the staging host is `buildcity-db` (or `buildcity-db.<suffix>`) or listed in `PROD_DB_HOSTS` (comma list; put prod's IP there)
 - `buildcity_staging`, `buildcity_staging_tmp` or `buildcity_staging_old` already exists with a marker other than
-  `staging` (for example `production`)
+  `staging`
 - a Supabase host (from `_lib.sh`)
 
 ## Seed (`seed-test-accounts.js`)
@@ -61,4 +72,4 @@ env only and never printed. It writes only to a database marked `staging`, or wi
 
 `npm run test:staging` runs the anonymiser tests, `refresh-shim.sh` (every refusal, no DB) and `refresh-dryrun.sh`
 (two throwaway `postgres:17` containers on loopback: failed verify, full swap, admin login on the result, seed
-idempotency and refusals). The dry run needs docker and host `psql`.
+idempotency and refusals, swapped URLs, a stray production DB, a failed rename-back). The dry run needs docker and host `psql`.

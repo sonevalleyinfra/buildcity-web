@@ -114,8 +114,50 @@ runseed sd_stg E2E_ADMIN_PASSWORD=; rc=$?; check "seed refuses a missing passwor
 runseed sd_stg; rc=$?; check "seed runs on marker staging" '[ $rc -eq 0 ] && [ "$(rows sd_stg)" -gt 0 ]'
 runseed sd_none APP_ENV=test; rc=$?; check "seed runs on APP_ENV=test with a loopback host (empty DB)" '[ $rc -eq 0 ] && [ "$(rows sd_none)" -gt 0 ]'
 check "the seed does not trip the unique constraints on an empty DB (role counts)" '[ "$(tq sd_none -c "select string_agg(role::text, '"','"' order by role::text) from users")" = "ADMIN,DR,VENDOR" ]'
+for d in sd_prod sd_none sd_stg; do tq postgres -c "DROP DATABASE $d"; done   # sd_prod would trip the marker guard
 
-# 6. Refresh refuses a staging server holding a production-marked live DB
+dbs() { dq "$1" postgres -c "select string_agg(datname, ',' order by datname) from pg_database"; }
+rm -f "$work/api-stopped" "$work/api-started"
+nodump='[ -z "$(ls -A "$work" | grep "^refresh\." || true)" ]'
+
+# 6. Swapped URLs: source = staging DB (marker staging), target = the server holding the production-marked DB
+s0="$(dbs "$S")"; t0="$(dbs "$T")"
+(cd "$work" && SOURCE_DATABASE_URL="postgresql://postgres:DUMMYPASS@127.0.0.1:$TP/buildcity_staging" \
+  STAGING_DATABASE_URL="postgresql://postgres:DUMMYPASS@127.0.0.1:$SP/postgres" bash "$stg/refresh.sh") >"$work/r4.out" 2>"$work/r4.err"; rc=$?
+check "swapped URLs refused (exit 2, reason)" '[ $rc -eq 2 ] && grep -q -e "marked production" -e "expected production" "$work/r4.err"'
+check "swapped URLs: no database created or dropped on either server" '[ "$(dbs "$S")" = "$s0" ] && [ "$(dbs "$T")" = "$t0" ]'
+check "swapped URLs: API never stopped, no dump left" '[ ! -e "$work/api-stopped" ] && '"$nodump"
+
+# 7. A production-marked database anywhere on the staging server
+tq postgres -c 'CREATE DATABASE stray_prod'; tq postgres -c "ALTER DATABASE stray_prod SET buildcity.env='production'"
+(cd "$work" && bash "$stg/refresh.sh") >"$work/r5.out" 2>"$work/r5.err"; rc=$?
+check "production DB on the staging server refused (exit 2)" '[ $rc -eq 2 ] && grep -q "stray_prod" "$work/r5.err"'
+check "production DB on the staging server: no tmp DB, API never stopped" '[ "$(tq postgres -c "select count(*) from pg_database where datname = '"'buildcity_staging_tmp'"'")" = 0 ] && [ ! -e "$work/api-stopped" ]'
+tq postgres -c 'DROP DATABASE stray_prod'
+
+# 8. Swap and rename-back both fail: exit 1, old DB stranded and named, API not restarted; the next run refuses
+real_psql="$(command -v psql)"
+cat >"$work/psql-wrap" <<SH
+#!/usr/bin/env bash
+case "\$*" in *"buildcity_staging_tmp RENAME TO"*|*"buildcity_staging_old RENAME TO buildcity_staging"*) exit 3 ;; esac
+exec "$real_psql" "\$@"
+SH
+chmod +x "$work/psql-wrap"
+tq buildcity_staging -c "CREATE TABLE old_marker (v text); INSERT INTO old_marker VALUES ('previous staging')"
+(cd "$work" && PSQL="$work/psql-wrap" bash "$stg/refresh.sh") >"$work/r6.out" 2>"$work/r6.err"; rc=$?
+check "failed swap + rename-back exits 1 (not psql's 3)" '[ $rc -eq 1 ]'
+check "failed rename-back names buildcity_staging_old, does not claim untouched" 'grep -q "buildcity_staging_old" "$work/r6.err" && ! grep -q untouched "$work/r6.err"'
+check "failed rename-back keeps the old data in buildcity_staging_old, tmp dropped" '[ "$(tq buildcity_staging_old -c "select v from old_marker")" = "previous staging" ] && [ "$(tq postgres -c "select count(*) from pg_database where datname in ('"'buildcity_staging_tmp','buildcity_staging'"')")" = 0 ]'
+check "failed rename-back: API stopped and not restarted, no dump left" '[ -e "$work/api-stopped" ] && [ ! -e "$work/api-started" ] && '"$nodump"
+[ $rc -eq 1 ] || cat "$work/r6.err"
+rm -f "$work/api-stopped"
+(cd "$work" && bash "$stg/refresh.sh") >"$work/r7.out" 2>"$work/r7.err"; rc=$?
+check "stranded old DB refused on the next run (exit 2)" '[ $rc -eq 2 ] && grep -q "stranded" "$work/r7.err" && [ ! -e "$work/api-stopped" ]'
+check "stranded old DB still holds the old data" '[ "$(tq buildcity_staging_old -c "select v from old_marker")" = "previous staging" ]'
+tq postgres -c 'ALTER DATABASE buildcity_staging_old RENAME TO buildcity_staging'
+check "no passwords or URLs in refusal and failure output" '! grep -q -e DUMMYPASS -e postgresql:// "$work"/r[4-7].out "$work"/r[4-7].err'
+
+# 9. Refresh refuses a staging server holding a production-marked live DB
 tq postgres -c "ALTER DATABASE buildcity_staging SET buildcity.env='production'"
 (cd "$work" && bash "$stg/refresh.sh") >"$work/r3.out" 2>"$work/r3.err"; rc=$?
 check "refresh refuses when buildcity_staging is marked production (exit 2)" '[ $rc -eq 2 ] && [ "$(tq buildcity_staging -c "select count(*) from users")" -gt 0 ]'

@@ -16,10 +16,15 @@ for c in pg_dump pg_restore psql; do
 name="$(basename "$0")"
 printf '%s PGHOST=%s PGPORT=%s ARGS:' "$name" "${PGHOST:-}" "${PGPORT:-}" >>"$SHIM_LOG"
 printf ' %q' "$@" >>"$SHIM_LOG"; echo >>"$SHIM_LOG"
+if [ -n "${SHIM_FAIL_ON:-}" ]; then case "$*" in *"$SHIM_FAIL_ON"*) exit 2 ;; esac; fi   # connection lost
 case "$name:$*" in
   pg_dump:--version) echo "pg_dump (PostgreSQL) 17.4" ;;
   psql:*server_version_num*) echo 170004 ;;
   psql:*system_identifier*) echo "${SHIM_SYSID:-id-$PGHOST-$PGPORT}" ;;
+  psql:*"buildcity.env=production"*) echo "${SHIM_SERVER_PROD-}" ;;
+  psql:*"current_database()"*) echo "${SHIM_SRC_MARKER-production}" ;;
+  psql:*"count(*) from pg_database where datname = 'buildcity_staging'"*) echo "${SHIM_EXISTS_LIVE:-${SHIM_EXISTS:-1}}" ;;
+  psql:*"count(*) from pg_database where datname = 'buildcity_staging_old'"*) echo "${SHIM_EXISTS_OLD:-${SHIM_EXISTS:-1}}" ;;
   psql:*"count(*) from pg_database"*) echo "${SHIM_EXISTS:-1}" ;;
   psql:*"d.datname = 'buildcity_staging'"*) echo "${SHIM_MARKER_LIVE-staging}" ;;
   psql:*"d.datname = 'buildcity_staging_tmp'"*) echo "${SHIM_MARKER_TMP-}" ;;
@@ -68,6 +73,13 @@ refuse "live DB marked production" "marker 'production'" SHIM_MARKER_LIVE=produc
 refuse "leftover tmp DB marked production" "marker 'production'" SHIM_MARKER_TMP=production
 refuse "unknown marker on live DB" "marker 'test'" SHIM_MARKER_LIVE=test
 refuse "Supabase target" "Supabase" STAGING_DATABASE_URL="postgresql://user:$PW@db.abc.supabase.co:5432/postgres"
+refuse "staging server has a production DB" "database marked production (buildcity)" SHIM_SERVER_PROD=buildcity
+refuse "server marker query fails" "could not read database markers on the staging server" SHIM_FAIL_ON=buildcity.env=production
+refuse "source marked staging (URLs swapped)" "marked 'staging', expected production (are the URLs swapped?)" SHIM_SRC_MARKER=staging
+refuse "source unmarked" "marked 'none', expected production" SHIM_SRC_MARKER=
+refuse "source marker query fails" "could not read the source marker" "SHIM_FAIL_ON=current_database()"
+refuse "existence query fails (no fail-open)" "could not check whether" "SHIM_FAIL_ON=count(*) from pg_database"
+refuse "stranded old DB" "buildcity_staging_old exists but buildcity_staging does not" SHIM_EXISTS_LIVE=0 SHIM_EXISTS_OLD=1
 
 : >"$SHIM_LOG"
 env "${base[@]}" bash "$stg/refresh.sh" extra >"$t/out/arg.out" 2>"$t/out/arg.err" </dev/null; rc=$?

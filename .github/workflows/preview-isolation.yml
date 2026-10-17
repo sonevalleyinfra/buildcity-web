@@ -1,0 +1,42 @@
+name: preview-isolation
+
+# Every Vercel preview must proxy /api/v1 to staging, never prod (ADR 0002 section 2).
+# The check lands on the deployed commit, so it shows on the PR head.
+on:
+  deployment_status:
+
+permissions:
+  contents: read
+
+jobs:
+  preview-isolation:
+    name: preview-isolation
+    # Vercel reports deployments in the "Preview" environment (PR branches and main alike; main's deployment
+    # carries a SHA as ref, so it can't be told apart here, and it passes anyway: any non-prod host is staging).
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment.environment == 'Preview'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PREVIEW_URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+      # Edit these only with the ADR: a preview must report staging/staging.
+      EXPECT_ENV: staging
+      EXPECT_DB: staging
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.deployment.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Require the deployment protection bypass secret
+        run: |
+          if [ -z "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
+            echo "::error::VERCEL_AUTOMATION_BYPASS_SECRET is not set; protected previews can't be probed"
+            exit 1
+          fi
+      - name: Preview reports staging/staging
+        run: node scripts/ci/check-env.mjs "$PREVIEW_URL" "$EXPECT_ENV" "$EXPECT_DB"

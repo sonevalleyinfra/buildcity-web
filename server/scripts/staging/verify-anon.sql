@@ -1,5 +1,6 @@
 -- Fails (RAISE EXCEPTION, non-zero exit with -v ON_ERROR_STOP=1) when the database still holds
--- anything that looks like a real phone number or email. Names every offending column.
+-- anything that looks like a real phone number, or any email other than *@example.invalid
+-- (one allowed address in a value does not excuse another). Names every offending column.
 -- Fix catalog false positives with explicit rules in anonymise.sql, never by loosening a regex here.
 DO $$
 DECLARE
@@ -46,8 +47,8 @@ BEGIN
       bad := bad + n; cols := cols || (r.t || '.' || r.c);
     END IF;
     EXECUTE format(
-      'SELECT count(*) FROM public.%I WHERE (%I)::text ~* $1 AND (%I)::text !~* ''@example\.invalid''',
-      r.t, r.c, r.c) INTO n USING email;
+      'SELECT count(*) FROM public.%I WHERE regexp_replace((%I)::text, ''[a-z0-9._%%+-]+@example\.invalid'', '''', ''gi'') ~* $1',
+      r.t, r.c) INTO n USING email;
     IF n > 0 THEN
       RAISE WARNING 'email-like value: %.% (% rows)', r.t, r.c, n;
       bad := bad + n; cols := cols || (r.t || '.' || r.c);

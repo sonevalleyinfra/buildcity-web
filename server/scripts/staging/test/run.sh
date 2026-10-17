@@ -24,7 +24,13 @@ for i in $(seq 1 60); do q postgres -c 'select 1' >/dev/null 2>&1 && break; slee
 (cd "$server" && npx --no-install prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script) >"$work/ddl.sql" 2>"$work/ddl.err" \
   || { cat "$work/ddl.err"; echo "prisma DDL failed (run npm ci in server/)"; exit 1; }
 q postgres -c 'CREATE DATABASE fx' && q fx <"$work/ddl.sql" && q fx <"$here/fixture.sql" || { echo "fixture load failed"; exit 1; }
+# TEMPLATE does not copy database settings, so every database gets its own marker
+q postgres -c 'CREATE DATABASE fx_unmarked TEMPLATE fx'
+q postgres -c 'CREATE DATABASE fx_prod TEMPLATE fx'
 q postgres -c 'CREATE DATABASE fx_collide TEMPLATE fx'
+q postgres -c "ALTER DATABASE fx SET buildcity.env='staging'"
+q postgres -c "ALTER DATABASE fx_collide SET buildcity.env='staging'"
+q postgres -c "ALTER DATABASE fx_prod SET buildcity.env='production'"
 
 snap() { q "$1" -c "SELECT table_name || ' ' || (xpath('/row/c/text()', query_to_xml(format('select md5(coalesce(string_agg(t::text, ''|'' order by t::text), '''')) as c from %I t', table_name), false, true, '')))[1]::text FROM information_schema.tables WHERE table_schema = 'public' ORDER BY 1"; }
 inv() { q "$1" -c "SELECT (SELECT count(*) FROM regions), (SELECT count(*) FROM categories), (SELECT count(*) FROM product_masters), (SELECT count(*) FROM product_images), (SELECT count(*) FROM vendor_products), (SELECT count(*) FROM banners), (SELECT count(*) FROM coupons), (SELECT count(*) FROM app_settings), (SELECT sum(\"totalAmount\") FROM orders), (SELECT sum(\"totalPrice\") FROM order_items), (SELECT sum(amount) FROM wallet_transactions), (SELECT sum(\"walletBalance\") FROM users), (SELECT sum(\"netRefundCash\") FROM order_returns), (SELECT count(*) FROM users), (SELECT count(*) FROM vendors), (SELECT count(*) FROM addresses)"; }
@@ -45,6 +51,17 @@ check "verify ignores the catalog 10-digit non-mobile value" '! grep -q "vendor_
 inv fx >"$work/inv0"; snap fx >"$work/snap0"
 q fx -c "SELECT id, phone FROM users ORDER BY id" >"$work/users0"
 
+# 1b. Prod guard: unmarked and production-marked databases are refused and left untouched
+for d in fx_unmarked fx_prod; do
+  snap $d >"$work/g0.$d"
+  q $d <"$stg/anonymise.sql" >/dev/null 2>"$work/g.$d.err"; rc=$?
+  check "anonymise refuses $d (non-zero exit)" '[ $rc -ne 0 ] && grep -q "anonymise refused" "$work/g.$d.err"'
+  snap $d >"$work/g1.$d"
+  check "$d snapshot unchanged after refusal" 'cmp -s "$work/g0.$d" "$work/g1.$d"'
+done
+check "refusal names the marker found / unset" 'grep -q "marker is unset" "$work/g.fx_unmarked.err" && grep -q "marker is production" "$work/g.fx_prod.err"'
+check "guard DO block is the first statement after BEGIN" '[ "$(awk "/^BEGIN;/{f=1;next} f&&/^(DO|CREATE|UPDATE|INSERT)/{print \$1; exit}" "$stg/anonymise.sql")" = DO ]'
+
 # 2. Anonymise: one transaction, then verify passes
 check "anonymise.sql has exactly one BEGIN and one COMMIT" '[ "$(grep -c "^BEGIN;" "$stg/anonymise.sql")" = 1 ] && [ "$(grep -c "^COMMIT;" "$stg/anonymise.sql")" = 1 ]'
 q fx <"$stg/anonymise.sql" >"$work/a1.out" 2>"$work/a1.err"; rc=$?
@@ -57,7 +74,7 @@ check "verify passes after anonymise" '[ $rc -eq 0 ]'
 # 3. Links, uniqueness, staff numbers, PII gone
 inv fx >"$work/inv1"
 check "catalog row counts and order/wallet sums unchanged" 'cmp -s "$work/inv0" "$work/inv1"'
-check "vendor phone == its user's phone" '[ "$(q fx -c "SELECT count(*) FROM vendors v JOIN users u ON u.id = v.\"userId\" WHERE v.phone = u.phone")" = 1 ]'
+check "vendor phone == its user's phone" '[ "$(q fx -c "SELECT count(*) FROM vendors v JOIN users u ON u.id = v.\"userId\" WHERE v.id = '"'v1'"' AND v.phone = u.phone")" = 1 ]'
 check "DR phone (+91 form) == its user's phone" '[ "$(q fx -c "SELECT count(*) FROM district_representatives d JOIN users u ON u.id = d.\"userId\" WHERE d.phone = u.phone")" = 1 ]'
 check "address phone == customer phone (leading 0 / spaces / +91 forms)" '[ "$(q fx -c "SELECT count(*) FROM addresses a JOIN users u ON u.id = a.\"userId\" WHERE a.id = '"'a1'"' AND a.phone = u.phone")" = 1 ]'
 check "return customerPhone == customer phone, drPhone == DR phone" '[ "$(q fx -c "SELECT count(*) FROM order_returns r JOIN orders o ON o.id = r.\"orderId\" JOIN users u ON u.id = o.\"customerId\" JOIN district_representatives d ON d.id = r.\"drId\" WHERE r.\"customerPhone\" = u.phone AND r.\"drPhone\" = d.phone")" = 1 ]'
@@ -66,9 +83,13 @@ check "9999999999 and 7777777777 kept" '[ "$(q fx -c "SELECT count(*) FROM users
 check "mapped phones follow 2<9 digits>" '[ "$(q fx -c "SELECT count(*) FROM users WHERE phone !~ '"'^(2[0-9]{9}|9999999999|7777777777)$'"'")" = 0 ]'
 check "all passwords null" '[ "$(q fx -c "SELECT (SELECT count(*) FROM users WHERE password IS NOT NULL) + (SELECT count(*) FROM vendors WHERE password IS NOT NULL) + (SELECT count(*) FROM district_representatives WHERE password IS NOT NULL)")" = 0 ]'
 check "names, emails and streets replaced" '[ "$(q fx -c "SELECT count(*) FROM users WHERE name !~ '"'^Test User '"' OR email !~ '"'^u.+@example.invalid$'"'")" = 0 ] && [ "$(q fx -c "SELECT count(*) FROM vendors WHERE \"ownerName\" !~ '"'^Owner '"' OR \"addedByDr\" = '"'Suresh Kumar'"'")" = 0 ] && [ "$(q fx -c "SELECT count(*) FROM addresses WHERE \"fullName\" !~ '"'^Customer '"' OR street !~ '"'^Street '"'")" = 0 ]'
-check "shop names kept, pincodes kept" '[ "$(q fx -c "SELECT \"shopName\" FROM vendors")" = "Sharma Cement Store" ] && [ "$(q fx -c "SELECT count(*) FROM addresses WHERE pincode IN ('"'221010','221002','226001'"')")" = 3 ]'
+check "shop names kept, pincodes kept" '[ "$(q fx -c "SELECT \"shopName\" FROM vendors WHERE id = '"'v1'"'")" = "Sharma Cement Store" ] && [ "$(q fx -c "SELECT count(*) FROM addresses WHERE pincode IN ('"'221010','221002','226001'"')")" = 4 ]'
 check "free text scrubbed, other text kept" '[ "$(q fx -c "SELECT comment FROM reviews WHERE id = '"'rv1'"'")" = "Good. Call [phone] or mail redacted@example.invalid" ] && [ "$(q fx -c "SELECT comment FROM reviews WHERE id = '"'rv2'"'")" = "Fast delivery" ]'
 check "tokens / otp / logs / notifications emptied" '[ "$(q fx -c "SELECT (SELECT count(*) FROM otp_verifications)+(SELECT count(*) FROM vendor_fcm_tokens)+(SELECT count(*) FROM customer_fcm_tokens)+(SELECT count(*) FROM audit_logs)+(SELECT count(*) FROM notifications)")" = 0 ]'
+
+check "real 2xxxxxxxxx landline (022-2345-6789) remapped, not kept" '[ "$(q fx -c "SELECT phone FROM addresses WHERE id = '"'a4'"'")" != 2223456789 ] && [ "$(q fx -c "SELECT count(*) FROM addresses WHERE phone ~ '"'^2[0-9]{9}$'"'")" = 4 ]'
+check "referral wallet name removed, rest kept" '[ "$(q fx -c "SELECT description FROM wallet_transactions WHERE id = '"'w4'"'")" = "Referral bonus of 50 for order by Customer" ]'
+check "Super Admin / Admin kept in addedByDr, names reduced to DR" '[ "$(q fx -c "SELECT \"addedByDr\" FROM vendors ORDER BY id" | paste -sd,)" = "DR,Super Admin" ]'
 
 # 4. Re-run is a no-op and still verifies
 snap fx >"$work/snap1"
@@ -112,6 +133,14 @@ done
 q fx -c "UPDATE vendor_products SET description = 'Batch 123456789 certified, 12 34 56 78, 400-500, 226001, 12,500.00'" >/dev/null
 q fx <"$stg/verify-anon.sql" >/dev/null 2>&1; rc=$?
 check "verify ignores short digit groups, pincode and amounts" '[ $rc -eq 0 ]'
+
+# 7b. Email check: one example.invalid address must not excuse a real one in the same value
+q fx -c "UPDATE vendor_products SET description = 'mail u1@example.invalid or real@gmail.com'" >/dev/null
+q fx <"$stg/verify-anon.sql" >/dev/null 2>"$work/v4.err"; rc=$?
+check "verify fails on a real email next to an example.invalid one" '[ $rc -ne 0 ] && grep -qF -- "vendor_products.description" "$work/v4.err"'
+q fx -c "UPDATE vendor_products SET description = 'mail u1@example.invalid'" >/dev/null
+q fx <"$stg/verify-anon.sql" >/dev/null 2>&1; rc=$?
+check "verify accepts example.invalid emails alone" '[ $rc -eq 0 ]'
 
 # 8. 256 KB adversarial input. Near-miss inputs (nine digits then a break, so nothing matches and the
 # engine backtracks at every start) must stay under 100 ms; match-dense inputs (one replacement per

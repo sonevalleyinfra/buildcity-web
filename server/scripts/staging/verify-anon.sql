@@ -10,6 +10,7 @@ DECLARE
   cols text[] := ARRAY[]::text[];
   allowed constant text := '^(2[0-9]{9}|10000[0-9]{5}|9999999999|7777777777)$';
   mobile  constant text := '(?<![0-9])(?:[0-9][ .()\s-]{0,5}){9,}[0-9]';
+  uuid_value constant text := '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
   email   constant text := '[a-z0-9._%+-]+@[a-z0-9-]+\.[a-z.]{2,}';
 BEGIN
   -- 1. Known phone columns: only anonymised, test or hardcoded staff numbers
@@ -35,12 +36,14 @@ BEGIN
              ON x.table_schema = c.table_schema AND x.table_name = c.table_name AND x.table_type = 'BASE TABLE'
            WHERE c.table_schema = 'public' AND c.data_type IN ('text', 'character varying', 'json', 'jsonb')
            ORDER BY 1, 2 LOOP
+    -- Explicit false-positive rule: a value that is exactly a UUID (ids and foreign keys). About one UUID in
+    -- ten has 10+ digits in a row across its dashes, so without this a real refresh fails on its own ids.
     -- Explicit false-positive rule: image URLs (Prisma default, Unsplash) carry long digit ids.
     n := 0;
     IF r.c <> 'imageUrl' THEN
       EXECUTE format(
-        'SELECT count(*) FROM public.%I WHERE (%I)::text ~ $1 AND (%I)::text !~ $2',
-        r.t, r.c, r.c) INTO n USING mobile, allowed;
+        'SELECT count(*) FROM public.%I WHERE (%I)::text ~ $1 AND (%I)::text !~ $2 AND (%I)::text !~* $3',
+        r.t, r.c, r.c, r.c) INTO n USING mobile, allowed, uuid_value;
     END IF;
     IF n > 0 THEN
       RAISE WARNING 'phone-like value: %.% (% rows)', r.t, r.c, n;

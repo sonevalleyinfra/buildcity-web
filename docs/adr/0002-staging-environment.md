@@ -318,7 +318,7 @@ New `server/src/appEnv.js` exports `isProduction()`. It returns true only after 
 | Side effect | Production | Anything else (staging, test, dev, misconfigured) |
 |---|---|---|
 | SMS (`sendRealSMSOTP`, including the hardcoded relay) | unchanged | returns `{ success: true, sandbox: true }` **before** any network call. Gateway creds are ignored even if set. |
-| OTP request | unchanged | phone must match `^10000\d{5}$`, else `403 "Staging: use a test number"`. The OTP is the code constant `STAGING_OTP = "246810"` (not env, so a misconfig can't change it). |
+| OTP request | unchanged | phone must match `^10000\d{5}$`, else `403 "Staging: use a test number"`. The OTP is the code constant `STAGING_OTP = "654321"` (not env, so a misconfig can't change it). |
 | FCM | unchanged | sent only if a service account is set **and** its `project_id` ends with `-staging`. Otherwise logged as sandboxed. |
 | Outbox | none | in-memory ring buffer (last 200) of sandboxed SMS/push payloads. `GET /api/v1/_staging/outbox` (ADMIN), **registered only when not production**, lets E2E assert that "vendor was notified". |
 
@@ -509,7 +509,7 @@ items 1-2 being done.
 - Context: `server/src/smsService.js`, `server/src/pushService.js`, OTP routes `index.js:1622-1760`.
 - Acceptance:
   - [ ] With `APP_ENV=test`, a test stubs `http.request`, `https.request` and `fetch` to throw, then calls an OTP
-        request for `1000012345`: success, nothing called. `9876543210` → 403. `1000012345` + `246810` → token.
+        request for `1000012345`: success, nothing called. `9876543210` → 403. `1000012345` + `654321` → token.
   - [ ] Push with no service account, or with a `project_id` not ending in `-staging`, is not sent and appears in
         the outbox. `/api/v1/_staging/outbox` needs ADMIN and is 404 when `isProduction()`. Unit test with injected
         env.
@@ -601,7 +601,7 @@ step 4 prod check. Lifting the preview hard rule after `preview-isolation` is gr
   (`staging.buildcity.in`, `buildcity-api-staging`, `buildcity-db-staging`).
 - qa verifies UI and flows on **PR previews or `staging.buildcity.in` only**, after checking that `/api/v1/env` says
   `staging`. Never on prod, never on a preview whose `/api/v1/env` isn't `staging`. Test logins use `10000xxxxx` +
-  OTP `246810` and the seeded partner accounts.
+  OTP `654321` and the seeded partner accounts.
 - Remove "Hard rule until staging exists" only after `preview-isolation` is green and the §2 step 4 prod query returns 0.
 - Approval/release: "ship it" on buildcity-web = `scripts/promote.sh <sha>` (green `e2e-staging` required). After
   that, the read-only prod smoke. `gh pr merge` to `main` no longer deploys prod.

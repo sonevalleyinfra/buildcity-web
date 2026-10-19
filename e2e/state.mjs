@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const STATE_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), ".state");
-export const OTP = process.env.STAGING_OTP || "246810";
+export const OTP = process.env.STAGING_OTP || "654321";
 export const PRODUCT_NAME = "E2E Test Cement 50kg";
 export const REGION_NAME = "E2E Varanasi";
 

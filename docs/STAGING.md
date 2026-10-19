@@ -33,7 +33,7 @@ Bots never run `promote.sh`, merge to `production`, or deploy.
    curl -fsS https://<preview-host>/api/v1/env
    ```
    If it says `production`, stop and tell the owner. (Previews are behind Vercel login; use a logged-in browser or the automation bypass header.)
-2. Log in with a test number: `10000` + 5 digits, any such number, OTP `246810`. Only `10000xxxxx` numbers can log in on non-prod, so no real person is ever messaged.
+2. Log in with a test number: `10000` + 5 digits, any such number, OTP `654321`. Only `10000xxxxx` numbers can log in on non-prod, so no real person is ever messaged.
 3. Seeded partner accounts exist after a data refresh (passwords are held by the owner and in GitHub secrets, not here):
    - vendor `1000000001`
    - delivery rep (DR) `1000000002`

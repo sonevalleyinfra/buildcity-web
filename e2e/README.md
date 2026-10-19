@@ -31,7 +31,7 @@ those hosts. Do not weaken either.
 |---|---|
 | `E2E_BASE_URL` | web origin under test (required) |
 | `E2E_API_URL` | API origin, only if it differs from the web origin |
-| `STAGING_OTP` | test-number OTP, default `246810` |
+| `STAGING_OTP` | test-number OTP, default `654321` |
 
 ## Specs
 

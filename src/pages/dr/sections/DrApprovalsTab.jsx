@@ -133,7 +133,7 @@ export default function DrApprovalsTab({
                       alt={p.name}
                       onError={(e) => {
                         e.currentTarget.onerror = null;
-                        e.currentTarget.src = "/categories/cement.png";
+                        e.currentTarget.src = cleanProductImage(null, p?.categoryName || p?.category, p?.name);
                       }}
                       className="h-14 w-14 shrink-0 rounded-xl border border-slate-200 object-cover bg-slate-100"
                     />
@@ -258,7 +258,7 @@ export default function DrApprovalsTab({
                               alt={p.name}
                               onError={(e) => {
                                 e.currentTarget.onerror = null;
-                                e.currentTarget.src = "/categories/cement.png";
+                                e.currentTarget.src = cleanProductImage(null, p?.categoryName || p?.category, p?.name);
                               }}
                               className="h-9 w-9 shrink-0 rounded-lg border border-slate-200 object-cover bg-slate-100"
                             />

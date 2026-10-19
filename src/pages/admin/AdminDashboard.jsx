@@ -11,11 +11,11 @@ import LoadMoreButton from "../../components/LoadMoreButton";
 import WalletSettingsTab from "./WalletSettingsTab";
 
 const PRESET_IMAGES = [
-  { label: "Cement Bag", url: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80" },
-  { label: "Paint Bucket", url: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=400&q=80" },
-  { label: "Steel Rebars", url: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=400&q=80" },
-  { label: "Pipes & Plumbing", url: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=80" },
-  { label: "Electrical / Wire", url: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=400&q=80" },
+  { label: "Cement Bag", url: "/categories/cement.png" },
+  { label: "Paint Bucket", url: "/categories/paints.png" },
+  { label: "Steel Rebars", url: "/categories/steel.png" },
+  { label: "Pipes & Plumbing", url: "/categories/plumbing.png" },
+  { label: "Tiles / Ceramic", url: "/categories/tiles.png" },
 ];
 
 const TABS = [
@@ -663,7 +663,7 @@ export default function AdminDashboard() {
         type: productForm.type.trim() || "Standard",
         unit: (productForm.unit || "").trim() || "50kg Bag",
         suggestedPrice: Number(productForm.price || productForm.suggestedPrice) || 100,
-        imageUrl: productForm.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+        imageUrl: productForm.imageUrl || "",
         description: productForm.description?.trim() || null,
         addedBy: "Admin",
       });
@@ -1908,7 +1908,7 @@ export default function AdminDashboard() {
                               className="w-10 h-10 object-cover rounded-lg border border-slate-200 shrink-0"
                               onError={(e) => {
                                 e.currentTarget.onerror = null;
-                                e.currentTarget.src = "/categories/cement.png";
+                                e.currentTarget.src = cleanProductImage(null, p?.categoryName || p?.category, p?.name);
                               }}
                             />
                             <div>
@@ -2039,7 +2039,7 @@ export default function AdminDashboard() {
                               className="h-8 w-8 rounded-lg object-cover border border-slate-200 shrink-0"
                               onError={(e) => {
                                 e.currentTarget.onerror = null;
-                                e.currentTarget.src = "/categories/cement.png";
+                                e.currentTarget.src = cleanProductImage(null, p?.categoryName || p?.category, p?.name);
                               }}
                             />
                             <span>{p.name}</span>
@@ -2771,7 +2771,7 @@ export default function AdminDashboard() {
                       <input
                         type="url"
                         required
-                        placeholder="https://res.cloudinary.com/... or https://images.unsplash.com/..."
+                        placeholder="https://res.cloudinary.com/..."
                         value={bannerForm.imageUrl}
                         onChange={(e) => setBannerForm({ ...bannerForm, imageUrl: e.target.value })}
                         className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-medium focus:border-brand-500"
@@ -2795,7 +2795,7 @@ export default function AdminDashboard() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setBannerForm({ ...bannerForm, imageUrl: "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1200&q=80", tag: "100% CERTIFIED MATERIALS", title: "Lab Tested. Site Delivered." })}
+                          onClick={() => setBannerForm({ ...bannerForm, imageUrl: "https://res.cloudinary.com/pvzxcmsk/image/upload/v1791021553/banner_6.png.png", tag: "100% CERTIFIED MATERIALS", title: "Lab Tested. Site Delivered." })}
                           className="text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded-md cursor-pointer"
                         >
                           Banner 3 (Architectural)
@@ -2898,7 +2898,7 @@ export default function AdminDashboard() {
                           alt="Banner Preview"
                           className="w-full h-full object-cover max-h-[220px]"
                           onError={(e) => {
-                            e.target.src = "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=800&q=80";
+                            e.target.src = "https://res.cloudinary.com/pvzxcmsk/image/upload/v1791020539/banner_5.png.png";
                           }}
                         />
                       ) : (
@@ -2961,7 +2961,7 @@ export default function AdminDashboard() {
                           alt={bTitle}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                           onError={(e) => {
-                            e.target.src = "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=800&q=80";
+                            e.target.src = "https://res.cloudinary.com/pvzxcmsk/image/upload/v1791020539/banner_5.png.png";
                           }}
                         />
                         <span className={`absolute top-2 right-2 text-[10px] font-black px-2 py-0.5 rounded-full shadow-xs ${isActive ? "bg-emerald-500 text-white" : "bg-slate-700 text-white"}`}>
@@ -3361,7 +3361,7 @@ export default function AdminDashboard() {
                   alt="Banner Preview"
                   className="w-full h-full object-cover"
                   onError={(e) => {
-                    e.target.src = "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=800&q=80";
+                    e.target.src = "https://res.cloudinary.com/pvzxcmsk/image/upload/v1791020539/banner_5.png.png";
                   }}
                 />
               </div>

@@ -1,23 +1,28 @@
 import { useState } from "react";
+import { cleanProductImage } from "../utils/productImage";
 
 export function getProductImages(product) {
-  if (!product) return ["https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80"];
+  if (!product) return [cleanProductImage(null)];
   if (Array.isArray(product.images) && product.images.length > 0) {
-    const valid = product.images.filter(Boolean);
+    const valid = product.images.filter((img) => Boolean(img) && !String(img).includes("photo-1589939705384-5185137a7f0f"));
     if (valid.length > 0) return valid;
   }
   if (typeof product.imageUrl === "string" && product.imageUrl.trim()) {
-    const split = product.imageUrl.split(",").map((s) => s.trim()).filter(Boolean);
+    const split = product.imageUrl
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => Boolean(s) && !s.includes("photo-1589939705384-5185137a7f0f"));
     if (split.length > 0) return split;
   }
-  return ["https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80"];
+  return [cleanProductImage(product)];
 }
 
-export default function ProductImageSlider({ images = [], name = "Product Image" }) {
+export default function ProductImageSlider({ images = [], name = "Product Image", categoryName = "" }) {
   const [activeIdx, setActiveIdx] = useState(0);
-  const imgList = Array.isArray(images) && images.length > 0 ? images.filter(Boolean) : [
-    "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80"
-  ];
+  const validImages = Array.isArray(images)
+    ? images.filter((img) => Boolean(img) && !String(img).includes("photo-1589939705384-5185137a7f0f"))
+    : [];
+  const imgList = validImages.length > 0 ? validImages : [cleanProductImage(null, categoryName, name)];
 
   const handlePrev = () => {
     setActiveIdx((prev) => (prev === 0 ? imgList.length - 1 : prev - 1));

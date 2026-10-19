@@ -1719,18 +1719,16 @@ app.post("/api/v1/auth/otp/request", otpRequestIpLimiter, otpRequestLimiter, asy
     const generatedOtp = appEnv.isProduction() ? crypto.randomInt(100000, 1000000).toString() : STAGING_OTP;
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins expiry
 
-    // Replace any older OTPs for this phone, then save the new one in background (Non-blocking)
-    prisma.oTPVerification.deleteMany({ where: { phone: cleanPhone } })
-      .catch(() => null)
-      .then(() => prisma.oTPVerification.create({
-        data: {
-          phone: cleanPhone,
-          otp: generatedOtp,
-          expiresAt,
-          createdAt: new Date(),
-        },
-      }))
-      .catch((e) => console.warn("Background OTP save note:", e.message));
+    // Replace older OTPs for this phone and save the new one before responding so verify never races
+    await prisma.oTPVerification.deleteMany({ where: { phone: cleanPhone } }).catch(() => null);
+    await prisma.oTPVerification.create({
+      data: {
+        phone: cleanPhone,
+        otp: generatedOtp,
+        expiresAt,
+        createdAt: new Date(),
+      },
+    }).catch((e) => console.warn("OTP save note:", e.message));
 
     // Dispatch Live SMS via parallel fastest-gateway in background
     sendRealSMSOTP(cleanPhone, generatedOtp).catch((smsErr) => {

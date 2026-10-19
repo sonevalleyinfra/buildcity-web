@@ -101,7 +101,7 @@ export default function ProductCard({ product, className = "" }) {
             loading="lazy"
             onError={(e) => {
               e.currentTarget.onerror = null;
-              e.currentTarget.src = "/categories/cement.png";
+              e.currentTarget.src = cleanProductImage(null, product.categoryName || product.category, product.name);
             }}
           />
         </div>

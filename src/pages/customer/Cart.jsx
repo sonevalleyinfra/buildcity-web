@@ -415,7 +415,7 @@ export default function Cart() {
                       alt={item.name}
                       onError={(e) => {
                         e.currentTarget.onerror = null;
-                        e.currentTarget.src = "/categories/cement.png";
+                        e.currentTarget.src = cleanProductImage(null, item.categoryName || item.category, item.name);
                       }}
                       className={`w-full h-full object-cover ${isItemUnavailable ? "grayscale opacity-80" : ""}`}
                     />

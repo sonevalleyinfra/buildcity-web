@@ -25,7 +25,7 @@ const initialBanners = [
     id: "b-3",
     tag: "100% CERTIFIED MATERIALS",
     title: "Lab Tested. Site Delivered.",
-    imageUrl: "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1200&q=80",
+    imageUrl: "https://res.cloudinary.com/pvzxcmsk/image/upload/v1791021553/banner_6.png.png",
     targetUrl: "/categories",
     isActive: true,
     displayOrder: 3,

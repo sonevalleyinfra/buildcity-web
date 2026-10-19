@@ -8,6 +8,7 @@ import Footer from "../../components/Footer";
 import { Capacitor } from "@capacitor/core";
 import { useRegion } from "../../context/RegionContext";
 import { useAdmin } from "../../context/AdminContext";
+import { cleanProductImage } from "../../utils/productImage";
 
 const CATEGORY_LABELS = {
   cement: "Cement",
@@ -30,13 +31,14 @@ const BRAND_POOL = {
 };
 
 const CATEGORY_IMAGES = {
-  cement: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
-  paints: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=400&q=80",
-  steel: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=400&q=80",
-  plumbing: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=400&q=80",
-  electrical: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=400&q=80",
-  hardware: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=80",
-  furniture: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=400&q=80",
+  cement: "/categories/cement.png",
+  paints: "/categories/paints.png",
+  steel: "/categories/steel.png",
+  plumbing: "/categories/plumbing.png",
+  electrical: "/categories/steel.png",
+  hardware: "/categories/rebars.png",
+  furniture: "/categories/tiles.png",
+  tiles: "/categories/tiles.png",
 };
 
 const PAGE_SIZE = 9;
@@ -72,7 +74,7 @@ export default function CategoryListing() {
           id: p.id,
           name: p.name,
           brand: p.brand || "Generic",
-          img: p.img || p.imageUrl || CATEGORY_IMAGES[slugLower] || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+          img: cleanProductImage(p, slugLower, p.name) || CATEGORY_IMAGES[slugLower] || "/categories/cement.png",
           mrp: Math.round(itemPrice * 1.15),
           price: itemPrice,
           rating: "4.9",

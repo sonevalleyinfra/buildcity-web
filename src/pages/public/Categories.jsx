@@ -10,6 +10,7 @@ import NotificationPanel from "../../components/NotificationPanel";
 import ProductCard from "../../components/ProductCard";
 import Footer from "../../components/Footer";
 import { Capacitor } from "@capacitor/core";
+import { resolveCategoryBubbleImage } from "../vendor/utils/productImage";
 
 const bannerSlides = [
   {
@@ -18,7 +19,7 @@ const bannerSlides = [
     line2: "Best Prices.",
     line3: "Reliable Service.",
     targetCat: "All",
-    img: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1200&q=80",
+    img: "https://res.cloudinary.com/pvzxcmsk/image/upload/v1791020539/banner_5.png.png",
   },
   {
     tag: "DIRECT SITE DELIVERY",
@@ -26,7 +27,7 @@ const bannerSlides = [
     line2: "Zero Middlemen.",
     line3: "Direct Delivery.",
     targetCat: "Cement",
-    img: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80",
+    img: "https://res.cloudinary.com/pvzxcmsk/image/upload/v1791019964/banner_4.png.png",
   },
   {
     tag: "100% CERTIFIED MATERIALS",
@@ -34,7 +35,7 @@ const bannerSlides = [
     line2: "Site Delivered.",
     line3: "Pay On Delivery.",
     targetCat: "Steel",
-    img: "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1200&q=80",
+    img: "https://res.cloudinary.com/pvzxcmsk/image/upload/v1791021553/banner_6.png.png",
   },
   {
     tag: "LUXURY INTERIORS & PAINTS",
@@ -42,7 +43,7 @@ const bannerSlides = [
     line2: "Waterproof Coats.",
     line3: "Modern Finishes.",
     targetCat: "Paints",
-    img: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=1200&q=80",
+    img: "https://res.cloudinary.com/lbwxvqmg/image/upload/v1788938503/banner3.png",
   },
 ];
 
@@ -52,8 +53,8 @@ const category8Grid = [
   { name: "Steel", countTag: "Steel", img: "/categories/steel.png" },
   { name: "Crushed Stone", countTag: "Crushed Stone", img: "/categories/crushed_stone.png" },
   { name: "Plumbing", countTag: "Plumbing", img: "/categories/plumbing.png" },
-  { name: "Electrical", countTag: "Electrical", img: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=300&q=80" },
-  { name: "Sanitary", countTag: "Sanitary", img: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=300&q=80" },
+  { name: "Electrical", countTag: "Electrical", img: "/categories/steel.png" },
+  { name: "Sanitary", countTag: "Sanitary", img: "/categories/plumbing.png" },
   { name: "Hardware", countTag: "Hardware", img: "/categories/rebars.png" },
   { name: "Tiles", countTag: "Tiles", img: "/categories/tiles.png" },
 ];
@@ -356,7 +357,7 @@ export default function Categories() {
                           alt={c.name}
                           className="w-full h-full object-cover rounded-full group-hover:scale-105 transition-transform duration-300"
                           onError={(e) => {
-                            e.target.src = "/categories/cement.png";
+                            e.target.src = resolveCategoryBubbleImage(c.name);
                           }}
                         />
                       )}

@@ -12,6 +12,7 @@ import ProductCard from "../../components/ProductCard";
 import Footer from "../../components/Footer";
 import SiteReviewsSection from "../../components/SiteReviewsSection";
 import { Capacitor } from "@capacitor/core";
+import { resolveCategoryBubbleImage } from "../vendor/utils/productImage";
 
 const categoryTiles = [
   {
@@ -193,7 +194,7 @@ const DEFAULT_BANNER_SLIDES = [
     id: "b-3",
     tag: "",
     title: "",
-    imageUrl: "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1200&q=80",
+    imageUrl: "https://res.cloudinary.com/pvzxcmsk/image/upload/v1791021553/banner_6.png.png",
     targetUrl: "/categories",
   },
 ];
@@ -474,7 +475,7 @@ export default function Home() {
                     alt={b.tag || b.title || "Hero Banner"}
                     className="w-full h-full object-cover object-center group-hover:scale-[1.015] transition-transform duration-700 ease-out"
                     onError={(e) => {
-                      e.target.src = "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1200&q=80";
+                      e.target.src = "https://res.cloudinary.com/pvzxcmsk/image/upload/v1791020539/banner_5.png.png";
                     }}
                   />
                   {/* Hover karne par halka sa brightness effect */}
@@ -612,7 +613,7 @@ export default function Home() {
                       alt={c.name}
                       className="w-full h-full object-cover rounded-full group-hover:scale-105 transition-transform duration-300"
                       onError={(e) => {
-                        e.target.src = "/categories/cement.png";
+                        e.target.src = resolveCategoryBubbleImage(c.name);
                       }}
                     />
                   </div>
@@ -793,7 +794,7 @@ export default function Home() {
           {/* Offer image aur discount badge */}
           <div className="flex items-center gap-2 relative">
             <img
-              src="https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=200&q=80"
+              src="/categories/cement.png"
               alt="Deals"
               className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-xl shadow-md border border-white/20"
             />

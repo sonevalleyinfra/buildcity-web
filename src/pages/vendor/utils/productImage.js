@@ -4,26 +4,26 @@ const bundledAssetFor = (categoryName = "", productName = "") => {
   const cat = (categoryName || "").toLowerCase();
   const name = (productName || "").toLowerCase();
 
-  if (cat.includes("cement") || name.includes("cement") || name.includes("birla") || name.includes("acc") || name.includes("ultratech") || name.includes("ambuja")) {
-    return "/categories/cement.png";
+  if (cat.includes("paint") || name.includes("paint") || name.includes("asian") || name.includes("berger") || name.includes("nerolac")) {
+    return "/categories/paints.png";
   }
   if (cat.includes("steel") || cat.includes("tmt") || name.includes("steel") || name.includes("tmt") || name.includes("jindal") || name.includes("tata tiscon")) {
     return "/categories/steel.png";
   }
-  if (cat.includes("paint") || name.includes("paint") || name.includes("asian") || name.includes("berger") || name.includes("nerolac")) {
-    return "/categories/paints.png";
-  }
-  if (cat.includes("plumb") || cat.includes("pipe") || name.includes("pipe") || name.includes("astral") || name.includes("ashirvad") || name.includes("supreme")) {
-    return "/categories/plumbing.png";
+  if (cat.includes("rebar") || name.includes("rebar") || name.includes("rod") || name.includes("sariya")) {
+    return "/categories/rebars.png";
   }
   if (cat.includes("tile") || cat.includes("marble") || name.includes("tile") || name.includes("kajaria") || name.includes("somany")) {
     return "/categories/tiles.png";
   }
+  if (cat.includes("plumb") || cat.includes("pipe") || name.includes("pipe") || name.includes("astral") || name.includes("ashirvad") || name.includes("supreme")) {
+    return "/categories/plumbing.png";
+  }
   if (cat.includes("stone") || cat.includes("sand") || cat.includes("aggregate") || cat.includes("gitti") || cat.includes("morang") || cat.includes("balu")) {
     return "/categories/crushed_stone.png";
   }
-  if (cat.includes("rebar") || name.includes("rebar") || name.includes("rod") || name.includes("sariya")) {
-    return "/categories/rebars.png";
+  if (cat.includes("cement") || name.includes("cement") || name.includes("birla") || name.includes("acc") || name.includes("ultratech") || name.includes("ambuja") || name.includes("shree") || name.includes("jk super")) {
+    return "/categories/cement.png";
   }
   return "/categories/cement.png";
 };
@@ -40,17 +40,16 @@ export const resolveProductImage = (imageUrl, categoryName = "", productName = "
     const parts = imageUrl.split(",").map((s) => s.trim()).filter(Boolean);
     clean = parts[0] || "";
   }
+  // Completely block all legacy/dummy unsplash images
+  if (clean.includes("unsplash.com") || clean.includes("photo-1589939705384-5185137a7f0f")) {
+    return bundledAssetFor(categoryName, productName);
+  }
   if (!clean) {
     return bundledAssetFor(categoryName, productName);
   }
   // Already a local asset
   if (clean.startsWith("/") || clean.startsWith("assets/")) {
     return clean;
-  }
-  // Unsplash: request a small thumbnail so it loads fast
-  if (clean.includes("images.unsplash.com")) {
-    const base = clean.split("?")[0];
-    return `${base}?auto=format&fit=crop&w=300&h=300&q=80`;
   }
   return clean;
 };
@@ -61,12 +60,10 @@ export const resolveCategoryBubbleImage = (catName = "") => {
   if (lower.includes("cement")) return "/categories/cement.png";
   if (lower.includes("steel")) return "/categories/steel.png";
   if (lower.includes("rebar") || lower.includes("sariya")) return "/categories/rebars.png";
-  if (lower.includes("stone") || lower.includes("gitti") || lower.includes("crush") || lower.includes("aggregate")) return "/categories/crushed_stone.png";
-  if (lower.includes("tile")) return "/categories/tiles.png";
+  if (lower.includes("stone") || lower.includes("gitti") || lower.includes("crush") || lower.includes("aggregate") || lower.includes("sand") || lower.includes("morang")) return "/categories/crushed_stone.png";
+  if (lower.includes("tile") || lower.includes("marble")) return "/categories/tiles.png";
   if (lower.includes("plumb") || lower.includes("pipe")) return "/categories/plumbing.png";
   if (lower.includes("paint")) return "/categories/paints.png";
-  if (lower.includes("brick")) return "https://images.unsplash.com/photo-1590069261209-f8e9b8642343?auto=format&fit=crop&w=160&q=80";
-  if (lower.includes("elect")) return "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=160&q=80";
   return "/categories/cement.png";
 };
 
@@ -78,6 +75,8 @@ export const listingImage = (p, masterProducts = []) => {
     rawUrl = p.images.filter(Boolean)[0];
   } else if (p.imageUrl) {
     rawUrl = p.imageUrl;
+  } else if (p.image) {
+    rawUrl = p.image;
   } else if (p.img) {
     rawUrl = p.img;
   } else {
@@ -105,13 +104,19 @@ export const cleanProductImage = (itemOrUrl, categoryName = "", productName = ""
     raw = it.images.filter(Boolean)[0];
   } else if (it.imageUrl) {
     raw = it.imageUrl;
+  } else if (it.image) {
+    raw = it.image;
   } else if (it.img) {
     raw = it.img;
-  } else if (it.masterProduct?.imageUrl) {
-    raw = it.masterProduct.imageUrl;
   } else if (it.vendorProduct?.imageUrl) {
     raw = it.vendorProduct.imageUrl;
+  } else if (it.vendorProduct?.images && Array.isArray(it.vendorProduct.images) && it.vendorProduct.images.length > 0) {
+    raw = it.vendorProduct.images[0];
+  } else if (it.vendorProduct?.masterProduct?.imageUrl) {
+    raw = it.vendorProduct.masterProduct.imageUrl;
+  } else if (it.masterProduct?.imageUrl) {
+    raw = it.masterProduct.imageUrl;
   }
-  return resolveProductImage(raw, it.categoryName || it.category, it.name || it.productName);
+  return resolveProductImage(raw, it.categoryName || it.category || categoryName, it.name || it.productName || productName);
 };
 

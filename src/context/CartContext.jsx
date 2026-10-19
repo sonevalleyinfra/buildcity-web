@@ -4,6 +4,7 @@ import { useRegion } from "./RegionContext";
 import { useAuth } from "./AuthContext";
 import { useAlert } from "./AlertContext";
 import { API_BASE_URL } from "../config/api";
+import { cleanProductImage } from "../utils/productImage";
 
 // Customer cart ka state, database sync aur district pricing ka context
 const CartContext = createContext(null);
@@ -259,12 +260,18 @@ export function CartProvider({ children }) {
 
   const buyNow = (product, quantity = 1) => {
     const isCustomPack = Boolean(product.packLabel && product.packQty > 1);
+    const resolvedImg = product.img || (Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : null) || product.image || product.imageUrl || cleanProductImage(product);
     return {
       id: isCustomPack ? `${product.id}-pack-${product.packQty}` : product.id,
       productId: product.productId || product.id,
       name: isCustomPack ? `${product.name} (${product.packLabel})` : product.name,
       brand: product.brand || "",
-      img: product.img || product.images?.[0] || product.image || "/categories/cement.png",
+      img: resolvedImg,
+      image: resolvedImg,
+      imageUrl: product.imageUrl || resolvedImg,
+      images: Array.isArray(product.images) && product.images.length > 0 ? product.images : [resolvedImg],
+      category: product.category || product.categoryName || "",
+      categoryName: product.categoryName || product.category || "",
       price: Number(product.price) || 0,
       basePrice: Number(product.basePrice || product.price) || 0,
       mrp: Number(product.mrp || product.price) || 0,

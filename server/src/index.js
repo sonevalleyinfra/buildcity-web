@@ -11,7 +11,7 @@ const { issueToken, requireAuth, optionalAuth, requireRole, requireSelfOrAdmin }
 const appEnv = require("./appEnv");
 const { enforceBoot, getEnvInfo } = appEnv;
 const outbox = require("./outbox");
-const STAGING_OTP = "246810";
+const STAGING_OTP = "654321";
 const TEST_PHONE_RE = /^10000\d{5}$/;
 
 const app = express();

@@ -47,7 +47,7 @@ async function unit() {
 
   appEnv._resetForTests();
   ok(appEnv.isProduction() === false, "unset env is not production (fail closed)");
-  const r = await sms.sendRealSMSOTP("1000012345", "246810");
+  const r = await sms.sendRealSMSOTP("1000012345", "654321");
   ok(r.success === true && r.sandbox === true && calls.length === 0, "SMS non-prod: sandbox result, no network even with creds set", { r, calls });
   ok(outbox.list().length === 1 && outbox.list()[0].kind === "sms", "SMS lands in outbox");
 
@@ -128,8 +128,8 @@ async function integration() {
 
     const bad = await req("POST", "/auth/otp/verify", { body: { phone: "1000012345", otp: "000000" } });
     ok(bad.status === 401, "wrong OTP rejected", bad.status);
-    const good = await req("POST", "/auth/otp/verify", { body: { phone: "1000012345", otp: "246810" } });
-    ok(good.status === 200 && !!good.body.token, "1000012345 + 246810 -> token", good.status);
+    const good = await req("POST", "/auth/otp/verify", { body: { phone: "1000012345", otp: "654321" } });
+    ok(good.status === 200 && !!good.body.token, "1000012345 + 654321 -> token", good.status);
     ok(stubCalls() === "", "still no outbound call after verify", stubCalls());
 
     const anon = await req("GET", "/_staging/outbox");

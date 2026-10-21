@@ -2586,7 +2586,7 @@ app.get("/api/v1/master-products", async (req, res) => {
 
 app.post("/api/v1/master-products", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
-    const { name, categoryId, brand, type, grade, unit, suggestedPrice, imageUrl, addedBy, description } = req.body;
+    const { name, categoryId, brand, type, grade, unit, suggestedPrice, imageUrl, addedBy, description, customPacks } = req.body;
     
     let targetCatId = categoryId;
     if (!targetCatId) {
@@ -2606,6 +2606,7 @@ app.post("/api/v1/master-products", requireAuth, requireRole("ADMIN", "DR"), asy
         imageUrl: imageUrl || "",
         description: description || null,
         addedBy: addedBy || "Admin",
+        customPacks: customPacks || undefined,
       },
     });
     invalidateCache();
@@ -2619,7 +2620,7 @@ app.post("/api/v1/master-products", requireAuth, requireRole("ADMIN", "DR"), asy
 app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const rawId = req.params.id;
-    const { name, categoryId, brand, type, grade, unit, suggestedPrice, price, imageUrl, description } = req.body;
+    const { name, categoryId, brand, type, grade, unit, suggestedPrice, price, imageUrl, description, customPacks } = req.body;
 
     let mp = await prisma.productMaster.findUnique({ where: { id: rawId } }).catch(() => null);
 
@@ -2632,6 +2633,7 @@ app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN", "DR")
       if (grade) updateData.grade = grade;
       if (unit) updateData.unit = unit;
       if (description !== undefined) updateData.description = description;
+      if (customPacks !== undefined) updateData.customPacks = customPacks;
 
       const targetPrice = suggestedPrice !== undefined ? Number(suggestedPrice) : (price !== undefined ? Number(price) : undefined);
       if (targetPrice !== undefined && !isNaN(targetPrice)) {

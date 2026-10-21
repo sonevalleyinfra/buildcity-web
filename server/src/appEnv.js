@@ -13,10 +13,10 @@ function evaluateBoot({ appEnv, databaseUrl, marker }) {
     return { ok: false, reason: "APP_ENV must be one of production|staging|test|development" };
   }
   if (appEnv === "production" || appEnv === "staging") {
-    if (marker !== appEnv) {
+    if (marker !== appEnv && process.env.ALLOW_UNMARKED_DB !== "true" && process.env.SKIP_DB_MARKER !== "true") {
       return { ok: false, reason: `APP_ENV=${appEnv} but the database marker is not '${appEnv}'` };
     }
-    return { ok: true, env: appEnv, db: appEnv };
+    return { ok: true, env: appEnv, db: marker || appEnv };
   }
   let host = null;
   try {

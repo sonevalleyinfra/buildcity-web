@@ -1,6 +1,7 @@
 import { PackageIcon, SearchIcon, PlusIcon, ChevronRightIcon } from "../ui/icons";
 import { PageHeader, Chip, ChipRow, SearchField, Card, EmptyState, Button, ApprovalBadge } from "../ui/primitives";
 import { cx, inr } from "../ui/format";
+import { getCategorySpec } from "../../../utils/categoryAttributes";
 
 export function ProductThumb({ src, fallback, alt, className = "h-12 w-12" }) {
   return (
@@ -40,7 +41,10 @@ function ProductRow({ product, index = 0, imageFor, onEdit }) {
   const stock = stockLabel(product.stockQty);
   const price = Number(product.price) || 0;
   const mrp = Number(product.mrp) || 0;
-  const meta = [product.brand, product.grade, product.unit].filter(Boolean).join(" · ");
+  const spec = getCategorySpec(product.categoryName || product.category);
+  const gradeLabel = spec.gradeLabel ? spec.gradeLabel.split("/")[0].trim() : "Grade";
+  const gradeMeta = product.grade ? `${gradeLabel}: ${product.grade}` : null;
+  const meta = [product.brand, gradeMeta, product.unit].filter(Boolean).join(" · ");
 
   return (
     <button

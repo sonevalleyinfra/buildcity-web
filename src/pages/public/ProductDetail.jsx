@@ -11,6 +11,7 @@ import { useOrders } from "../../context/OrderContext";
 import { API_BASE_URL } from "../../config/api";
 import { authFetch } from "../../config/authFetch";
 import { generateProductPacks } from "../../utils/productPacks";
+import { getCategorySpec } from "../../utils/categoryAttributes";
 
 
 
@@ -210,11 +211,16 @@ export default function ProductDetail() {
         realProd.masterProduct?.categoryName ||
         "";
 
+      const catSpec = getCategorySpec(resolvedCategory);
+
       return {
         id: realProd.id,
         name: realProd.name,
         brand: realProd.brand || "Generic",
         category: resolvedCategory || "Material",
+        catSpec,
+        grade: realProd.grade || "",
+        type: realProd.type || "",
         vendorId: realProd.vendorId,
         vendorName: realProd.vendorName || realProd.vendor?.shopName,
         isVendorSuspended: isSuspended,
@@ -250,10 +256,17 @@ export default function ProductDetail() {
           `High-quality certified ${realProd.name} by ${realProd.brand || "Authorized Brand"}. Supplied directly via BuildCity Certified Delivery Network.`,
         specs: [
           { label: "Fulfillment", value: `BuildCity Certified Network (${region?.name || "Local"})` },
+          { label: "Category", value: catSpec.label || resolvedCategory || "Building Material" },
           { label: "Brand", value: realProd.brand || "Generic" },
-          { label: "Grade", value: realProd.grade || "Standard" },
-          { label: "Type", value: realProd.type || "Standard Type" },
-          { label: "Packaging Unit", value: realProd.unit || "Unit" },
+          ...(realProd.type ? [{ label: catSpec.typeLabel || "Product Type", value: realProd.type }] : []),
+          ...(realProd.grade ? [{ label: catSpec.gradeLabel || "Grade / Specification", value: realProd.grade }] : []),
+          { label: catSpec.unitLabel || "Packaging Unit", value: realProd.unit || "Unit" },
+          ...(realProd.customPacks?.diameter ? [{ label: "Rebar Diameter", value: realProd.customPacks.diameter }] : []),
+          ...(realProd.customPacks?.tileSize ? [{ label: "Tile Dimensions", value: realProd.customPacks.tileSize }] : []),
+          ...(realProd.customPacks?.pipeSize ? [{ label: "Pipe Bore / Size", value: realProd.customPacks.pipeSize }] : []),
+          ...(realProd.customPacks?.availablePackSizes && Array.isArray(realProd.customPacks.availablePackSizes)
+            ? [{ label: "Available Pack Sizes", value: realProd.customPacks.availablePackSizes.join(", ") }]
+            : []),
           { label: "Available Stock", value: `${realProd.stockQty || 0} units` },
         ],
         reviewsList: [],
@@ -725,7 +738,16 @@ export default function ProductDetail() {
 
           {/* Product details aur pricing block */}
           <div>
-            <span className="text-xs font-bold text-brand-600 uppercase tracking-wider">{product.brand}</span>
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <span className="text-xs font-bold text-brand-600 uppercase tracking-wider">{product.brand}</span>
+              <span className="text-slate-300">•</span>
+              <span className="text-xs font-semibold text-slate-500">{product.category}</span>
+              {product.grade && (
+                <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-lg border border-amber-200 shadow-2xs">
+                  {product.catSpec?.gradeLabel ? `${product.catSpec.gradeLabel.split("/")[0].trim()}: ${product.grade}` : product.grade}
+                </span>
+              )}
+            </div>
             <h1 className="text-xl sm:text-2xl font-extrabold text-navy-900 mt-1 mb-2 leading-snug tracking-tight">
               {product.name}
             </h1>

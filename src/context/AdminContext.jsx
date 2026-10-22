@@ -207,7 +207,12 @@ const loadInitialProducts = () => {
     const saved = localStorage.getItem(PRODUCTS_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((p) => ({
+          ...p,
+          stockQty: p.stockQty !== undefined && p.stockQty !== null ? Number(p.stockQty) : 100,
+        }));
+      }
     }
   } catch {}
   return [];
@@ -405,6 +410,7 @@ export function AdminProvider({ children }) {
             districtName: resolvedRegionName,
             mrp: resolvedMrp,
             price: Number(l.price) || 100,
+            stockQty: l.stockQty !== undefined && l.stockQty !== null ? Number(l.stockQty) : (l.masterProduct?.stockQty !== undefined && l.masterProduct?.stockQty !== null ? Number(l.masterProduct.stockQty) : 100),
             imageUrl: (l.imageUrl && !l.imageUrl.includes("photo-1589939705384-5185137a7f0f")) || (l.masterProduct?.imageUrl && !l.masterProduct.imageUrl.includes("photo-1589939705384-5185137a7f0f")) || (matchedMaster.imageUrl && !matchedMaster.imageUrl.includes("photo-1589939705384-5185137a7f0f")) || "",
             images: Array.isArray(l.images) && l.images.length > 0
               ? l.images.filter((img) => !String(img).includes("photo-1589939705384-5185137a7f0f"))
@@ -773,6 +779,7 @@ export function AdminProvider({ children }) {
             districtName: resolvedRegionName,
             price: Number(l.price) || 100,
             mrp: resolvedMrp,
+            stockQty: l.stockQty !== undefined && l.stockQty !== null ? Number(l.stockQty) : (l.masterProduct?.stockQty !== undefined && l.masterProduct?.stockQty !== null ? Number(l.masterProduct.stockQty) : 100),
             imageUrl: (l.imageUrl && !l.imageUrl.includes("photo-1589939705384-5185137a7f0f")) || (l.masterProduct?.imageUrl && !l.masterProduct.imageUrl.includes("photo-1589939705384-5185137a7f0f")) || "",
             images: Array.isArray(l.images) && l.images.length > 0
               ? l.images.filter((img) => !String(img).includes("photo-1589939705384-5185137a7f0f"))

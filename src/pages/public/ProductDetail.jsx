@@ -213,6 +213,10 @@ export default function ProductDetail() {
 
       const catSpec = getCategorySpec(resolvedCategory);
 
+      const resolvedStockQty = realProd.stockQty !== undefined && realProd.stockQty !== null
+        ? Number(realProd.stockQty)
+        : (realProd.masterProduct?.stockQty !== undefined && realProd.masterProduct?.stockQty !== null ? Number(realProd.masterProduct.stockQty) : 100);
+
       return {
         id: realProd.id,
         name: realProd.name,
@@ -232,8 +236,8 @@ export default function ProductDetail() {
         price: Number(realProd.price) || 100,
         rating: 5.0,
         reviews: 0,
-        inStock: (realProd.stockQty || 0) > 0 && !isSuspended && isDeliverable,
-        stockQty: realProd.stockQty,
+        inStock: resolvedStockQty > 0 && !isSuspended && isDeliverable,
+        stockQty: resolvedStockQty,
         unit: realProd.unit || "Unit",
         customPacks: (() => {
           let cp = realProd.customPacks || realProd.custom_packs;
@@ -267,7 +271,7 @@ export default function ProductDetail() {
           ...(realProd.customPacks?.availablePackSizes && Array.isArray(realProd.customPacks.availablePackSizes)
             ? [{ label: "Available Pack Sizes", value: realProd.customPacks.availablePackSizes.join(", ") }]
             : []),
-          { label: "Available Stock", value: `${realProd.stockQty || 0} units` },
+          { label: "Available Stock", value: `${resolvedStockQty} units` },
         ],
         reviewsList: [],
       };
@@ -965,7 +969,7 @@ export default function ProductDetail() {
                   >
                     <span className="w-1/3 text-slate-500 font-medium">{s.label}</span>
                     <span className="flex-1 text-navy-900 font-bold">
-                      {s.value}
+                      {s.label === "Available Stock" && selectedPack?.stock !== undefined ? `${selectedPack.stock} units` : s.value}
                     </span>
                   </div>
                 ))}

@@ -60,6 +60,25 @@ for d in fx_unmarked fx_prod; do
   check "$d snapshot unchanged after refusal" 'cmp -s "$work/g0.$d" "$work/g1.$d"'
 done
 check "refusal names the marker found / unset" 'grep -q "marker is unset" "$work/g.fx_unmarked.err" && grep -q "marker is production" "$work/g.fx_prod.err"'
+
+# 1c. Spoofed markers (PGOPTIONS session setting, role-level setting) never satisfy the guard
+qo() { local o="$1"; shift; docker exec -i -e PGOPTIONS="$o" "$C" psql -U postgres -X -q -At -v ON_ERROR_STOP=1 -d "$@"; }   # qo <pgoptions> <db> [args]
+qr() { local r="$1"; shift; docker exec -i "$C" psql -U "$r" -X -q -At -v ON_ERROR_STOP=1 -d "$@"; }   # qr <role> <db> [args]
+q postgres -c "CREATE ROLE anon_spoof LOGIN" && q postgres -c "ALTER ROLE anon_spoof SET buildcity.env='staging'"
+check "spoof sanity: PGOPTIONS and the role setting do set the session GUC" '[ "$(qo "-c buildcity.env=staging" fx_prod -c "select current_setting('"'buildcity.env'"', true)")" = staging ] && [ "$(qr anon_spoof fx_unmarked -c "select current_setting('"'buildcity.env'"', true)")" = staging ]'
+spoof_case() {   # spoof_case <label> <db> <runner...>
+  local label="$1" d="$2"; shift 2
+  snap "$d" >"$work/s0.$d"
+  "$@" "$d" <"$stg/anonymise.sql" >/dev/null 2>"$work/s.err"; local rc=$?
+  check "anonymise refuses $d with $label" '[ $rc -ne 0 ] && grep -q "anonymise refused" "$work/s.err"'
+  snap "$d" >"$work/s1.$d"
+  check "$d snapshot unchanged after $label refusal" 'cmp -s "$work/s0.$d" "$work/s1.$d"'
+}
+spoof_case "PGOPTIONS staging" fx_prod qo "-c buildcity.env=staging"
+spoof_case "role-level staging" fx_prod qr anon_spoof
+spoof_case "PGOPTIONS staging" fx_unmarked qo "-c buildcity.env=staging"
+q postgres -c "DROP ROLE anon_spoof"
+
 check "guard DO block is the first statement after BEGIN" '[ "$(awk "/^BEGIN;/{f=1;next} f&&/^(DO|CREATE|UPDATE|INSERT)/{print \$1; exit}" "$stg/anonymise.sql")" = DO ]'
 
 # 2. Anonymise: one transaction, then verify passes

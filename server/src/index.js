@@ -8,7 +8,11 @@ const bcrypt = require("bcryptjs");
 const compression = require("compression");
 const { PrismaClient } = require("@prisma/client");
 const { issueToken, requireAuth, optionalAuth, requireRole, requireSelfOrAdmin } = require("./middleware/auth");
-const { enforceBoot, getEnvInfo } = require("./appEnv");
+const appEnv = require("./appEnv");
+const { enforceBoot, getEnvInfo } = appEnv;
+const outbox = require("./outbox");
+const STAGING_OTP = "654321";
+const TEST_PHONE_RE = /^10000\d{5}$/;
 
 const app = express();
 app.set("trust proxy", 1);
@@ -396,6 +400,9 @@ app.get("/api/v1/env", (req, res) => {
   res.json(getEnvInfo());
 });
 
+// Sandbox outbox (SMS/push that were not sent). 404 in production; ADMIN only elsewhere.
+app.get("/api/v1/_staging/outbox", outbox.notInProduction(() => appEnv.isProduction()), requireAuth, requireRole("ADMIN"), outbox.listHandler);
+
 // Database & Environment Diagnostic Check
 app.get("/api/v1/db-check", requireAuth, requireRole("ADMIN"), async (req, res) => {
   const hasDbUrl = !!process.env.DATABASE_URL;
@@ -470,7 +477,7 @@ let bannersList = [
     id: "b-3",
     tag: "",
     title: "",
-    imageUrl: "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1200&q=80",
+    imageUrl: "https://res.cloudinary.com/pvzxcmsk/image/upload/v1791021553/banner_6.png.png",
     targetUrl: "/categories",
     isActive: true,
     displayOrder: 3,
@@ -1277,6 +1284,27 @@ app.put("/api/v1/admin/wallet-settings", requireAuth, requireRole("ADMIN"), asyn
   }
 });
 
+// Helper: Calculate realtime wallet balance dynamically from the transactions ledger
+async function getRealtimeWalletBalance(userId) {
+  if (!userId) return 0;
+  try {
+    const ledgerSum = await prisma.walletTransaction.aggregate({
+      where: { userId, status: "COMPLETED" },
+      _sum: { amount: true },
+    });
+    const realtimeBalance = Math.max(0, Number(ledgerSum?._sum?.amount ?? 0));
+    // Auto-sync column in DB if out of sync
+    await prisma.user.update({
+      where: { id: userId },
+      data: { walletBalance: realtimeBalance },
+    }).catch(() => {});
+    return realtimeBalance;
+  } catch (err) {
+    console.warn("Realtime wallet calculation note:", err.message);
+    return 0;
+  }
+}
+
 // 3. Admin: Search Users with Wallet Balances
 app.get("/api/v1/admin/wallet-users", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
@@ -1435,11 +1463,12 @@ app.get("/api/v1/wallet", requireAuth, async (req, res) => {
       take: 50,
     }).catch(() => []);
 
+    const realtimeBalance = await getRealtimeWalletBalance(user.id);
     const settings = await getActiveWalletSettings();
 
     res.json({
       success: true,
-      balance: Number(user.walletBalance) || 0,
+      balance: realtimeBalance,
       referralCode: user.referralCode,
       referredBy: user.referredBy,
       settings: {
@@ -1635,6 +1664,11 @@ app.post("/api/v1/auth/otp/request", otpRequestIpLimiter, otpRequestLimiter, asy
     // Clean 10-digit mobile number
     const cleanPhone = phone.trim().replace(/\D/g, "").slice(-10);
 
+    // Off-production only the reserved test numbers may request an OTP (no real user is ever messaged).
+    if (!appEnv.isProduction() && !TEST_PHONE_RE.test(cleanPhone)) {
+      return res.status(403).json({ error: "Staging: use a test number" });
+    }
+
     // Fast Partner Phone Check
     const isSpecialAdminOrDr = cleanPhone === "9999999999" || cleanPhone === "7777777777";
     if (isSpecialAdminOrDr) {
@@ -1682,21 +1716,19 @@ app.post("/api/v1/auth/otp/request", otpRequestIpLimiter, otpRequestLimiter, asy
 
     // Generate 6-digit OTP code instantly
     // Cryptographically secure OTP (Math.random is predictable)
-    const generatedOtp = crypto.randomInt(100000, 1000000).toString();
+    const generatedOtp = appEnv.isProduction() ? crypto.randomInt(100000, 1000000).toString() : STAGING_OTP;
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins expiry
 
-    // Replace any older OTPs for this phone, then save the new one in background (Non-blocking)
-    prisma.oTPVerification.deleteMany({ where: { phone: cleanPhone } })
-      .catch(() => null)
-      .then(() => prisma.oTPVerification.create({
-        data: {
-          phone: cleanPhone,
-          otp: generatedOtp,
-          expiresAt,
-          createdAt: new Date(),
-        },
-      }))
-      .catch((e) => console.warn("Background OTP save note:", e.message));
+    // Replace older OTPs for this phone and save the new one before responding so verify never races
+    await prisma.oTPVerification.deleteMany({ where: { phone: cleanPhone } }).catch(() => null);
+    await prisma.oTPVerification.create({
+      data: {
+        phone: cleanPhone,
+        otp: generatedOtp,
+        expiresAt,
+        createdAt: new Date(),
+      },
+    }).catch((e) => console.warn("OTP save note:", e.message));
 
     // Dispatch Live SMS via parallel fastest-gateway in background
     sendRealSMSOTP(cleanPhone, generatedOtp).catch((smsErr) => {
@@ -1910,12 +1942,16 @@ app.get("/api/v1/users/me", requireAuth, async (req, res) => {
 
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    if (user.role === "CUSTOMER" && !user.referralCode) {
-      const code = await generateUniqueReferralCode();
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: { referralCode: code },
-      }).catch(() => user);
+    if (user.role === "CUSTOMER") {
+      if (!user.referralCode) {
+        const code = await generateUniqueReferralCode();
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { referralCode: code },
+        }).catch(() => user);
+      }
+      const realtimeBal = await getRealtimeWalletBalance(user.id);
+      user.walletBalance = realtimeBal;
     }
 
     const { password, ...safeUser } = user;
@@ -2550,7 +2586,7 @@ app.get("/api/v1/master-products", async (req, res) => {
 
 app.post("/api/v1/master-products", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
-    const { name, categoryId, brand, type, grade, unit, suggestedPrice, imageUrl, addedBy, description } = req.body;
+    const { name, categoryId, brand, type, grade, unit, suggestedPrice, imageUrl, addedBy, description, customPacks } = req.body;
     
     let targetCatId = categoryId;
     if (!targetCatId) {
@@ -2567,9 +2603,10 @@ app.post("/api/v1/master-products", requireAuth, requireRole("ADMIN", "DR"), asy
         grade: grade || "Standard Grade",
         unit: unit || "Unit",
         suggestedPrice: Number(suggestedPrice) || 100,
-        imageUrl: imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+        imageUrl: imageUrl || "",
         description: description || null,
         addedBy: addedBy || "Admin",
+        customPacks: customPacks || undefined,
       },
     });
     invalidateCache();
@@ -2583,7 +2620,7 @@ app.post("/api/v1/master-products", requireAuth, requireRole("ADMIN", "DR"), asy
 app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const rawId = req.params.id;
-    const { name, categoryId, brand, type, grade, unit, suggestedPrice, price, imageUrl, description } = req.body;
+    const { name, categoryId, brand, type, grade, unit, suggestedPrice, price, imageUrl, description, customPacks } = req.body;
 
     let mp = await prisma.productMaster.findUnique({ where: { id: rawId } }).catch(() => null);
 
@@ -2596,6 +2633,7 @@ app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN", "DR")
       if (grade) updateData.grade = grade;
       if (unit) updateData.unit = unit;
       if (description !== undefined) updateData.description = description;
+      if (customPacks !== undefined) updateData.customPacks = customPacks;
 
       const targetPrice = suggestedPrice !== undefined ? Number(suggestedPrice) : (price !== undefined ? Number(price) : undefined);
       if (targetPrice !== undefined && !isNaN(targetPrice)) {
@@ -4234,7 +4272,7 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       const key = String(idempotencyKey);
       const existingOrders = await prisma.order.findMany({
         where: { OR: [{ idempotencyKey: key }, { idempotencyKey: { startsWith: `${key}__v` } }] },
-        include: { items: true, customer: { select: SAFE_USER_SELECT }, address: true },
+        include: CUSTOMER_ORDER_INCLUDE,
         orderBy: { createdAt: "asc" },
       });
       if (existingOrders.length > 0) {
@@ -4420,7 +4458,7 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
     const requestedUseWallet = req.body.useWallet === true || Boolean(req.body.walletDiscount) || Boolean(req.body.walletAmount);
 
     if (requestedUseWallet && settings.walletRedeemEnabled) {
-      const userBalance = Number(targetUser.walletBalance || 0);
+      const userBalance = await getRealtimeWalletBalance(targetCustomerId);
       if (userBalance > 0) {
         const maxPercentLimit = Math.floor((cartTotalBeforeWallet * Number(settings.maxWalletUsagePercent || 10)) / 100);
         const maxAllowed = Math.min(Number(settings.maxWalletUsageFlat || 500), maxPercentLimit, Math.floor(userBalance));
@@ -4474,8 +4512,17 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
               vendor: {
                 select: { id: true, shopName: true, phone: true, ownerName: true, regionId: true },
               },
+              vendorProduct: {
+                select: {
+                  id: true,
+                  imageUrl: true,
+                  masterProduct: { select: { id: true, imageUrl: true } },
+                },
+              },
             },
           },
+          customer: { select: SAFE_USER_SELECT },
+          address: true,
         },
       });
     });
@@ -4526,6 +4573,8 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
         price: Number(ci.priceAtPurchase),
         totalPrice: Number(ci.totalPrice),
         vendorName: ci.vendor?.shopName || "District Vendor",
+        imageUrl: ci.vendorProduct?.imageUrl || ci.vendorProduct?.masterProduct?.imageUrl || null,
+        vendorProduct: ci.vendorProduct,
       })),
       customer: {
         id: targetUser.id,

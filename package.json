@@ -10,11 +10,15 @@
     "build:vendor": "vite build --mode vendor",
     "android:customer": "node scripts/android.mjs customer",
     "android:partner": "node scripts/android.mjs partner",
+    "apk:customer": "node scripts/android.mjs customer && cd android && gradlew.bat assembleCustomerRelease",
+    "apk:partner": "node scripts/android.mjs partner && cd android && gradlew.bat assemblePartnerRelease",
     "cap:sync": "cap sync android",
     "cap:open": "cap open android",
     "lint": "node scripts/check-vercel-routes.mjs && oxlint",
     "preview": "vite preview",
-    "prepare": "husky"
+    "prepare": "husky",
+    "e2e": "node scripts/e2e-local.mjs",
+    "e2e:guard": "node --test e2e/guard.test.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.1",
@@ -35,6 +39,7 @@
     "react-router-dom": "^7.18.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",

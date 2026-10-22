@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import NotificationPanel from "../../components/NotificationPanel";
@@ -83,9 +83,8 @@ export default function Profile() {
   const [showPassbookModal, setShowPassbookModal] = useState(false);
   const [copiedReferral, setCopiedReferral] = useState(false);
 
-  useEffect(() => {
+  const fetchWallet = () => {
     if (user) {
-      if (!walletData) setLoadingWallet(true);
       authFetch(`${API_BASE_URL}/api/v1/wallet`)
         .then((r) => r.json())
         .then((data) => {
@@ -99,7 +98,29 @@ export default function Profile() {
         .catch(() => {})
         .finally(() => setLoadingWallet(false));
     }
+  };
+
+  useEffect(() => {
+    fetchWallet();
   }, [user]);
+
+  useEffect(() => {
+    if (showPassbookModal) {
+      fetchWallet();
+    }
+  }, [showPassbookModal]);
+
+  // Realtime ledger calculation: if transactions are empty, balance is 0; otherwise exact sum of ledger
+  const displayedWalletBalance = useMemo(() => {
+    if (walletData?.transactions) {
+      if (walletData.transactions.length === 0) return 0;
+      return Math.max(0, walletData.transactions.reduce((acc, t) => acc + (Number(t.amount) || 0), 0));
+    }
+    if (walletData?.balance !== undefined && walletData?.balance !== null) {
+      return Math.max(0, Number(walletData.balance));
+    }
+    return Math.max(0, Number(user?.walletBalance ?? 0));
+  }, [walletData, user]);
 
   const handleCopyCode = (code) => {
     navigator.clipboard?.writeText(code);
@@ -260,7 +281,7 @@ export default function Profile() {
                 <div className="h-6 w-16 mx-auto bg-slate-200 animate-pulse rounded-md my-0.5" />
               ) : (
                 <p className="text-base sm:text-xl font-black text-brand-600 group-hover:text-brand-700 transition-colors tabular-nums">
-                  ₹{Number(walletData?.balance ?? user?.walletBalance ?? 0).toLocaleString("en-IN")}
+                  ₹{displayedWalletBalance.toLocaleString("en-IN")}
                 </p>
               )}
               <p className="text-[10px] font-bold text-slate-500 mt-0.5 flex items-center justify-center gap-1">
@@ -606,7 +627,7 @@ export default function Profile() {
                   <div className="h-7 w-24 bg-slate-200 animate-pulse rounded-md mt-1" />
                 ) : (
                   <span className="text-2xl font-black text-navy-950 tabular-nums">
-                    ₹{Number(walletData?.balance || user?.walletBalance || 0).toLocaleString("en-IN")}
+                    ₹{displayedWalletBalance.toLocaleString("en-IN")}
                   </span>
                 )}
               </div>

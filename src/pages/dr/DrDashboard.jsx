@@ -16,11 +16,11 @@ import DrProfileTab from "./sections/DrProfileTab";
 import DrModals from "./sections/DrModals";
 
 const PRESET_IMAGES = [
-  { label: "Cement Bag", url: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80" },
-  { label: "Paint Bucket", url: "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=400&q=80" },
-  { label: "Steel Rebars", url: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=400&q=80" },
-  { label: "Pipes & Plumbing", url: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=80" },
-  { label: "Electrical / Wire", url: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=400&q=80" },
+  { label: "Cement Bag", url: "/categories/cement.png" },
+  { label: "Paint Bucket", url: "/categories/paints.png" },
+  { label: "Steel Rebars", url: "/categories/steel.png" },
+  { label: "Pipes & Plumbing", url: "/categories/plumbing.png" },
+  { label: "Tiles / Ceramic", url: "/categories/tiles.png" },
 ];
 
 // Canonical district name resolver
@@ -327,7 +327,7 @@ export default function DrDashboard() {
               imageUrl:
                 l.imageUrl ||
                 l.masterProduct?.imageUrl ||
-                "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80",
+                "",
               approvalStatus: l.approvalStatus || "APPROVED",
               isActive: isListingApproved && l.isActive !== false && !isVendorSuspended,
               isVendorSuspended: Boolean(isVendorSuspended),

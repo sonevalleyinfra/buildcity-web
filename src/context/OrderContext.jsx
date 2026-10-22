@@ -268,16 +268,27 @@ export function OrderProvider({ children }) {
 
   // Order place karna - alag alag vendors ke items ko group karke order banana
   const placeOrder = async ({ items, address, total, customerId, districtName, regionId, deliveryFee = 49, couponCode = null, discountAmount = 0, useWallet = false, walletDiscount = 0 }) => {
-    // Items ko vendor details ke sath format karo
-    const formattedItems = (items || []).map((it) => ({
-      id: it.id || it.productId,
-      productId: it.productId || it.id,
-      name: it.name || it.productName || "Material Item",
-      quantity: Number(it.quantity || it.qty) || 1,
-      price: Number(it.price) || 100,
-      vendorId: it.vendorId,
-      vendorName: it.vendorName || "District Vendor",
-    }));
+    // Items ko vendor details aur image data ke sath format karo
+    const formattedItems = (items || []).map((it) => {
+      const resolvedImg = it.imageUrl || it.image || it.img || (Array.isArray(it.images) && it.images.length > 0 ? it.images[0] : null) || it.vendorProduct?.imageUrl || null;
+      return {
+        id: it.id || it.productId,
+        productId: it.productId || it.id,
+        name: it.name || it.productName || "Material Item",
+        quantity: Number(it.quantity || it.qty) || 1,
+        price: Number(it.price) || 100,
+        vendorId: it.vendorId,
+        vendorName: it.vendorName || "District Vendor",
+        imageUrl: resolvedImg,
+        image: resolvedImg,
+        img: resolvedImg,
+        images: Array.isArray(it.images) && it.images.length > 0 ? it.images : (resolvedImg ? [resolvedImg] : []),
+        category: it.category || it.categoryName || "",
+        categoryName: it.categoryName || it.category || "",
+        unit: it.unit || "unit",
+        vendorProduct: it.vendorProduct || (resolvedImg ? { imageUrl: resolvedImg } : null),
+      };
+    });
 
     // Ek vendor ke sabhi items ko ek order me group karo
     const vendorMap = new Map();
@@ -357,26 +368,45 @@ export function OrderProvider({ children }) {
         if (response.ok && resData?.success && resData?.order) {
           // Har vendor ka alag order id generate hota hai
           const serverOrders = Array.isArray(resData.orders) && resData.orders.length > 0 ? resData.orders : [resData.order];
-          ordersSaved = serverOrders.map((so) => normalizeOrder({
-            id: so.id,
-            userId: customerId || so.userId || so.customerId,
-            userPhone: so.userPhone || address?.phone || so.customer?.phone,
-            date: so.createdAt || new Date().toISOString(),
-            status: so.status || "Pending",
-            districtName: districtName || so.districtName || so.address?.city || "Varanasi",
-            regionId: regionId || so.regionId || so.address?.regionId || "varanasi",
-            vendorId: so.items?.[0]?.vendorId || groupVendorId,
-            vendorName: so.items?.[0]?.vendorName || groupVendorName,
-            items: so.items && so.items.length > 0 ? so.items : groupItems,
-            address: so.address || address,
-            customer: so.customer,
-            total: Number(so.totalAmount !== undefined ? so.totalAmount : groupTotal),
-            totalAmount: Number(so.totalAmount !== undefined ? so.totalAmount : groupTotal),
-            deliveryFee: Number(so.deliveryFee !== undefined ? so.deliveryFee : groupDeliveryFee),
-            discountAmount: Number(so.discountAmount !== undefined ? so.discountAmount : groupDiscount),
-            walletDiscount: Number(so.walletDiscount !== undefined ? so.walletDiscount : groupWalletDiscount),
-            couponCode: so.couponCode || groupCouponCode,
-          }));
+          ordersSaved = serverOrders.map((so) => {
+            const rawItems = so.items && so.items.length > 0 ? so.items : groupItems;
+            const enrichedItems = rawItems.map((si, idx) => {
+              const matchedGroup = groupItems.find((gi) => gi.id === si.vendorProductId || gi.productId === si.vendorProductId || gi.id === si.id || gi.name === si.productName) || groupItems[idx];
+              const resolvedImg = si.imageUrl || si.vendorProduct?.imageUrl || si.vendorProduct?.masterProduct?.imageUrl || matchedGroup?.imageUrl || matchedGroup?.img || matchedGroup?.image || null;
+              return {
+                ...matchedGroup,
+                ...si,
+                imageUrl: resolvedImg,
+                image: resolvedImg,
+                img: resolvedImg,
+                images: si.vendorProduct?.images || matchedGroup?.images || (resolvedImg ? [resolvedImg] : []),
+                category: si.category || matchedGroup?.category || "",
+                categoryName: si.categoryName || matchedGroup?.categoryName || "",
+                vendorProduct: si.vendorProduct || matchedGroup?.vendorProduct || (resolvedImg ? { imageUrl: resolvedImg } : null),
+              };
+            });
+
+            return normalizeOrder({
+              id: so.id,
+              userId: customerId || so.userId || so.customerId,
+              userPhone: so.userPhone || address?.phone || so.customer?.phone,
+              date: so.createdAt || new Date().toISOString(),
+              status: so.status || "Pending",
+              districtName: districtName || so.districtName || so.address?.city || "Varanasi",
+              regionId: regionId || so.regionId || so.address?.regionId || "varanasi",
+              vendorId: so.items?.[0]?.vendorId || groupVendorId,
+              vendorName: so.items?.[0]?.vendorName || groupVendorName,
+              items: enrichedItems,
+              address: so.address || address,
+              customer: so.customer,
+              total: Number(so.totalAmount !== undefined ? so.totalAmount : groupTotal),
+              totalAmount: Number(so.totalAmount !== undefined ? so.totalAmount : groupTotal),
+              deliveryFee: Number(so.deliveryFee !== undefined ? so.deliveryFee : groupDeliveryFee),
+              discountAmount: Number(so.discountAmount !== undefined ? so.discountAmount : groupDiscount),
+              walletDiscount: Number(so.walletDiscount !== undefined ? so.walletDiscount : groupWalletDiscount),
+              couponCode: so.couponCode || groupCouponCode,
+            });
+          });
         } else {
           throw new Error(resData?.error || "Order not placed , please try again.");
         }

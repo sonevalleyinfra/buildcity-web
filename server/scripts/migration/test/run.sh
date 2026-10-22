@@ -72,6 +72,7 @@ check "restore list skips CREATE SCHEMA public" '! grep -q "SCHEMA - public" "$S
 check "restore removes its list file" '! ls "$t/work" | grep -q list'
 check "unmarked target: prints marker none" 'grep -qxF "Target database marker (buildcity.env): none" "$t/out/restore.out"'
 check "unmarked target: prints ALTER line with db name" 'grep -qxF "ALTER DATABASE app SET buildcity.env = '"'"'<env>'"'"';" "$t/out/restore.out"'
+check "marker read uses the catalog (pg_db_role_setting), not current_setting" 'grep "^psql " "$SHIM_LOG" | grep buildcity.env | grep -q pg_db_role_setting && ! grep "^psql " "$SHIM_LOG" | grep -q current_setting'
 check "restore never sends ALTER/set to psql" '! grep "^psql " "$SHIM_LOG" | grep -qi -e ALTER -e set_config -e "SET buildcity"'
 
 # restore into a marked target

@@ -281,7 +281,7 @@ export default function Orders() {
                               className="w-full h-full object-cover"
                               onError={(e) => {
                                 e.currentTarget.onerror = null;
-                                e.currentTarget.src = "/categories/cement.png";
+                                e.currentTarget.src = cleanProductImage(null, firstItem?.categoryName || firstItem?.category, firstItem?.name || firstItem?.productName);
                               }}
                             />
                           ) : (

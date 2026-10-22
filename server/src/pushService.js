@@ -3,11 +3,29 @@ const { cert } = require("firebase-admin/app");
 const { getMessaging } = require("firebase-admin/messaging");
 const path = require("path");
 const fs = require("fs");
+const appEnv = require("./appEnv");
+const outbox = require("./outbox");
 
 let firebaseInitialized = false;
 
+function readServiceAccount() {
+  try {
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) return JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    const p = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || path.join(__dirname, "../firebase-service-account.json");
+    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
+  } catch {}
+  return null;
+}
+
+// Off-production, FCM is allowed only with a service account whose project_id ends with "-staging".
+function nonProdFcmAllowed() {
+  const sa = readServiceAccount();
+  return !!(sa && typeof sa.project_id === "string" && sa.project_id.endsWith("-staging"));
+}
+
 function initFirebase() {
   if (firebaseInitialized) return true;
+  if (!appEnv.isProduction() && !nonProdFcmAllowed()) return false;
   try {
     const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || path.join(__dirname, "../firebase-service-account.json");
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
@@ -383,15 +401,33 @@ async function getTokenForVendor(vendorId, phone = null) {
  * Sends a high-priority background push notification to a vendor's phone.
  * Wakes up device even if the app is killed or swiped away.
  */
+// Single send point for both push kinds. Off-production without a "-staging" service account the message
+// is recorded in the outbox and never sent. Production keeps the original init + send path.
+async function dispatchFcm(kind, message, label) {
+  if (!appEnv.isProduction() && !nonProdFcmAllowed()) {
+    outbox.record("push", { kind, message });
+    console.log(`[push] sandboxed (${kind}) for ${label}`);
+    return { success: true, sandbox: true };
+  }
+  if (!initFirebase()) {
+    return { success: false, reason: "firebase_not_initialized" };
+  }
+  try {
+    const messaging = typeof admin.messaging === "function" ? admin.messaging() : getMessaging();
+    const response = await messaging.send(message);
+    console.log(`✅ FCM Push Notification delivered (${kind}) for ${label}:`, response);
+    return { success: true, messageId: response };
+  } catch (err) {
+    console.error(`❌ FCM Push send error (${kind}) for ${label}:`, err.message);
+    return { success: false, error: err.message };
+  }
+}
+
 async function sendVendorOrderPushNotification({ vendorId, phone, orderNumber, amount, itemCount, orderId }) {
   const fcmToken = await getTokenForVendor(vendorId, phone);
   if (!fcmToken) {
     console.log(`ℹ️ No FCM push token registered for vendor: ${vendorId}. Skipping push.`);
     return { success: false, reason: "no_fcm_token" };
-  }
-
-  if (!initFirebase()) {
-    return { success: false, reason: "firebase_not_initialized" };
   }
 
   const cleanOrderNum = String(orderNumber).replace(/^#/g, "").slice(-4).toUpperCase();
@@ -427,15 +463,7 @@ async function sendVendorOrderPushNotification({ vendorId, phone, orderNumber, a
     },
   };
 
-  try {
-    const messaging = typeof admin.messaging === "function" ? admin.messaging() : getMessaging();
-    const response = await messaging.send(message);
-    console.log(`✅ FCM Push Notification successfully delivered to vendor ${vendorId}:`, response);
-    return { success: true, messageId: response };
-  } catch (err) {
-    console.error(`❌ FCM Push send error for vendor ${vendorId}:`, err.message);
-    return { success: false, error: err.message };
-  }
+  return dispatchFcm("vendor_order", message, `vendor ${vendorId}`);
 }
 
 // In-memory cache for customer tokens
@@ -602,10 +630,6 @@ async function sendCustomerOrderStatusPushNotification({ userId, phone, orderId,
     return { success: false, reason: "no_fcm_token" };
   }
 
-  if (!initFirebase()) {
-    return { success: false, reason: "firebase_not_initialized" };
-  }
-
   const message = {
     token: fcmToken,
     notification: {
@@ -636,19 +660,12 @@ async function sendCustomerOrderStatusPushNotification({ userId, phone, orderId,
     },
   };
 
-  try {
-    const messaging = typeof admin.messaging === "function" ? admin.messaging() : getMessaging();
-    const response = await messaging.send(message);
-    console.log(`✅ Customer Push Notification delivered for order ${orderNumber} (${status}):`, response);
-    return { success: true, messageId: response };
-  } catch (err) {
-    console.error(`❌ Customer Push send error for order ${orderNumber}:`, err.message);
-    return { success: false, error: err.message };
-  }
+  return dispatchFcm("customer_order_status", message, `order ${orderNumber} (${status})`);
 }
 
 module.exports = {
   initFirebase,
+  dispatchFcm,
   setPrismaClient,
   saveToken,
   removeToken,

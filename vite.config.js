@@ -12,6 +12,12 @@ export default defineConfig(({ mode }) => {
     VITE_API_URL: process.env.VITE_API_URL ?? fileEnv.VITE_API_URL,
     VITE_BACKEND_DIRECT_URL: process.env.VITE_BACKEND_DIRECT_URL ?? fileEnv.VITE_BACKEND_DIRECT_URL,
   })
+  const backendTarget =
+    process.env.VITE_BACKEND_URL ||
+    fileEnv.VITE_BACKEND_URL ||
+    fileEnv.VITE_API_URL ||
+    'http://localhost:5000'
+
   return {
   define: { __BC_TARGET__: JSON.stringify(target) },
   plugins: [react(), tailwindcss()],
@@ -19,7 +25,7 @@ export default defineConfig(({ mode }) => {
     host: true,
     proxy: {
       '/api': {
-        target: process.env.VITE_BACKEND_URL || 'http://localhost:5000',
+        target: backendTarget,
         changeOrigin: true,
         secure: false,
       },

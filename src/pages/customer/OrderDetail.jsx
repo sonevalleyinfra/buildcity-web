@@ -266,7 +266,7 @@ export default function OrderDetail() {
                       className="w-full h-full object-contain"
                       onError={(e) => {
                         e.target.onerror = null;
-                        e.target.src = "/categories/cement.png";
+                        e.target.src = cleanProductImage(null, item.categoryName || item.category, itemName);
                       }}
                     />
                   </div>

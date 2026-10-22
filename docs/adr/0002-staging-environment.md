@@ -111,8 +111,9 @@ allowed, but the build **fails** if a `staging` build names a prod host or a `pr
 `localhost` is allowed for both. No Vercel env vars are needed.
 
 **Layer 3: API boot guard (backend).** New required env `APP_ENV` ∈ `production | staging | test | development`.
-At boot the API reads the database's own marker: `SELECT current_setting('buildcity.env', true)`, set once per
-database with `ALTER DATABASE ... SET buildcity.env = '<env>'`. A database-level setting is **not** copied by
+At boot the API reads the database's own marker, set once per database with
+`ALTER DATABASE ... SET buildcity.env = '<env>'`, from the catalog (`pg_db_role_setting`, `setrole = 0`; see
+`server/src/dbMarker.js`), never `current_setting()`, which role, session and `?options=` settings override. A database-level setting is **not** copied by
 `pg_dump`/`pg_restore` without `--create`, which restore.sh doesn't use (checked on a local postgres:17: the restored
 database returned no marker while the source returned `production`). A raw prod dump restored anywhere therefore
 arrives without a `production` marker.
@@ -242,7 +243,7 @@ leaves the VPS):
 
 Staging's `DATA_DIR` volume is its own, so it never holds prod's `vendor-fcm-tokens.json`.
 
-**Seed (`seed-test-accounts.js`, idempotent; also used by `e2e-local` on an empty DB):** region `E2E Region`; vendor
+**Seed (`seed-test-accounts.js`, idempotent; also used by `e2e-local` on an empty DB):** region `E2E Varanasi`; vendor
 `1000000001` (approved, password `E2E_VENDOR_PASSWORD`) with product `E2E Test Cement 50kg` priced above
 `minOrderForCashback`; DR `1000000002` (`E2E_DR_PASSWORD`) in the same region; admin = the hardcoded `9999999999`
 `users` row (upserted with `role ADMIN`, name `E2E Admin`), its `password` set to bcrypt(`E2E_ADMIN_PASSWORD`). That
@@ -317,7 +318,7 @@ New `server/src/appEnv.js` exports `isProduction()`. It returns true only after 
 | Side effect | Production | Anything else (staging, test, dev, misconfigured) |
 |---|---|---|
 | SMS (`sendRealSMSOTP`, including the hardcoded relay) | unchanged | returns `{ success: true, sandbox: true }` **before** any network call. Gateway creds are ignored even if set. |
-| OTP request | unchanged | phone must match `^10000\d{5}$`, else `403 "Staging: use a test number"`. The OTP is the code constant `STAGING_OTP = "246810"` (not env, so a misconfig can't change it). |
+| OTP request | unchanged | phone must match `^10000\d{5}$`, else `403 "Staging: use a test number"`. The OTP is the code constant `STAGING_OTP = "654321"` (not env, so a misconfig can't change it). |
 | FCM | unchanged | sent only if a service account is set **and** its `project_id` ends with `-staging`. Otherwise logged as sandboxed. |
 | Outbox | none | in-memory ring buffer (last 200) of sandboxed SMS/push payloads. `GET /api/v1/_staging/outbox` (ADMIN), **registered only when not production**, lets E2E assert that "vendor was notified". |
 
@@ -360,7 +361,7 @@ status bar and the back button.
 - Global setup = the isolation guard from §2 (aborts unless `env/db ∈ {staging,test}`; refuses prod hosts).
 - Smoke specs, in order, sharing one run id:
   1. `customer-auth`: register and log in with OTP as `10000` + 5 digits from the run id, using `STAGING_OTP`.
-  2. `browse-cart-cod`: home → category → `E2E Test Cement 50kg` → cart → checkout with a new address in `E2E Region`
+  2. `browse-cart-cod`: home → category → `E2E Test Cement 50kg` → cart → checkout with a new address in `E2E Varanasi`
      → COD → order placed. Writes the order id to the shared state.
   3. `vendor-accepts`: `/vendor/login` with the partner UA, as vendor `1000000001` → order visible → accept. The
      outbox has a push for that order.
@@ -394,7 +395,7 @@ Ordered by when they are needed. Worker bots do none of them. Owner decision (20
 **Batch A: before the backend guard PRs merge (prod, small):**
 1. **[OM]** Coolify `buildcity-api` → Environment: add `APP_ENV=production`. No redeploy needed until the next merge.
 2. **[OM]** Prod DB marker: `ALTER DATABASE buildcity SET buildcity.env = 'production';`, then check it with
-   `SELECT current_setting('buildcity.env', true);` in a new session → `production`.
+   the catalog query in `docs/MIGRATION-VPS.md` ("Restoring `buildcity-db`", step 5) → `production`.
 
 **Batch B: staging resources (no prod impact):**
 3. **[OM]** Coolify: new **Postgres 17** `buildcity-db-staging`, database `buildcity_staging`, memory limit 512 MB,
@@ -496,7 +497,7 @@ items 1-2 being done.
         `APP_ENV`.
   - [ ] Prod restore runbook: `docs/MIGRATION-VPS.md` gets a "Restoring `buildcity-db` from a backup" section (R2
         backup or `restore.sh`) whose last steps are `ALTER DATABASE buildcity SET buildcity.env = 'production';`,
-        a new-session check that `current_setting('buildcity.env', true)` = `production`, then the API restart and
+        a catalog check (`pg_db_role_setting`, `setrole = 0`) that the marker is `production`, then the API restart and
         `/api/v1/env` = `production/production`. The C1 restore *test* says to leave `restore-test` unmarked.
   - [ ] `restore.sh` (prod-target path included) ends by printing the target database's `buildcity.env` (or
         "none") and, when it is none, the exact `ALTER DATABASE <db> SET buildcity.env = '<env>';` line to run. It
@@ -508,7 +509,7 @@ items 1-2 being done.
 - Context: `server/src/smsService.js`, `server/src/pushService.js`, OTP routes `index.js:1622-1760`.
 - Acceptance:
   - [ ] With `APP_ENV=test`, a test stubs `http.request`, `https.request` and `fetch` to throw, then calls an OTP
-        request for `1000012345`: success, nothing called. `9876543210` → 403. `1000012345` + `246810` → token.
+        request for `1000012345`: success, nothing called. `9876543210` → 403. `1000012345` + `654321` → token.
   - [ ] Push with no service account, or with a `project_id` not ending in `-staging`, is not sent and appears in
         the outbox. `/api/v1/_staging/outbox` needs ADMIN and is 404 when `isProduction()`. Unit test with injected
         env.
@@ -600,7 +601,7 @@ step 4 prod check. Lifting the preview hard rule after `preview-isolation` is gr
   (`staging.buildcity.in`, `buildcity-api-staging`, `buildcity-db-staging`).
 - qa verifies UI and flows on **PR previews or `staging.buildcity.in` only**, after checking that `/api/v1/env` says
   `staging`. Never on prod, never on a preview whose `/api/v1/env` isn't `staging`. Test logins use `10000xxxxx` +
-  OTP `246810` and the seeded partner accounts.
+  OTP `654321` and the seeded partner accounts.
 - Remove "Hard rule until staging exists" only after `preview-isolation` is green and the §2 step 4 prod query returns 0.
 - Approval/release: "ship it" on buildcity-web = `scripts/promote.sh <sha>` (green `e2e-staging` required). After
   that, the read-only prod smoke. `gh pr merge` to `main` no longer deploys prod.

@@ -3,6 +3,7 @@ import { ProductThumb } from "./ProductsTab";
 import { Sheet, Field, Button, ApprovalBadge, Spinner } from "../ui/primitives";
 import { inr } from "../ui/format";
 import { getDefaultPacksForProduct } from "../../../utils/productPacks";
+import { getCategorySpec } from "../../../utils/categoryAttributes";
 
 export default function EditListingSheet(props) {
   if (!props.product) return null;
@@ -110,12 +111,16 @@ function EditListingSheetInner({
     onCustomPacksChange?.(next);
   };
 
+  const spec = getCategorySpec(product.categoryName || product.category);
+  const gradeLabel = spec.gradeLabel ? spec.gradeLabel.split("/")[0].trim() : "Grade";
+  const gradeMeta = product.grade ? `${gradeLabel}: ${product.grade}` : null;
+
   return (
     <Sheet
       open
       onClose={onClose}
       title={product.name}
-      subtitle={[product.brand, product.unit].filter(Boolean).join(" · ")}
+      subtitle={[product.brand, gradeMeta, product.unit].filter(Boolean).join(" · ")}
       leading={<ProductThumb src={image.src} fallback={image.fallback} alt="" className="h-10 w-10" />}
       footer={
         <div className="flex gap-2">

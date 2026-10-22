@@ -4,6 +4,7 @@ import Navbar from "../../components/Navbar";
 import ProductCard from "../../components/ProductCard";
 import { useRegion } from "../../context/RegionContext";
 import { useAdmin } from "../../context/AdminContext";
+import { cleanProductImage } from "../../utils/productImage";
 
 export default function SearchResults() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -61,7 +62,7 @@ export default function SearchResults() {
         name: p.name,
         brand: p.brand || "BuildCity Certified",
         vendorName: p.vendorName || p.vendor?.shopName || "District Vendor",
-        img: p.img || p.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+        img: cleanProductImage(p, p.categoryName || p.category, p.name),
         mrp: calculatedMrp,
         price: itemPrice,
         rating: p.rating || "4.9",

@@ -164,7 +164,7 @@ const seedBanners = [
     id: "b-3",
     tag: "",
     title: "",
-    imageUrl: "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1200&q=80",
+    imageUrl: "https://res.cloudinary.com/pvzxcmsk/image/upload/v1791021553/banner_6.png.png",
     targetUrl: "/categories",
     isActive: true,
     displayOrder: 3,
@@ -405,14 +405,13 @@ export function AdminProvider({ children }) {
             districtName: resolvedRegionName,
             mrp: resolvedMrp,
             price: Number(l.price) || 100,
-            stockQty: Number(l.stockQty) || 100,
-            imageUrl: l.imageUrl || l.masterProduct?.imageUrl || matchedMaster.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80",
+            imageUrl: (l.imageUrl && !l.imageUrl.includes("photo-1589939705384-5185137a7f0f")) || (l.masterProduct?.imageUrl && !l.masterProduct.imageUrl.includes("photo-1589939705384-5185137a7f0f")) || (matchedMaster.imageUrl && !matchedMaster.imageUrl.includes("photo-1589939705384-5185137a7f0f")) || "",
             images: Array.isArray(l.images) && l.images.length > 0
-              ? l.images
+              ? l.images.filter((img) => !String(img).includes("photo-1589939705384-5185137a7f0f"))
               : (l.imageUrl || l.masterProduct?.imageUrl || matchedMaster.imageUrl || "")
                   .split(",")
                   .map((s) => s.trim())
-                  .filter(Boolean),
+                  .filter((s) => Boolean(s) && !s.includes("photo-1589939705384-5185137a7f0f")),
             approvalStatus: resolvedApproval,
             isActive: resolvedIsActive,
             isVendorSuspended: Boolean(isVendorSuspended),
@@ -648,8 +647,9 @@ export function AdminProvider({ children }) {
             type: m.type || "Standard",
             grade: m.grade || "Standard Grade",
             unit: m.unit || "Unit",
+            customPacks: m.customPacks || null,
             suggestedPrice: Number(m.suggestedPrice) || 100,
-            imageUrl: m.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+            imageUrl: (m.imageUrl && !m.imageUrl.includes("photo-1589939705384-5185137a7f0f")) ? m.imageUrl : "",
             description: m.description || null,
             addedBy: m.addedBy || "Admin",
           };
@@ -773,14 +773,13 @@ export function AdminProvider({ children }) {
             districtName: resolvedRegionName,
             price: Number(l.price) || 100,
             mrp: resolvedMrp,
-            stockQty: Number(l.stockQty) || 100,
-            imageUrl: l.imageUrl || l.masterProduct?.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80",
+            imageUrl: (l.imageUrl && !l.imageUrl.includes("photo-1589939705384-5185137a7f0f")) || (l.masterProduct?.imageUrl && !l.masterProduct.imageUrl.includes("photo-1589939705384-5185137a7f0f")) || "",
             images: Array.isArray(l.images) && l.images.length > 0
-              ? l.images
+              ? l.images.filter((img) => !String(img).includes("photo-1589939705384-5185137a7f0f"))
               : (l.imageUrl || l.masterProduct?.imageUrl || "")
                   .split(",")
                   .map((s) => s.trim())
-                  .filter(Boolean),
+                  .filter((s) => Boolean(s) && !s.includes("photo-1589939705384-5185137a7f0f")),
             approvalStatus: l.approvalStatus || "APPROVED",
             isActive: isListingApproved && l.isActive !== false && !isVendorSuspended,
             isVendorSuspended: Boolean(isVendorSuspended),
@@ -1898,8 +1897,9 @@ export function AdminProvider({ children }) {
           type: created.type || mpData.type || "Standard",
           grade: created.grade || mpData.grade || "Standard Grade",
           unit: created.unit || mpData.unit || "Unit",
+          customPacks: created.customPacks || mpData.customPacks || null,
           suggestedPrice: Number(created.suggestedPrice) || Number(mpData.suggestedPrice) || 100,
-          imageUrl: created.imageUrl || mpData.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+          imageUrl: (created.imageUrl && !created.imageUrl.includes("photo-1589939705384-5185137a7f0f")) || (mpData.imageUrl && !mpData.imageUrl.includes("photo-1589939705384-5185137a7f0f")) || "",
           description: created.description !== undefined ? created.description : (mpData.description || null),
           addedBy: created.addedBy || mpData.addedBy || "Admin",
         };
@@ -1924,8 +1924,9 @@ export function AdminProvider({ children }) {
       type: mpData.type || "Standard",
       grade: mpData.grade || "Standard Grade",
       unit: mpData.unit || "Unit",
+      customPacks: mpData.customPacks || null,
       suggestedPrice: Number(mpData.suggestedPrice) || 100,
-      imageUrl: mpData.imageUrl || "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+      imageUrl: (mpData.imageUrl && !mpData.imageUrl.includes("photo-1589939705384-5185137a7f0f")) ? mpData.imageUrl : "",
       description: mpData.description || null,
       addedBy: mpData.addedBy || "Admin",
     };
@@ -1959,8 +1960,10 @@ export function AdminProvider({ children }) {
             ...(updates.images ? { images: updates.images } : updates.imageUrl ? { images: updates.imageUrl.split(",").map((s) => s.trim()).filter(Boolean) } : {}),
             ...(updates.name ? { name: updates.name } : {}),
             ...(updates.brand ? { brand: updates.brand } : {}),
+            ...(updates.type ? { type: updates.type } : {}),
             ...(updates.grade ? { grade: updates.grade } : {}),
             ...(updates.unit ? { unit: updates.unit } : {}),
+            ...(updates.customPacks !== undefined ? { customPacks: updates.customPacks } : {}),
             ...(updates.description !== undefined ? { description: updates.description } : {}),
             // NOTE: Master product edit only updates suggestedPrice reference; vendors retain their individual selling prices (p.price)
             ...(!isNaN(targetPrice) && targetPrice > 0 ? { suggestedPrice: targetPrice } : {}),
@@ -2038,7 +2041,7 @@ export function AdminProvider({ children }) {
       price: Number(price) || (mp ? mp.suggestedPrice : 100),
       stockQty: Number(stockQty) || 100,
       customPacks: customPacks || null,
-      imageUrl: (mp && mp.imageUrl) ? mp.imageUrl : "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80",
+      imageUrl: (mp?.imageUrl && !mp.imageUrl.includes("photo-1589939705384-5185137a7f0f")) ? mp.imageUrl : "",
       isActive: (addedBy === "Admin" || addedBy === "DR") ? true : false,
       approvalStatus: (addedBy === "Admin" || addedBy === "DR") ? "APPROVED" : "PENDING_REVIEW",
       addedBy: addedBy || "Vendor",

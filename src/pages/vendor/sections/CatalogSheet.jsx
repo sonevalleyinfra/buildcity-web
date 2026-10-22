@@ -3,6 +3,7 @@ import { ProductThumb } from "./ProductsTab";
 import { CheckIcon, SearchIcon } from "../ui/icons";
 import { Sheet, SearchField, Chip, ChipRow, Button, Field, EmptyState, Spinner } from "../ui/primitives";
 import { cx, inr } from "../ui/format";
+import { getCategorySpec } from "../../../utils/categoryAttributes";
 
 function OfferForm({ form, onSubmit, onCancel, isSubmitting }) {
   const {
@@ -238,7 +239,10 @@ export default function CatalogSheet({
             const inStore = isInStore(mp);
             const selected = selectedId === mp.id;
             const img = imageFor(mp);
-            const meta = [mp.brand, mp.grade, mp.unit].filter(Boolean).join(" · ");
+            const spec = getCategorySpec(mp.categoryName || mp.category);
+            const gradeLabel = spec.gradeLabel ? spec.gradeLabel.split("/")[0].trim() : "Grade";
+            const gradeMeta = mp.grade ? `${gradeLabel}: ${mp.grade}` : null;
+            const meta = [mp.brand, gradeMeta, mp.unit].filter(Boolean).join(" · ");
             return (
               <li key={mp.id} id={`catalog-product-row-${mp.id}`} style={{ "--i": idx }} className={cx("transition-colors duration-300", selected && "bg-brand-50/40")}>
                 <div className="flex items-center gap-3 px-4 py-3 sm:px-5">

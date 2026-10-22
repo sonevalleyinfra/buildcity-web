@@ -1,5 +1,7 @@
 const https = require("https");
 const http = require("http");
+const appEnv = require("./appEnv");
+const outbox = require("./outbox");
 
 /**
  * BuildCity Aradhya Technologies SMS Gateway Module (High-Speed Direct Gateway with KeepAlive Pool)
@@ -14,6 +16,13 @@ if (!(process.env.SMS_USERNAME || process.env.ARADHYA_SMS_USERNAME) || !(process
 
 async function sendRealSMSOTP(phone, otpCode) {
   const cleanMobile = (phone || "").toString().trim().replace(/\D/g, "").slice(-10);
+
+  // Fail closed: anything that is not production (APP_ENV=production AND DB marker production) never
+  // reaches a gateway or relay, whatever credentials are set. Runs before any network call.
+  if (!appEnv.isProduction()) {
+    outbox.record("sms", { to: cleanMobile, otp: String(otpCode) });
+    return { success: true, sandbox: true, gateway: "sandbox" };
+  }
 
   const currentUsername = (process.env.SMS_USERNAME || process.env.ARADHYA_SMS_USERNAME || "").trim();
   const currentApikey = (process.env.SMS_APIKEY || process.env.ARADHYA_SMS_APIKEY || "").trim();

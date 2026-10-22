@@ -59,3 +59,8 @@ jobs:
       - name: Migration tests
         run: npm run test:migration
         working-directory: server
+      - name: Staging refresh tests (docker, loopback)
+        run: |
+          command -v psql >/dev/null || { sudo apt-get update && sudo apt-get install -y postgresql-client; }
+          env -u APP_ENV -u DATABASE_URL npm run test:staging
+        working-directory: server

@@ -148,7 +148,7 @@ export default function DrCatalogTab({
                           alt={p.name}
                           onError={(e) => {
                             e.currentTarget.onerror = null;
-                            e.currentTarget.src = "/categories/cement.png";
+                            e.currentTarget.src = cleanProductImage(null, p?.categoryName || p?.category, p?.name);
                           }}
                           className="h-14 w-14 shrink-0 rounded-xl border border-slate-200 object-cover bg-slate-100"
                         />
@@ -268,7 +268,7 @@ export default function DrCatalogTab({
                                   alt={p.name}
                                   onError={(e) => {
                                     e.currentTarget.onerror = null;
-                                    e.currentTarget.src = "/categories/cement.png";
+                                    e.currentTarget.src = cleanProductImage(null, p?.categoryName || p?.category, p?.name);
                                   }}
                                   className="h-11 w-11 shrink-0 rounded-lg border border-slate-200 object-cover bg-slate-100"
                                 />
@@ -402,7 +402,7 @@ export default function DrCatalogTab({
                         alt={p.name}
                         onError={(e) => {
                           e.currentTarget.onerror = null;
-                          e.currentTarget.src = "/categories/cement.png";
+                          e.currentTarget.src = cleanProductImage(null, p?.categoryName || p?.category, p?.name);
                         }}
                         className="h-14 w-14 shrink-0 rounded-xl border border-slate-200 object-cover bg-slate-100"
                       />
@@ -466,7 +466,7 @@ export default function DrCatalogTab({
                                 alt={p.name}
                                 onError={(e) => {
                                   e.currentTarget.onerror = null;
-                                  e.currentTarget.src = "/categories/cement.png";
+                                  e.currentTarget.src = cleanProductImage(null, p?.categoryName || p?.category, p?.name);
                                 }}
                                 className="h-10 w-10 shrink-0 rounded-lg border border-slate-200 object-cover bg-slate-100"
                               />

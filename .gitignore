@@ -55,3 +55,9 @@ google-services.json
 
 # Runtime data written by the server (FCM device tokens)
 server/data/
+
+# Playwright
+e2e/.state/
+e2e/.build/
+e2e/report/
+e2e/results/

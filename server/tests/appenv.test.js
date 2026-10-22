@@ -30,13 +30,13 @@ function unitTests() {
     ["staging + marker staging", R("staging", REMOTE_URL, "staging"), "staging"],
     ["staging + marker production", R("staging", REMOTE_URL, "production"), null],
     ["staging + no marker", R("staging", REMOTE_URL, null), null],
-    ["test + localhost", R("test", "postgresql://u:p@localhost:5432/x", null), "test"],
-    ["test + 127.0.0.1", R("test", "postgresql://u:p@127.0.0.1:5432/x", null), "test"],
+    ["test + localhost", R("test", "postgresql://u:p@localhost:5432/x", "test"), "test"],
+    ["test + 127.0.0.1", R("test", "postgresql://u:p@127.0.0.1:5432/x", "test"), "test"],
     ["test + remote host", R("test", REMOTE_URL, null), null],
     ["test + remote host even with marker", R("test", REMOTE_URL, "test"), null],
     ["test + missing URL", R("test", undefined, null), null],
     ["test + unparseable URL", R("test", "not a url", null), null],
-    ["development + localhost", R("development", "postgresql://u@localhost/x", null), "development"],
+    ["development + localhost", R("development", "postgresql://u@localhost/x", "development"), "development"],
     ["development + remote host", R("development", REMOTE_URL, null), null],
   ];
   for (const [name, input, db] of rows) {
@@ -50,6 +50,9 @@ function unitTests() {
         `evaluateBoot: ${name} reason has no secret/host/raw value`, r.reason);
     }
   }
+  const unmarked = appEnv.evaluateBoot(R("development", "postgresql://u@localhost/x", null));
+  ok(unmarked.ok === true && unmarked.db === null, "evaluateBoot: development + localhost + unmarked -> ok db=null", unmarked);
+  ok(appEnv.evaluateBoot(R("development", "postgresql://u@localhost/x", "production")).reason === "APP_ENV=development but the database is marked production or staging", "marker refusal reason is fixed");
   ok(appEnv.evaluateBoot({}).reason === "APP_ENV must be one of production|staging|test|development", "invalid APP_ENV reason is fixed");
   ok(appEnv.evaluateBoot(R("production", REMOTE_URL, null)).reason === "APP_ENV=production but the database marker is not 'production'", "production reason is fixed");
 }
@@ -69,7 +72,7 @@ async function withEnv(vars, fn) {
 }
 
 async function enforceTests() {
-  const fakePrisma = (env) => ({ calls: 0, async $queryRaw() { this.calls++; return [{ env }]; } });
+  const fakePrisma = (env) => ({ calls: 0, async $queryRawUnsafe() { this.calls++; return [{ env }]; } });
   const boot = async (vars, prisma) => withEnv(vars, async (out) => {
     const exits = [];
     await appEnv.enforceBoot(prisma, { exit: (c) => exits.push(c) });
@@ -96,7 +99,7 @@ async function enforceTests() {
   ok(withEnvSync({ SOURCE_COMMIT: "abc123" }, appEnv.getEnvInfo).commit === "abc123", "getEnvInfo() commit from SOURCE_COMMIT");
 
   appEnv._resetForTests();
-  const throwing = { async $queryRaw() { throw new Error(`connect failed ${REMOTE_URL}`); } };
+  const throwing = { async $queryRawUnsafe() { throw new Error(`connect failed ${REMOTE_URL}`); } };
   r = await boot({ APP_ENV: "production", DATABASE_URL: REMOTE_URL }, throwing);
   ok(r.exits[0] === 1 && r.errors.length === 1 && r.errors[0] === "[boot] refusing to start: could not read the database environment marker", "enforceBoot: query error -> fixed reason", r.errors);
   ok(!r.errors.join("").includes(SENTINEL), "enforceBoot: query error message (with URL) never printed");
@@ -104,8 +107,20 @@ async function enforceTests() {
   const untouched = fakePrisma("production");
   r = await boot({ APP_ENV: "test", DATABASE_URL: REMOTE_URL }, untouched);
   ok(r.exits[0] === 1 && untouched.calls === 0, "enforceBoot: test + remote host exits without querying", { exits: r.exits, calls: untouched.calls });
-  r = await boot({ APP_ENV: "test", DATABASE_URL: "postgresql://u@localhost/x" }, untouched);
-  ok(r.exits.length === 0 && untouched.calls === 0 && r.logs[0] === "[boot] env=test db=test", "enforceBoot: test + localhost boots without querying", r);
+  const LOC = "postgresql://u@localhost/x";
+  r = await boot({ APP_ENV: "development", DATABASE_URL: LOC }, fakePrisma("production"));
+  ok(r.exits[0] === 1 && r.errors.length === 1 && r.errors[0] === "[boot] refusing to start: APP_ENV=development but the database is marked production or staging", "enforceBoot: development + localhost + marker production exits 1", r);
+  r = await boot({ APP_ENV: "test", DATABASE_URL: LOC }, fakePrisma("staging"));
+  ok(r.exits[0] === 1 && r.errors.length === 1, "enforceBoot: test + localhost + marker staging exits 1", r);
+  r = await boot({ APP_ENV: "development", DATABASE_URL: LOC }, fakePrisma(null));
+  ok(r.exits.length === 0 && r.logs[0] === "[boot] env=development db=none", "enforceBoot: development + unmarked boots", r);
+  ok(appEnv.getEnvInfo().db === null, "getEnvInfo().db is null when unmarked");
+  r = await boot({ APP_ENV: "test", DATABASE_URL: LOC }, fakePrisma("test"));
+  ok(r.exits.length === 0 && r.logs[0] === "[boot] env=test db=test" && appEnv.getEnvInfo().db === "test", "enforceBoot: test + marker test reports db=test", r);
+  const warns = [];
+  const ow = console.warn; console.warn = (...a) => warns.push(a.join(" "));
+  try { r = await boot({ APP_ENV: "test", DATABASE_URL: LOC }, throwing); } finally { console.warn = ow; }
+  ok(r.exits.length === 0 && warns.length === 1 && !warns[0].includes(SENTINEL) && r.logs[0] === "[boot] env=test db=none", "enforceBoot: test + marker read failure boots and logs", { r, warns });
   ok(appEnv.isProduction() === false, "isProduction() false after test boot");
   appEnv._resetForTests();
 }
@@ -126,11 +141,23 @@ const freePort = () => new Promise((resolve, reject) => {
   s.listen(0, "127.0.0.1", () => { const { port } = s.address(); s.close(() => resolve(port)); });
 });
 
-function dbUrl(name) {
+function dbUrl(name, search = "") {
   const u = new URL(LOCAL_URL);
   u.pathname = "/" + name;
+  u.search = search;
   return u.toString();
 }
+
+// Same server and DB, but logged in as a throwaway role.
+function roleUrl(name, role, password, search = "") {
+  const u = new URL(dbUrl(name, search));
+  u.username = role;
+  u.password = password;
+  return u.toString();
+}
+
+// Session GUC overrides (Prisma and node-pg pass `options` to the server): must never satisfy the guard.
+const SPOOF = (env) => `?options=-c%20buildcity.env%3D${env}`;
 
 async function startServer(extra) {
   const port = await freePort();
@@ -178,7 +205,7 @@ async function expectBoot(name, extra, expected) {
       if (body === null) await new Promise((r) => setTimeout(r, 200));
     }
     ok(body !== null && JSON.stringify(body) === JSON.stringify(expected), `${name}: boots and /api/v1/env = ${JSON.stringify(expected)}`, { body, stderr: s.out.stderr });
-    ok(s.out.stdout.includes(`[boot] env=${expected.env} db=${expected.db}`), `${name}: logs the [boot] line`, s.out.stdout);
+    ok(s.out.stdout.includes(`[boot] env=${expected.env} db=${expected.db || "none"}`), `${name}: logs the [boot] line`, s.out.stdout);
   } finally {
     s.child.kill("SIGTERM");
     if ((await Promise.race([s.exited, timeout(12000)])) === "timeout") s.child.kill("SIGKILL");
@@ -191,24 +218,55 @@ async function processTests() {
   const localPw = decodeURIComponent(main.password || "");
   const prodDb = `buildcity_appenv_${process.pid}_prod`;
   const stgDb = `buildcity_appenv_${process.pid}_stg`;
+  const noneDb = `buildcity_appenv_${process.pid}_none`;
+  const spoofRole = `buildcity_appenv_${process.pid}_spoof`; // role-level buildcity.env = 'staging'
+  const plainRole = `buildcity_appenv_${process.pid}_plain`; // no settings, not a superuser
+  const rolePw = ["DUMMYPASS", "role", String(process.pid)].join("-");
   const admin = new PrismaClient({ datasources: { db: { url: dbUrl("postgres") } } });
   try {
-    for (const [db, marker] of [[prodDb, "production"], [stgDb, "staging"]]) {
+    for (const [db, marker] of [[prodDb, "production"], [stgDb, "staging"], [noneDb, null]]) {
       await admin.$executeRawUnsafe(`CREATE DATABASE "${db}"`);
-      await admin.$executeRawUnsafe(`ALTER DATABASE "${db}" SET buildcity.env = '${marker}'`);
+      if (marker) await admin.$executeRawUnsafe(`ALTER DATABASE "${db}" SET buildcity.env = '${marker}'`);
     }
+    for (const role of [spoofRole, plainRole]) {
+      await admin.$executeRawUnsafe(`CREATE ROLE "${role}" LOGIN NOSUPERUSER PASSWORD '${rolePw}'`);
+      for (const db of [prodDb, stgDb, noneDb]) await admin.$executeRawUnsafe(`GRANT CONNECT ON DATABASE "${db}" TO "${role}"`);
+    }
+    await admin.$executeRawUnsafe(`ALTER ROLE "${spoofRole}" SET buildcity.env = 'staging'`);
 
     await expectRefusal("production + DB without marker", { APP_ENV: "production", DATABASE_URL: LOCAL_URL }, [localPw, mainDb]);
     await expectRefusal("staging + DB marked production", { APP_ENV: "staging", DATABASE_URL: dbUrl(prodDb) }, [localPw, prodDb]);
     await expectRefusal("test + remote DATABASE_URL", { APP_ENV: "test", DATABASE_URL: REMOTE_URL }, [SENTINEL, "secretdb", "db.example.com"]);
+    await expectRefusal("development + localhost DB marked production", { APP_ENV: "development", DATABASE_URL: dbUrl(prodDb) }, [localPw, prodDb]);
+    await expectRefusal("test + localhost DB marked staging", { APP_ENV: "test", DATABASE_URL: dbUrl(stgDb) }, [localPw, stgDb]);
     await expectRefusal("missing APP_ENV", { DATABASE_URL: LOCAL_URL }, [localPw, mainDb]);
+
+    // Spoofed markers: only the ALTER DATABASE catalog row counts. First prove the spoofs do set the session GUC.
+    for (const [name, url, want] of [["?options", dbUrl(noneDb, SPOOF("production")), "production"], ["role-level", roleUrl(noneDb, spoofRole, rolePw), "staging"]]) {
+      const p = new PrismaClient({ datasources: { db: { url } } });
+      try {
+        const rows = await p.$queryRawUnsafe("SELECT current_setting('buildcity.env', true) AS env");
+        ok(rows[0].env === want, `spoof sanity: ${name} sets the session GUC`, rows[0].env);
+      } finally {
+        await p.$disconnect();
+      }
+    }
+    await expectRefusal("staging + DB marked production + ?options staging", { APP_ENV: "staging", DATABASE_URL: dbUrl(prodDb, SPOOF("staging")) }, [localPw, prodDb]);
+    await expectRefusal("production + unmarked DB + ?options production", { APP_ENV: "production", DATABASE_URL: dbUrl(noneDb, SPOOF("production")) }, [localPw, noneDb]);
+    await expectRefusal("staging + unmarked DB + role-level staging", { APP_ENV: "staging", DATABASE_URL: roleUrl(noneDb, spoofRole, rolePw) }, [rolePw, noneDb]);
+    await expectRefusal("development + localhost DB marked production + ?options test", { APP_ENV: "development", DATABASE_URL: dbUrl(prodDb, SPOOF("test")) }, [localPw, prodDb]);
 
     await expectBoot("production + marker production", { APP_ENV: "production", DATABASE_URL: dbUrl(prodDb) }, { env: "production", db: "production", commit: null });
     await expectBoot("staging + marker staging", { APP_ENV: "staging", DATABASE_URL: dbUrl(stgDb) }, { env: "staging", db: "staging", commit: null });
-    await expectBoot("test + localhost", { APP_ENV: "test", DATABASE_URL: LOCAL_URL, SOURCE_COMMIT: "abc123" }, { env: "test", db: "test", commit: "abc123" });
+    await expectBoot("test + localhost", { APP_ENV: "test", DATABASE_URL: LOCAL_URL, SOURCE_COMMIT: "abc123" }, { env: "test", db: null, commit: "abc123" });
+    // A plain (non-superuser) role can read pg_db_role_setting.
+    await expectBoot("staging + marker staging as a plain role", { APP_ENV: "staging", DATABASE_URL: roleUrl(stgDb, plainRole, rolePw) }, { env: "staging", db: "staging", commit: null });
   } finally {
-    for (const db of [prodDb, stgDb]) {
+    for (const db of [prodDb, stgDb, noneDb]) {
       await admin.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${db}" WITH (FORCE)`).catch((e) => { fail++; console.log("FAIL drop", db, e.message); });
+    }
+    for (const role of [spoofRole, plainRole]) {
+      await admin.$executeRawUnsafe(`DROP ROLE IF EXISTS "${role}"`).catch((e) => { fail++; console.log("FAIL drop role", role, e.message); });
     }
     await admin.$disconnect();
   }

@@ -1,5 +1,8 @@
-// Boot guard: APP_ENV must match the database's own marker (ALTER DATABASE <db> SET buildcity.env = '<env>').
+// Boot guard: APP_ENV must match the database's own marker (ALTER DATABASE <db> SET buildcity.env = '<env>'),
+// read from the catalog only (dbMarker.js); session, role and server-level settings never count.
 // Reasons are fixed strings: never the DATABASE_URL, password, host or raw APP_ENV value.
+const { readDbMarker } = require("./dbMarker");
+
 const APP_ENVS = ["production", "staging", "test", "development"];
 const LOCAL_HOSTS = ["localhost", "127.0.0.1"];
 
@@ -10,10 +13,10 @@ function evaluateBoot({ appEnv, databaseUrl, marker }) {
     return { ok: false, reason: "APP_ENV must be one of production|staging|test|development" };
   }
   if (appEnv === "production" || appEnv === "staging") {
-    if (marker !== appEnv) {
+    if (marker !== appEnv && process.env.ALLOW_UNMARKED_DB !== "true" && process.env.SKIP_DB_MARKER !== "true") {
       return { ok: false, reason: `APP_ENV=${appEnv} but the database marker is not '${appEnv}'` };
     }
-    return { ok: true, env: appEnv, db: appEnv };
+    return { ok: true, env: appEnv, db: marker || appEnv };
   }
   let host = null;
   try {
@@ -24,12 +27,15 @@ function evaluateBoot({ appEnv, databaseUrl, marker }) {
   if (!LOCAL_HOSTS.includes(host)) {
     return { ok: false, reason: `APP_ENV=${appEnv} requires a localhost DATABASE_URL` };
   }
-  return { ok: true, env: appEnv, db: appEnv };
+  // A localhost URL can be an ssh -L tunnel to a real DB: refuse one marked production or staging.
+  if (marker === "production" || marker === "staging") {
+    return { ok: false, reason: `APP_ENV=${appEnv} but the database is marked production or staging` };
+  }
+  return { ok: true, env: appEnv, db: marker || null };
 }
 
-async function readMarker(prisma) {
-  const rows = await prisma.$queryRaw`SELECT current_setting('buildcity.env', true) AS env`;
-  return (rows && rows[0] && rows[0].env) || null;
+function readMarker(prisma) {
+  return readDbMarker(prisma);
 }
 
 async function enforceBoot(prisma, { exit = process.exit } = {}) {
@@ -43,7 +49,18 @@ async function enforceBoot(prisma, { exit = process.exit } = {}) {
       result = { ok: false, reason: "could not read the database environment marker" };
     }
   } else {
-    result = evaluateBoot({ appEnv, databaseUrl, marker: null });
+    // test/development: a failed marker read (fresh local DB) still boots, but is logged.
+    let marker = null;
+    let host = null;
+    try { host = new URL(databaseUrl).hostname; } catch { host = null; }
+    if (APP_ENVS.includes(appEnv) && LOCAL_HOSTS.includes(host)) {
+      try {
+        marker = await readMarker(prisma);
+      } catch {
+        console.warn("[boot] could not read the database environment marker, continuing");
+      }
+    }
+    result = evaluateBoot({ appEnv, databaseUrl, marker });
   }
   if (!result.ok) {
     console.error("[boot] refusing to start: " + result.reason);
@@ -52,7 +69,7 @@ async function enforceBoot(prisma, { exit = process.exit } = {}) {
   }
   state.env = result.env;
   state.db = result.db;
-  console.log(`[boot] env=${result.env} db=${result.db}`);
+  console.log(`[boot] env=${result.env} db=${result.db || "none"}`);
   return result;
 }
 

@@ -166,7 +166,7 @@ model ProductMaster {
   grade          String   @default("Standard Grade")
   unit           String   @default("Unit")
   suggestedPrice Decimal  @default(100.00)
-  imageUrl       String   @default("https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=400&q=80")
+  imageUrl       String   @default("")
   description    String?
   mrp            Decimal? @default(0)
   customPacks    Json?    @map("custom_packs")

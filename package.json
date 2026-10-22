@@ -10,6 +10,8 @@
     "build:vendor": "vite build --mode vendor",
     "android:customer": "node scripts/android.mjs customer",
     "android:partner": "node scripts/android.mjs partner",
+    "apk:customer": "node scripts/android.mjs customer && cd android && gradlew.bat assembleCustomerRelease",
+    "apk:partner": "node scripts/android.mjs partner && cd android && gradlew.bat assemblePartnerRelease",
     "cap:sync": "cap sync android",
     "cap:open": "cap open android",
     "lint": "node scripts/check-vercel-routes.mjs && oxlint",

@@ -7,6 +7,7 @@ import { useAlert } from "../../context/AlertContext";
 import { useNotifications } from "../../context/NotificationContext";
 import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
 import { cleanProductImage } from "../../utils/productImage";
+import { getCategorySpec, detectCategoryType } from "../../utils/categoryAttributes";
 import LoadMoreButton from "../../components/LoadMoreButton";
 import WalletSettingsTab from "./WalletSettingsTab";
 
@@ -497,6 +498,7 @@ export default function AdminDashboard() {
     stockQty: "",
     description: "",
     imageUrl: "",
+    customPacks: null,
   });
   const [productImageSlotCount, setProductImageSlotCount] = useState(3);
   const [editImageSlotCount, setEditImageSlotCount] = useState(3);
@@ -661,14 +663,16 @@ export default function AdminDashboard() {
         categoryId: productForm.categoryId,
         brand: productForm.brand.trim() || "Generic",
         type: productForm.type.trim() || "Standard",
+        grade: (productForm.grade || "").trim() || "Standard Grade",
         unit: (productForm.unit || "").trim() || "50kg Bag",
+        customPacks: productForm.customPacks || null,
         suggestedPrice: Number(productForm.price || productForm.suggestedPrice) || 100,
         imageUrl: productForm.imageUrl || "",
         description: productForm.description?.trim() || null,
         addedBy: "Admin",
       });
 
-      setProductForm({ name: "", categoryId: "", brand: "", type: "", grade: "", unit: "", price: "", stockQty: "", description: "", imageUrl: "" });
+      setProductForm({ name: "", categoryId: "", brand: "", type: "", grade: "", unit: "", price: "", stockQty: "", description: "", imageUrl: "", customPacks: null });
       setProductImageSlotCount(3);
       setShowProductForm(false);
       showAlert({ title: "Master Product Created", message: `Master product "${productForm.name.trim()}" saved to Database successfully!`, type: "success" });
@@ -1637,122 +1641,334 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            {showProductForm && (
-              <form onSubmit={handleAddProduct} className="p-5 border-b border-slate-200 bg-brand-50/30 space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-navy-900 mb-1">Product Category *</label>
-                    <select
-                      required
-                      value={productForm.categoryId}
-                      onChange={(e) => {
-                        const catId = e.target.value;
-                        const cat = categories.find((c) => c.id === catId);
-                        const catName = (cat?.name || "").toLowerCase();
-                        let defaultUnit = productForm.unit;
-                        if (!productForm.unit || productForm.unit === "50kg Bag" || productForm.unit === "Piece") {
-                          if (catName.includes("cement")) defaultUnit = "50kg Bag";
-                          else if (catName.includes("paint")) defaultUnit = "20 Litre Bucket";
-                          else if (catName.includes("tile")) defaultUnit = "Box";
-                          else if (catName.includes("steel") || catName.includes("rebar")) defaultUnit = "Ton";
-                        }
-                        setProductForm({ ...productForm, categoryId: catId, unit: defaultUnit });
-                      }}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-medium"
-                    >
-                      <option value="">-- Select Category --</option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-navy-900 mb-1">Product Title / Name *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. UltraTech Super PPC Cement"
-                      value={productForm.name}
-                      onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-bold"
-                    />
-                  </div>
-                </div>
+            {showProductForm && (() => {
+              const selectedCatObj = categories.find((c) => c.id === productForm.categoryId);
+              const activeSpec = getCategorySpec(selectedCatObj?.name || "");
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-navy-900 mb-1">Brand Name</label>
-                    <input type="text" placeholder="e.g. UltraTech" value={productForm.brand} onChange={(e) => setProductForm({ ...productForm, brand: e.target.value })} className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-medium" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-navy-900 mb-1">Product Type</label>
-                    <input type="text" placeholder="e.g. PPC Cement" value={productForm.type} onChange={(e) => setProductForm({ ...productForm, type: e.target.value })} className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-medium" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-navy-900 mb-1">Grade / Spec</label>
-                    <input type="text" placeholder="e.g. OPC 53 Grade" value={productForm.grade} onChange={(e) => setProductForm({ ...productForm, grade: e.target.value })} className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-medium" />
-                  </div>
-                </div>
+              return (
+                <form onSubmit={handleAddProduct} className="p-5 border-b border-slate-200 bg-brand-50/30 space-y-4">
+                  {/* Category Header Badge */}
+                  {productForm.categoryId && (
+                    <div className="flex items-center justify-between p-2.5 rounded-xl border bg-white shadow-xs">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md border ${activeSpec.badgeColor}`}>
+                          📂 {activeSpec.label}
+                        </span>
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          Smart form adapted for <strong className="text-slate-800">{activeSpec.label}</strong> specifications.
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400 font-mono uppercase">
+                        Mode: {activeSpec.categoryType}
+                      </span>
+                    </div>
+                  )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-bold text-navy-900">Unit Packaging</label>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setProductForm((f) => ({ ...f, unit: "50kg Bag" }))}
-                          className="text-[9px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-1.5 py-0.5 rounded cursor-pointer"
-                        >
-                          Bag
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setProductForm((f) => ({ ...f, unit: "20 Litre Bucket" }))}
-                          className="text-[9px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-1.5 py-0.5 rounded cursor-pointer"
-                        >
-                          Bucket
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setProductForm((f) => ({ ...f, unit: "Box" }))}
-                          className="text-[9px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-1.5 py-0.5 rounded cursor-pointer"
-                        >
-                          Box
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setProductForm((f) => ({ ...f, unit: "Piece" }))}
-                          className="text-[9px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-1.5 py-0.5 rounded cursor-pointer"
-                        >
-                          Piece
-                        </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-navy-900 mb-1">Product Category *</label>
+                      <select
+                        required
+                        value={productForm.categoryId}
+                        onChange={(e) => {
+                          const catId = e.target.value;
+                          const cat = categories.find((c) => c.id === catId);
+                          const spec = getCategorySpec(cat?.name || "");
+                          setProductForm({
+                            ...productForm,
+                            categoryId: catId,
+                            unit: spec.defaultUnit || "Unit",
+                            suggestedPrice: productForm.suggestedPrice || spec.defaultSuggestedPrice || "",
+                            brand: productForm.brand || (spec.brandPresets ? spec.brandPresets[0] : ""),
+                            type: productForm.type || (spec.typePresets ? spec.typePresets[0] : ""),
+                            grade: productForm.grade || (spec.gradePresets ? spec.gradePresets[0] : ""),
+                            customPacks: spec.availablePackSizes ? { availablePackSizes: [...spec.availablePackSizes] } : null,
+                          });
+                        }}
+                        className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-medium"
+                      >
+                        <option value="">-- Select Category --</option>
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-navy-900 mb-1">Product Title / Name *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder={activeSpec.titlePlaceholder || "e.g. Product Title"}
+                        value={productForm.name}
+                        onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                        className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Brand, Dynamic Type, Dynamic Grade */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-navy-900 mb-1">Brand Name</label>
+                      <input
+                        type="text"
+                        placeholder={activeSpec.brandPresets ? `e.g. ${activeSpec.brandPresets[0]}` : "e.g. Brand"}
+                        value={productForm.brand}
+                        onChange={(e) => setProductForm({ ...productForm, brand: e.target.value })}
+                        className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-medium focus:border-brand-500"
+                      />
+                      {activeSpec.brandPresets && activeSpec.brandPresets.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5 max-h-16 overflow-y-auto no-scrollbar">
+                          {activeSpec.brandPresets.slice(0, 6).map((b) => (
+                            <button
+                              key={b}
+                              type="button"
+                              onClick={() => setProductForm((f) => ({ ...f, brand: b }))}
+                              className={`text-[9px] px-1.5 py-0.5 rounded border transition-all cursor-pointer font-medium ${
+                                productForm.brand === b
+                                  ? "bg-brand-50 border-brand-300 text-brand-700 font-bold"
+                                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100"
+                              }`}
+                            >
+                              {b}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-navy-900 mb-1">{activeSpec.typeLabel || "Product Type"}</label>
+                      <input
+                        type="text"
+                        placeholder={activeSpec.typePresets ? `e.g. ${activeSpec.typePresets[0]}` : "e.g. Standard"}
+                        value={productForm.type}
+                        onChange={(e) => setProductForm({ ...productForm, type: e.target.value })}
+                        className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-medium focus:border-brand-500"
+                      />
+                      {activeSpec.typePresets && activeSpec.typePresets.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5 max-h-16 overflow-y-auto no-scrollbar">
+                          {activeSpec.typePresets.slice(0, 5).map((t) => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setProductForm((f) => ({ ...f, type: t }))}
+                              className={`text-[9px] px-1.5 py-0.5 rounded border transition-all cursor-pointer font-medium ${
+                                productForm.type === t
+                                  ? "bg-brand-50 border-brand-300 text-brand-700 font-bold"
+                                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100"
+                              }`}
+                            >
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-navy-900 mb-1">{activeSpec.gradeLabel || "Grade / Specification"}</label>
+                      <input
+                        type="text"
+                        placeholder={activeSpec.gradePresets ? `e.g. ${activeSpec.gradePresets[0]}` : "e.g. Standard Grade"}
+                        value={productForm.grade}
+                        onChange={(e) => setProductForm({ ...productForm, grade: e.target.value })}
+                        className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-medium focus:border-brand-500"
+                      />
+                      {activeSpec.gradePresets && activeSpec.gradePresets.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5 max-h-16 overflow-y-auto no-scrollbar">
+                          {activeSpec.gradePresets.slice(0, 5).map((g) => (
+                            <button
+                              key={g}
+                              type="button"
+                              onClick={() => setProductForm((f) => ({ ...f, grade: g }))}
+                              className={`text-[9px] px-1.5 py-0.5 rounded border transition-all cursor-pointer font-medium ${
+                                productForm.grade === g
+                                  ? "bg-amber-50 border-amber-300 text-amber-800 font-bold"
+                                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100"
+                              }`}
+                            >
+                              {g}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Category-Specific Extra Attributes (Paint Pack Sizes / Steel Diameters / Tile Sizes / Pipe Sizes) */}
+                  {activeSpec.availablePackSizes && (
+                    <div className="p-3 bg-purple-50/70 rounded-xl border border-purple-200">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold text-purple-950">
+                          🎨 Paint Variant Pack Sizes (Select available volumes for this product)
+                        </label>
+                        <span className="text-[10px] text-purple-700 font-semibold">Saved in Master Spec</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {activeSpec.availablePackSizes.map((pack) => {
+                          const selectedPacks = productForm.customPacks?.availablePackSizes || [];
+                          const isSelected = selectedPacks.includes(pack);
+                          return (
+                            <button
+                              key={pack}
+                              type="button"
+                              onClick={() => {
+                                const next = isSelected
+                                  ? selectedPacks.filter((p) => p !== pack)
+                                  : [...selectedPacks, pack];
+                                setProductForm({
+                                  ...productForm,
+                                  customPacks: { ...productForm.customPacks, availablePackSizes: next },
+                                });
+                              }}
+                              className={`text-xs px-3 py-1.5 rounded-lg border font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                isSelected
+                                  ? "bg-purple-600 text-white border-purple-600 shadow-xs"
+                                  : "bg-white text-purple-900 border-purple-200 hover:bg-purple-100/50"
+                              }`}
+                            >
+                              <span>{isSelected ? "✓" : "+"}</span>
+                              <span>{pack}</span>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
-                    <input
-                      type="text"
-                      placeholder="e.g. 50kg Bag, 20L Bucket, Box, Ton"
-                      value={productForm.unit !== undefined ? productForm.unit : ""}
-                      onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-medium focus:border-brand-500"
-                    />
+                  )}
+
+                  {activeSpec.diameters && (
+                    <div className="p-3 bg-blue-50/70 rounded-xl border border-blue-200">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold text-blue-950">
+                          🔩 TMT Rebar Diameters (Click to append to Product Title)
+                        </label>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {activeSpec.diameters.map((dia) => (
+                          <button
+                            key={dia}
+                            type="button"
+                            onClick={() => {
+                              let name = productForm.name;
+                              if (!name.includes(dia)) {
+                                name = name ? `${name} (${dia})` : `TMT Rebar (${dia})`;
+                              }
+                              setProductForm((f) => ({ ...f, name, customPacks: { ...f.customPacks, diameter: dia } }));
+                            }}
+                            className="text-xs px-2.5 py-1 rounded-lg border border-blue-200 bg-white hover:bg-blue-100 text-blue-900 font-bold cursor-pointer transition-all active:scale-95"
+                          >
+                            + {dia}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {activeSpec.tileSizes && (
+                    <div className="p-3 bg-teal-50/70 rounded-xl border border-teal-200">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold text-teal-950">
+                          📐 Standard Tile Dimensions (Click to append to Product Title)
+                        </label>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {activeSpec.tileSizes.map((sz) => (
+                          <button
+                            key={sz}
+                            type="button"
+                            onClick={() => {
+                              let name = productForm.name;
+                              if (!name.includes(sz)) {
+                                name = name ? `${name} (${sz})` : `Vitrified Floor Tiles (${sz})`;
+                              }
+                              setProductForm((f) => ({ ...f, name, customPacks: { ...f.customPacks, tileSize: sz } }));
+                            }}
+                            className="text-xs px-2.5 py-1 rounded-lg border border-teal-200 bg-white hover:bg-teal-100 text-teal-900 font-bold cursor-pointer transition-all active:scale-95"
+                          >
+                            + {sz}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {activeSpec.pipeSizes && (
+                    <div className="p-3 bg-cyan-50/70 rounded-xl border border-cyan-200">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold text-cyan-950">
+                          🚰 Pipe Diameter / Bore Size (Click to append to Product Title)
+                        </label>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {activeSpec.pipeSizes.map((psz) => (
+                          <button
+                            key={psz}
+                            type="button"
+                            onClick={() => {
+                              let name = productForm.name;
+                              if (!name.includes(psz)) {
+                                name = name ? `${name} ${psz}` : `CPVC Pipe ${psz}`;
+                              }
+                              setProductForm((f) => ({ ...f, name, customPacks: { ...f.customPacks, pipeSize: psz } }));
+                            }}
+                            className="text-xs px-2.5 py-1 rounded-lg border border-cyan-200 bg-white hover:bg-cyan-100 text-cyan-900 font-bold cursor-pointer transition-all active:scale-95"
+                          >
+                            + {psz}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Unit Packaging, Suggested Price, Stock Quantity */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-navy-900">{activeSpec.unitLabel || "Unit Packaging"}</label>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder={activeSpec.defaultUnit || "e.g. 50kg Bag, 20L Bucket, Box"}
+                        value={productForm.unit !== undefined ? productForm.unit : ""}
+                        onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })}
+                        className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-medium focus:border-brand-500"
+                      />
+                      {activeSpec.unitPresets && activeSpec.unitPresets.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {activeSpec.unitPresets.map((u) => (
+                            <button
+                              key={u}
+                              type="button"
+                              onClick={() => setProductForm((f) => ({ ...f, unit: u }))}
+                              className={`text-[9px] px-1.5 py-0.5 rounded border transition-all cursor-pointer font-medium ${
+                                productForm.unit === u
+                                  ? "bg-brand-50 border-brand-300 text-brand-700 font-bold"
+                                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100"
+                              }`}
+                            >
+                              {u}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-navy-900 mb-1">Suggested Price (₹) *</label>
+                      <input
+                        type="number"
+                        required
+                        placeholder={activeSpec.defaultSuggestedPrice ? `e.g. ${activeSpec.defaultSuggestedPrice}` : "e.g. 390"}
+                        value={productForm.suggestedPrice || productForm.price || ""}
+                        onChange={(e) => setProductForm({ ...productForm, suggestedPrice: e.target.value, price: e.target.value })}
+                        className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-navy-900 mb-1">Stock Quantity</label>
+                      <input type="number" placeholder="e.g. 100" value={productForm.stockQty || ""} onChange={(e) => setProductForm({ ...productForm, stockQty: e.target.value })} className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold" />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-navy-900 mb-1">Suggested Price (₹) *</label>
-                    <input
-                      type="number"
-                      required
-                      placeholder="e.g. 390"
-                      value={productForm.suggestedPrice || productForm.price || ""}
-                      onChange={(e) => setProductForm({ ...productForm, suggestedPrice: e.target.value, price: e.target.value })}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-navy-900 mb-1">Stock Quantity</label>
-                    <input type="number" placeholder="e.g. 100" value={productForm.stockQty || ""} onChange={(e) => setProductForm({ ...productForm, stockQty: e.target.value })} className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold" />
-                  </div>
-                </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -1880,7 +2096,8 @@ export default function AdminDashboard() {
                   </button>
                 </div>
               </form>
-            )}
+            );
+          })()}
 
             {/* MASTER PRODUCT CATALOG */}
             <div className="overflow-x-auto">
@@ -1930,9 +2147,28 @@ export default function AdminDashboard() {
                         </td>
                         <td className="py-3.5 px-4">
                           <p className="font-semibold text-slate-800">{p.type}</p>
-                          <span className="bg-amber-50 text-amber-700 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-amber-200 inline-block mt-0.5">
-                            Grade: {p.grade}
-                          </span>
+                          <div className="flex flex-wrap gap-1 mt-0.5 items-center">
+                            {p.grade && (
+                              <span className="bg-amber-50 text-amber-700 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-amber-200 inline-block">
+                                Spec: {p.grade}
+                              </span>
+                            )}
+                            {p.customPacks?.availablePackSizes && Array.isArray(p.customPacks.availablePackSizes) && (
+                              <span className="bg-purple-50 text-purple-700 text-[9px] font-bold px-1.5 py-0.5 rounded border border-purple-200 inline-block" title={p.customPacks.availablePackSizes.join(", ")}>
+                                🎨 {p.customPacks.availablePackSizes.length} Pack Sizes
+                              </span>
+                            )}
+                            {p.customPacks?.diameter && (
+                              <span className="bg-blue-50 text-blue-700 text-[9px] font-bold px-1.5 py-0.5 rounded border border-blue-200 inline-block">
+                                🔩 {p.customPacks.diameter}
+                              </span>
+                            )}
+                            {p.customPacks?.tileSize && (
+                              <span className="bg-teal-50 text-teal-700 text-[9px] font-bold px-1.5 py-0.5 rounded border border-teal-200 inline-block">
+                                📐 {p.customPacks.tileSize}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3.5 px-4">
                           <span className="font-extrabold text-navy-900 text-sm">₹{p.suggestedPrice || p.price}</span>
@@ -3639,67 +3875,176 @@ export default function AdminDashboard() {
       )}
 
       {/* EDIT MODAL: MASTER PRODUCT */}
-      {editingProduct && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-100 max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-              <h3 className="font-bold text-navy-900 text-base">Edit Master Product Catalog</h3>
-              <button onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none cursor-pointer">✕</button>
-            </div>
-            <form onSubmit={handleUpdateProductSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-navy-900 mb-1">Product Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={editingProduct.name}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
-                />
+      {editingProduct && (() => {
+        const editCatObj = categories.find((c) => c.id === editingProduct.categoryId);
+        const editSpec = getCategorySpec(editingProduct.categoryName || editCatObj?.name || "");
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-100 max-h-[92vh] overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-navy-900 text-base">Edit Master Product Catalog</h3>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${editSpec.badgeColor}`}>
+                    {editSpec.label}
+                  </span>
+                </div>
+                <button onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none cursor-pointer">✕</button>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <form onSubmit={handleUpdateProductSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-navy-900 mb-1">Brand</label>
+                  <label className="block text-xs font-bold text-navy-900 mb-1">Product Name *</label>
                   <input
                     type="text"
-                    value={editingProduct.brand}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, brand: e.target.value })}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-navy-900 mb-1">Grade / Spec</label>
-                  <input
-                    type="text"
-                    value={editingProduct.grade}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, grade: e.target.value })}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-navy-900 mb-1">Suggested Price (₹) *</label>
-                  <input
-                    type="number"
                     required
-                    value={editingProduct.suggestedPrice || editingProduct.price}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, suggestedPrice: e.target.value, price: e.target.value })}
+                    value={editingProduct.name}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
                     className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
                   />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Brand</label>
+                    <input
+                      type="text"
+                      value={editingProduct.brand || ""}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, brand: e.target.value })}
+                      className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                    />
+                    {editSpec.brandPresets && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {editSpec.brandPresets.slice(0, 4).map((b) => (
+                          <button
+                            key={b}
+                            type="button"
+                            onClick={() => setEditingProduct((p) => ({ ...p, brand: b }))}
+                            className="text-[9px] px-1.5 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 font-medium cursor-pointer"
+                          >
+                            {b}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">{editSpec.typeLabel || "Product Type"}</label>
+                    <input
+                      type="text"
+                      value={editingProduct.type || ""}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, type: e.target.value })}
+                      className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                    />
+                    {editSpec.typePresets && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {editSpec.typePresets.slice(0, 3).map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => setEditingProduct((p) => ({ ...p, type: t }))}
+                            className="text-[9px] px-1.5 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 font-medium cursor-pointer"
+                          >
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">{editSpec.gradeLabel || "Grade / Spec"}</label>
+                    <input
+                      type="text"
+                      value={editingProduct.grade || ""}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, grade: e.target.value })}
+                      className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                    />
+                    {editSpec.gradePresets && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {editSpec.gradePresets.slice(0, 3).map((g) => (
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={() => setEditingProduct((p) => ({ ...p, grade: g }))}
+                            className="text-[9px] px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-800 font-medium cursor-pointer"
+                          >
+                            {g}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Edit Pack Sizes for Paints */}
+                {editSpec.availablePackSizes && (
+                  <div className="p-2.5 bg-purple-50/70 rounded-xl border border-purple-200">
+                    <label className="block text-xs font-bold text-purple-950 mb-1">
+                      🎨 Paint Pack Sizes
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {editSpec.availablePackSizes.map((pack) => {
+                        const curPacks = editingProduct.customPacks?.availablePackSizes || [];
+                        const isSel = curPacks.includes(pack);
+                        return (
+                          <button
+                            key={pack}
+                            type="button"
+                            onClick={() => {
+                              const next = isSel ? curPacks.filter((p) => p !== pack) : [...curPacks, pack];
+                              setEditingProduct({
+                                ...editingProduct,
+                                customPacks: { ...editingProduct.customPacks, availablePackSizes: next },
+                              });
+                            }}
+                            className={`text-xs px-2.5 py-1 rounded-lg border font-bold transition-all cursor-pointer ${
+                              isSel ? "bg-purple-600 text-white border-purple-600 shadow-xs" : "bg-white text-purple-900 border-purple-200 hover:bg-purple-100/50"
+                            }`}
+                          >
+                            {isSel ? "✓ " : "+ "}{pack}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Suggested Price (₹) *</label>
+                    <input
+                      type="number"
+                      required
+                      value={editingProduct.suggestedPrice || editingProduct.price}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, suggestedPrice: e.target.value, price: e.target.value })}
+                      className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">{editSpec.unitLabel || "Unit Packaging"}</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 50kg Bag, Box, 20L"
+                      value={editingProduct.unit !== undefined ? editingProduct.unit : ""}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, unit: e.target.value })}
+                      className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
+                    />
+                    {editSpec.unitPresets && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {editSpec.unitPresets.slice(0, 4).map((u) => (
+                          <button
+                            key={u}
+                            type="button"
+                            onClick={() => setEditingProduct((p) => ({ ...p, unit: u }))}
+                            className="text-[9px] px-1.5 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 font-medium cursor-pointer"
+                          >
+                            {u}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-navy-900 mb-1">Unit Packaging</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 50kg Bag, Box, 20L"
-                    value={editingProduct.unit !== undefined ? editingProduct.unit : ""}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, unit: e.target.value })}
-                    className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
-                  />
-                </div>
-              </div>
-              <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-navy-900">
                     Product Images (1 to 6 Images for Interactive Slider)
@@ -3825,9 +4170,10 @@ export default function AdminDashboard() {
                 </button>
               </div>
             </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* EDIT MODAL: CATEGORY hai ye  */}
       {editingCategory && (

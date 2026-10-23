@@ -28,8 +28,10 @@ q postgres -c 'CREATE DATABASE fx' && q fx <"$work/ddl.sql" && q fx <"$here/fixt
 q postgres -c 'CREATE DATABASE fx_unmarked TEMPLATE fx'
 q postgres -c 'CREATE DATABASE fx_prod TEMPLATE fx'
 q postgres -c 'CREATE DATABASE fx_collide TEMPLATE fx'
+q postgres -c 'CREATE DATABASE fx_full TEMPLATE fx'
 q postgres -c "ALTER DATABASE fx SET buildcity.env='staging'"
 q postgres -c "ALTER DATABASE fx_collide SET buildcity.env='staging'"
+q postgres -c "ALTER DATABASE fx_full SET buildcity.env='staging'"
 q postgres -c "ALTER DATABASE fx_prod SET buildcity.env='production'"
 
 snap() { q "$1" -c "SELECT table_name || ' ' || (xpath('/row/c/text()', query_to_xml(format('select md5(coalesce(string_agg(t::text, ''|'' order by t::text), '''')) as c from %I t', table_name), false, true, '')))[1]::text FROM information_schema.tables WHERE table_schema = 'public' ORDER BY 1"; }
@@ -42,6 +44,7 @@ for col in users.phone vendors.phone district_representatives.phone addresses.ph
            order_returns.customerPhone order_returns.drPhone vendor_fcm_tokens.phone customer_fcm_tokens.phone \
            otp_verifications.phone users.email notifications.message audit_logs.details \
            reviews.comment wallet_transactions.description order_returns.returnReason \
+           orders.idempotencyKey users.cartItems \
            'table not empty: otp_verifications' 'table not empty: vendor_fcm_tokens' \
            'table not empty: customer_fcm_tokens' 'table not empty: audit_logs' 'table not empty: notifications'; do
   check "verify names $col" 'grep -qF -- "$col" "$work/v0.err"'
@@ -110,6 +113,16 @@ check "real 2xxxxxxxxx landline (022-2345-6789) remapped, not kept" '[ "$(q fx -
 check "referral wallet name removed, rest kept" '[ "$(q fx -c "SELECT description FROM wallet_transactions WHERE id = '"'w4'"'")" = "Referral bonus of 50 for order by Customer" ]'
 check "Super Admin / Admin kept in addedByDr, names reduced to DR" '[ "$(q fx -c "SELECT \"addedByDr\" FROM vendors ORDER BY id" | paste -sd,)" = "DR,Super Admin" ]'
 
+# 3b. A real phone that looks like an issued number (u8: 2000000001) is remapped, and no new number reuses it
+# (u10 sorts first and is updated first: with a base of 0 it got 2000000001 -> duplicate key)
+check "real 2000000001 remapped to another 2<9 digits>" '[ "$(q fx -c "SELECT phone ~ '"'^2[0-9]{9}$'"' AND phone <> '"'2000000001'"' FROM users WHERE id = '"'u8'"'")" = t ]'
+check "no user holds 2000000001 (u10 not issued it)" '[ "$(q fx -c "SELECT count(*) FROM users WHERE phone = '"'2000000001'"'")" = 0 ] && [ "$(q fx -c "SELECT phone FROM users WHERE id = '"'u10'"'")" != 2000000001 ]'
+
+# 3c. Idempotency keys digit-free, still unique, NULL kept; carts emptied, NULL kept
+check "idempotency keys unique, digit-free, stg_ prefixed" '[ "$(q fx -c "SELECT count(DISTINCT \"idempotencyKey\") = count(*) AND count(*) = 2 AND bool_and(\"idempotencyKey\" !~ '"'[0-9]'"' AND \"idempotencyKey\" LIKE '"'stg_%'"') FROM orders WHERE \"idempotencyKey\" IS NOT NULL")" = t ]'
+check "NULL idempotency key stays NULL" '[ "$(q fx -c "SELECT \"idempotencyKey\" IS NULL FROM orders WHERE id = '"'o2'"'")" = t ]'
+check "carts emptied, NULL cart stays NULL" '[ "$(q fx -c "SELECT \"cartItems\" = '"'[]'"'::jsonb FROM users WHERE id = '"'u1'"'")" = t ] && [ "$(q fx -c "SELECT \"cartItems\" IS NULL FROM users WHERE id = '"'u5'"'")" = t ]'
+
 # 4. Re-run is a no-op and still verifies
 snap fx >"$work/snap1"
 q fx <"$stg/anonymise.sql" >"$work/a2.out" 2>"$work/a2.err"; rc=$?
@@ -134,6 +147,14 @@ q fx_collide <"$stg/anonymise.sql" >/dev/null 2>"$work/c.err"; rc=$?
 check "colliding phones make anonymise fail on the unique key" '[ $rc -ne 0 ] && grep -q "duplicate key" "$work/c.err"'
 snap fx_collide >"$work/c1"
 check "failed run leaves the database untouched" 'cmp -s "$work/c0" "$work/c1"'
+
+# 6b. Exhaustion: a real 2999999999 pushes the next issued number past 10 digits -> fail, roll back
+q fx_full -c "INSERT INTO users (id, phone, \"updatedAt\") VALUES ('uf1', '2999999999', now())" >/dev/null
+snap fx_full >"$work/f0"
+q fx_full <"$stg/anonymise.sql" >/dev/null 2>"$work/f.err"; rc=$?
+check "number space exhaustion makes anonymise fail" '[ $rc -ne 0 ] && grep -q "phone number space exhausted" "$work/f.err"'
+snap fx_full >"$work/f1"
+check "exhausted run leaves the database untouched" 'cmp -s "$work/f0" "$work/f1"'
 
 # 7. Separators inside free text: scrubbed, and verify catches them in a catalog column
 check "separated phones scrubbed in reviews" '[ "$(q fx -c "SELECT comment FROM reviews WHERE id = '"'rv3'"'")" = "Call [phone] or [phone] or [phone] or +[phone] ok" ]'

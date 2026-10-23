@@ -837,6 +837,164 @@ async function staffLifecycle(ids, { admin, mzp }) {
   ok(adminStill.status === 200, "D4: shared admin still logs in after the staff scenarios", adminStill.status);
 }
 
+// --- Visibility cleanups (Security PR5)
+const signAs = (claims) => require("jsonwebtoken").sign({ tv: 1, ...claims }, process.env.JWT_SECRET.trim(), { expiresIn: "15d" });
+
+async function visibilityCleanups(ids, { admin, c1, c2 }) {
+  const phantomAdmin = signAs({ sub: crypto.randomUUID(), phone: "9100000099", role: "ADMIN" });
+  const phantomCustomer = signAs({ sub: crypto.randomUUID(), phone: "9100000098", role: "CUSTOMER" });
+  const ownTitles = async (token) => (await req("GET", "/notifications/me", { token })).body;
+
+  await scenario("PR5 a) /users/me with no user row is 401 SESSION_EXPIRED for every role", async () => {
+    for (const [who, token] of [["ADMIN", phantomAdmin], ["CUSTOMER", phantomCustomer]]) {
+      const r = await req("GET", "/users/me", { token });
+      ok(r.status === 401 && deepEqual(r.body, SESSION_EXPIRED), `PR5 a) phantom ${who} token -> 401 SESSION_EXPIRED, no token`, { s: r.status, b: r.body });
+    }
+    const real = await req("GET", "/users/me", { token: admin });
+    ok(real.status === 200 && real.body.id === ids.admin && typeof real.body.token === "string" && !hasPasswordField(real.body), "PR5 a) real admin still gets 200 + token", { s: real.status, b: real.body });
+  });
+
+  await scenario("PR5 b) POST /notifications never invents a recipient", async () => {
+    const usersBefore = await prisma.user.count();
+    const notesBefore = await prisma.notification.count();
+    const r = await req("POST", "/notifications", { token: admin, body: { title: "PR5 ghost", message: "x", userId: crypto.randomUUID() } });
+    ok(r.status === 404 && deepEqual(r.body, { error: "User not found" }), "PR5 b) unknown userId -> 404", { s: r.status, b: r.body });
+    const p = await req("POST", "/notifications", { token: phantomAdmin, body: { title: "PR5 phantom", message: "x" } });
+    ok(p.status === 404 && deepEqual(p.body, { error: "User not found" }), "PR5 b) phantom admin broadcast -> 404", { s: p.status, b: p.body });
+    const bad = await req("POST", "/notifications", { token: admin, body: { title: "  ", message: "x" } });
+    ok(bad.status === 400, "PR5 b) blank title -> 400", bad.status);
+    ok(await prisma.user.count() === usersBefore && !(await prisma.user.findUnique({ where: { phone: "7607650875" } })), "PR5 b) no user created (no 7607650875 system user)");
+    ok(await prisma.notification.count() === notesBefore, "PR5 b) no notification created");
+  });
+
+  await scenario("PR5 c) admin DELETE /notifications clears only the admin's own rows", async () => {
+    const mk = (userId, title) => prisma.notification.create({ data: { userId, title, message: "x" } });
+    const n1 = await mk(ids.c1, "PR5 c1 seed");
+    const n2 = await mk(ids.c2, "PR5 c2 seed");
+    const na = await mk(ids.admin, "PR5 admin seed");
+    const r = await req("DELETE", "/notifications", { token: admin });
+    const left = (await prisma.notification.findMany({ where: { id: { in: [n1.id, n2.id, na.id] } } })).map((n) => n.id);
+    ok(r.status === 200 && left.includes(n1.id) && left.includes(n2.id) && !left.includes(na.id), "PR5 c) c1/c2 rows survive, admin row gone", { s: r.status, left });
+    ok(await prisma.notification.count({ where: { userId: ids.admin } }) === 0, "PR5 c) no admin rows left");
+  });
+
+  await scenario("PR5 d) /notifications/me: own rows + explicit broadcasts only", async () => {
+    const c2Row = await prisma.notification.create({ data: { userId: ids.c2, title: "PR5 c2 private", message: "x" } });
+    const priv = await req("POST", "/notifications", { token: admin, body: { title: "PR5 admin private", message: "x", userId: ids.admin } });
+    const bc = await req("POST", "/notifications", { token: admin, body: { title: "PR5 broadcast", message: "x", type: "info" } });
+    ok(priv.status === 201 && priv.body.success === true && priv.body.notification?.isBroadcast === false && priv.body.notification?.userId === ids.admin, "PR5 d) targeted POST -> 201, private", priv.body);
+    ok(bc.status === 201 && bc.body.success === true && bc.body.notification?.isBroadcast === true && bc.body.notification?.userId === ids.admin, "PR5 d) broadcast POST -> 201, stored on the caller", bc.body);
+    const mine = await ownTitles(c1);
+    ok(Array.isArray(mine) && mine.some((n) => n.title === "PR5 broadcast"), "PR5 d) customer sees the broadcast", mine);
+    ok(Array.isArray(mine) && !mine.some((n) => n.title === "PR5 admin private"), "PR5 d) customer does not see a private admin row", mine);
+    ok(Array.isArray(mine) && !mine.some((n) => n.userId === ids.c2 || n.id === c2Row.id), "PR5 d) customer does not see another customer's rows", mine);
+    ok(Array.isArray(mine) && mine.some((n) => n.title === "PR5 c1 seed"), "PR5 d) customer still sees own rows", mine);
+    const adm = await ownTitles(admin);
+    ok(Array.isArray(adm) && adm.length > 0 && adm.every((n) => n.userId === ids.admin), "PR5 d) admin /notifications/me returns only admin's own rows", adm.map((n) => n.userId));
+    const cust = await req("POST", "/notifications", { token: c1, body: { title: "PR5 cust", message: "x" } });
+    ok(cust.status === 403, "PR5 d) customer cannot POST notifications", cust.status);
+  });
+
+  await scenario("PR5 e) customer order lists match customerId only", async () => {
+    const c1User = await prisma.user.findUnique({ where: { id: ids.c1 } });
+    const c2User = await prisma.user.findUnique({ where: { id: ids.c2 } });
+    const addr = await prisma.address.create({ data: { userId: ids.c2, regionId: ids.reg, fullName: "Gift", phone: c1User.phone, street: "PR5 street", pincode: "221001" } });
+    const order = await prisma.order.create({ data: { customerId: ids.c2, addressId: addr.id, totalAmount: 410, items: { create: [{ vendorId: ids.vb, productName: "Cement Bag", priceAtPurchase: 410, quantity: 1, totalPrice: 410 }] } } });
+    const has = (body) => (Array.isArray(body) ? body : body?.orders || []).some((o) => o.id === order.id);
+    try {
+      const me = await req("GET", "/orders/me", { token: c1 });
+      ok(me.status === 200 && Array.isArray(me.body) && !has(me.body), "PR5 e) c1 /orders/me excludes c2's order to c1's phone", me.body);
+      const paged = await req("GET", "/orders/me?limit=50", { token: c1 });
+      ok(paged.status === 200 && Array.isArray(paged.body.orders) && !has(paged.body), "PR5 e) c1 /orders/me?limit= excludes it", paged.body);
+      const sum = await req("GET", "/orders/summary", { token: c1 });
+      const c1Count = await prisma.order.count({ where: { customerId: ids.c1 } });
+      ok(sum.status === 200 && sum.body.totalOrders === c1Count, "PR5 e) c1 /orders/summary counts only own orders", { got: sum.body, c1Count });
+      const self = await req("GET", `/orders/user/${ids.c1}`, { token: c1 });
+      ok(self.status === 200 && Array.isArray(self.body) && !has(self.body), "PR5 e) c1 /orders/user/<own id> excludes it", self.body);
+      const selfPhone = await req("GET", `/orders/user/${c1User.phone}`, { token: c1 });
+      ok(selfPhone.status === 200 && Array.isArray(selfPhone.body) && !has(selfPhone.body), "PR5 e) c1 /orders/user/<own phone> excludes it", selfPhone.body);
+      const aById = await req("GET", `/orders/user/${ids.c2}`, { token: admin });
+      ok(aById.status === 200 && has(aById.body) && aById.body.every((o) => o.customerId === ids.c2), "PR5 e) admin /orders/user/<c2 id> includes it", aById.body);
+      const aByPhone = await req("GET", `/orders/user/${c2User.phone}`, { token: admin });
+      ok(aByPhone.status === 200 && has(aByPhone.body) && aByPhone.body.every((o) => o.customerId === ids.c2), "PR5 e) admin /orders/user/<c2 phone> includes it", aByPhone.body);
+      const aPaged = await req("GET", `/orders/user/+91${c2User.phone}?limit=50`, { token: admin });
+      ok(aPaged.status === 200 && Array.isArray(aPaged.body.orders) && has(aPaged.body), "PR5 e) admin /orders/user/<+91 phone>?limit= includes it (paged shape)", aPaged.body);
+      const aC1 = await req("GET", `/orders/user/${ids.c1}`, { token: admin });
+      ok(aC1.status === 200 && Array.isArray(aC1.body) && !has(aC1.body) && aC1.body.every((o) => o.customerId === ids.c1), "PR5 e) admin /orders/user/<c1 id> excludes it", aC1.body);
+      const aNone = await req("GET", `/orders/user/${crypto.randomUUID()}`, { token: admin });
+      const aNonePaged = await req("GET", `/orders/user/${crypto.randomUUID()}?limit=10`, { token: admin });
+      ok(deepEqual(aNone.body, []) && aNonePaged.status === 200 && deepEqual(aNonePaged.body.orders, []) && aNonePaged.body.hasMore === false, "PR5 e) admin /orders/user/<unknown> -> empty, same shapes", { a: aNone.body, b: aNonePaged.body });
+      const c2Me = await req("GET", "/orders/me", { token: c2 });
+      ok(c2Me.status === 200 && has(c2Me.body), "PR5 e) c2 /orders/me still includes it", c2Me.body);
+    } finally {
+      await prisma.order.delete({ where: { id: order.id } });
+      await prisma.address.delete({ where: { id: addr.id } });
+    }
+  });
+
+  await scenario("PR5 f) public catalog + public coupons show only live rows", async () => {
+    const reg = ids.reg;
+    const cat = await prisma.vendorProduct.findUnique({ where: { id: ids.la } });
+    const base = { categoryId: cat.categoryId, categoryName: "Cement", brand: "X", type: "T", grade: "G", unit: "Bag", imageUrl: "x", regionId: reg, regionName: "Varanasi", masterProductId: ids.mp, name: "PR5 listing", price: 400, stockQty: 5 };
+    const seededUsers = [], seededVendors = [], listings = {};
+    const mkVendor = async (phone, data) => {
+      const u = await prisma.user.create({ data: { phone, name: "PR5 " + phone, role: "VENDOR" } });
+      seededUsers.push(u.id);
+      const v = await prisma.vendor.create({ data: { userId: u.id, shopName: "PR5 " + phone, ownerName: "PR5", phone, regionId: reg, ...data } });
+      seededVendors.push(v.id);
+      return v;
+    };
+    const suspended = await mkVendor("9100000011", { status: "SUSPENDED" });
+    const disabled = await mkVendor("9100000012", { status: "APPROVED", disabledAt: new Date() });
+    listings.pending = await prisma.vendorProduct.create({ data: { ...base, vendorId: ids.va, approvalStatus: "PENDING_REVIEW", isActive: true } });
+    listings.rejected = await prisma.vendorProduct.create({ data: { ...base, vendorId: ids.va, approvalStatus: "REJECTED", isActive: true } });
+    listings.inactive = await prisma.vendorProduct.create({ data: { ...base, vendorId: ids.va, approvalStatus: "APPROVED", isActive: false } });
+    listings.suspended = await prisma.vendorProduct.create({ data: { ...base, vendorId: suspended.id, approvalStatus: "APPROVED", isActive: true } });
+    listings.disabled = await prisma.vendorProduct.create({ data: { ...base, vendorId: disabled.id, approvalStatus: "APPROVED", isActive: true } });
+    const offCoupon = await prisma.coupon.create({ data: { code: "PR5OFF", title: "PR5 off", isActive: false } });
+    const onCoupon = await prisma.coupon.create({ data: { code: "PR5ON", title: "PR5 on", isActive: true } });
+    const excluded = Object.values(listings).map((l) => l.id);
+    try {
+      // Any non-neutral admin mutation empties the in-memory cache when its response finishes
+      await req("PATCH", `/orders/${ids.orderB}/status`, { token: admin, body: { status: "NOT_A_STATUS" } });
+      const r = await req("GET", "/public-catalog");
+      ok(r.status === 200 && r.headers.get("x-cache") === "MISS", "PR5 f) catalog cache is cold", r.headers.get("x-cache"));
+      const lids = (r.body.listings || []).map((l) => l.id);
+      ok(!excluded.some((id) => lids.includes(id)), "PR5 f) catalog excludes pending/rejected/inactive/suspended-shop/disabled-shop listings", { lids, excluded });
+      ok(lids.includes(ids.la) && (r.body.listings || []).every((l) => l.approvalStatus === "APPROVED" && l.isActive === true), "PR5 f) catalog still has approved active listings only", lids);
+      const expected = await prisma.vendorProduct.findUnique({
+        where: { id: ids.la },
+        include: { vendor: { select: { id: true, shopName: true, status: true, regionId: true, region: true } }, masterProduct: true },
+      });
+      const got = r.body.listings.find((l) => l.id === ids.la);
+      const keys = (o) => Object.keys(JSON.parse(JSON.stringify(o))).sort();
+      ok(deepEqual(keys(got), keys(expected)) && deepEqual(keys(got.vendor), keys(expected.vendor)), "PR5 f) listing keeps the same field set", { got: keys(got), want: keys(expected) });
+      const codes = (r.body.coupons || []).map((c) => c.code);
+      ok(codes.includes("PR5ON") && !codes.includes("PR5OFF"), "PR5 f) catalog coupons: active in, inactive out", codes);
+      ok(deepEqual(["categories", "regions", "listings", "coupons", "masterProducts", "banners"].sort(), Object.keys(r.body).sort()), "PR5 f) catalog top-level keys unchanged", Object.keys(r.body));
+      const pub = await req("GET", "/coupons");
+      const pubCodes = (pub.body || []).map((c) => c.code);
+      ok(pub.status === 200 && pubCodes.includes("PR5ON") && !pubCodes.includes("PR5OFF"), "PR5 f) GET /coupons excludes inactive coupons", pubCodes);
+      const hit = await req("GET", "/public-catalog");
+      const hitIds = (hit.body.listings || []).map((l) => l.id);
+      ok(hit.headers.get("x-cache") === "HIT" && !excluded.some((id) => hitIds.includes(id)) && !(hit.body.coupons || []).some((c) => c.code === "PR5OFF"), "PR5 f) cached catalog is still filtered", hit.headers.get("x-cache"));
+
+      // Every DB coupon inactive: an empty list, not the hardcoded fallback
+      await prisma.coupon.updateMany({ where: { id: onCoupon.id }, data: { isActive: false } });
+      const othersActive = await prisma.coupon.count({ where: { isActive: true } });
+      await req("PATCH", `/orders/${ids.orderB}/status`, { token: admin, body: { status: "NOT_A_STATUS" } });
+      const none = await req("GET", "/public-catalog");
+      ok(othersActive > 0 || deepEqual(none.body.coupons, []), "PR5 f) all DB coupons inactive -> no coupons (no fallback list)", none.body.coupons);
+    } finally {
+      await prisma.vendorProduct.deleteMany({ where: { id: { in: excluded } } });
+      await prisma.vendor.deleteMany({ where: { id: { in: seededVendors } } });
+      await prisma.user.deleteMany({ where: { id: { in: seededUsers } } });
+      await prisma.coupon.deleteMany({ where: { id: { in: [offCoupon.id, onCoupon.id] } } });
+      await req("PATCH", `/orders/${ids.orderB}/status`, { token: admin, body: { status: "NOT_A_STATUS" } });
+    }
+  });
+}
+
 (async () => {
   const ids = JSON.parse(execFileSync("node", [path.join(__dirname, "fixture.js")]).toString().trim().split("\n").pop());
 
@@ -946,6 +1104,9 @@ async function staffLifecycle(ids, { admin, mzp }) {
 
   // --- Staff lifecycle (Security PR4)
   await staffLifecycle(ids, { admin, mzp: pb2.mzp });
+
+  // --- Visibility cleanups (Security PR5)
+  await visibilityCleanups(ids, { admin, c1, c2 });
 
   // --- Brute force protection on partner password login
   let last;

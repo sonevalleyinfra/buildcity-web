@@ -1,0 +1,56 @@
+name: e2e-staging
+
+# Smoke suite against https://staging.buildcity.in on the merged SHA (ADR 0002 sections 3 and 7).
+# scripts/promote.sh reads this workflow's push run on the commit; the `production` branch rule reads its check.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: read
+
+concurrency:
+  group: staging
+  cancel-in-progress: true
+
+jobs:
+  e2e-staging:
+    name: e2e-staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      CI: "true"
+      E2E_TRACE: "off"
+      E2E_BASE_URL: https://staging.buildcity.in
+      E2E_VENDOR_PASSWORD: ${{ secrets.E2E_VENDOR_PASSWORD }}
+      E2E_DR_PASSWORD: ${{ secrets.E2E_DR_PASSWORD }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Require secrets
+        run: |
+          for v in E2E_VENDOR_PASSWORD E2E_DR_PASSWORD E2E_ADMIN_PASSWORD VERCEL_AUTOMATION_BYPASS_SECRET; do
+            if [ -z "${!v}" ]; then echo "::error::secret $v is not set"; missing=1; fi
+          done
+          [ -z "${missing:-}" ]
+      - name: Install
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Wait for this SHA on Vercel and api-staging (20 min max)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/ci/wait-for-staging.mjs "$GITHUB_SHA"
+      # No artifacts on purpose: the repo is public, and traces/reports would leak secrets.
+      - name: E2E (staging)
+        run: npx playwright test -c e2e/playwright.config.mjs --trace=off

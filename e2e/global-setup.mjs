@@ -2,12 +2,13 @@
 // writing request sent (the only request is GET /api/v1/env).
 import fs from "node:fs";
 import { assertSafeRun } from "./guard.mjs";
+import { withBypass } from "./bypass.mjs";
 import { STATE_DIR, newRunId } from "./state.mjs";
 
 export default async function globalSetup() {
   const baseURL = process.env.E2E_BASE_URL;
   const apiURL = process.env.E2E_API_URL || baseURL;
-  await assertSafeRun({ baseURL, apiURL });
+  await assertSafeRun({ baseURL, apiURL }, withBypass());
 
   fs.rmSync(STATE_DIR, { recursive: true, force: true });
   fs.mkdirSync(STATE_DIR, { recursive: true });

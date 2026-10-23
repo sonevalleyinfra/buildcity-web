@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { assertNotProdHost } from "./guard.mjs";
+import { bypassHeadersFor } from "./bypass.mjs";
 import { REGION_NAME, STATE_DIR } from "./state.mjs";
 
 // Seeded accounts (server/scripts/staging/seed-test-accounts.js). The ADMIN row is the hardcoded super-admin
@@ -31,6 +32,7 @@ export async function apiFetch(pathname, { token, method = "GET", body } = {}) {
     method,
     redirect: "error",
     headers: {
+      ...bypassHeadersFor(apiURL()),
       accept: "application/json",
       ...(body ? { "content-type": "application/json" } : {}),
       ...(token ? { authorization: `Bearer ${token}` } : {}),

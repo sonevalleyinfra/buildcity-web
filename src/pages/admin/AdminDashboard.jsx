@@ -751,7 +751,6 @@ export default function AdminDashboard() {
     }
 
     setEditingProduct(null);
-    showAlert({ title: "Product Updated", message: "Product details aur images successfully update ho gaye!", type: "success" });
 
     try {
       const targetPrice = Number(prodToSave.suggestedPrice || prodToSave.price || 100);
@@ -764,8 +763,9 @@ export default function AdminDashboard() {
         suggestedPrice: targetPrice,
         description: prodToSave.description,
       });
+      showAlert({ title: "Product Updated", message: "Product details aur images successfully update ho gaye!", type: "success" });
     } catch (err) {
-      console.warn("Background update product note:", err.message);
+      showAlert({ title: "Error", message: "Failed to update master product: " + (err.message || err), type: "error" });
     }
   };
 

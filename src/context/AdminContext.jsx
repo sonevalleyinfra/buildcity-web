@@ -1883,6 +1883,11 @@ export function AdminProvider({ children }) {
     }
   };
 
+  const readServerError = async (res, fallback) => {
+    const data = await res.json().catch(() => null);
+    return data?.error || data?.message || `${fallback} (${res.status})`;
+  };
+
   const addMasterProduct = async (mpData) => {
     const catObj = categories.find((c) => c.id === mpData.categoryId) || {};
     const catName = catObj.name || mpData.categoryName || "General";
@@ -1918,35 +1923,37 @@ export function AdminProvider({ children }) {
         fetchCloudData();
         return formattedNewMp;
       }
+      throw new Error(await readServerError(res, "Failed to add master product"));
     } catch (err) {
       console.warn("DB Master product add note:", err.message);
+      throw err;
     }
-
-    const fallbackMp = {
-      id: mpData.id || "mp-" + Date.now(),
-      name: mpData.name,
-      categoryId: mpData.categoryId || "c1",
-      categoryName: catName,
-      brand: mpData.brand || "Generic",
-      type: mpData.type || "Standard",
-      grade: mpData.grade || "Standard Grade",
-      unit: mpData.unit || "Unit",
-      customPacks: mpData.customPacks || null,
-      suggestedPrice: Number(mpData.suggestedPrice) || 100,
-      imageUrl: (mpData.imageUrl && !mpData.imageUrl.includes("photo-1589939705384-5185137a7f0f")) ? mpData.imageUrl : "",
-      description: mpData.description || null,
-      addedBy: mpData.addedBy || "Admin",
-    };
-    setMasterProducts((prev) => {
-      const updated = [fallbackMp, ...prev];
-      try { localStorage.setItem(MASTER_PRODUCTS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
-      return updated;
-    });
-    return fallbackMp;
   };
 
   const updateMasterProduct = async (id, updates) => {
     const targetPrice = Number(updates.suggestedPrice !== undefined ? updates.suggestedPrice : updates.price);
+    // Snapshots so a rejected edit can be rolled back
+    const prevMasterProducts = masterProducts;
+    const prevProducts = products;
+    const prevRecentEdit = recentEditsRef.current.get(String(id));
+    const readStored = (key) => {
+      try { return localStorage.getItem(key); } catch { return null; }
+    };
+    const prevStoredMasterProducts = readStored(MASTER_PRODUCTS_STORAGE_KEY);
+    const prevStoredProducts = readStored(PRODUCTS_STORAGE_KEY);
+    const rollback = () => {
+      setMasterProducts(prevMasterProducts);
+      setProducts(prevProducts);
+      if (prevRecentEdit) recentEditsRef.current.set(String(id), prevRecentEdit);
+      else recentEditsRef.current.delete(String(id));
+      try {
+        if (prevStoredMasterProducts === null) localStorage.removeItem(MASTER_PRODUCTS_STORAGE_KEY);
+        else localStorage.setItem(MASTER_PRODUCTS_STORAGE_KEY, prevStoredMasterProducts);
+        if (prevStoredProducts === null) localStorage.removeItem(PRODUCTS_STORAGE_KEY);
+        else localStorage.setItem(PRODUCTS_STORAGE_KEY, prevStoredProducts);
+      } catch {}
+    };
+
     markRecentEdit(id, {
       ...updates,
       suggestedPrice: !isNaN(targetPrice) && targetPrice > 0 ? targetPrice : updates.suggestedPrice,
@@ -1992,11 +1999,14 @@ export function AdminProvider({ children }) {
         }),
       });
 
-      if (res.ok) {
-        fetchCloudData();
+      if (!res.ok) {
+        throw new Error(await readServerError(res, "Failed to update master product"));
       }
+      fetchCloudData();
     } catch (err) {
       console.warn("Update master product error:", err.message);
+      rollback();
+      throw err;
     }
   };
 
@@ -2099,9 +2109,13 @@ export function AdminProvider({ children }) {
             return updated;
           });
         }
+      } else {
+        throw new Error(await readServerError(res, "Failed to add listing"));
       }
     } catch (err) {
       console.warn("Assign master product error:", err.message);
+      setProducts((prev) => prev.filter((p) => p.id !== tempId));
+      throw err;
     }
   };
 

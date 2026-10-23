@@ -911,21 +911,47 @@ export function AdminProvider({ children }) {
     };
   }, [user, userRole]);
 
-  const addDr = async (drData) => {
+  // Staff create: a non-2xx answer is thrown as { message, code } for the form (no local fallback row).
+  // A customer's number is only converted after the admin/DR confirms the server's question.
+  // confirmConvert: async (message) => boolean; absent means the conversion is cancelled.
+  const postStaffCreate = async (path, body, confirmConvert) => {
+    const send = (extra) => authFetch(`${API_BASE_URL}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...body, ...extra }),
+    });
+    let res = await send({});
+    if (res.ok) return res;
+    let data = await res.json().catch(() => ({}));
+    if (data.code === "CONVERT_CONFIRM_REQUIRED") {
+      const ok = confirmConvert ? await confirmConvert(data.error) : false;
+      if (!ok) {
+        throw Object.assign(new Error(data.error), { code: data.code, staffError: true, cancelled: true });
+      }
+      res = await send({ confirmConvert: true });
+      if (res.ok) return res;
+      data = await res.json().catch(() => ({}));
+    }
+    throw await staffRequestError(res, data);
+  };
+
+  // Non-2xx staff answer -> Error carrying the server's { error, code } (shown by the calling form)
+  const staffRequestError = async (res, data) => {
+    const body = data || (await res.json().catch(() => ({})));
+    return Object.assign(new Error(body.error || `Request failed (${res.status})`), { code: body.code, staffError: true });
+  };
+
+  const addDr = async (drData, { confirmConvert } = {}) => {
     const regionObj = regions.find((r) => r.id === drData.regionId) || {};
     const targetRegionName = regionObj.name || drData.regionName || "Varanasi";
 
     try {
-      const res = await authFetch(`${API_BASE_URL}/api/v1/drs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: drData.name,
-          phone: drData.phone.trim(),
-          password: drData.password ? drData.password.trim() : "dr123",
-          regionId: drData.regionId,
-        }),
-      });
+      const res = await postStaffCreate("/api/v1/drs", {
+        name: drData.name,
+        phone: drData.phone.trim(),
+        password: (drData.password || "").trim(),
+        regionId: drData.regionId,
+      }, confirmConvert);
       if (res.ok) {
         const created = await res.json();
         const formattedNewDr = {
@@ -948,6 +974,7 @@ export function AdminProvider({ children }) {
         return formattedNewDr;
       }
     } catch (err) {
+      if (err.staffError) throw err;
       console.warn("DB DR add note:", err.message);
     }
 
@@ -1009,10 +1036,10 @@ export function AdminProvider({ children }) {
           regionId: drData.regionId,
         }),
       });
-      if (res.ok) {
-        fetchCloudData();
-      }
+      fetchCloudData();
+      if (!res.ok) throw await staffRequestError(res);
     } catch (err) {
+      if (err.staffError) throw err;
       console.warn("Update DR error:", err.message);
     }
   };
@@ -1049,38 +1076,33 @@ export function AdminProvider({ children }) {
       return updated;
     });
     try {
-      const res = await authFetch(`${API_BASE_URL}/api/v1/drs/${id}`, {
+      await authFetch(`${API_BASE_URL}/api/v1/drs/${id}`, {
         method: "DELETE",
       });
-      if (res.ok) {
-        fetchCloudData();
-      }
+      // Success shows the server's list; a refusal reverts the optimistic removal
+      fetchCloudData();
     } catch (err) {
       console.warn("Delete DR error:", err.message);
     }
   };
 
-  const addVendor = async (vendorData) => {
+  const addVendor = async (vendorData, { confirmConvert } = {}) => {
     const regionObj = regions.find((r) => r.id === vendorData.regionId || r.name?.toLowerCase() === (vendorData.regionName || "").toLowerCase()) || {};
     const targetRegionName = regionObj.name || vendorData.regionName || vendorData.districtName || "Mirzapur";
 
     try {
-      const res = await authFetch(`${API_BASE_URL}/api/v1/vendors`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          shopName: vendorData.shopName,
-          ownerName: vendorData.ownerName,
-          phone: vendorData.phone,
-          password: vendorData.password,
-          status: vendorData.status || "APPROVED",
-          regionId: vendorData.regionId,
-          regionName: targetRegionName,
-          districtName: targetRegionName,
-          commissionRate: vendorData.commissionRate,
-          addedByDr: vendorData.addedByDr,
-        }),
-      });
+      const res = await postStaffCreate("/api/v1/vendors", {
+        shopName: vendorData.shopName,
+        ownerName: vendorData.ownerName,
+        phone: vendorData.phone,
+        password: vendorData.password,
+        status: vendorData.status || "APPROVED",
+        regionId: vendorData.regionId,
+        regionName: targetRegionName,
+        districtName: targetRegionName,
+        commissionRate: vendorData.commissionRate,
+        addedByDr: vendorData.addedByDr,
+      }, confirmConvert);
       if (res.ok) {
         const createdV = await res.json();
         const formattedNewVendor = {
@@ -1106,6 +1128,7 @@ export function AdminProvider({ children }) {
         return formattedNewVendor;
       }
     } catch (err) {
+      if (err.staffError) throw err;
       console.warn("Add vendor DB note:", err.message);
     }
 
@@ -1181,8 +1204,12 @@ export function AdminProvider({ children }) {
           return freshList;
         });
         fetchCloudData();
+      } else {
+        fetchCloudData();
+        throw await staffRequestError(res);
       }
     } catch (err) {
+      if (err.staffError) throw err;
       console.warn("Update vendor error:", err.message);
     }
   };
@@ -1224,6 +1251,8 @@ export function AdminProvider({ children }) {
           } catch {}
           return updated;
         });
+      } else {
+        fetchCloudData();
       }
     } catch (err) {
       console.warn("Set vendor status error:", err.message);

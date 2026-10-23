@@ -46,6 +46,8 @@ class DrScopeUnavailableError extends Error {
 // A DR dashboard load sends several requests at once (cloud-sync, orders, summary, vendors,
 // listings) that each need this, so successful results are cached briefly; any mutation clears the
 // cache (see invalidateCache), so a DR reassignment still applies immediately. Failures are never cached.
+// Only live, ACTIVE DR rows count (same rule as the partner login and /users/me), so an old token of a
+// deleted (disabledAt set) or suspended DR loses its scope as soon as that change clears the cache.
 function createDrRegionResolver(prisma, { ttlMs = 30000 } = {}) {
   const cache = new Map();
 
@@ -62,7 +64,10 @@ function createDrRegionResolver(prisma, { ttlMs = 30000 } = {}) {
     const promise = (async () => {
       // Both reads in parallel: the region list is small, and this saves a sequential round trip
       const [drs, regions] = await Promise.all([
-        prisma.dR.findMany({ where, include: { region: true } }),
+        prisma.dR.findMany({
+          where: { AND: [where, { disabledAt: null }, { status: { equals: "ACTIVE", mode: "insensitive" } }] },
+          include: { region: true },
+        }),
         prisma.region.findMany({ select: { id: true, name: true } }),
       ]);
       const regionIds = new Set(drs.map((d) => d.regionId).filter(Boolean));

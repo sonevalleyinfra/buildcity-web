@@ -106,6 +106,10 @@ const areProductsEqual = (listA, listB) => {
 export default function DrDashboard() {
   const { user, logout } = useAuth();
   const { showAlert, showConfirm } = useAlert();
+  const confirmConvert = (message) => new Promise((resolve) => {
+    showConfirm({ title: "Convert customer?", message, confirmText: "Convert", type: "warning",
+      onConfirm: () => resolve(true), onCancel: () => resolve(false) });
+  });
   const {
     drs = [],
     masterProducts = [],
@@ -1114,6 +1118,10 @@ export default function DrDashboard() {
       showAlert({ title: "Validation Error", message: "Please fill all required vendor details!", type: "warning" });
       return;
     }
+    if (vendorForm.password.trim().length < 8) {
+      showAlert({ title: "Validation Error", message: "Password must be at least 8 characters.", type: "warning" });
+      return;
+    }
     if (isSubmittingVendor) return;
 
     setIsSubmittingVendor(true);
@@ -1126,7 +1134,7 @@ export default function DrDashboard() {
         shopName: vendorForm.shopName.trim(),
         ownerName: vendorForm.ownerName.trim(),
         phone: vendorForm.phone.trim(),
-        password: vendorForm.password.trim() || "vendor123",
+        password: vendorForm.password.trim(),
         regionId: targetRegionId,
         regionName: targetRegionName,
         districtName: targetRegionName,
@@ -1134,7 +1142,7 @@ export default function DrDashboard() {
         commissionRate: Number(vendorForm.commissionRate) || 10,
         addedByDr: `${user?.name || "DR"} (${targetRegionName})`,
         drId: currentDr.id,
-      });
+      }, { confirmConvert });
 
       if (created) {
         setDirectVendors((prev) => [created, ...prev.filter((v) => v.id !== created.id)]);
@@ -1146,10 +1154,11 @@ export default function DrDashboard() {
       setShowVendorModal(false);
       showAlert({
         title: "Vendor Added",
-        message: `Vendor "${vendorForm.shopName.trim()}" successfully added to Supabase Cloud Database!`,
+        message: "Vendor added.",
         type: "success",
       });
     } catch (err) {
+      if (err.cancelled) return;
       showAlert({ title: "Error", message: "Failed to add vendor: " + err.message, type: "error" });
     } finally {
       setIsSubmittingVendor(false);
@@ -1159,24 +1168,29 @@ export default function DrDashboard() {
   const handleUpdateVendorSubmit = async (e) => {
     e.preventDefault();
     if (!editingVendor) return;
+    const typedPassword = (editingVendor.password || "").trim();
+    if (typedPassword && typedPassword.length < 8) {
+      showAlert({ title: "Validation Error", message: "Password must be at least 8 characters.", type: "warning" });
+      return;
+    }
+    if (isSubmittingEditVendor) return;
     setIsSubmittingEditVendor(true);
     const vendorToSave = { ...editingVendor };
     markRecentDrEdit(vendorToSave.id, vendorToSave);
     setDirectVendors((prev) => prev.map((v) => (v.id === vendorToSave.id ? { ...v, ...vendorToSave } : v)));
-    setEditingVendor(null);
-    setIsSubmittingEditVendor(false);
-    showAlert({
-      title: "Vendor Updated",
-      message: `Vendor "${vendorToSave.shopName}" details & password updated successfully!`,
-      type: "success",
-    });
 
     try {
       await updateVendor(vendorToSave.id, vendorToSave);
+      setEditingVendor(null);
       fetchLiveVendorsDirect();
       window.dispatchEvent(new CustomEvent("buildcity_vendors_updated"));
+      showAlert({ title: "Vendor Updated", message: "Changes saved.", type: "success" });
     } catch (err) {
-      console.warn("Background update vendor note:", err.message);
+      // Revert the optimistic row to the server's state
+      fetchLiveVendorsDirect();
+      showAlert({ title: "Error", message: "Failed to update vendor: " + err.message, type: "error" });
+    } finally {
+      setIsSubmittingEditVendor(false);
     }
   };
 

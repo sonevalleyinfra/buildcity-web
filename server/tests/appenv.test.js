@@ -2,7 +2,7 @@
 // Rows that need a DB marker use throwaway databases on the same localhost server; the main test DB is never altered.
 const path = require("path");
 const net = require("net");
-const { spawn } = require("child_process");
+const { spawn, execFileSync } = require("child_process");
 const { PrismaClient } = require("@prisma/client");
 const appEnv = require("../src/appEnv");
 
@@ -233,6 +233,10 @@ async function processTests() {
       for (const db of [prodDb, stgDb, noneDb]) await admin.$executeRawUnsafe(`GRANT CONNECT ON DATABASE "${db}" TO "${role}"`);
     }
     await admin.$executeRawUnsafe(`ALTER ROLE "${spoofRole}" SET buildcity.env = 'staging'`);
+    // Booting DBs need the real schema: ensureOtpSchema refuses to boot without otp_verifications.attempts.
+    for (const db of [prodDb, stgDb]) {
+      execFileSync("npx", ["prisma", "db", "push", "--skip-generate"], { cwd: root, env: { ...process.env, DATABASE_URL: dbUrl(db), DIRECT_URL: dbUrl(db) }, stdio: "ignore" });
+    }
 
     await expectRefusal("production + DB without marker", { APP_ENV: "production", DATABASE_URL: LOCAL_URL }, [localPw, mainDb]);
     await expectRefusal("staging + DB marked production", { APP_ENV: "staging", DATABASE_URL: dbUrl(prodDb) }, [localPw, prodDb]);

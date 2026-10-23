@@ -4950,11 +4950,16 @@ let server = null;
 let shuttingDown = false;
 enforceBoot(prisma).then(async () => {
   if (shuttingDown) return;
-  await ensureOtpSchema(prisma);
+  await ensureOtpSchema(prisma, { shouldStop: () => shuttingDown });
   if (shuttingDown) return;
   server = app.listen(PORT, () => {
     console.log(`🚀 BuildCity Express Gateway running live on http://localhost:${PORT}`);
   });
+}).catch(async (e) => {
+  // Never listen with a half-provisioned schema: exit non-zero so the deploy stays on the old container.
+  console.error("[boot] refusing to start: " + String((e && e.message) || e).replace(/\s+/g, " ").trim());
+  await prisma.$disconnect().catch(() => null);
+  process.exit(1);
 });
 
 // Graceful shutdown: finish in-flight requests (e.g. checkouts) before the platform stops the container

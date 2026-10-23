@@ -129,21 +129,45 @@ function planOtpRequest({ phone10, type, existingRole, isSpecial, legacyHints })
 }
 
 // Prod does not run `prisma db push` on deploy and staging restores prod dumps, so the column self-provisions here.
-// Never throws: a failure is logged and boot continues.
-async function ensureOtpSchema(prisma) {
-  try {
-    const cols = await prisma.$queryRawUnsafe(
-      "SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'otp_verifications' AND column_name = 'attempts'"
-    );
-    if (Array.isArray(cols) && cols.length > 0) return;
-    await prisma.$transaction([
-      prisma.$executeRawUnsafe("SET LOCAL lock_timeout = '5s'"),
-      prisma.$executeRawUnsafe("ALTER TABLE otp_verifications ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0"),
-    ]);
-    console.log("[otp] added otp_verifications.attempts");
-  } catch (e) {
-    console.error("[otp] could not add otp_verifications.attempts:", e.message);
+// Throws after bounded retries (e.g. lock_timeout while the hourly pg_dump holds ACCESS SHARE); the caller must then
+// refuse to boot so the new container never turns healthy and the platform keeps the old one.
+// Worst case: 5 attempts x 5 s lock_timeout + 15 s of sleeps = ~40 s, which must stay under the Coolify healthcheck window.
+const OTP_SCHEMA_DELAYS_MS = [1000, 2000, 4000, 8000];
+
+async function ensureOtpSchema(prisma, opts = {}) {
+  const delaysMs = opts.delaysMs || OTP_SCHEMA_DELAYS_MS;
+  const sleep = opts.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
+  const log = opts.log || console;
+  const shouldStop = opts.shouldStop || (() => false);
+  const max = delaysMs.length + 1;
+  let lastError = null;
+  for (let i = 1; i <= max; i++) {
+    if (shouldStop()) return;
+    try {
+      // pg_catalog, not information_schema: the latter hides columns the role holds no privilege on, and a false
+      // "missing" now blocks boot. to_regclass resolves through search_path exactly like the unqualified ALTER below.
+      const cols = await prisma.$queryRawUnsafe(
+        "SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('otp_verifications') AND attname = 'attempts' AND NOT attisdropped"
+      );
+      if (Array.isArray(cols) && cols.length > 0) return;
+      await prisma.$transaction([
+        prisma.$executeRawUnsafe("SET LOCAL lock_timeout = '5s'"),
+        prisma.$executeRawUnsafe("ALTER TABLE otp_verifications ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0"),
+      ]);
+      log.log("[otp] added otp_verifications.attempts");
+      return;
+    } catch (e) {
+      lastError = e;
+      const msg = String((e && e.message) || e).replace(/\s+/g, " ").trim();
+      log.error(`[otp] ensure schema attempt ${i}/${max} failed: ${(e && e.code) || ""} ${msg}`);
+      if (i < max) {
+        if (shouldStop()) return;
+        await sleep(delaysMs[i - 1]);
+      }
+    }
   }
+  const lastMsg = String((lastError && lastError.message) || lastError).replace(/\s+/g, " ").trim();
+  throw new Error(`otp_verifications.attempts is missing and could not be added after ${max} attempts: ${lastMsg}`, { cause: lastError });
 }
 
 module.exports = {

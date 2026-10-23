@@ -11,6 +11,7 @@ const { issueToken, requireAuth, optionalAuth, requireRole, requireSelfOrAdmin }
 const appEnv = require("./appEnv");
 const { enforceBoot, getEnvInfo } = appEnv;
 const outbox = require("./outbox");
+const { createDrRegionResolver, drSelfWhere, DrScopeUnavailableError } = require("./drScope");
 const {
   OTP_MAX_ATTEMPTS,
   OTP_TTL_MS,
@@ -76,6 +77,10 @@ class ClientError extends Error {
 
 // Logs the real error server-side and returns a generic message (no Prisma/stack internals)
 function sendServerError(res, err, label = "Request") {
+  if (err instanceof DrScopeUnavailableError) {
+    console.error(`${label} error: DR scope lookup failed:`, err.cause);
+    return res.status(err.status).json({ error: err.message });
+  }
   if (err instanceof ClientError) {
     return res.status(err.status).json({ error: err.message });
   }
@@ -213,58 +218,10 @@ async function resolveOwnVendor(req) {
   return prisma.vendor.findFirst({ where: { phone: cleanPhone } }).catch(() => null);
 }
 
-// Same district aliases as the DR dashboard, so "Banaras" and "Varanasi" region rows count as one district
-const DISTRICT_ALIASES = {
-  varanasi: ["varanasi", "varnasi", "banaras", "kashi", "vns"],
-  mirzapur: ["mirzapur", "mzp"],
-  prayagraj: ["prayagraj", "allahabad"],
-  jaunpur: ["jaunpur"],
-};
-function canonicalDistrict(name) {
-  const clean = String(name || "").toLowerCase().trim();
-  if (!clean) return "";
-  for (const [district, aliases] of Object.entries(DISTRICT_ALIASES)) {
-    if (aliases.some((alias) => clean.includes(alias))) return district;
-  }
-  return clean;
-}
-
-// Region IDs covering the logged-in DR's assigned district(s).
-// A DR dashboard load sends several requests at once (cloud-sync, orders, summary, vendors,
-// listings) that each need this, so results are cached briefly; any mutation clears the cache
-// (see invalidateCache), so a DR reassignment still applies immediately.
-const DR_REGION_CACHE_TTL_MS = 30000;
-const drRegionIdsCache = new Map();
-
-async function resolveCallerDrRegionIds(auth) {
-  const last10 = String(auth?.phone || "").replace(/\D/g, "").slice(-10);
-  const or = [];
-  if (auth?.userId) or.push({ id: auth.userId }, { userId: auth.userId });
-  if (last10.length === 10) or.push({ phone: { endsWith: last10 } });
-  if (or.length === 0) return [];
-
-  const cacheKey = `${auth?.userId || ""}|${last10}`;
-  const cached = drRegionIdsCache.get(cacheKey);
-  // Callers get their own copy so none can alter the cached list
-  if (cached && cached.expiresAt > Date.now()) return cached.promise.then((ids) => ids.slice());
-
-  const promise = (async () => {
-    // Both reads in parallel: the region list is small, and this saves a sequential round trip
-    const [drs, regions] = await Promise.all([
-      prisma.dR.findMany({ where: { OR: or }, include: { region: true } }).catch(() => []),
-      prisma.region.findMany({ select: { id: true, name: true } }).catch(() => []),
-    ]);
-    const regionIds = new Set(drs.map((d) => d.regionId).filter(Boolean));
-    const districts = new Set(drs.map((d) => canonicalDistrict(d.region?.name)).filter(Boolean));
-    for (const r of regions) {
-      if (districts.has(canonicalDistrict(r.name))) regionIds.add(r.id);
-    }
-    return Array.from(regionIds);
-  })();
-  drRegionIdsCache.set(cacheKey, { promise, expiresAt: Date.now() + DR_REGION_CACHE_TTL_MS });
-  promise.catch(() => drRegionIdsCache.delete(cacheKey));
-  return promise.then((ids) => ids.slice());
-}
+// Region IDs covering the logged-in DR's assigned district(s); rejects with DrScopeUnavailableError
+// (-> 503 via sendServerError) when the lookup fails, so a DB error never widens or drops the scope.
+const drRegionResolver = createDrRegionResolver(prisma);
+const resolveCallerDrRegionIds = (auth) => drRegionResolver.resolve(auth);
 
 // DRs may only manage shops (and their listings) in their own district
 async function drCanManageVendor(auth, vendorOrId) {
@@ -387,7 +344,7 @@ function setCached(key, data, ttlMs = 60000) {
 function invalidateCache(prefix) {
   if (!prefix) {
     memoryCache.clear();
-    drRegionIdsCache.clear();
+    drRegionResolver.clear();
   } else {
     for (const k of memoryCache.keys()) {
       if (k.startsWith(prefix)) memoryCache.delete(k);
@@ -604,7 +561,8 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
     // Short per-role cache: a full sync reads almost every table, so many open dashboards (or a
     // client refresh bug) must not translate 1:1 into database egress. Any catalog/order mutation
     // clears the cache (see invalidateCache middleware), so staff still see changes immediately.
-    const cacheKey = `cloud_sync_${role}_${ownVendor ? ownVendor.id : ""}_${drRegionIds ? [...drRegionIds].sort().join(",") : ""}`;
+    // A DR's sync includes its own DR record, so DR entries are also keyed by caller
+    const cacheKey = `cloud_sync_${role}_${ownVendor ? ownVendor.id : ""}_${drRegionIds ? `${req.auth.userId}_${[...drRegionIds].sort().join(",")}` : ""}`;
     const cached = getCached(cacheKey);
     if (cached) {
       res.setHeader("X-Cache", "HIT");
@@ -615,9 +573,11 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       ? { items: { some: { vendorId: ownVendor.id } } }
       : drRegionIds ? ordersInRegionsWhere(drRegionIds) : {};
 
+    // DRs see only their own DR record; vendors see none
+    const drsWhere = role === "DR" ? drSelfWhere(req.auth) : undefined;
     const fetchPromises = [
-      isVendor ? Promise.resolve([]) : prisma.dR.findMany({
-        where: drRegionIds ? { regionId: { in: drRegionIds } } : undefined,
+      isVendor || (role === "DR" && !drsWhere) ? Promise.resolve([]) : prisma.dR.findMany({
+        where: drsWhere,
         include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
         orderBy: { joinedOn: "desc" },
       }).then(list => list.map(d => { const { password, ...safe } = d; return safe; })).catch(() => []),
@@ -2140,7 +2100,11 @@ app.post("/api/v1/users", requireAuth, requireRole("ADMIN"), async (req, res) =>
 // 2. DISTRICT REPRESENTATIVE (DR) ENDPOINTS
 app.get("/api/v1/drs", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
+    // A DR only ever gets its own record (no co-DR phones/emails)
+    const where = req.auth.role === "DR" ? drSelfWhere(req.auth) : undefined;
+    if (req.auth.role === "DR" && !where) return res.json([]);
     const drs = await prisma.dR.findMany({
+      where,
       include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
       orderBy: { joinedOn: "desc" },
     });
@@ -2599,7 +2563,7 @@ app.get("/api/v1/master-products", async (req, res) => {
   }
 });
 
-app.post("/api/v1/master-products", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
+app.post("/api/v1/master-products", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const { name, categoryId, brand, type, grade, unit, suggestedPrice, imageUrl, addedBy, description, customPacks } = req.body;
     
@@ -2632,7 +2596,7 @@ app.post("/api/v1/master-products", requireAuth, requireRole("ADMIN", "DR"), asy
 });
 
 // Master Product Update Endpoint — Admin dwara Product Title, Brand, Grade, Unit, Price, Image, Description update karne ke liye
-app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
+app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const rawId = req.params.id;
     const { name, categoryId, brand, type, grade, unit, suggestedPrice, price, imageUrl, description, customPacks } = req.body;
@@ -3645,9 +3609,9 @@ app.get("/api/v1/returns/search", requireAuth, requireRole("DR", "ADMIN"), async
     let scopeWhere = {};
     if (req.auth.role === "DR") {
       const drRegionIds = await resolveCallerDrRegionIds(req.auth);
-      if (drRegionIds.length > 0) {
-        scopeWhere = ordersInRegionsWhere(drRegionIds);
-      }
+      // No district assigned -> nothing to search (never an unscoped search)
+      if (drRegionIds.length === 0) return res.json([]);
+      scopeWhere = ordersInRegionsWhere(drRegionIds);
     }
 
     const searchOr = [];
@@ -3766,9 +3730,9 @@ app.get("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req, 
     let where = {};
     if (req.auth.role === "DR") {
       const drRegionIds = await resolveCallerDrRegionIds(req.auth);
-      if (drRegionIds.length > 0) {
-        where = { order: ordersInRegionsWhere(drRegionIds) };
-      }
+      // No district assigned -> no returns (never every district's)
+      if (drRegionIds.length === 0) return res.json([]);
+      where = { order: ordersInRegionsWhere(drRegionIds) };
     }
 
     const returnsList = await prisma.orderReturn.findMany({

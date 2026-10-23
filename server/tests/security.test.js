@@ -339,6 +339,143 @@ async function pushBinding(ids, { admin, vA, c1, c2 }) {
     const sRows = await vendRows("token = $1", TS);
     ok(!sRows.some((r) => r.vendor_id === ids.vb || r.vendor_id === ids.ub), "saveToken does not resolve a vendor by phone substring", sRows);
   });
+
+  return { dr, drUser, vc, mzp, run };
+}
+
+// --- DR scope (Security PR3): a DR never sees or changes more than its own district; scope failures fail closed
+async function drScope(ids, { admin, dr, drUser, vc, mzp, run }) {
+  const jwt = require("jsonwebtoken");
+  const bcrypt = require("bcryptjs");
+  const mint = (u) => jwt.sign({ sub: u.id, phone: u.phone, role: "DR", tv: 1 }, process.env.JWT_SECRET.trim(), { expiresIn: "1h" });
+  const body = (r) => JSON.stringify(r.body);
+
+  // Returns: one on vendor B's order (Varanasi), one on an order whose only vendor is C (Mirzapur)
+  const orderC = await prisma.order.create({
+    data: { customerId: ids.c2, totalAmount: 300, items: { create: [{ vendorId: vc.id, productName: "Cement Bag", priceAtPurchase: 300, quantity: 1, totalPrice: 300 }] } },
+  });
+  const retData = (orderId, customerPhone) => ({ orderId, customerPhone, returnAmount: 100, netRefundCash: 100, returnItems: [] });
+  const retVar = await prisma.orderReturn.create({ data: retData(ids.orderB, "8000000001") });
+  const retMzp = await prisma.orderReturn.create({ data: retData(orderC.id, "8000000002") });
+
+  // A user whose role is DR but who has no district_representatives row
+  const ghostUser = await prisma.user.create({ data: { phone: "9100000009", name: "Ghost DR", role: "DR" } });
+  const ghost = mint(ghostUser);
+
+  await scenario("a) DR without a district row fails closed on returns", async () => {
+    const list = await req("GET", "/returns", { token: ghost });
+    ok(list.status === 200 && Array.isArray(list.body) && list.body.length === 0, "ghost DR GET /returns -> 200 []", { s: list.status, n: list.body?.length });
+    const search = await req("GET", "/returns/search?q=8000000001", { token: ghost });
+    ok(search.status === 200 && Array.isArray(search.body) && search.body.length === 0, "ghost DR GET /returns/search -> empty result", { s: search.status, n: search.body?.length });
+  });
+
+  await scenario("a2) returns are district scoped for DRs, unscoped for admin", async () => {
+    const mine = await req("GET", "/returns", { token: dr });
+    const mineIds = (mine.body || []).map((r) => r.id);
+    ok(mine.status === 200 && mineIds.includes(retVar.id) && !mineIds.includes(retMzp.id), "DR One sees the Varanasi return, not the Mirzapur one", mineIds);
+    const all = await req("GET", "/returns", { token: admin });
+    const allIds = (all.body || []).map((r) => r.id);
+    ok(all.status === 200 && allIds.includes(retVar.id) && allIds.includes(retMzp.id), "admin sees every district's returns", allIds);
+  });
+
+  await scenario("c) district aliases match whole names only", async () => {
+    const kas = await prisma.region.create({ data: { name: `Kashipur ${run}` } });
+    const uk = await prisma.user.create({ data: { phone: "9000000011", name: "Vendor K", role: "VENDOR" } });
+    const vk = await prisma.vendor.create({ data: { userId: uk.id, shopName: "Shop K", ownerName: "K", phone: "9000000011", regionId: kas.id, status: "APPROVED", commissionRate: 10 } });
+    const ban = await prisma.region.findFirst({ where: { name: "Banaras" } }) || await prisma.region.create({ data: { name: "Banaras" } });
+    const ubn = await prisma.user.create({ data: { phone: "9000000012", name: "Vendor Bn", role: "VENDOR" } });
+    const vbn = await prisma.vendor.create({ data: { userId: ubn.id, shopName: "Shop Bn", ownerName: "Bn", phone: "9000000012", regionId: ban.id, status: "APPROVED" } });
+    await req("POST", "/regions", { token: admin, body: { name: `noop-${run}` } }); // any admin write clears the DR scope cache
+
+    const list = await req("GET", "/vendors", { token: dr });
+    const vIds = (list.body || []).map((v) => v.id);
+    ok(list.status === 200 && !vIds.includes(vk.id), "DR One (Varanasi) does not see a vendor in 'Kashipur'", vIds);
+    ok(vIds.includes(vbn.id) && vIds.includes(ids.va), "DR One still sees vendors in the 'Banaras' alias region", vIds);
+    const patch = await req("PATCH", `/vendors/${vk.id}`, { token: dr, body: { commissionRate: 1 } });
+    const vkRow = await prisma.vendor.findUnique({ where: { id: vk.id } });
+    ok(patch.status === 403 && Number(vkRow.commissionRate) === 10, "DR One cannot change a 'Kashipur' vendor's commission", { s: patch.status, c: vkRow.commissionRate });
+  });
+
+  await scenario("d) DR directory shows a DR only itself", async () => {
+    const u2 = await prisma.user.create({ data: { phone: "9100000002", name: "DR Two", role: "DR", email: `dr2-${run}@example.test` } });
+    const dr2 = await prisma.dR.create({ data: { userId: u2.id, name: "DR Two", phone: "9100000002", regionId: mzp.id } });
+    // A co-DR in the same district (alias region) whose contact details must not reach DR One either
+    const ban = await prisma.region.findFirst({ where: { name: "Banaras" } }) || await prisma.region.create({ data: { name: "Banaras" } });
+    const u3 = await prisma.user.create({ data: { phone: "9100000003", name: "DR Three", role: "DR", email: `dr3-${run}@example.test` } });
+    const dr3 = await prisma.dR.create({ data: { userId: u3.id, name: "DR Three", phone: "9100000003", regionId: ban.id } });
+    await req("POST", "/regions", { token: admin, body: { name: `noop2-${run}` } });
+
+    const own = await req("GET", "/drs", { token: dr });
+    const leaked = ["9100000002", "9100000003", `dr2-${run}`, `dr3-${run}`].filter((x) => body(own).includes(x));
+    ok(own.status === 200 && Array.isArray(own.body) && own.body.length === 1 && own.body[0].userId === drUser.id && leaked.length === 0, "DR One GET /drs -> only its own record, no co-DR contacts", { s: own.status, n: own.body?.length, leaked });
+    const all = await req("GET", "/drs", { token: admin });
+    const allIds = (all.body || []).map((d) => d.id);
+    ok(all.status === 200 && allIds.includes(dr2.id) && allIds.includes(dr3.id) && allIds.length >= 3, "admin GET /drs lists every DR", allIds.length);
+    const sync = await req("GET", "/cloud-sync", { token: dr });
+    const syncDrs = sync.body?.drs || [];
+    ok(sync.status === 200 && syncDrs.length === 1 && syncDrs[0].userId === drUser.id && !body({ body: syncDrs }).includes("9100000003"), "DR One cloud-sync drs -> only DR One", syncDrs.map((d) => d.name));
+    const ghostDrs = await req("GET", "/drs", { token: ghost });
+    ok(ghostDrs.status === 200 && Array.isArray(ghostDrs.body) && ghostDrs.body.length === 0, "ghost DR GET /drs -> []", { s: ghostDrs.status, n: ghostDrs.body?.length });
+  });
+
+  await scenario("e) master catalog writes are admin-only", async () => {
+    const name = `DR MP ${run}`;
+    const post = await req("POST", "/master-products", { token: dr, body: { name, suggestedPrice: 10 } });
+    const made = await prisma.productMaster.count({ where: { name } });
+    ok(post.status === 403 && made === 0, "DR POST /master-products -> 403, nothing created", { s: post.status, made });
+
+    const mpBefore = await prisma.productMaster.findUnique({ where: { id: ids.mp } });
+    const listBefore = await prisma.vendorProduct.findMany({ where: { masterProductId: ids.mp }, select: { id: true, description: true, imageUrl: true }, orderBy: { id: "asc" } });
+    const patch = await req("PATCH", `/master-products/${ids.mp}`, { token: dr, body: { name: "Hijacked", description: "hijacked", imageUrl: "https://evil.example/x.png" } });
+    const mpAfter = await prisma.productMaster.findUnique({ where: { id: ids.mp } });
+    const listAfter = await prisma.vendorProduct.findMany({ where: { masterProductId: ids.mp }, select: { id: true, description: true, imageUrl: true }, orderBy: { id: "asc" } });
+    ok(patch.status === 403 && mpAfter.name === mpBefore.name && mpAfter.description === mpBefore.description, "DR PATCH /master-products -> 403, master row unchanged", { s: patch.status, name: mpAfter.name });
+    ok(JSON.stringify(listAfter) === JSON.stringify(listBefore), "DR PATCH /master-products leaves every vendor listing unchanged");
+
+    const aPost = await req("POST", "/master-products", { token: admin, body: { name: `Admin MP ${run}`, suggestedPrice: 10 } });
+    ok(aPost.status === 201, "admin POST /master-products -> 201", aPost.status);
+    const aPatch = await req("PATCH", `/master-products/${ids.mp}`, { token: admin, body: { name: "Cement Bag Renamed" } });
+    ok(aPatch.status === 200 && aPatch.body.name === "Cement Bag Renamed", "admin PATCH /master-products -> 200", aPatch.status);
+    await req("PATCH", `/master-products/${ids.mp}`, { token: admin, body: { name: mpBefore.name } });
+
+    const listing = await req("POST", "/vendor/listings", { token: dr, body: { masterProductId: ids.mp, vendorId: ids.va, price: 420, stockQty: 5 } });
+    ok(listing.status === 201 && listing.body.vendorId === ids.va, "DR can still add a listing from the master catalog for an own-district vendor", { s: listing.status });
+  });
+
+  await scenario("f) DR keeps commission edits and password resets in own district only", async () => {
+    const oldHash = await bcrypt.hash("OldPass#1", 4);
+    const ud = await prisma.user.create({ data: { phone: "9000000013", name: "Vendor D", role: "VENDOR", password: oldHash } });
+    const vd = await prisma.vendor.create({ data: { userId: ud.id, shopName: "Shop D", ownerName: "D", phone: "9000000013", password: oldHash, regionId: ids.reg, status: "APPROVED", commissionRate: 10 } });
+
+    const com = await req("PATCH", `/vendors/${vd.id}`, { token: dr, body: { commissionRate: 7 } });
+    const vdRow = await prisma.vendor.findUnique({ where: { id: vd.id } });
+    ok(com.status === 200 && Number(vdRow.commissionRate) === 7, "DR sets commission of an own-district vendor", { s: com.status, c: vdRow.commissionRate });
+    const pw = await req("PATCH", `/vendors/${vd.id}`, { token: dr, body: { password: "NewPass#123" } });
+    const vdAfter = await prisma.vendor.findUnique({ where: { id: vd.id } });
+    const udAfter = await prisma.user.findUnique({ where: { id: ud.id } });
+    ok(pw.status === 200 && await bcrypt.compare("NewPass#123", vdAfter.password) && await bcrypt.compare("NewPass#123", udAfter.password), "DR resets an own-district vendor's password (vendor + user rows)", pw.status);
+
+    const vcBefore = await prisma.vendor.findUnique({ where: { id: vc.id } });
+    const ucBefore = await prisma.user.findUnique({ where: { id: vcBefore.userId } });
+    const comC = await req("PATCH", `/vendors/${vc.id}`, { token: dr, body: { commissionRate: 7 } });
+    const pwC = await req("PATCH", `/vendors/${vc.id}`, { token: dr, body: { password: "NewPass#123" } });
+    const vcAfter = await prisma.vendor.findUnique({ where: { id: vc.id } });
+    const ucAfter = await prisma.user.findUnique({ where: { id: vcBefore.userId } });
+    ok(comC.status === 403 && pwC.status === 403, "DR cannot edit commission or password of an out-of-district vendor", { com: comC.status, pw: pwC.status });
+    ok(String(vcAfter.commissionRate) === String(vcBefore.commissionRate) && vcAfter.password === vcBefore.password && ucAfter.password === ucBefore.password, "out-of-district vendor's commission and hash unchanged");
+  });
+
+  await scenario("g) scoped DR still sees own-district orders", async () => {
+    const orders = await req("GET", "/orders", { token: dr });
+    ok(orders.status === 200 && (orders.body || []).some((o) => o.id === ids.orderB) && !(orders.body || []).some((o) => o.id === orderC.id), "DR One GET /orders includes orderB, not the Mirzapur order", orders.status);
+    const short = ids.orderB.slice(-6);
+    const byId = await req("GET", `/returns/search?q=${short}`, { token: dr });
+    ok(byId.status === 200 && byId.body.some((o) => o.id === ids.orderB), "DR One finds orderB by short id", byId.status);
+    const byPhone = await req("GET", "/returns/search?q=8000000001", { token: dr });
+    ok(byPhone.status === 200 && byPhone.body.some((o) => o.id === ids.orderB), "DR One finds orderB by customer phone", byPhone.status);
+    const otherPhone = await req("GET", "/returns/search?q=8000000002", { token: dr });
+    ok(otherPhone.status === 200 && !otherPhone.body.some((o) => o.id === orderC.id), "DR One search does not reach the Mirzapur order", otherPhone.status);
+  });
 }
 
 (async () => {
@@ -443,7 +580,10 @@ async function pushBinding(ids, { admin, vA, c1, c2 }) {
   const cart = await req("GET", "/cart", { token: c1 });
   ok(cart.body.cartItems?.length === 1, "cart persisted", cart.body);
 
-  await pushBinding(ids, { admin, vA, c1, c2 });
+  const pb2 = await pushBinding(ids, { admin, vA, c1, c2 });
+
+  // --- DR scope (Security PR3)
+  await drScope(ids, { admin, ...pb2 });
 
   // --- Brute force protection on partner password login
   let last;

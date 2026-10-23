@@ -11,6 +11,19 @@ const { issueToken, requireAuth, optionalAuth, requireRole, requireSelfOrAdmin }
 const appEnv = require("./appEnv");
 const { enforceBoot, getEnvInfo } = appEnv;
 const outbox = require("./outbox");
+const {
+  OTP_MAX_ATTEMPTS,
+  OTP_TTL_MS,
+  OTP_GENERIC_ERROR,
+  ALLOWED_OTP_TYPES,
+  normalizePhone,
+  isValidPhoneInput,
+  hashOtp,
+  otpMatches,
+  legacyOtpHints,
+  planOtpRequest,
+  ensureOtpSchema,
+} = require("./otp");
 const STAGING_OTP = "654321";
 const TEST_PHONE_RE = /^10000\d{5}$/;
 
@@ -298,7 +311,10 @@ app.use((req, res, next) => {
 const otpRequestLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 5,
-  keyGenerator: (req) => String(req.body?.phone || req.ip),
+  keyGenerator: (req) => {
+    const p = normalizePhone(req.body?.phone);
+    return p.length === 10 ? `otp-req:${p}` : `otp-req-ip:${req.ip}`;
+  },
   message: { error: "Too many OTP requests. Please try again after an hour." },
   standardHeaders: true,
   legacyHeaders: false,
@@ -331,7 +347,10 @@ const partnerLoginLimiter = rateLimit({
 const otpVerifyLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 mins
   max: 10,
-  keyGenerator: (req) => String(req.body?.phone || req.ip),
+  keyGenerator: (req) => {
+    const p = normalizePhone(req.body?.phone);
+    return p.length === 10 ? `otp-ver:${p}` : `otp-ver-ip:${req.ip}`;
+  },
   message: { error: "Too many attempts. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
@@ -1655,126 +1674,108 @@ const { sendRealSMSOTP } = require("./smsService");
 
 // 1. AUTHENTICATION & USERS ENDPOINTS (INSTANT HIGH SPEED OPTIMIZED)
 app.post("/api/v1/auth/otp/request", otpRequestIpLimiter, otpRequestLimiter, async (req, res) => {
-  const { phone, type = "login" } = req.body;
-  if (!phone || !/^\d{10}$/.test(phone)) {
+  const { phone } = req.body || {};
+  const type = req.body?.type ?? "login";
+  if (typeof type !== "string" || !ALLOWED_OTP_TYPES.includes(type)) {
+    return res.status(400).json({ error: "Invalid request type" });
+  }
+  if (!isValidPhoneInput(phone)) {
     return res.status(400).json({ error: "Valid 10-digit phone number required" });
   }
+  const phone10 = normalizePhone(phone);
 
   try {
-    // Clean 10-digit mobile number
-    const cleanPhone = phone.trim().replace(/\D/g, "").slice(-10);
-
     // Off-production only the reserved test numbers may request an OTP (no real user is ever messaged).
-    if (!appEnv.isProduction() && !TEST_PHONE_RE.test(cleanPhone)) {
+    if (!appEnv.isProduction() && !TEST_PHONE_RE.test(phone10)) {
       return res.status(403).json({ error: "Staging: use a test number" });
     }
 
-    // Fast Partner Phone Check
-    const isSpecialAdminOrDr = cleanPhone === "9999999999" || cleanPhone === "7777777777";
-    if (isSpecialAdminOrDr) {
-      return res.status(403).json({
-        error: "Special Admin and DR accounts cannot log in using Mobile OTP. Please click 'Partner Login (Password)' at the bottom.",
-        isStaffBlocked: true,
-      });
-    }
+    const isSpecial = phone10 === "9999999999" || phone10 === "7777777777";
+    const existingUser = isSpecial
+      ? null
+      : await prisma.user.findUnique({ where: { phone: phone10 }, select: { role: true } });
 
-    if (cleanPhone.length !== 10) {
-      return res.status(400).json({ error: "Please enter a valid 10-digit mobile number" });
-    }
+    const plan = planOtpRequest({
+      phone10,
+      type,
+      existingRole: existingUser ? existingUser.role : null,
+      isSpecial,
+      legacyHints: legacyOtpHints(),
+    });
+    if (!plan.issue) return res.status(plan.status).json(plan.body);
 
-    // Single Ultra-Fast Indexed User Lookup (1ms exact index query)
-    const existingUser = await prisma.user.findUnique({
-      where: { phone: cleanPhone },
-      select: { id: true, role: true, name: true },
-    }).catch(() => null);
-
-    // Block Staff (Vendor, DR, Admin) from Customer OTP
-    if (existingUser && ["ADMIN", "DR", "VENDOR"].includes(existingUser.role)) {
-      return res.status(403).json({
-        error: "Vendor, DR, and Admin accounts cannot log in using Mobile OTP. Please click 'Partner Login (Password)' at the bottom.",
-        isStaffBlocked: true,
-      });
-    }
-
-    // If logging in, user MUST be registered
-    if (type === "login" && !existingUser) {
-      return res.status(200).json({
-        success: false,
-        notRegistered: true,
-        error: "This mobile number is not registered. Please create an account first.",
-      });
-    }
-
-    // If registering, check if already registered
-    if (type === "register" && existingUser) {
-      return res.status(200).json({
-        success: false,
-        alreadyRegistered: true,
-        error: "This mobile number is already registered. Please log in directly.",
-      });
-    }
-
-    // Generate 6-digit OTP code instantly
     // Cryptographically secure OTP (Math.random is predictable)
     const generatedOtp = appEnv.isProduction() ? crypto.randomInt(100000, 1000000).toString() : STAGING_OTP;
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins expiry
 
-    // Replace older OTPs for this phone and save the new one before responding so verify never races
-    await prisma.oTPVerification.deleteMany({ where: { phone: cleanPhone } }).catch(() => null);
-    await prisma.oTPVerification.create({
-      data: {
-        phone: cleanPhone,
-        otp: generatedOtp,
-        expiresAt,
-        createdAt: new Date(),
-      },
-    }).catch((e) => console.warn("OTP save note:", e.message));
+    // Replace older OTPs for this phone and save the new one (hashed) before responding so verify never races
+    try {
+      await prisma.$transaction([
+        prisma.oTPVerification.deleteMany({ where: { phone: phone10 } }),
+        prisma.oTPVerification.create({
+          data: { phone: phone10, otp: hashOtp(phone10, generatedOtp), expiresAt: new Date(Date.now() + OTP_TTL_MS), attempts: 0 },
+        }),
+      ]);
+    } catch (e) {
+      console.error("[otp] could not save OTP row:", e.message);
+      return sendServerError(res, e, "OTP dispatch");
+    }
 
     // Dispatch Live SMS via parallel fastest-gateway in background
-    sendRealSMSOTP(cleanPhone, generatedOtp).catch((smsErr) => {
+    sendRealSMSOTP(phone10, generatedOtp).catch((smsErr) => {
       console.warn("[Background SMS Notice]:", smsErr.message);
     });
 
     // Instant Response to Frontend (<100ms) so OTP entry screen opens immediately
-    return res.json({
-      success: true,
-      message: `OTP dispatched to +91 ${cleanPhone.slice(-10)}`,
-      gateway: "AradhyaSMS",
-      smsStatus: "dispatched",
-      isRegistered: !!existingUser,
-    });
+    return res.status(plan.status).json(plan.body);
   } catch (err) {
     sendServerError(res, err, "OTP dispatch");
   }
 });
 
 app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
-  const { phone, otp, name } = req.body;
-  if (!phone || !otp) return res.status(400).json({ error: "Phone and OTP required" });
+  const { phone, otp, name } = req.body || {};
+  if (!phone || otp === undefined || otp === null || otp === "" || !["string", "number"].includes(typeof otp)) {
+    return res.status(400).json({ error: "Phone and OTP required" });
+  }
+  const phone10 = normalizePhone(phone);
+  if (phone10.length !== 10) return res.status(400).json({ error: "Phone and OTP required" });
+  const code = String(otp).trim();
 
   try {
-    const cleanPhone = phone.trim().replace(/\D/g, "").slice(-10);
-
-    // Single Fast Customer OTP Match Query (Indexed 2ms lookup)
-    const validRecord = await prisma.oTPVerification.findFirst({
-      where: {
-        phone: cleanPhone,
-        otp: otp.trim(),
-        expiresAt: { gte: new Date() },
-      },
+    const now = new Date();
+    const row = await prisma.oTPVerification.findFirst({
+      where: { phone: phone10, expiresAt: { gte: now } },
       orderBy: { createdAt: "desc" },
-    }).catch(() => null);
-
-    if (!validRecord) {
-      return res.status(401).json({ error: "Invalid or expired OTP. Please enter the exact OTP code sent to your mobile." });
+      select: { id: true, otp: true, attempts: true },
+    });
+    if (!row || row.attempts >= OTP_MAX_ATTEMPTS) {
+      return res.status(401).json({ error: OTP_GENERIC_ERROR });
     }
 
-    // One-time use: consume every OTP for this phone so it can't be replayed
-    await prisma.oTPVerification.deleteMany({ where: { phone: cleanPhone } }).catch(() => null);
+    // Reserve an attempt atomically before comparing, so parallel guesses can't exceed the cap
+    const slot = await prisma.oTPVerification.updateMany({
+      where: { id: row.id, attempts: { lt: OTP_MAX_ATTEMPTS }, expiresAt: { gte: now } },
+      data: { attempts: { increment: 1 } },
+    });
+    if (slot.count !== 1) return res.status(401).json({ error: OTP_GENERIC_ERROR });
+
+    if (!otpMatches(row, phone10, code, Date.now())) {
+      await prisma.oTPVerification
+        .deleteMany({ where: { id: row.id, attempts: { gte: OTP_MAX_ATTEMPTS } } })
+        .catch((e) => console.error("[otp] could not delete exhausted OTP row:", e.message));
+      return res.status(401).json({ error: OTP_GENERIC_ERROR });
+    }
+
+    // One-time use: only the request that deletes the row wins; a concurrent verify gets 401
+    const consumed = await prisma.oTPVerification.deleteMany({ where: { id: row.id } });
+    if (consumed.count !== 1) return res.status(401).json({ error: OTP_GENERIC_ERROR });
+    await prisma.oTPVerification
+      .deleteMany({ where: { phone: phone10 } })
+      .catch((e) => console.error("[otp] could not clear other OTP rows:", e.message));
 
     // Fast Indexed User Lookup
     let user = await prisma.user.findUnique({
-      where: { phone: cleanPhone },
+      where: { phone: phone10 },
     }).catch(() => null);
 
     // Block Staff accounts if found
@@ -1806,7 +1807,7 @@ app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
       }
     } else {
       // Create new user in DB with exact Name, preferred region, and referral code
-      const customerName = name && name.trim().length >= 2 ? name.trim() : `Customer ${cleanPhone.slice(-4)}`;
+      const customerName = name && name.trim().length >= 2 ? name.trim() : `Customer ${phone10.slice(-4)}`;
       const myRefCode = await generateUniqueReferralCode();
 
       // Check if a valid referral code was passed during signup
@@ -1819,13 +1820,13 @@ app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
         }).catch(() => null);
         if (referrerUser && referrerUser.id) {
           referrerId = referrerUser.id;
-          console.log(`🤝 Linked new customer (${cleanPhone}) to referrer ${referrerId}`);
+          console.log(`🤝 Linked new customer (${phone10}) to referrer ${referrerId}`);
         }
       }
 
       user = await prisma.user.create({
         data: {
-          phone: cleanPhone,
+          phone: phone10,
           name: customerName,
           role: "CUSTOMER",
           preferredRegionId: req.body.preferredRegionId || null,
@@ -4947,11 +4948,18 @@ process.on("unhandledRejection", (reason) => {
 // Start Express Server, only once APP_ENV matches the database marker
 let server = null;
 let shuttingDown = false;
-enforceBoot(prisma).then(() => {
+enforceBoot(prisma).then(async () => {
+  if (shuttingDown) return;
+  await ensureOtpSchema(prisma, { shouldStop: () => shuttingDown });
   if (shuttingDown) return;
   server = app.listen(PORT, () => {
     console.log(`🚀 BuildCity Express Gateway running live on http://localhost:${PORT}`);
   });
+}).catch(async (e) => {
+  // Never listen with a half-provisioned schema: exit non-zero so the deploy stays on the old container.
+  console.error("[boot] refusing to start: " + String((e && e.message) || e).replace(/\s+/g, " ").trim());
+  await prisma.$disconnect().catch(() => null);
+  process.exit(1);
 });
 
 // Graceful shutdown: finish in-flight requests (e.g. checkouts) before the platform stops the container

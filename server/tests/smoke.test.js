@@ -1,9 +1,15 @@
 // Regression smoke test for admin / DR / customer flows that the security fixes must not break.
 const path = require("path");
+const crypto = require("crypto");
 const { execFileSync } = require("child_process");
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const BASE = `http://localhost:${process.env.TEST_PORT || 5055}/api/v1`;
+// OTP rows are stored as "h1$" + HMAC(pepper, "phone:code")
+const pepper = () => (process.env.OTP_PEPPER && process.env.OTP_PEPPER.trim().length >= 16)
+  ? process.env.OTP_PEPPER.trim()
+  : crypto.createHmac("sha256", process.env.JWT_SECRET.trim()).update("buildcity-otp-pepper-v1").digest("hex");
+const otpHash = (phone, code) => "h1$" + crypto.createHmac("sha256", pepper()).update(`${phone}:${code}`).digest("hex");
 // Fixture login credentials (local test data only)
 const CREDS = { admin: "admin123", vendorA: "vendorA123", vendorB: "vendorB123", vendorC: "vendorC123", dr: "drpass1" };
 const DEVICE_B = "device-b";
@@ -53,7 +59,7 @@ const req = async (method, p, { token, body, raw } = {}) => {
   ok(susLogin.status === 403, "suspended vendor login blocked", susLogin.status);
 
   // Customer (legacy repo test flow) + addresses + orders
-  await prisma.oTPVerification.create({ data: { phone: "9988776655", otp: "123456", expiresAt: new Date(Date.now() + 600000) } });
+  await prisma.oTPVerification.create({ data: { phone: "9988776655", otp: otpHash("9988776655", "123456"), expiresAt: new Date(Date.now() + 600000) } });
   const cv = await req("POST", "/auth/otp/verify", { body: { phone: "9988776655", otp: "123456", name: "Legacy Test" } });
   ok(cv.status === 200 && cv.body.user?.name === "Legacy Test", "new customer registers via OTP", cv.body);
   const ct = cv.body.token, cid = cv.body.user?.id;
@@ -145,7 +151,7 @@ const req = async (method, p, { token, body, raw } = {}) => {
   ok(otpReq.status === 200 && otpReq.body.success === true, "OTP request succeeds", otpReq.body);
   await new Promise((r) => setTimeout(r, 300));
   const rec = await prisma.oTPVerification.findMany({ where: { phone: "1000099600" } });
-  ok(rec.length === 1 && /^\d{6}$/.test(rec[0].otp), "single 6-digit OTP stored", rec.length);
+  ok(rec.length === 1 && rec[0].otp === otpHash("1000099600", "654321") && !/^\d{6}$/.test(rec[0].otp), "single hashed OTP stored", rec.map((r) => r.otp));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   await prisma.$disconnect();

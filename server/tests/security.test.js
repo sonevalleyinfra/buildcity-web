@@ -1,6 +1,9 @@
 // Exploit + regression suite. Every assertion states the SECURE / CORRECT behaviour.
 const path = require("path");
-const { execFileSync } = require("child_process");
+const fs = require("fs");
+const os = require("os");
+const crypto = require("crypto");
+const { execFileSync, spawn } = require("child_process");
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const BASE = `http://localhost:${process.env.TEST_PORT || 5055}/api/v1`;
@@ -24,11 +27,207 @@ const req = async (method, p, { token, body, headers = {} } = {}) => {
   return { status: res.status, body: json, headers: res.headers };
 };
 const hasPasswordField = (obj) => JSON.stringify(obj).includes('"password"');
+// OTP rows are stored as "h1$" + HMAC(pepper, "phone:code"); computed here independently of src/otp.js
+const pepper = () => (process.env.OTP_PEPPER && process.env.OTP_PEPPER.trim().length >= 16)
+  ? process.env.OTP_PEPPER.trim()
+  : crypto.createHmac("sha256", process.env.JWT_SECRET.trim()).update("buildcity-otp-pepper-v1").digest("hex");
+const otpHash = (phone, code) => "h1$" + crypto.createHmac("sha256", pepper()).update(`${phone}:${code}`).digest("hex");
+const otpRow = (phone, otp) => prisma.oTPVerification.create({ data: { phone, otp, expiresAt: new Date(Date.now() + 600000) } });
 
 async function otpLogin(phone) {
-  await prisma.oTPVerification.create({ data: { phone, otp: "123456", expiresAt: new Date(Date.now() + 600000) } });
+  await otpRow(phone, otpHash(phone, "123456"));
   const r = await req("POST", "/auth/otp/verify", { body: { phone, otp: "123456" } });
   return r;
+}
+
+// --- OTP hardening (Security PR1)
+const scenario = async (name, fn) => {
+  try { await fn(); } catch (e) { ok(false, name, e && e.message); }
+};
+const LEGACY_KEYS = ["isRegistered", "notRegistered", "alreadyRegistered", "isStaffBlocked"];
+const FLAG0_PORT = String(Number(process.env.TEST_PORT || 5055) + 2);
+
+function otpUnit() {
+  let otp;
+  try { otp = require("../src/otp"); } catch (e) { ok(false, "src/otp.js loads", e && e.message); return; }
+  const { planOtpRequest, isValidPhoneInput, normalizePhone } = otp;
+  const UNIFORM = { success: true, message: "OTP dispatched", gateway: "AradhyaSMS", smsStatus: "dispatched" };
+  const cases = [
+    { who: "customer", existingRole: "CUSTOMER", isSpecial: false, issue: true },
+    { who: "unknown", existingRole: null, isSpecial: false, issue: true },
+    { who: "vendor", existingRole: "VENDOR", isSpecial: false, issue: false },
+    { who: "dr", existingRole: "DR", isSpecial: false, issue: false },
+    { who: "admin", existingRole: "ADMIN", isSpecial: false, issue: false },
+    { who: "special", existingRole: null, isSpecial: true, issue: false },
+  ];
+  let uniform = true;
+  const bad = [];
+  for (const c of cases) {
+    for (const type of ["login", "register"]) {
+      const p = planOtpRequest({ phone10: "1000000999", type, existingRole: c.existingRole, isSpecial: c.isSpecial, legacyHints: false });
+      try { require("assert").deepStrictEqual(p.body, UNIFORM); } catch { uniform = false; bad.push({ who: c.who, type, body: p.body }); }
+      if (p.status !== 200 || p.issue !== c.issue) { uniform = false; bad.push({ who: c.who, type, status: p.status, issue: p.issue }); }
+    }
+  }
+  ok(uniform, "planOtpRequest(legacyHints:false): uniform 200 body; no OTP issued for staff/special", bad);
+
+  const L = (o) => planOtpRequest({ phone10: "1000000999", type: "login", existingRole: null, isSpecial: false, legacyHints: true, ...o });
+  const sp = L({ isSpecial: true });
+  ok(sp.status === 403 && !sp.issue && sp.body.isStaffBlocked === true && /Special Admin and DR/.test(sp.body.error), "legacy: special number -> 403 isStaffBlocked", sp);
+  const st = L({ existingRole: "VENDOR" });
+  ok(st.status === 403 && !st.issue && st.body.isStaffBlocked === true && /Vendor, DR, and Admin/.test(st.body.error), "legacy: staff -> 403 isStaffBlocked", st);
+  const nr = L({});
+  ok(nr.status === 200 && !nr.issue && nr.body.success === false && nr.body.notRegistered === true, "legacy: login unknown -> notRegistered", nr);
+  const ar = L({ type: "register", existingRole: "CUSTOMER" });
+  ok(ar.status === 200 && !ar.issue && ar.body.success === false && ar.body.alreadyRegistered === true, "legacy: register existing -> alreadyRegistered", ar);
+  const li = L({ existingRole: "CUSTOMER" });
+  ok(li.status === 200 && li.issue && li.body.success === true && li.body.isRegistered === true && li.body.message === "OTP dispatched to +91 1000000999", "legacy: login customer -> issued, isRegistered", li);
+  const ri = L({ type: "register" });
+  ok(ri.status === 200 && ri.issue && ri.body.isRegistered === false && ri.body.gateway === "AradhyaSMS" && ri.body.smsStatus === "dispatched", "legacy: register unknown -> issued", ri);
+
+  const valid = ["9876543210", "+91 98765 43210", "09876543210", " 9876543210", "919876543210", "+919876543210"];
+  const invalid = ["98765", "", null, undefined, "123456789012345", "19876543210", "929876543210", "abc"];
+  ok(valid.every(isValidPhoneInput) && !invalid.some(isValidPhoneInput), "isValidPhoneInput matrix", { valid: valid.map(isValidPhoneInput), invalid: invalid.map(isValidPhoneInput) });
+  const norm = ["+91 98765 43210", "09876543210", " 9876543210", "+919876543210", "9876543210"].map(normalizePhone);
+  ok(norm.every((n) => n === "9876543210") && normalizePhone(null) === "" && normalizePhone("98765") === "98765", "normalizePhone variants", norm);
+}
+
+async function startFlag0Server() {
+  const stubLog = path.join(fs.mkdtempSync(path.join(process.env.TMPDIR || os.tmpdir(), "otpflag0-")), "net.log");
+  const env = {
+    ...process.env, PORT: FLAG0_PORT, TEST_PORT: FLAG0_PORT, APP_ENV: "test", NODE_ENV: "test",
+    LEGACY_OTP_HINTS: "0", OTP_PLAINTEXT_COMPAT_MS: "0", SMS_RELAY_SECRET: "", STUB_LOG: stubLog,
+    NODE_OPTIONS: `-r ${path.join(__dirname, "stubnet.js")}`,
+  };
+  const server = spawn("node", ["src/index.js"], { cwd: path.join(__dirname, ".."), env, stdio: ["ignore", "ignore", "inherit"] });
+  let up = false;
+  for (let i = 0; i < 60 && !up; i++) {
+    try { up = (await fetch(`http://localhost:${FLAG0_PORT}/health`)).ok; } catch {}
+    if (!up) await new Promise((r) => setTimeout(r, 200));
+  }
+  return { server, up };
+}
+const reqAt = (port) => async (method, p, opts = {}) => {
+  const res = await fetch(`http://localhost:${port}/api/v1${p}`, { method, headers: { "Content-Type": "application/json" }, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  const text = await res.text();
+  let json; try { json = JSON.parse(text); } catch { json = text; }
+  return { status: res.status, body: json };
+};
+const rowsFor = (phone) => prisma.oTPVerification.findMany({ where: { phone } });
+
+async function otpHardening() {
+  otpUnit();
+
+  await scenario("a) verify limiter keys on the normalized phone", async () => {
+    const P = "8100000001";
+    await otpRow(P, otpHash(P, "123456"));
+    const variants = ["+91" + P, "0" + P, " " + P, "+91 " + P];
+    let last;
+    for (let i = 0; i < 11; i++) last = await req("POST", "/auth/otp/verify", { body: { phone: variants[i % 4], otp: String(200000 + i) } });
+    ok(last.status === 429, "a) 11th verify across phone variants is rate limited (429)", last.status);
+  });
+
+  await scenario("b) attempt cap", async () => {
+    const P = "8100000002";
+    await otpRow(P, otpHash(P, "123456"));
+    const st = [];
+    for (let i = 0; i < 5; i++) st.push((await req("POST", "/auth/otp/verify", { body: { phone: P, otp: String(300000 + i) } })).status);
+    ok(st.every((s) => s === 401), "b) 5 wrong codes -> 401", st);
+    const right = await req("POST", "/auth/otp/verify", { body: { phone: P, otp: "123456" } });
+    ok(right.status === 401 && !right.body.token, "b) correct code after 5 wrong attempts -> 401, no token", right);
+    const rows = await rowsFor(P);
+    ok(rows.length === 0 || rows[0].attempts === 5, "b) row attempts is 5 (or row gone)", rows.map((r) => r.attempts));
+  });
+
+  await scenario("c) parallel verify", async () => {
+    const P = "8100000003";
+    await prisma.user.create({ data: { phone: P, name: "Race Cust", role: "CUSTOMER" } });
+    await otpRow(P, otpHash(P, "123456"));
+    const rs = await Promise.all([0, 1].map(() => req("POST", "/auth/otp/verify", { body: { phone: P, otp: "123456" } })));
+    const st = rs.map((r) => r.status).sort();
+    ok(st[0] === 200 && st[1] === 401, "c) two parallel verifies with the right code -> exactly one 200", st);
+    const replay = await req("POST", "/auth/otp/verify", { body: { phone: P, otp: "123456" } });
+    ok(replay.status === 401, "d) replay after parallel verify -> 401", replay.status);
+  });
+
+  await scenario("e) request validation + limiter", async () => {
+    const t1 = await req("POST", "/auth/otp/request", { body: { phone: "1000000301", type: "admin" } });
+    const t2 = await req("POST", "/auth/otp/request", { body: { phone: "1000000301", type: 123 } });
+    ok(t1.status === 400 && t2.status === 400, "e) unknown/non-string OTP type -> 400", [t1, t2]);
+    const P = "1000000302";
+    const variants = [P, "+91" + P, "0" + P, " " + P, "+91 " + P];
+    const st = [];
+    for (const v of variants) st.push((await req("POST", "/auth/otp/request", { body: { phone: v, type: "register" } })).status);
+    ok(st.every((s) => s === 200), "e) request accepts phone variants", st);
+    const sixth = await req("POST", "/auth/otp/request", { body: { phone: P, type: "register" } });
+    ok(sixth.status === 429, "e) 6th request for the same normalized phone -> 429", sixth.status);
+  });
+
+  await scenario("g1) hashed OTP at rest", async () => {
+    const P = "1000000303";
+    const r = await req("POST", "/auth/otp/request", { body: { phone: P, type: "register" } });
+    const rows = await rowsFor(P);
+    ok(r.status === 200 && rows.length === 1 && !/^\d{6}$/.test(rows[0].otp) && !rows[0].otp.includes("654321") && rows[0].otp === otpHash(P, "654321"),
+      "g1) OTP row is stored hashed", { s: r.status, rows: rows.map((x) => x.otp) });
+    const v = await req("POST", "/auth/otp/verify", { body: { phone: P, otp: "654321" } });
+    ok(v.status === 200 && !!v.body.token, "g1) hashed OTP verifies", v.status);
+  });
+
+  await scenario("g2) plaintext compat window open", async () => {
+    const P = "8100000004";
+    await otpRow(P, "123456");
+    const v = await req("POST", "/auth/otp/verify", { body: { phone: P, otp: "123456" } });
+    ok(v.status === 200, "g2) legacy plaintext row verifies inside the compat window", v.status);
+  });
+
+  let flag0;
+  try {
+    flag0 = await startFlag0Server();
+    ok(flag0.up, "flag-0 server started");
+    const r0 = reqAt(FLAG0_PORT);
+
+    await scenario("f) no enumeration", async () => {
+      await prisma.user.create({ data: { phone: "1000000401", name: "Enum Cust", role: "CUSTOMER" } });
+      await prisma.user.create({ data: { phone: "1000000402", name: "Enum Vendor", role: "VENDOR" } });
+      await prisma.user.create({ data: { phone: "1000000403", name: "Enum DR", role: "DR" } });
+      const calls = [
+        ["1000000401", "login"], ["1000000402", "login"], ["1000000403", "login"], ["1000000404", "login"],
+        ["1000000401", "register"], ["1000000404", "register"],
+      ];
+      const out = [];
+      for (const [phone, type] of calls) out.push(await r0("POST", "/auth/otp/request", { body: { phone, type } }));
+      const bodies = out.map((r) => JSON.stringify(r.body));
+      ok(out.every((r) => r.status === 200) && bodies.every((b) => b === bodies[0]), "f) identical 200 response for customer/staff/unknown, login/register", out);
+      ok(out.every((r) => LEGACY_KEYS.every((k) => !(r.body && k in r.body))), "f) no registration/staff hints in the response", out.map((r) => r.body));
+      const staffRows = [...(await rowsFor("1000000402")), ...(await rowsFor("1000000403"))];
+      ok(staffRows.length === 0, "f) staff numbers get no OTP row", staffRows.length);
+      const cRows = await rowsFor("1000000401"), uRows = await rowsFor("1000000404");
+      ok(cRows.length === 1 && uRows.length === 1 && cRows[0].otp === otpHash("1000000401", "654321") && uRows[0].otp === otpHash("1000000404", "654321"),
+        "f) customer and unknown each have one hashed row", { c: cRows.length, u: uRows.length });
+      const v = await r0("POST", "/auth/otp/verify", { body: { phone: "1000000404", otp: "654321" } });
+      const u = await prisma.user.findUnique({ where: { phone: "1000000404" } });
+      ok(v.status === 200 && !!v.body.token && u && u.role === "CUSTOMER", "f) unknown number verifies and becomes a CUSTOMER", { s: v.status, role: u && u.role });
+    });
+
+    await scenario("f2) special numbers", async () => {
+      const ref = await r0("POST", "/auth/otp/request", { body: { phone: "9876500000" } });
+      const outs = [await r0("POST", "/auth/otp/request", { body: { phone: "9999999999" } }), await r0("POST", "/auth/otp/request", { body: { phone: "7777777777" } })];
+      const rows = [...(await rowsFor("9999999999")), ...(await rowsFor("7777777777"))];
+      ok(outs.every((o) => o.status === ref.status && JSON.stringify(o.body) === JSON.stringify(ref.body)) && rows.length === 0,
+        "f2) special numbers look like any other non-test number off-prod, no row", { ref, outs, rows: rows.length });
+    });
+
+    await scenario("g3) plaintext compat window closed", async () => {
+      const P = "8100000005";
+      await otpRow(P, "123456");
+      const v = await r0("POST", "/auth/otp/verify", { body: { phone: P, otp: "123456" } });
+      ok(v.status === 401, "g3) plaintext row rejected once the compat window is closed", v.status);
+    });
+  } catch (e) {
+    ok(false, "flag-0 server scenarios", e && e.message);
+  } finally {
+    if (flag0) flag0.server.kill("SIGTERM");
+  }
 }
 
 (async () => {
@@ -137,6 +336,8 @@ async function otpLogin(phone) {
   let last;
   for (let i = 0; i < 12; i++) last = await req("POST", "/auth/vendor/login", { body: { phone: "9000000099", password: "wrong" + i } });
   ok(last.status === 429, "partner password login is rate limited", last.status);
+
+  await otpHardening();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   await prisma.$disconnect();

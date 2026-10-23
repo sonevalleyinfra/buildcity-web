@@ -1,9 +1,15 @@
 // Pagination + summary correctness for orders, cloud-sync and users.
 const path = require("path");
+const crypto = require("crypto");
 const { execFileSync } = require("child_process");
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const BASE = `http://localhost:${process.env.TEST_PORT || 5055}/api/v1`;
+// OTP rows are stored as "h1$" + HMAC(pepper, "phone:code")
+const pepper = () => (process.env.OTP_PEPPER && process.env.OTP_PEPPER.trim().length >= 16)
+  ? process.env.OTP_PEPPER.trim()
+  : crypto.createHmac("sha256", process.env.JWT_SECRET.trim()).update("buildcity-otp-pepper-v1").digest("hex");
+const otpHash = (phone, code) => "h1$" + crypto.createHmac("sha256", pepper()).update(`${phone}:${code}`).digest("hex");
 
 // Fixture login credentials (local test data only)
 const CREDS = { admin: "admin123", vendorA: "vendorA123" };
@@ -120,7 +126,7 @@ async function walk(p, token, limit) {
   ok(vSum.body.totalOrders === vDb && Math.abs(vSum.body.totalRevenue - vRev) < 0.001, "vendor summary: own order count + delivered revenue", { s: vSum.body, vDb, vRev });
 
   // Customer
-  await prisma.oTPVerification.create({ data: { phone: "8000000002", otp: "123456", expiresAt: new Date(Date.now() + 600000) } });
+  await prisma.oTPVerification.create({ data: { phone: "8000000002", otp: otpHash("8000000002", "123456"), expiresAt: new Date(Date.now() + 600000) } });
   const c2 = (await fetch(`${BASE}/auth/otp/verify`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: "8000000002", otp: "123456" }) }).then((r) => r.json())).token;
   const cWalk = await walk("/orders/me", c2, 10);
   const cDb = await prisma.order.count({ where: { customerId: ids.c2 } });

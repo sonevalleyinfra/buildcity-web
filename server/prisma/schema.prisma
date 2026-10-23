@@ -113,7 +113,12 @@ model DR {
   region      Region   @relation(fields: [regionId], references: [id])
   status      String   @default("ACTIVE")
   joinedOn    DateTime @default(now())
+  // Soft delete: set together with status "DISABLED"; the row and its history stay
+  disabledAt  DateTime? @map("disabled_at")
 
+  // Also a partial unique index district_representatives_phone_live_key ON (phone) WHERE disabled_at IS NULL,
+  // managed at boot by ensureStaffSchema (src/staff.js): Prisma cannot express partial indexes, so `db push`
+  // may drop it and the next boot recreates it.
   @@index([userId])
   @@index([phone])
   @@map("district_representatives")
@@ -134,10 +139,15 @@ model Vendor {
   commissionRate Decimal      @default(10.00)
   addedByDr      String?
   joinedOn       DateTime     @default(now())
+  // Soft delete: set together with status SUSPENDED (no new enum value, so an old client can still read the row)
+  disabledAt     DateTime?    @map("disabled_at")
 
   vendorProducts VendorProduct[]
   orderItems     OrderItem[]
 
+  // Also a partial unique index vendors_phone_live_key ON (phone) WHERE disabled_at IS NULL, managed at boot by
+  // ensureStaffSchema (src/staff.js): Prisma cannot express partial indexes, so `db push` may drop it and the next
+  // boot recreates it.
   @@index([userId])
   @@index([phone])
   @@map("vendors")

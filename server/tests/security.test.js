@@ -478,6 +478,313 @@ async function drScope(ids, { admin, dr, drUser, vc, mzp, run }) {
   });
 }
 
+// --- Staff lifecycle (Security PR4): no account takeover on create, soft delete revokes access, strong new passwords
+const STRONG = "Str0ng-Test#Pass";
+const SESSION_EXPIRED = { error: "Session expired. Please log in again.", invalidSession: true };
+const PARTNER_LOGIN_TEXT = JSON.stringify({ error: "Invalid mobile number or password." });
+const loginText = async (phone, password) => {
+  const r = await fetch(`${BASE}/auth/vendor/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, password }) });
+  return { status: r.status, text: await r.text() };
+};
+const userSnap = async (phone) => {
+  const u = await prisma.user.findUnique({ where: { phone } });
+  return u && JSON.stringify({ id: u.id, role: u.role, password: u.password, tokenVersion: u.tokenVersion, status: u.status, name: u.name });
+};
+const deepEqual = (a, b) => { try { require("assert").deepStrictEqual(a, b); return true; } catch { return false; } };
+
+function staffUnit() {
+  let staff;
+  try { staff = require("../src/staff"); } catch (e) { ok(false, "src/staff.js loads", e && e.message); return; }
+  const { checkNewPassword, normalizeStaffPhone } = staff;
+  const weak = ["vendor123", "VENDOR123", " Vendor@123 ", "Password123", "BuildCity@123", "IloveYou"].map((p) => checkNewPassword(p));
+  ok(weak.every((r) => r.ok === false && r.error === "This password is too common. Choose another."), "checkNewPassword: deny-list is case-insensitive and trimmed", weak);
+  const len = ["Ab3$xyz", "Ab3$" + "x".repeat(4), "Ab3$" + "x".repeat(124), "Ab3$" + "x".repeat(125), "  Ab3$xyzw  ", "   Ab3$xyz   "].map((p) => checkNewPassword(p));
+  ok(len[0].ok === false && len[0].error === "Password must be 8-128 characters." && len[1].ok && len[2].ok && len[3].ok === false && len[3].error === len[0].error
+    && len[4].ok && len[4].value === "Ab3$xyzw" && len[5].ok === false, "checkNewPassword: 7/8/128/129 lengths, trimmed value", len);
+  const nonStr = [undefined, null, 12345678, {}].map((p) => checkNewPassword(p));
+  ok(nonStr.every((r) => r.ok === false), "checkNewPassword: non-strings rejected", nonStr);
+  const ph = [checkNewPassword("9876543210", { phone: "9876543210" }), checkNewPassword("ab9876543210cd", { phone: "9876543210" }), checkNewPassword("Str0ng-Test#Pass", { phone: "9876543210" })];
+  ok(ph[0].ok === false && ph[0].error === "Password must not contain the mobile number." && ph[1].ok === false && ph[1].error === ph[0].error && ph[2].ok === true,
+    "checkNewPassword: rejects passwords containing the phone", ph);
+  const phones = ["+91 98765 43210", "09876543210", "9876543210", "98765", "123456789012345", "", null].map(normalizeStaffPhone);
+  ok(JSON.stringify(phones) === JSON.stringify(["9876543210", "9876543210", "9876543210", null, null, null, null]), "normalizeStaffPhone matrix", phones);
+}
+
+async function staffLifecycle(ids, { admin, mzp }) {
+  const bcrypt = require("bcryptjs");
+  const strongHash = await bcrypt.hash(STRONG, 4);
+  staffUnit();
+
+  // A DR of Varanasi created through the API (so it can log in)
+  const drMade = await req("POST", "/drs", { token: admin, body: { name: "DR Life", phone: "9300000001", password: STRONG, regionId: ids.reg } });
+  const drTok = (await req("POST", "/auth/vendor/login", { body: { phone: "9300000001", password: STRONG } })).body.token;
+  ok(drMade.status === 201 && !!drTok && !hasPasswordField(drMade.body), "setup: admin creates a DR with a strong password and it logs in", { s: drMade.status, b: drMade.body });
+
+  await scenario("a) staff create never overwrites an existing staff account", async () => {
+    await prisma.user.create({ data: { phone: "9200000001", name: "Other Admin", role: "ADMIN", password: strongHash } });
+    await prisma.user.create({ data: { phone: "9200000002", name: "Bare DR", role: "DR", password: strongHash } });
+    await prisma.user.create({ data: { phone: "9200000003", name: "Bare Vendor", role: "VENDOR", password: strongHash } });
+    for (const phone of ["9999999999", "9200000001", "9200000002", "9200000003"]) {
+      const before = await userSnap(phone);
+      const r = await req("POST", "/drs", { token: admin, body: { name: "Takeover", phone, password: STRONG, regionId: ids.reg } });
+      const after = await userSnap(phone);
+      ok(r.status === 409 && r.body.code === "PHONE_IN_USE_STAFF" && before === after, `a) POST /drs on staff ${phone} -> 409 PHONE_IN_USE_STAFF, user unchanged`, { s: r.status, b: r.body, same: before === after });
+    }
+    const vcBefore = await userSnap("9000000003");
+    const vcRowBefore = JSON.stringify(await prisma.vendor.findFirst({ where: { phone: "9000000003" } }));
+    const drOther = await req("POST", "/vendors", { token: drTok, body: { shopName: "Takeover", ownerName: "T", phone: "9000000003", password: STRONG, regionName: "Varanasi" } });
+    ok(drOther.status === 409 && vcBefore === await userSnap("9000000003") && vcRowBefore === JSON.stringify(await prisma.vendor.findFirst({ where: { phone: "9000000003" } })),
+      "a) DR POST /vendors on another district's vendor phone -> 409, unchanged", { s: drOther.status, b: drOther.body });
+    const adBefore = await userSnap("9999999999");
+    const adV = await req("POST", "/vendors", { token: admin, body: { shopName: "Takeover", ownerName: "T", phone: "9999999999", password: STRONG, regionName: "Varanasi" } });
+    ok(adV.status === 409 && adBefore === await userSnap("9999999999"), "a) admin POST /vendors on 9999999999 -> 409, admin unchanged", { s: adV.status, b: adV.body });
+    ok((await prisma.vendor.count({ where: { phone: "9999999999" } })) === 0 && (await prisma.dR.count({ where: { phone: { in: ["9999999999", "9200000001", "9200000002", "9200000003"] } } })) === 0, "a) no staff rows created on refused phones");
+  });
+
+  // Customer with an order and a wallet, converted to a vendor by the Varanasi DR
+  const conv = await prisma.user.create({ data: { phone: "9200000010", name: "Conv Customer", role: "CUSTOMER", walletBalance: 150 } });
+  await prisma.walletTransaction.create({ data: { userId: conv.id, amount: 150, type: "ADMIN_ADJUST", description: "seed" } });
+  const convOrder = await prisma.order.create({ data: { customerId: conv.id, totalAmount: 100, items: { create: [{ vendorId: ids.va, productName: "Cement Bag", priceAtPurchase: 100, quantity: 1, totalPrice: 100 }] } } });
+  const convCustTok = (await otpLogin("9200000010")).body.token;
+  let convVendorId = null;
+
+  await scenario("b) customer -> vendor conversion needs an explicit confirm", async () => {
+    const body = { shopName: "Conv Shop", ownerName: "Conv Owner", phone: "9200000010", password: STRONG, regionName: "Varanasi" };
+    const before = await userSnap("9200000010");
+    const noConfirm = await req("POST", "/vendors", { token: drTok, body });
+    ok(noConfirm.status === 409 && noConfirm.body.code === "CONVERT_CONFIRM_REQUIRED" && /vendor/.test(noConfirm.body.error) && before === await userSnap("9200000010"),
+      "b) POST /vendors on a customer without confirmConvert -> 409 CONVERT_CONFIRM_REQUIRED, unchanged", noConfirm.body);
+    const other = await req("POST", "/vendors", { token: drTok, body: { ...body, regionName: mzp.name, regionId: mzp.id, confirmConvert: true } });
+    ok(other.status === 403 && before === await userSnap("9200000010"), "b) DR converting into another district -> 403, unchanged", { s: other.status, b: other.body });
+    const walletBefore = await prisma.walletTransaction.findMany({ where: { userId: conv.id }, orderBy: { id: "asc" } });
+    const yes = await req("POST", "/vendors", { token: drTok, body: { ...body, confirmConvert: true } });
+    convVendorId = yes.body && yes.body.id;
+    const u = await prisma.user.findUnique({ where: { id: conv.id } });
+    ok(yes.status === 201 && !hasPasswordField(yes.body) && u.role === "VENDOR" && u.tokenVersion === conv.tokenVersion + 1 && u.name === "Conv Customer",
+      "b) with confirmConvert -> 201, same user is now VENDOR, tokenVersion +1, name kept", { s: yes.status, b: yes.body, role: u.role, tv: u.tokenVersion });
+    const order = await prisma.order.findUnique({ where: { id: convOrder.id } });
+    const walletAfter = await prisma.walletTransaction.findMany({ where: { userId: conv.id }, orderBy: { id: "asc" } });
+    ok(order.customerId === conv.id && Number(u.walletBalance) === 150 && JSON.stringify(walletAfter) === JSON.stringify(walletBefore), "b) orders and wallet kept", { bal: u.walletBalance });
+    const audit = await prisma.auditLog.findFirst({ where: { action: "STAFF_CONVERT", details: { contains: `"targetUserId":"${conv.id}"` } } });
+    ok(!!audit, "b) STAFF_CONVERT audit row with targetUserId");
+    const vl = await loginText("9200000010", STRONG);
+    ok(vl.status === 200 && JSON.parse(vl.text).user?.role === "VENDOR", "b) converted vendor logs in with the new password", vl.status);
+
+    const dc = await prisma.user.create({ data: { phone: "9200000012", name: "DR Customer", role: "CUSTOMER" } });
+    const dBody = { name: "Conv DR", phone: "9200000012", password: STRONG, regionId: ids.reg };
+    const dNo = await req("POST", "/drs", { token: admin, body: dBody });
+    ok(dNo.status === 409 && dNo.body.code === "CONVERT_CONFIRM_REQUIRED" && /DR/.test(dNo.body.error), "b) POST /drs on a customer without confirmConvert -> 409", dNo.body);
+    const dYes = await req("POST", "/drs", { token: admin, body: { ...dBody, confirmConvert: true } });
+    const du = await prisma.user.findUnique({ where: { id: dc.id } });
+    ok(dYes.status === 201 && du.role === "DR" && du.tokenVersion === dc.tokenVersion + 1 && dYes.body.userId === dc.id, "b) POST /drs with confirmConvert converts the same user", { s: dYes.status, role: du.role });
+  });
+
+  await scenario("c) customer token from before the conversion is revoked", async () => {
+    const me = await req("GET", "/users/me", { token: convCustTok });
+    ok(me.status === 401 && deepEqual(me.body, SESSION_EXPIRED), "c) old customer token -> 401 session expired", me);
+  });
+
+  await scenario("d) deleting a DR revokes access but keeps the rows", async () => {
+    const made = await req("POST", "/drs", { token: admin, body: { name: "DR Gone", phone: "9300000002", password: STRONG, regionId: ids.reg } });
+    const tok = (await req("POST", "/auth/vendor/login", { body: { phone: "9300000002", password: STRONG } })).body.token;
+    const uBefore = await prisma.user.findUnique({ where: { phone: "9300000002" } });
+    const del = await req("DELETE", `/drs/${made.body.id}`, { token: admin });
+    ok(del.status === 200 && del.body.success === true && del.body.message === "DR deleted" && del.body.id === made.body.id, "d) DELETE /drs -> 200 DR deleted", del.body);
+    const login = await loginText("9300000002", STRONG);
+    ok(login.status === 401 && login.text === PARTNER_LOGIN_TEXT, "d) deleted DR cannot log in", login);
+    const me = await req("GET", "/users/me", { token: tok });
+    ok(me.status === 401 && deepEqual(me.body, SESSION_EXPIRED), "d) deleted DR's token -> /users/me 401", me);
+    const row = await prisma.dR.findUnique({ where: { id: made.body.id } });
+    const u = await prisma.user.findUnique({ where: { phone: "9300000002" } });
+    ok(row && row.disabledAt instanceof Date && row.status === "DISABLED", "d) DR row kept, disabledAt set, status DISABLED", row);
+    ok(u && u.status === "DISABLED" && u.tokenVersion === uBefore.tokenVersion + 1, "d) DR user kept, DISABLED, tokenVersion +1", u && { s: u.status, tv: u.tokenVersion });
+    const list = await req("GET", "/drs", { token: admin });
+    ok(list.status === 200 && !list.body.some((d) => d.id === made.body.id), "d) deleted DR not listed in GET /drs");
+    const again = await req("DELETE", `/drs/${made.body.id}`, { token: admin });
+    ok(again.status === 200 && again.body.success === true, "d) deleting again is idempotent", again.body);
+    const nf = await req("DELETE", "/drs/no-such-dr", { token: admin });
+    ok(nf.status === 404, "d) DELETE /drs unknown id -> 404", nf.status);
+  });
+
+  await scenario("d2) deleting a vendor revokes access, keeps rows, listings and orders", async () => {
+    const made = await req("POST", "/vendors", { token: admin, body: { shopName: "Gone Shop", ownerName: "Gone", phone: "9200000020", password: STRONG, regionName: "Varanasi" } });
+    const vid = made.body.id;
+    const base = { categoryId: (await prisma.category.findFirst()).id, categoryName: "Cement", brand: "X", type: "T", grade: "G", unit: "Bag", imageUrl: "x", regionId: ids.reg, regionName: "Varanasi" };
+    const listing = await prisma.vendorProduct.create({ data: { ...base, masterProductId: ids.mp, vendorId: vid, name: "Cement Bag", price: 400, stockQty: 5, approvalStatus: "APPROVED", isActive: true } });
+    const order = await prisma.order.create({ data: { customerId: ids.c1, totalAmount: 400, items: { create: [{ vendorId: vid, vendorProductId: listing.id, productName: "Cement Bag", priceAtPurchase: 400, quantity: 1, totalPrice: 400 }] } }, include: { items: true } });
+    const tok = (await req("POST", "/auth/vendor/login", { body: { phone: "9200000020", password: STRONG } })).body.token;
+    const uBefore = await prisma.user.findUnique({ where: { phone: "9200000020" } });
+    const del = await req("DELETE", `/vendors/${vid}`, { token: drTok });
+    ok(del.status === 200 && del.body.success === true && del.body.message === "Vendor deleted" && del.body.id === vid, "d2) DR deletes own-district vendor -> 200", del.body);
+    const login = await loginText("9200000020", STRONG);
+    ok(login.status === 401 && login.text === PARTNER_LOGIN_TEXT, "d2) deleted vendor cannot log in", login);
+    const me = await req("GET", "/users/me", { token: tok });
+    ok(me.status === 401 && deepEqual(me.body, SESSION_EXPIRED), "d2) deleted vendor's token -> /users/me 401", me);
+    const row = await prisma.vendor.findUnique({ where: { id: vid } });
+    ok(row && row.status === "SUSPENDED" && row.disabledAt instanceof Date, "d2) vendor row kept, SUSPENDED + disabledAt", row);
+    const l = await prisma.vendorProduct.findUnique({ where: { id: listing.id } });
+    const items = await prisma.orderItem.findMany({ where: { orderId: order.id } });
+    ok(l && l.isActive === false && items.length === 1 && items[0].vendorId === vid, "d2) listing kept but inactive; order item still references the vendor", { l, items });
+    const u = await prisma.user.findUnique({ where: { phone: "9200000020" } });
+    ok(u && u.status === "DISABLED" && u.role === "VENDOR" && u.tokenVersion === uBefore.tokenVersion + 1, "d2) vendor user DISABLED, tokenVersion +1", u && { s: u.status, tv: u.tokenVersion });
+    const list = await req("GET", "/vendors", { token: admin });
+    const sync = await req("GET", "/cloud-sync", { token: admin });
+    ok(!list.body.some((v) => v.id === vid) && !sync.body.vendors.some((v) => v.id === vid), "d2) deleted vendor not in GET /vendors or cloud-sync");
+    const re = await req("POST", "/vendors", { token: admin, body: { shopName: "Again", ownerName: "Again", phone: "9200000020", password: STRONG, regionName: "Varanasi" } });
+    ok(re.status === 409 && re.body.code === "PHONE_IN_USE_STAFF", "d2) re-adding a deleted staff-only phone -> 409 PHONE_IN_USE_STAFF", re.body);
+    const nf = await req("DELETE", "/vendors/no-such-vendor", { token: admin });
+    ok(nf.status === 404, "d2) DELETE /vendors unknown id -> 404 (admin too)", nf.status);
+  });
+
+  await scenario("d3) deleting a converted vendor reverts the user to a customer", async () => {
+    const del = await req("DELETE", `/vendors/${convVendorId}`, { token: admin });
+    const u = await prisma.user.findUnique({ where: { phone: "9200000010" } });
+    ok(del.status === 200 && u.role === "CUSTOMER" && u.status === "ACTIVE", "d3) converted vendor deleted -> user back to ACTIVE CUSTOMER", { s: del.status, role: u.role, st: u.status });
+    const otp = await otpLogin("9200000010");
+    ok(otp.status === 200 && !!otp.body.token && otp.body.user?.role === "CUSTOMER", "d3) reverted customer can OTP-login again", otp.status);
+  });
+
+  await scenario("d4) a failed delete rolls back completely", async () => {
+    const made = await req("POST", "/vendors", { token: admin, body: { shopName: "Rollback Shop", ownerName: "Rb", phone: "9200000021", password: STRONG, regionName: "Varanasi" } });
+    const vid = made.body.id;
+    const base = { categoryId: (await prisma.category.findFirst()).id, categoryName: "Cement", brand: "X", type: "T", grade: "G", unit: "Bag", imageUrl: "x", regionId: ids.reg, regionName: "Varanasi" };
+    await prisma.vendorProduct.create({ data: { ...base, masterProductId: ids.mp, vendorId: vid, name: "Cement Bag", price: 400, stockQty: 5, approvalStatus: "APPROVED", isActive: true } });
+    const snap = async () => JSON.stringify([
+      await prisma.vendor.findUnique({ where: { id: vid } }),
+      await prisma.vendorProduct.findMany({ where: { vendorId: vid }, orderBy: { id: "asc" } }),
+      await prisma.user.findUnique({ where: { phone: "9200000021" } }),
+    ]);
+    const before = await snap();
+    try {
+      await prisma.$executeRawUnsafe("CREATE FUNCTION pr4_fail_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'pr4 forced failure'; END $$");
+      await prisma.$executeRawUnsafe("CREATE TRIGGER pr4_fail_audit BEFORE INSERT ON audit_logs FOR EACH ROW WHEN (NEW.action = 'STAFF_DELETE') EXECUTE FUNCTION pr4_fail_audit()");
+      const del = await req("DELETE", `/vendors/${vid}`, { token: admin });
+      ok(del.status >= 500 && before === await snap(), "d4) audit insert fails -> 5xx and vendor/listings/user unchanged", { s: del.status });
+    } finally {
+      await prisma.$executeRawUnsafe("DROP TRIGGER IF EXISTS pr4_fail_audit ON audit_logs");
+      await prisma.$executeRawUnsafe("DROP FUNCTION IF EXISTS pr4_fail_audit()");
+    }
+  });
+
+  let suspendedVendorId = null, suspendedDrId = null;
+  await scenario("e) partner login failures are indistinguishable", async () => {
+    const sv = await req("POST", "/vendors", { token: admin, body: { shopName: "Sus Shop", ownerName: "Sus", phone: "9200000030", password: STRONG, regionName: "Varanasi" } });
+    suspendedVendorId = sv.body.id;
+    const svUser = await prisma.user.findUnique({ where: { phone: "9200000030" } });
+    const sus = await req("PATCH", `/vendors/${sv.body.id}/status`, { token: admin, body: { status: "SUSPENDED" } });
+    ok(sus.status === 200 && (await prisma.user.findUnique({ where: { phone: "9200000030" } })).tokenVersion === svUser.tokenVersion + 1, "j) PATCH /vendors/:id/status SUSPENDED bumps tokenVersion", sus.status);
+    await req("POST", "/vendors", { token: admin, body: { shopName: "Pend Shop", ownerName: "Pend", phone: "9200000031", password: STRONG, regionName: "Varanasi", status: "PENDING" } });
+    const sd = await req("POST", "/drs", { token: admin, body: { name: "DR Sus", phone: "9300000003", password: STRONG, regionId: ids.reg } });
+    suspendedDrId = sd.body.id;
+    const sdUser = await prisma.user.findUnique({ where: { phone: "9300000003" } });
+    const sdr = await req("PATCH", `/drs/${sd.body.id}`, { token: admin, body: { status: "suspended" } });
+    const sdAfter = await prisma.user.findUnique({ where: { phone: "9300000003" } });
+    const sdRow = await prisma.dR.findUnique({ where: { id: sd.body.id } });
+    ok(sdr.status === 200 && sdRow.status === "SUSPENDED" && sdAfter.tokenVersion === sdUser.tokenVersion + 1, "j) PATCH /drs/:id status SUSPENDED bumps tokenVersion", { s: sdr.status, st: sdRow.status });
+    await prisma.user.create({ data: { phone: "9200000032", name: "Only User", role: "VENDOR", password: strongHash } });
+    const dis = await prisma.user.create({ data: { phone: "9200000033", name: "Disabled", role: "VENDOR", status: "DISABLED", password: strongHash } });
+    await prisma.vendor.create({ data: { userId: dis.id, shopName: "Dis", ownerName: "Dis", phone: "9200000033", password: strongHash, regionId: ids.reg, status: "APPROVED" } });
+
+    const cases = [
+      ["unknown phone", "9200000099", STRONG], ["wrong password", "9300000001", "Wrong-Pass#1"], ["deleted vendor", "9200000020", STRONG],
+      ["suspended vendor", "9200000030", STRONG], ["pending vendor", "9200000031", STRONG], ["suspended DR", "9300000003", STRONG],
+      ["user-only vendor", "9200000032", STRONG], ["disabled user", "9200000033", STRONG],
+    ];
+    for (const [name, phone, pw] of cases) {
+      const r = await loginText(phone, pw);
+      ok(r.status === 401 && r.text === PARTNER_LOGIN_TEXT, `e) partner login: ${name} -> 401 generic`, r);
+    }
+  });
+
+  await scenario("e2) decidePartnerLogin always runs one compare", async () => {
+    const { decidePartnerLogin, DUMMY_PASSWORD_HASH } = require("../src/staff");
+    const calls = [];
+    const compare = async (pw, hash) => { calls.push([pw, hash]); return true; };
+    const unknown = await decidePartnerLogin({ phone10: "9200000099", password: "x", user: null, dr: null, vendor: null }, compare);
+    ok(unknown.ok === false && calls.length === 1 && calls[0][1] === DUMMY_PASSWORD_HASH && /^\$2[aby]\$10\$/.test(DUMMY_PASSWORD_HASH), "e2) unknown phone: one compare against the dummy hash, denied", { unknown, calls });
+    calls.length = 0;
+    const disabled = await decidePartnerLogin({ phone10: "9200000033", password: "x", user: { id: "u", role: "VENDOR", status: "DISABLED", password: "h" }, dr: null, vendor: { id: "v", password: "vh" } }, compare);
+    ok(disabled.ok === false && calls.length === 1, "e2) disabled user: one compare, denied", { disabled, calls });
+    calls.length = 0;
+    const live = await decidePartnerLogin({ phone10: "9200000034", password: "x", user: { id: "u", role: "VENDOR", status: "ACTIVE", password: "h" }, dr: null, vendor: { id: "v", password: "vh" } }, compare);
+    ok(live.ok === true && live.kind === "VENDOR" && calls.length === 1 && calls[0][1] === "vh", "e2) live vendor: compared against the vendor hash, allowed", { live, calls });
+  });
+
+  await scenario("f) a disabled customer cannot complete OTP verify", async () => {
+    await prisma.user.create({ data: { phone: "9200000040", name: "Disabled Cust", role: "CUSTOMER", status: "DISABLED" } });
+    const r = await otpLogin("9200000040");
+    ok(r.status === 401 && !r.body.token && r.body.error === require("../src/otp").OTP_GENERIC_ERROR, "f) disabled customer OTP verify -> 401, no token", r);
+  });
+
+  await scenario("g) one live staff row per phone", async () => {
+    const dup = await req("POST", "/vendors", { token: admin, body: { shopName: "Dup", ownerName: "Dup", phone: "9000000001", password: STRONG, regionName: "Varanasi" } });
+    ok(dup.status === 409, "g) POST /vendors with a live vendor's phone -> 409", dup);
+    const idx = (await prisma.$queryRawUnsafe("SELECT indexname FROM pg_indexes WHERE indexname IN ('vendors_phone_live_key', 'district_representatives_phone_live_key')")).map((r) => r.indexname).sort();
+    ok(JSON.stringify(idx) === JSON.stringify(["district_representatives_phone_live_key", "vendors_phone_live_key"]), "g) partial unique indexes exist", idx);
+    let code = null;
+    try {
+      await prisma.$executeRawUnsafe(`INSERT INTO vendors (id, "userId", "shopName", "ownerName", phone, "regionId", status) VALUES ('pr4-dup', $1, 'Dup', 'Dup', '9000000001', $2, 'APPROVED')`, ids.ua, ids.reg);
+    } catch (e) { code = (e.meta && e.meta.code) || (/23505/.test(String(e.message)) ? "23505" : e.code); }
+    ok(code === "23505", "g) raw insert of a second live vendor with the same phone fails with 23505", code);
+  });
+
+  await scenario("h) weak passwords are refused for new accounts and resets", async () => {
+    const pv = await req("POST", "/vendors", { token: admin, body: { shopName: "Pw Shop", ownerName: "Pw", phone: "9200000051", password: STRONG, regionName: "Varanasi" } });
+    const pd = await req("POST", "/drs", { token: admin, body: { name: "DR Pw", phone: "9300000004", password: STRONG, regionId: ids.reg } });
+    const vRow = await prisma.vendor.findUnique({ where: { id: pv.body.id } });
+    const dRow = await prisma.dR.findUnique({ where: { id: pd.body.id } });
+    for (const pw of ["vendor123", "dr123", "short1", "PASSWORD123"]) {
+      const a = await req("POST", "/vendors", { token: admin, body: { shopName: "Weak", ownerName: "Weak", phone: "9200000050", password: pw, regionName: "Varanasi" } });
+      const b = await req("POST", "/drs", { token: admin, body: { name: "Weak", phone: "9300000050", password: pw, regionId: ids.reg } });
+      const c = await req("PATCH", `/vendors/${pv.body.id}`, { token: admin, body: { password: pw } });
+      const d = await req("PATCH", `/drs/${pd.body.id}`, { token: admin, body: { password: pw } });
+      ok([a, b, c, d].every((r) => r.status === 400 && r.body.code === "WEAK_PASSWORD"), `h) weak password "${pw}" -> 400 WEAK_PASSWORD on create and reset`, [a, b, c, d].map((r) => [r.status, r.body]));
+    }
+    const nothing = await prisma.user.count({ where: { phone: { in: ["9200000050", "9300000050"] } } });
+    const vAfter = await prisma.vendor.findUnique({ where: { id: pv.body.id } });
+    const dAfter = await prisma.dR.findUnique({ where: { id: pd.body.id } });
+    ok(nothing === 0 && vAfter.password === vRow.password && dAfter.password === dRow.password, "h) nothing written for weak passwords", { nothing });
+    const noPw = await req("POST", "/vendors", { token: admin, body: { shopName: "NoPw", ownerName: "NoPw", phone: "9200000052", regionName: "Varanasi" } });
+    ok(noPw.status === 400 && noPw.body.code === "WEAK_PASSWORD", "h) password is required on create", noPw.body);
+    const badPhone = await req("POST", "/drs", { token: admin, body: { name: "Bad", phone: "98765", password: STRONG, regionId: ids.reg } });
+    ok(badPhone.status === 400 && badPhone.body.code === "INVALID_PHONE", "h) invalid phone on create -> 400 INVALID_PHONE", badPhone.body);
+    const legacyA = await loginText("9000000001", CREDS.vendorA);
+    const legacyAdmin = await loginText("9999999999", CREDS.admin);
+    ok(legacyA.status === 200 && legacyAdmin.status === 200, "h) existing accounts with old passwords still log in", [legacyA.status, legacyAdmin.status]);
+    const reset = await req("PATCH", `/vendors/${pv.body.id}`, { token: admin, body: { password: "An0ther#Strong-Pw" } });
+    ok(reset.status === 200 && !hasPasswordField(reset.body), "h) strong password reset accepted", reset.status);
+  });
+
+  await scenario("j) status changes and deleted rows", async () => {
+    const nf = await req("PATCH", "/vendors/no-such-vendor/status", { token: admin, body: { status: "APPROVED" } });
+    ok(nf.status === 404, "j) PATCH /vendors/unknown/status -> 404", nf.status);
+    const gone = await prisma.vendor.findFirst({ where: { phone: "9200000020" } });
+    const p1 = await req("PATCH", `/vendors/${gone.id}/status`, { token: admin, body: { status: "APPROVED" } });
+    const p2 = await req("PATCH", `/vendors/${gone.id}`, { token: admin, body: { status: "APPROVED" } });
+    const goneDr = await prisma.dR.findFirst({ where: { phone: "9300000002" } });
+    const p3 = await req("PATCH", `/drs/${goneDr.id}`, { token: admin, body: { status: "ACTIVE" } });
+    ok([p1, p2, p3].every((r) => r.status === 409 && r.body.code === "STAFF_DISABLED"), "j) PATCH on a deleted vendor/DR -> 409 STAFF_DISABLED", [p1, p2, p3].map((r) => [r.status, r.body]));
+    const badSt = await req("PATCH", `/vendors/${suspendedVendorId}/status`, { token: admin, body: { status: "DELETED" } });
+    const badDr = await req("PATCH", `/drs/${suspendedDrId}`, { token: admin, body: { status: "DISABLED" } });
+    ok(badSt.status === 400 && badDr.status === 400, "j) unknown status values -> 400", [badSt.status, badDr.status]);
+  });
+
+  await scenario("i) audit trail for every staff change", async () => {
+    const rows = await prisma.auditLog.findMany({ where: { action: { startsWith: "STAFF_" } } });
+    for (const action of ["STAFF_CREATE", "STAFF_CONVERT", "STAFF_PASSWORD_RESET", "STAFF_STATUS_CHANGE", "STAFF_DELETE"]) {
+      const mine = rows.filter((r) => r.action === action).map((r) => JSON.parse(r.details));
+      ok(mine.length > 0 && mine.every((d) => d.actorId && d.targetType && d.targetId && d.targetUserId), `i) ${action} audit rows carry actor and target`, mine.slice(0, 2));
+    }
+    ok(rows.length > 0 && rows.every((r) => !/password|\$2[aby]\$/i.test(r.details)), "i) no password or hash text in audit details");
+    const del = rows.find((r) => r.action === "STAFF_DELETE" && JSON.parse(r.details).mode);
+    const st = rows.find((r) => r.action === "STAFF_STATUS_CHANGE" && JSON.parse(r.details).from && JSON.parse(r.details).to);
+    ok(!!del && !!st, "i) STAFF_DELETE has mode, STAFF_STATUS_CHANGE has from/to");
+  });
+
+  const adminStill = await loginText("9999999999", CREDS.admin);
+  ok(adminStill.status === 200, "D4: shared admin still logs in after the staff scenarios", adminStill.status);
+}
+
 (async () => {
   const ids = JSON.parse(execFileSync("node", [path.join(__dirname, "fixture.js")]).toString().trim().split("\n").pop());
 
@@ -584,6 +891,9 @@ async function drScope(ids, { admin, dr, drUser, vc, mzp, run }) {
 
   // --- DR scope (Security PR3)
   await drScope(ids, { admin, ...pb2 });
+
+  // --- Staff lifecycle (Security PR4)
+  await staffLifecycle(ids, { admin, mzp: pb2.mzp });
 
   // --- Brute force protection on partner password login
   let last;

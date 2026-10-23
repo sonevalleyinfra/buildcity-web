@@ -25,6 +25,23 @@ const {
   planOtpRequest,
   ensureOtpSchema,
 } = require("./otp");
+const {
+  SESSION_EXPIRED_BODY,
+  PARTNER_LOGIN_ERROR,
+  ADMIN_PHONE,
+  STAFF_ERRORS,
+  StaffError,
+  normalizeStaffPhone,
+  checkNewPassword,
+  isActiveStatus,
+  decidePartnerLogin,
+  stripPasswords,
+  planStaffAccount,
+  createOrConvertStaffUser,
+  writeAudit,
+  retireStaffUser,
+  ensureStaffSchema,
+} = require("./staff");
 const STAGING_OTP = "654321";
 const TEST_PHONE_RE = /^10000\d{5}$/;
 
@@ -92,6 +109,13 @@ function sendServerError(res, err, label = "Request") {
   }
   console.error(`${label} error:`, err);
   return res.status(500).json({ error: "Something went wrong. Please try again." });
+}
+
+// Staff create/update/delete errors: fixed 4xx bodies, a unique-phone race as 409, everything else generic
+function sendStaffError(res, err, label) {
+  if (err instanceof StaffError) return res.status(err.status).json(err.body);
+  if (err?.code === "P2002") return res.status(409).json(STAFF_ERRORS.PHONE_IN_USE);
+  return sendServerError(res, err, label);
 }
 
 const SAFE_USER_SELECT = { id: true, name: true, phone: true, email: true, role: true };
@@ -577,12 +601,12 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
     const drsWhere = role === "DR" ? drSelfWhere(req.auth) : undefined;
     const fetchPromises = [
       isVendor || (role === "DR" && !drsWhere) ? Promise.resolve([]) : prisma.dR.findMany({
-        where: drsWhere,
+        where: drsWhere ? { AND: [drsWhere, { disabledAt: null }] } : { disabledAt: null },
         include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
         orderBy: { joinedOn: "desc" },
       }).then(list => list.map(d => { const { password, ...safe } = d; return safe; })).catch(() => []),
       prisma.vendor.findMany({
-        where: isVendor ? { id: ownVendor.id } : drRegionIds ? { regionId: { in: drRegionIds } } : undefined,
+        where: { ...(isVendor ? { id: ownVendor.id } : drRegionIds ? { regionId: { in: drRegionIds } } : {}), disabledAt: null },
         include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
         orderBy: { joinedOn: "desc" },
       }).then(list => list.map(v => { const { password, ...safe } = v; return safe; })).catch(() => []),
@@ -689,28 +713,48 @@ app.post("/api/v1/auth/vendor/login", partnerLoginLimiter, async (req, res) => {
       return res.status(400).json({ error: "Mobile number and Password are required." });
     }
 
-    const cleanPhone = phone.trim().replace(/\D/g, "");
-    const cleanPassword = password.trim();
+    const rawPhone = String(phone);
+    const phone10 = normalizeStaffPhone(rawPhone) || rawPhone.trim().replace(/\D/g, "");
+    const cleanPassword = String(password).trim();
+    // Legacy rows may store the phone exactly as typed, so the raw value is matched too
+    const phones = [...new Set([phone10, rawPhone])];
 
-    // 1. Super Admin Check (Phone: 9999999999)
-    if (cleanPhone === "9999999999") {
-      const adminUser = await prisma.user.findUnique({ where: { phone: "9999999999" } }).catch(() => null);
+    // The User for this phone, else the user behind a legacy DR/vendor row with that phone
+    let user = phone10 ? await prisma.user.findUnique({ where: { phone: phone10 } }) : null;
+    if (!user && rawPhone !== phone10) user = await prisma.user.findUnique({ where: { phone: rawPhone } });
+    if (!user) {
+      const legacyRow =
+        (await prisma.dR.findFirst({ where: { phone: { in: phones } }, select: { userId: true } })) ||
+        (await prisma.vendor.findFirst({ where: { phone: { in: phones } }, select: { userId: true } }));
+      if (legacyRow) user = await prisma.user.findUnique({ where: { id: legacyRow.userId } });
+    }
+    const [dr, vendor] = user
+      ? await Promise.all([
+          prisma.dR.findFirst({
+            where: { userId: user.id, disabledAt: null, status: { equals: "ACTIVE", mode: "insensitive" } },
+            include: { user: true, region: true },
+          }),
+          prisma.vendor.findFirst({
+            where: { userId: user.id, disabledAt: null, status: "APPROVED" },
+            include: { region: true, user: true },
+            orderBy: { joinedOn: "desc" },
+          }),
+        ])
+      : [null, null];
 
-      if (!adminUser || !adminUser.password) {
-        return res.status(401).json({ error: "Invalid mobile number or password." });
-      }
+    // One generic 401 for every failure: unknown phone, wrong password, disabled/deleted/suspended/pending accounts
+    const decision = await decidePartnerLogin({ phone10, password: cleanPassword, user, dr, vendor }, (p, h) => bcrypt.compare(p, h));
+    if (!decision.ok) {
+      return res.status(401).json(PARTNER_LOGIN_ERROR);
+    }
 
-      const isMatch = await bcrypt.compare(cleanPassword, adminUser.password).catch(() => false);
-      if (!isMatch) {
-        return res.status(401).json({ error: "Invalid mobile number or password." });
-      }
-
+    if (decision.kind === "ADMIN") {
       const adminObj = {
-        id: adminUser.id || "u-admin-9999999999",
-        name: adminUser.name || "Super Admin",
-        phone: "9999999999",
+        id: user.id,
+        name: user.name || "Super Admin",
+        phone: ADMIN_PHONE,
         role: "ADMIN",
-        tokenVersion: adminUser.tokenVersion || 1,
+        tokenVersion: user.tokenVersion || 1,
       };
       const token = issueToken(adminObj);
 
@@ -726,47 +770,17 @@ app.post("/api/v1/auth/vendor/login", partnerLoginLimiter, async (req, res) => {
       });
     }
 
-    // 2-4. Look up the User, DR and Vendor rows for this phone in parallel (one DB round trip
-    // instead of three back-to-back ones); the role checks below still run in the same order.
-    const [userInDb, drInDb, vendor] = await Promise.all([
-      prisma.user.findFirst({
-        where: { OR: [{ phone: cleanPhone }, { phone }] },
-      }).catch(() => null),
-      prisma.dR.findFirst({
-        where: { OR: [{ phone: cleanPhone }, { phone }] },
-        include: { user: true, region: true },
-      }).catch(() => null),
-      prisma.vendor.findFirst({
-        where: { OR: [{ phone: cleanPhone }, { phone }] },
-        include: { region: true, user: true },
-      }).catch(() => null),
-    ]);
-
-    // 3. District Representative (DR) Check
-    if (drInDb || userInDb?.role === "DR") {
-      const storedPassword =
-        drInDb?.password ||
-        drInDb?.user?.password ||
-        userInDb?.password;
-
-      if (!storedPassword) {
-        return res.status(401).json({ error: "Invalid mobile number or password." });
-      }
-
-      const isMatch = await bcrypt.compare(cleanPassword, storedPassword).catch(() => false);
-      if (!isMatch) {
-        return res.status(401).json({ error: "Invalid mobile number or password." });
-      }
-
+    if (decision.kind === "DR") {
+      const safeDr = stripPasswords(dr);
       const drUserObj = {
-        id: userInDb?.id || drInDb?.userId || drInDb?.id || `u-dr-${cleanPhone}`,
-        name: drInDb?.name || userInDb?.name || "District Representative",
-        phone: cleanPhone,
+        id: user.id,
+        name: dr.name || user.name || "District Representative",
+        phone: phone10,
         role: "DR",
-        regionId: drInDb?.regionId || drInDb?.region?.id,
-        regionName: drInDb?.region?.name,
-        drInfo: drInDb || null,
-        tokenVersion: userInDb?.tokenVersion || drInDb?.user?.tokenVersion || 1,
+        regionId: dr.regionId || dr.region?.id,
+        regionName: dr.region?.name,
+        drInfo: safeDr,
+        tokenVersion: user.tokenVersion || 1,
       };
       const token = issueToken(drUserObj);
 
@@ -774,62 +788,17 @@ app.post("/api/v1/auth/vendor/login", partnerLoginLimiter, async (req, res) => {
         success: true,
         token,
         user: drUserObj,
-        dr: drInDb,
+        dr: safeDr,
       });
     }
 
-    // 4. Vendor record (looked up above)
-    let user = null;
-    if (vendor && vendor.user) {
-      user = vendor.user;
-    } else if (userInDb && userInDb.role === "VENDOR" && userInDb.phone === cleanPhone) {
-      user = userInDb;
-    } else {
-      user = await prisma.user.findFirst({
-        where: {
-          phone: cleanPhone,
-          role: "VENDOR",
-        },
-      }).catch(() => null);
-    }
-
-    if (!user && !vendor) {
-      return res.status(401).json({ error: "Invalid mobile number or password." });
-    }
-
-    // Verify Vendor Status (Must be APPROVED)
-    const currentStatus = vendor?.status || "APPROVED";
-    if (currentStatus === "SUSPENDED") {
-      return res.status(403).json({ error: "Your account is SUSPENDED. Please contact Super Admin." });
-    }
-    if (currentStatus === "PENDING" || currentStatus === "PENDING_REVIEW") {
-      return res.status(403).json({ error: "Your account is PENDING approval from Admin." });
-    }
-
-    // Verify Password with Bcrypt against Vendor or User password hash
-    const storedPassword = vendor?.password || user?.password || vendor?.user?.password;
-    if (!storedPassword) {
-      return res.status(401).json({ error: "Invalid mobile number or password." });
-    }
-
-    const isMatch = await bcrypt.compare(cleanPassword, storedPassword).catch(() => false);
-    if (!isMatch) {
-      return res.status(401).json({ error: "Invalid mobile number or password." });
-    }
-
-    const resUser = user || {
-      id: vendor?.userId || `u-vendor-${cleanPhone}`,
-      name: vendor?.ownerName || vendor?.shopName || "Vendor Partner",
-      phone: cleanPhone,
-      role: "VENDOR",
-      tokenVersion: user?.tokenVersion || 1,
-    };
-
+    const { password: _userPassword, ...safeUser } = user;
+    const safeVendor = stripPasswords(vendor);
     const vendorUserObj = {
-      ...resUser,
+      ...safeUser,
       role: "VENDOR",
-      vendorInfo: vendor,
-      tokenVersion: resUser.tokenVersion || 1,
+      vendorInfo: safeVendor,
+      tokenVersion: user.tokenVersion || 1,
     };
     const token = issueToken(vendorUserObj);
 
@@ -838,20 +807,18 @@ app.post("/api/v1/auth/vendor/login", partnerLoginLimiter, async (req, res) => {
     // round trips; those run in the background so they don't hold up the login response.
     const loginDeviceToken = cleanDeviceToken(fcmToken);
     if (loginDeviceToken) {
-      const vId = vendor?.id || vendor?.userId || resUser.id;
-      if (vId) {
-        const { saveToken } = require("./pushService");
-        saveToken(vId, loginDeviceToken, cleanPhone)
-          .then(() => console.log(`✅ FCM device token saved during login for vendor ${vId}`))
-          .catch((fcmErr) => console.warn("Login FCM save note:", fcmErr.message));
-      }
+      const vId = vendor.id;
+      const { saveToken } = require("./pushService");
+      saveToken(vId, loginDeviceToken, phone10)
+        .then(() => console.log(`✅ FCM device token saved during login for vendor ${vId}`))
+        .catch((fcmErr) => console.warn("Login FCM save note:", fcmErr.message));
     }
 
     res.json({
       success: true,
       token,
       user: vendorUserObj,
-      vendor,
+      vendor: safeVendor,
     });
   } catch (err) {
     sendServerError(res, err, "Vendor login");
@@ -1752,6 +1719,11 @@ app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
       where: { phone: phone10 },
     }).catch(() => null);
 
+    // A disabled account gets the same answer as a wrong code
+    if (user && !isActiveStatus(user.status)) {
+      return res.status(401).json({ error: OTP_GENERIC_ERROR });
+    }
+
     // Block Staff accounts if found
     if (user && ["ADMIN", "DR", "VENDOR"].includes(user.role)) {
       return res.status(403).json({
@@ -1827,9 +1799,18 @@ app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
 // Fetch Current Authenticated User Profile (Zero PII in URL)
 app.get("/api/v1/users/me", requireAuth, async (req, res) => {
   try {
-    let user = await prisma.user.findUnique({ where: { id: req.auth.userId } }).catch(() => null);
+    // No .catch here: a DB error must be a 500, never a 401 that logs a healthy session out
+    let user = await prisma.user.findUnique({ where: { id: req.auth.userId } });
     if (!user && req.auth.phone) {
-      user = await prisma.user.findUnique({ where: { phone: req.auth.phone } }).catch(() => null);
+      user = await prisma.user.findUnique({ where: { phone: req.auth.phone } });
+    }
+
+    // Disabled, converted or deleted accounts: the token is not refreshed (no silent role change)
+    if (user && (!isActiveStatus(user.status) || user.role !== req.auth.role)) {
+      return res.status(401).json(SESSION_EXPIRED_BODY);
+    }
+    if (!user && ["CUSTOMER", "DR", "VENDOR"].includes(req.auth.role)) {
+      return res.status(401).json(SESSION_EXPIRED_BODY);
     }
 
     // Always attach DR profile details if user has DR role
@@ -1842,9 +1823,12 @@ app.get("/api/v1/users/me", requireAuth, async (req, res) => {
             ...(req.auth.phone ? [{ phone: req.auth.phone }] : []),
             ...(user?.phone ? [{ phone: user.phone }] : []),
           ],
+          disabledAt: null,
+          status: { equals: "ACTIVE", mode: "insensitive" },
         },
         include: { region: true, user: true },
-      }).catch(() => null);
+      });
+      if (!dr) return res.status(401).json(SESSION_EXPIRED_BODY);
 
       if (dr || user) {
         const safeDr = dr ? (({ password, ...rest }) => rest)(dr) : null;
@@ -1878,9 +1862,12 @@ app.get("/api/v1/users/me", requireAuth, async (req, res) => {
             ...(req.auth.phone ? [{ phone: req.auth.phone }] : []),
             ...(user?.phone ? [{ phone: user.phone }] : []),
           ],
+          disabledAt: null,
+          status: "APPROVED",
         },
         include: { region: true, user: true },
-      }).catch(() => null);
+      });
+      if (!vendor) return res.status(401).json(SESSION_EXPIRED_BODY);
 
       if (vendor || user) {
         const safeVendor = vendor ? (({ password, ...rest }) => rest)(vendor) : null;
@@ -2098,13 +2085,54 @@ app.post("/api/v1/users", requireAuth, requireRole("ADMIN"), async (req, res) =>
 });
 
 // 2. DISTRICT REPRESENTATIVE (DR) ENDPOINTS
+// Staff rows are soft-deleted (disabledAt set) and never listed again; their history and orders stay.
+const DR_STATUSES = ["ACTIVE", "SUSPENDED"];
+const VENDOR_STATUSES = ["PENDING", "APPROVED", "SUSPENDED"];
+
+// { value } (upper-cased, null when not given) or { error }
+function parseStaffStatus(raw, allowed) {
+  if (!raw) return { value: null };
+  const value = typeof raw === "string" ? raw.trim().toUpperCase() : "";
+  return allowed.includes(value) ? { value } : { error: STAFF_ERRORS.INVALID_STATUS };
+}
+
+// Password reset on an edit: empty means "unchanged"; anything else must pass the new-password rules
+function parseResetPassword(raw, phone) {
+  if (raw === undefined || raw === null || (typeof raw === "string" && !raw.trim())) return { value: null };
+  const pw = checkNewPassword(raw, { phone });
+  return pw.ok ? { value: pw.value } : { error: { error: pw.error, code: "WEAK_PASSWORD" } };
+}
+
+// Phone edit on a DR/vendor row: { phone10, changed } or { status, body }
+async function checkStaffPhoneChange(model, row, rawPhone) {
+  if (!rawPhone) return { phone10: null, changed: false };
+  const phone10 = normalizeStaffPhone(rawPhone);
+  if (!phone10) return { status: 400, body: STAFF_ERRORS.INVALID_PHONE };
+  if (phone10 === row.phone) return { phone10, changed: false };
+  const otherUser = await prisma.user.findFirst({ where: { phone: phone10, ...(row.userId ? { id: { not: row.userId } } : {}) }, select: { id: true } });
+  const otherRow = await prisma[model].findFirst({ where: { phone: phone10, disabledAt: null, id: { not: row.id } }, select: { id: true } });
+  if (otherUser || otherRow) return { status: 409, body: STAFF_ERRORS.PHONE_IN_USE };
+  return { phone10, changed: true };
+}
+
+// Mirrors name/phone/password onto the row's login and revokes its sessions when the status changes.
+// The shared admin login (9999999999 / ADMIN) is never touched from a staff row.
+async function updateLinkedStaffUser(tx, userId, userData, statusChanged) {
+  if (!userId) return;
+  const linked = await tx.user.findUnique({ where: { id: userId }, select: { phone: true, role: true } });
+  if (!linked || linked.phone === ADMIN_PHONE || linked.role === "ADMIN") return;
+  const data = { ...userData };
+  if (statusChanged) data.tokenVersion = { increment: 1 };
+  if (Object.keys(data).length > 0) await tx.user.update({ where: { id: userId }, data });
+}
+
 app.get("/api/v1/drs", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     // A DR only ever gets its own record (no co-DR phones/emails)
-    const where = req.auth.role === "DR" ? drSelfWhere(req.auth) : undefined;
-    if (req.auth.role === "DR" && !where) return res.json([]);
+    const self = req.auth.role === "DR" ? drSelfWhere(req.auth) : undefined;
+    if (req.auth.role === "DR" && !self) return res.json([]);
     const drs = await prisma.dR.findMany({
-      where,
+      where: self ? { AND: [self, { disabledAt: null }] } : { disabledAt: null },
       include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
       orderBy: { joinedOn: "desc" },
     });
@@ -2117,10 +2145,14 @@ app.get("/api/v1/drs", requireAuth, requireRole("ADMIN", "DR"), async (req, res)
 
 app.post("/api/v1/drs", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
-    const { name, phone, password, regionId } = req.body;
-    const cleanPhone = phone?.trim().replace(/\D/g, "");
-    const rawPassword = (password && password.trim()) || null;
-    const drHashedPassword = rawPassword ? await bcrypt.hash(rawPassword, 10) : null;
+    const { name, phone, password, regionId } = req.body || {};
+    if (typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ error: "DR name is required." });
+    }
+    const phone10 = normalizeStaffPhone(phone);
+    if (!phone10) return res.status(400).json(STAFF_ERRORS.INVALID_PHONE);
+    const pw = checkNewPassword(password, { phone: phone10 });
+    if (!pw.ok) return res.status(400).json({ error: pw.error, code: "WEAK_PASSWORD" });
 
     let targetRegionId = regionId;
     let validRegion = targetRegionId ? await prisma.region.findUnique({ where: { id: targetRegionId } }).catch(() => null) : null;
@@ -2136,89 +2168,73 @@ app.post("/api/v1/drs", requireAuth, requireRole("ADMIN"), async (req, res) => {
       }
     }
 
-    let user = await prisma.user.findUnique({ where: { phone: cleanPhone || phone } }).catch(() => null);
-    if (!user) {
-      user = await prisma.user.create({
-        data: { phone: cleanPhone || phone, name, password: drHashedPassword, role: "DR", tokenVersion: 1 },
-      });
-    } else {
-      const userUpdateData = { role: "DR", name };
-      if (drHashedPassword) {
-        userUpdateData.password = drHashedPassword;
-      }
-      await prisma.user.update({
-        where: { id: user.id },
-        data: userUpdateData,
-      }).catch(() => null);
-    }
+    const plan = await planStaffAccount(prisma, { model: "dR", phone10, confirmConvert: req.body.confirmConvert, label: "DR" });
+    if (plan.error) return res.status(409).json(plan.error);
 
-    const newDr = await prisma.dR.create({
-      data: {
-        userId: user.id,
-        name,
-        phone: cleanPhone || phone,
-        password: drHashedPassword,
-        regionId: targetRegionId,
-        status: "ACTIVE",
-      },
-      include: { region: true, user: true },
+    const passwordHash = await bcrypt.hash(pw.value, 10);
+    const newDr = await prisma.$transaction(async (tx) => {
+      const userId = await createOrConvertStaffUser(tx, plan.existing, { role: "DR", name: name.trim(), phone10, passwordHash });
+      const dr = await tx.dR.create({
+        data: { userId, name: name.trim(), phone: phone10, password: passwordHash, regionId: targetRegionId, status: "ACTIVE" },
+        include: { region: true, user: true },
+      });
+      await writeAudit(tx, req, plan.existing ? "STAFF_CONVERT" : "STAFF_CREATE", { targetType: "DR", targetId: dr.id, targetUserId: userId });
+      return dr;
     });
-    console.log(`✅ DR created in DB: ${newDr.name} (${newDr.phone})`);
-    res.status(201).json(newDr);
+    console.log(`✅ DR ${plan.existing ? "converted" : "created"} in DB: ${newDr.name}`);
+    res.status(201).json(stripPasswords(newDr));
   } catch (err) {
-    console.error("Add DR error:", err);
-    sendServerError(res, err);
+    sendStaffError(res, err, "Add DR");
   }
 });
 
 app.patch("/api/v1/drs/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const rawId = req.params.id;
-    const { name, phone, password, regionId, status } = req.body;
-
-    const dataToUpdate = {};
-    if (name) dataToUpdate.name = name;
-    if (phone) dataToUpdate.phone = phone.trim().replace(/\D/g, "");
-    if (password && password.trim()) {
-      dataToUpdate.password = await bcrypt.hash(password.trim(), 10);
-    }
-    if (regionId) dataToUpdate.regionId = regionId;
-    if (status) dataToUpdate.status = status;
+    const { name, phone, password, regionId, status } = req.body || {};
 
     let dr = await prisma.dR.findUnique({ where: { id: rawId } }).catch(() => null);
     if (!dr) {
       dr = await prisma.dR.findFirst({ where: { OR: [{ id: rawId }, { phone: rawId }] } }).catch(() => null);
     }
+    if (!dr) return res.status(404).json({ error: "DR not found" });
+    if (dr.disabledAt) return res.status(409).json(STAFF_ERRORS.STAFF_DISABLED);
 
-    if (dr) {
-      const updatedDr = await prisma.dR.update({
-        where: { id: dr.id },
-        data: dataToUpdate,
-        include: { region: true, user: true },
-      });
+    const ph = await checkStaffPhoneChange("dR", dr, phone);
+    if (ph.status) return res.status(ph.status).json(ph.body);
+    const pw = parseResetPassword(password, ph.phone10 || dr.phone);
+    if (pw.error) return res.status(400).json(pw.error);
+    const st = parseStaffStatus(status, DR_STATUSES);
+    if (st.error) return res.status(400).json(st.error);
+    const hashedPassword = pw.value ? await bcrypt.hash(pw.value, 10) : null;
+    const fromStatus = String(dr.status || "ACTIVE").toUpperCase();
+    const statusChanged = !!st.value && st.value !== fromStatus;
 
-      if (dr.userId) {
-        const userUpdateData = {};
-        if (name) userUpdateData.name = name;
-        if (phone) userUpdateData.phone = phone.trim().replace(/\D/g, "");
-        if (dataToUpdate.password) userUpdateData.password = dataToUpdate.password;
+    const dataToUpdate = {};
+    const userUpdateData = {};
+    if (name) dataToUpdate.name = userUpdateData.name = name;
+    if (ph.changed) dataToUpdate.phone = userUpdateData.phone = ph.phone10;
+    if (hashedPassword) dataToUpdate.password = userUpdateData.password = hashedPassword;
+    if (regionId) dataToUpdate.regionId = regionId;
+    if (st.value) dataToUpdate.status = st.value;
 
-        if (Object.keys(userUpdateData).length > 0) {
-          await prisma.user.update({
-            where: { id: dr.userId },
-            data: userUpdateData,
-          }).catch(() => null);
-        }
-      }
-      console.log(`✅ DR updated in DB: ${updatedDr.name} (${updatedDr.phone})`);
-      return res.json(updatedDr);
-    }
-    return res.status(404).json({ error: "DR not found" });
+    const updatedDr = await prisma.$transaction(async (tx) => {
+      const updated = await tx.dR.update({ where: { id: dr.id }, data: dataToUpdate, include: { region: true, user: true } });
+      await updateLinkedStaffUser(tx, dr.userId, userUpdateData, statusChanged);
+      const target = { targetType: "DR", targetId: dr.id, targetUserId: dr.userId };
+      if (hashedPassword) await writeAudit(tx, req, "STAFF_PASSWORD_RESET", target);
+      if (statusChanged) await writeAudit(tx, req, "STAFF_STATUS_CHANGE", { ...target, from: fromStatus, to: st.value });
+      return updated;
+    });
+    console.log(`✅ DR updated in DB: ${updatedDr.name}`);
+    return res.json(stripPasswords(updatedDr));
   } catch (err) {
-    sendServerError(res, err);
+    sendStaffError(res, err, "Update DR");
   }
 });
 
+// Soft delete: the row, user, orders and history stay; the login is disabled (or reverted to the customer it was
+// converted from) and its sessions revoked
 app.delete("/api/v1/drs/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const rawId = req.params.id;
@@ -2226,21 +2242,27 @@ app.delete("/api/v1/drs/:id", requireAuth, requireRole("ADMIN"), async (req, res
     if (!dr) {
       dr = await prisma.dR.findFirst({ where: { OR: [{ id: rawId }, { phone: rawId }] } }).catch(() => null);
     }
+    if (!dr) return res.status(404).json({ error: "DR not found" });
+    if (dr.disabledAt) return res.json({ success: true, message: "DR already deleted", id: dr.id });
 
-    if (dr) {
-      await prisma.dR.delete({ where: { id: dr.id } });
-      return res.json({ success: true, message: "DR deleted successfully" });
-    }
-    return res.status(404).json({ error: "DR not found" });
+    await prisma.$transaction(async (tx) => {
+      const marked = await tx.dR.updateMany({ where: { id: dr.id, disabledAt: null }, data: { status: "DISABLED", disabledAt: new Date() } });
+      if (marked.count !== 1) return; // a parallel delete already did it
+      const mode = await retireStaffUser(tx, dr.userId, { exceptDrId: dr.id });
+      await writeAudit(tx, req, "STAFF_DELETE", { targetType: "DR", targetId: dr.id, targetUserId: dr.userId, mode });
+    });
+    return res.json({ success: true, message: "DR deleted", id: dr.id });
   } catch (err) {
-    sendServerError(res, err);
+    sendStaffError(res, err, "Delete DR");
   }
 });
 
 // 3. VENDOR ENDPOINTS
 app.get("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
-    const where = req.auth.role === "DR" ? { regionId: { in: await resolveCallerDrRegionIds(req.auth) } } : undefined;
+    const where = req.auth.role === "DR"
+      ? { regionId: { in: await resolveCallerDrRegionIds(req.auth) }, disabledAt: null }
+      : { disabledAt: null };
     const vendors = await prisma.vendor.findMany({
       where,
       include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
@@ -2256,11 +2278,17 @@ app.get("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req, 
 // Vendor Add Endpoint — Admin ya DR dwara naya Vendor Supabase DB me create karne ke liye
 app.post("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
-    const { shopName, ownerName, phone, password, regionId, regionName, districtName, commissionRate, addedByDr, status } = req.body;
+    const { shopName, ownerName, phone, password, regionId, regionName, districtName, commissionRate, addedByDr, status } = req.body || {};
+    if (typeof shopName !== "string" || !shopName.trim()) {
+      return res.status(400).json({ error: "Shop name is required." });
+    }
+    const phone10 = normalizeStaffPhone(phone);
+    if (!phone10) return res.status(400).json(STAFF_ERRORS.INVALID_PHONE);
+    const pw = checkNewPassword(password, { phone: phone10 });
+    if (!pw.ok) return res.status(400).json({ error: pw.error, code: "WEAK_PASSWORD" });
+    const st = parseStaffStatus(status, VENDOR_STATUSES);
+    if (st.error) return res.status(400).json(st.error);
     const reqRegName = regionName || districtName || "Mirzapur";
-    const cleanPhone = phone ? phone.trim().replace(/\D/g, "") : "";
-    const rawPassword = password?.trim() || null;
-    const vendorHashedPassword = rawPassword ? await bcrypt.hash(rawPassword, 10) : null;
 
     // 1. Try finding region by regionId UUID if valid
     let validRegion = null;
@@ -2301,53 +2329,65 @@ app.post("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req,
       return res.status(400).json({ error: "Could not locate or create a valid Region in DB" });
     }
 
-    let user = await prisma.user.findUnique({ where: { phone: cleanPhone || phone } }).catch(() => null);
-    if (user && (user.role === "ADMIN" || user.role === "DR")) {
-      return res.status(409).json({ error: "This mobile number belongs to a staff account and cannot be registered as a vendor." });
-    }
-    if (!user) {
-      user = await prisma.user.create({
-        data: { phone: cleanPhone || phone, name: ownerName || shopName, password: vendorHashedPassword, role: "VENDOR", tokenVersion: 1 },
-      });
-    } else {
-      const userUpdateData = { role: "VENDOR", name: ownerName || shopName };
-      if (vendorHashedPassword) {
-        userUpdateData.password = vendorHashedPassword;
-      }
-      await prisma.user.update({
-        where: { id: user.id },
-        data: userUpdateData,
-      }).catch(() => null);
-    }
+    const plan = await planStaffAccount(prisma, { model: "vendor", phone10, confirmConvert: req.body.confirmConvert, label: "vendor" });
+    if (plan.error) return res.status(409).json(plan.error);
 
-    const newVendor = await prisma.vendor.create({
-      data: {
-        userId: user.id,
-        shopName,
-        ownerName,
-        phone: cleanPhone || phone,
-        password: vendorHashedPassword,
-        regionId: validRegion.id,
-        commissionRate: Number(commissionRate) || 10,
-        addedByDr: addedByDr || "Admin",
-        status: status || "APPROVED",
-      },
-      include: { region: true, user: true },
+    const cleanShopName = shopName.trim();
+    const cleanOwnerName = typeof ownerName === "string" && ownerName.trim() ? ownerName.trim() : cleanShopName;
+    const passwordHash = await bcrypt.hash(pw.value, 10);
+    const newVendor = await prisma.$transaction(async (tx) => {
+      const userId = await createOrConvertStaffUser(tx, plan.existing, { role: "VENDOR", name: cleanOwnerName, phone10, passwordHash });
+      const vendor = await tx.vendor.create({
+        data: {
+          userId,
+          shopName: cleanShopName,
+          ownerName: cleanOwnerName,
+          phone: phone10,
+          password: passwordHash,
+          regionId: validRegion.id,
+          commissionRate: Number(commissionRate) || 10,
+          addedByDr: addedByDr || "Admin",
+          status: st.value || "APPROVED",
+        },
+        include: { region: true, user: true },
+      });
+      await writeAudit(tx, req, plan.existing ? "STAFF_CONVERT" : "STAFF_CREATE", { targetType: "VENDOR", targetId: vendor.id, targetUserId: userId });
+      return vendor;
     });
 
-    console.log(`✅ Vendor created successfully in Supabase DB: ${newVendor.shopName} (${validRegion.name})`);
-    res.status(201).json(newVendor);
+    console.log(`✅ Vendor ${plan.existing ? "converted" : "created"} in DB: ${newVendor.shopName} (${validRegion.name})`);
+    res.status(201).json(stripPasswords(newVendor));
   } catch (err) {
-    console.error("Add Vendor error:", err);
-    sendServerError(res, err);
+    sendStaffError(res, err, "Add Vendor");
   }
 });
+
+// One transaction for a vendor edit: the row, its login, listing visibility on a status change, and the audit trail
+function updateVendorTx(req, vendor, { data, userData = {}, newStatus, passwordReset, include }) {
+  const statusChanged = !!newStatus && newStatus !== vendor.status;
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.vendor.update({ where: { id: vendor.id }, data, include });
+    await updateLinkedStaffUser(tx, vendor.userId, userData, statusChanged);
+
+    // Synchronize Vendor Products Active state with Vendor Status
+    if (statusChanged && newStatus === "SUSPENDED") {
+      await tx.vendorProduct.updateMany({ where: { vendorId: vendor.id }, data: { isActive: false } });
+    } else if (statusChanged && newStatus === "APPROVED") {
+      await tx.vendorProduct.updateMany({ where: { vendorId: vendor.id, approvalStatus: "APPROVED" }, data: { isActive: true } });
+    }
+
+    const target = { targetType: "VENDOR", targetId: vendor.id, targetUserId: vendor.userId };
+    if (passwordReset) await writeAudit(tx, req, "STAFF_PASSWORD_RESET", target);
+    if (statusChanged) await writeAudit(tx, req, "STAFF_STATUS_CHANGE", { ...target, from: vendor.status, to: newStatus });
+    return updated;
+  });
+}
 
 // Update Vendor Details & Password Endpoint (Supports PATCH and PUT)
 const handleUpdateVendor = async (req, res) => {
   try {
     const rawId = req.params.id;
-    const { shopName, ownerName, phone, password, commissionRate, status, regionId } = req.body;
+    const { shopName, ownerName, phone, password, commissionRate, status, regionId } = req.body || {};
 
     let vendor = await prisma.vendor.findUnique({ where: { id: rawId } }).catch(() => null);
     if (!vendor) {
@@ -2355,72 +2395,46 @@ const handleUpdateVendor = async (req, res) => {
         where: { OR: [{ id: rawId }, { phone: rawId }] },
       }).catch(() => null);
     }
+    if (!vendor) return res.status(404).json({ error: "Vendor not found" });
 
-    if (vendor && req.auth.role === "DR") {
+    if (req.auth.role === "DR") {
       const drRegionIds = await resolveCallerDrRegionIds(req.auth);
       if (!drRegionIds.includes(vendor.regionId) || (regionId && !drRegionIds.includes(regionId))) {
         return res.status(403).json({ error: "You can only manage vendors in your own district." });
       }
     }
+    if (vendor.disabledAt) return res.status(409).json(STAFF_ERRORS.STAFF_DISABLED);
 
-    if (vendor) {
-      const cleanPhone = (phone || vendor.phone || "").trim().replace(/\D/g, "");
-      let hashedPassword = null;
-      if (password && password.trim()) {
-        hashedPassword = await bcrypt.hash(password.trim(), 10);
-      }
+    const ph = await checkStaffPhoneChange("vendor", vendor, phone);
+    if (ph.status) return res.status(ph.status).json(ph.body);
+    const pw = parseResetPassword(password, ph.phone10 || vendor.phone);
+    if (pw.error) return res.status(400).json(pw.error);
+    const st = parseStaffStatus(status, VENDOR_STATUSES);
+    if (st.error) return res.status(400).json(st.error);
+    const hashedPassword = pw.value ? await bcrypt.hash(pw.value, 10) : null;
 
-      const prismaUpdateData = {};
-      if (shopName) prismaUpdateData.shopName = shopName.trim();
-      if (ownerName) prismaUpdateData.ownerName = ownerName.trim();
-      if (phone) prismaUpdateData.phone = cleanPhone || phone.trim();
-      if (hashedPassword) prismaUpdateData.password = hashedPassword;
-      if (commissionRate !== undefined) prismaUpdateData.commissionRate = Number(commissionRate);
-      if (status) prismaUpdateData.status = status;
-      if (regionId) prismaUpdateData.regionId = regionId;
+    const prismaUpdateData = {};
+    const userUpdateData = {};
+    if (shopName) prismaUpdateData.shopName = shopName.trim();
+    if (ownerName) prismaUpdateData.ownerName = userUpdateData.name = ownerName.trim();
+    if (ph.changed) prismaUpdateData.phone = userUpdateData.phone = ph.phone10;
+    if (hashedPassword) prismaUpdateData.password = userUpdateData.password = hashedPassword;
+    if (commissionRate !== undefined) prismaUpdateData.commissionRate = Number(commissionRate);
+    if (st.value) prismaUpdateData.status = st.value;
+    if (regionId) prismaUpdateData.regionId = regionId;
 
-      const updatedVendor = await prisma.vendor.update({
-        where: { id: vendor.id },
-        data: prismaUpdateData,
-        include: { region: true, user: true },
-      });
+    const updatedVendor = await updateVendorTx(req, vendor, {
+      data: prismaUpdateData,
+      userData: userUpdateData,
+      newStatus: st.value,
+      passwordReset: !!hashedPassword,
+      include: { region: true, user: true },
+    });
 
-      // Synchronize User account linked to this vendor
-      if (vendor.userId) {
-        const userUpdateData = {};
-        if (ownerName) userUpdateData.name = ownerName.trim();
-        if (phone && cleanPhone) userUpdateData.phone = cleanPhone;
-        if (hashedPassword) userUpdateData.password = hashedPassword;
-
-        if (Object.keys(userUpdateData).length > 0) {
-          await prisma.user.update({
-            where: { id: vendor.userId },
-            data: userUpdateData,
-          }).catch(() => null);
-        }
-      }
-
-      // Synchronize Vendor Products if status changed
-      if (status === "SUSPENDED") {
-        await prisma.vendorProduct.updateMany({
-          where: { vendorId: vendor.id },
-          data: { isActive: false },
-        }).catch(() => null);
-      } else if (status === "APPROVED") {
-        await prisma.vendorProduct.updateMany({
-          where: { vendorId: vendor.id, approvalStatus: "APPROVED" },
-          data: { isActive: true },
-        }).catch(() => null);
-      }
-
-      console.log(`✅ Vendor updated successfully in Supabase DB: ${updatedVendor.shopName} (ID: ${vendor.id})`);
-
-      return res.json(updatedVendor);
-    }
-    return res.status(404).json({ error: "Vendor not found" });
+    console.log(`✅ Vendor updated successfully in Supabase DB: ${updatedVendor.shopName} (ID: ${vendor.id})`);
+    return res.json(stripPasswords(updatedVendor));
   } catch (err) {
-    console.error("Update Vendor error:", err);
-    sendServerError(res, err);
+    sendStaffError(res, err, "Update Vendor");
   }
 };
 
@@ -2431,7 +2445,7 @@ app.put("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), handleUp
 app.patch("/api/v1/vendors/:id/status", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const rawId = req.params.id;
-    const { status } = req.body; // PENDING | APPROVED | SUSPENDED
+    const { status } = req.body || {}; // PENDING | APPROVED | SUSPENDED
 
     let vendor = await prisma.vendor.findUnique({ where: { id: rawId } }).catch(() => null);
     if (!vendor) {
@@ -2441,40 +2455,24 @@ app.patch("/api/v1/vendors/:id/status", requireAuth, requireRole("ADMIN", "DR"),
         },
       }).catch(() => null);
     }
+    if (!vendor) return res.status(404).json({ error: "Vendor not found" });
 
-    if (vendor && req.auth.role === "DR" && !(await drCanManageVendor(req.auth, vendor))) {
+    if (req.auth.role === "DR" && !(await drCanManageVendor(req.auth, vendor))) {
       return res.status(403).json({ error: "You can only manage vendors in your own district." });
     }
+    if (vendor.disabledAt) return res.status(409).json(STAFF_ERRORS.STAFF_DISABLED);
 
-    if (vendor) {
-      const updatedVendor = await prisma.vendor.update({
-        where: { id: vendor.id },
-        data: { status },
-      });
+    const st = parseStaffStatus(status, VENDOR_STATUSES);
+    if (st.error || !st.value) return res.status(400).json(STAFF_ERRORS.INVALID_STATUS);
 
-      // Synchronize Vendor Products Active state with Vendor Status
-      if (status === "SUSPENDED") {
-        await prisma.vendorProduct.updateMany({
-          where: { vendorId: vendor.id },
-          data: { isActive: false },
-        }).catch(() => null);
-      } else if (status === "APPROVED") {
-        await prisma.vendorProduct.updateMany({
-          where: { vendorId: vendor.id, approvalStatus: "APPROVED" },
-          data: { isActive: true },
-        }).catch(() => null);
-      }
-
-      return res.json(updatedVendor);
-    }
-
-    res.json({ message: "Vendor status updated", status });
+    const updatedVendor = await updateVendorTx(req, vendor, { data: { status: st.value }, newStatus: st.value, passwordReset: false });
+    return res.json(stripPasswords(updatedVendor));
   } catch (err) {
-    sendServerError(res, err);
+    sendStaffError(res, err, "Vendor status");
   }
 });
 
-// Vendor Delete Endpoint — Admin ya DR dwara Vendor ko Supabase DB se permanent delete karne ke liye (Foreign Key cleanup ke sath)
+// Vendor Delete Endpoint — soft delete: the row, listings and orders stay, the shop and its login stop working
 app.delete("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const rawId = req.params.id;
@@ -2491,54 +2489,33 @@ app.delete("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), async
         },
       }).catch(() => null);
     }
+    if (!vendor) return res.status(404).json({ error: "Vendor not found" });
 
-    if (req.auth.role === "DR") {
-      if (!vendor) return res.status(404).json({ error: "Vendor not found" });
-      if (!(await drCanManageVendor(req.auth, vendor))) {
-        return res.status(403).json({ error: "You can only manage vendors in your own district." });
-      }
+    if (req.auth.role === "DR" && !(await drCanManageVendor(req.auth, vendor))) {
+      return res.status(403).json({ error: "You can only manage vendors in your own district." });
+    }
+    if (vendor.disabledAt) return res.json({ success: true, message: "Vendor already deleted", id: vendor.id });
+
+    await prisma.$transaction(async (tx) => {
+      const marked = await tx.vendor.updateMany({ where: { id: vendor.id, disabledAt: null }, data: { status: "SUSPENDED", disabledAt: new Date() } });
+      if (marked.count !== 1) return; // a parallel delete already did it
+      await tx.vendorProduct.updateMany({ where: { vendorId: vendor.id }, data: { isActive: false } });
+      await tx.vendorFcmToken.deleteMany({ where: { vendorId: vendor.id } });
+      const mode = await retireStaffUser(tx, vendor.userId, { exceptVendorId: vendor.id });
+      await writeAudit(tx, req, "STAFF_DELETE", { targetType: "VENDOR", targetId: vendor.id, targetUserId: vendor.userId, mode });
+    });
+
+    // Device tokens also live in memory and the local token file; cleared only once the delete is committed
+    try {
+      const { removeToken } = require("./pushService");
+      await removeToken(vendor.id);
+    } catch (pushErr) {
+      console.error("Vendor delete: push token cleanup failed:", pushErr.message);
     }
 
-    if (vendor) {
-      const targetId = vendor.id;
-      const linkedUserId = vendor.userId;
-      const vendorPhone = vendor.phone;
-
-      // 1. Delete FCM tokens
-      await prisma.$executeRawUnsafe(`DELETE FROM vendor_fcm_tokens WHERE vendor_id = $1`, targetId).catch(() => null);
-
-      // 2. Foreign Key constraint satisfied karne ke liye child records pehle delete karein
-      await prisma.vendorProduct.deleteMany({ where: { vendorId: targetId } }).catch(() => null);
-
-      // 3. Delete Vendor record
-      await prisma.vendor.delete({ where: { id: targetId } }).catch(() => null);
-
-      // 4. Delete linked User login account(s) by BOTH ID and Phone so no orphaned user can ever remain in users table
-      await prisma.user.deleteMany({
-        where: {
-          OR: [
-            ...(linkedUserId ? [{ id: linkedUserId }] : []),
-            ...(vendorPhone ? [{ phone: vendorPhone, role: "VENDOR" }] : []),
-          ],
-        },
-      }).catch(() => null);
-    } else {
-      // If vendor record was already gone, check if an orphaned VENDOR user exists with this ID or phone
-      await prisma.user.deleteMany({
-        where: {
-          OR: [
-            { id: rawId },
-            { phone: rawId },
-          ],
-          role: "VENDOR",
-        },
-      }).catch(() => null);
-    }
-
-    res.json({ message: "Vendor and associated user login deleted successfully from Supabase DB", id: rawId });
+    res.json({ success: true, message: "Vendor deleted", id: vendor.id });
   } catch (err) {
-    console.error("Delete vendor endpoint error:", err);
-    sendServerError(res, err);
+    sendStaffError(res, err, "Delete vendor");
   }
 });
 
@@ -4951,6 +4928,8 @@ let shuttingDown = false;
 enforceBoot(prisma).then(async () => {
   if (shuttingDown) return;
   await ensureOtpSchema(prisma, { shouldStop: () => shuttingDown });
+  if (shuttingDown) return;
+  await ensureStaffSchema(prisma, { shouldStop: () => shuttingDown });
   if (shuttingDown) return;
   server = app.listen(PORT, () => {
     console.log(`🚀 BuildCity Express Gateway running live on http://localhost:${PORT}`);

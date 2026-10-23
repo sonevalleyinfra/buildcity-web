@@ -119,8 +119,9 @@ export default function DrModals({
                   Set Vendor Login Password *
                 </label>
                 <input
-                  type="text"
-                  placeholder="Password (default: vendor123)"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="Password (min 8 characters)"
                   value={vendorForm.password}
                   onChange={(e) => setVendorForm({ ...vendorForm, password: e.target.value })}
                   className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 font-mono text-xs text-slate-900 outline-none focus:border-brand-500 focus:bg-white"
@@ -445,8 +446,9 @@ export default function DrModals({
                   Vendor Login Password
                 </label>
                 <input
-                  type="text"
-                  placeholder="Set / Change Login Password"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="New password (min 8 characters)"
                   value={editingVendor.password || ""}
                   onChange={(e) => setEditingVendor({ ...editingVendor, password: e.target.value })}
                   className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 font-mono text-xs font-semibold text-slate-900 outline-none focus:border-brand-500 focus:bg-white"

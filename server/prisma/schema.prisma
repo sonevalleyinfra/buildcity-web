@@ -352,6 +352,8 @@ model Notification {
   title     String
   message   String
   isRead    Boolean  @default(false)
+  // Admin broadcast (shown to every customer). Self-provisioned at boot by ensureNotificationSchema (src/notifications.js)
+  isBroadcast Boolean @default(false) @map("is_broadcast")
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])

@@ -42,6 +42,7 @@ const {
   retireStaffUser,
   ensureStaffSchema,
 } = require("./staff");
+const { ensureNotificationSchema } = require("./notifications");
 const STAGING_OTP = "654321";
 const TEST_PHONE_RE = /^10000\d{5}$/;
 
@@ -512,7 +513,9 @@ app.get("/api/v1/public-catalog", async (req, res) => {
     const [categories, regions, listings, coupons, masterProducts, dbBanners] = await Promise.all([
       prisma.category.findMany({ orderBy: { name: "asc" } }).catch(() => []),
       prisma.region.findMany({ orderBy: { name: "asc" } }).catch(() => []),
+      // Storefront only: approved, active listings of shops that are neither suspended nor soft-deleted
       prisma.vendorProduct.findMany({
+        where: { approvalStatus: "APPROVED", isActive: true, vendor: { status: { not: "SUSPENDED" }, disabledAt: null } },
         include: {
           vendor: {
             select: {
@@ -533,12 +536,15 @@ app.get("/api/v1/public-catalog", async (req, res) => {
     ]);
 
     const finalBanners = dbBanners && dbBanners.length > 0 ? dbBanners : bannersList;
+    // The hardcoded list is only a fallback for an empty coupons table, never for "every DB coupon is inactive"
+    const dbCoupons = coupons || [];
+    const activeCoupons = dbCoupons.filter((c) => c.isActive === true);
 
     const result = {
       categories,
       regions,
       listings,
-      coupons: coupons && coupons.length > 0 ? coupons : couponsList,
+      coupons: dbCoupons.length > 0 ? activeCoupons : couponsList.filter((c) => c.isActive),
       masterProducts,
       banners: finalBanners,
     };
@@ -830,7 +836,7 @@ app.post("/api/v1/auth/vendor/login", partnerLoginLimiter, async (req, res) => {
 // Coupons Endpoints with Prisma PostgreSQL DB
 app.get("/api/v1/coupons", async (req, res) => {
   try {
-    const dbCoupons = await prisma.coupon.findMany({ orderBy: { createdAt: "desc" } }).catch(() => []);
+    const dbCoupons = await prisma.coupon.findMany({ where: { isActive: true }, orderBy: { createdAt: "desc" } }).catch(() => []);
     res.json(dbCoupons || []);
   } catch {
     res.json([]);
@@ -1811,7 +1817,8 @@ app.get("/api/v1/users/me", requireAuth, async (req, res) => {
     if (user && (!isActiveStatus(user.status) || user.role !== req.auth.role)) {
       return res.status(401).json(SESSION_EXPIRED_BODY);
     }
-    if (!user && ["CUSTOMER", "DR", "VENDOR"].includes(req.auth.role)) {
+    // No account row (every role, ADMIN included): never mint a synthetic profile or a fresh token
+    if (!user) {
       return res.status(401).json(SESSION_EXPIRED_BODY);
     }
 
@@ -1892,19 +1899,6 @@ app.get("/api/v1/users/me", requireAuth, async (req, res) => {
         });
       }
     }
-
-    if (!user && req.auth.role === "ADMIN") {
-      const adminPayload = {
-        id: req.auth.userId || "u-admin-9999999999",
-        name: "Super Admin",
-        phone: req.auth.phone || "9999999999",
-        role: "ADMIN",
-      };
-      const refreshedToken = issueToken(adminPayload);
-      return res.json({ ...adminPayload, token: refreshedToken });
-    }
-
-    if (!user) return res.status(404).json({ error: "User not found" });
 
     if (user.role === "CUSTOMER") {
       if (!user.referralCode) {
@@ -3252,16 +3246,11 @@ const withVendorNames = (orders) =>
     }),
   }));
 
-// Orders a customer can see: placed by them, or delivered to their phone number
-function customerOrdersWhere(userId, phone) {
-  const cleanPhone = String(phone || "").replace(/\D/g, "").slice(-10);
-  return {
-    OR: [
-      ...(userId ? [{ customerId: userId }] : []),
-      ...(cleanPhone ? [{ customer: { phone: { contains: cleanPhone } } }] : []),
-      ...(cleanPhone ? [{ address: { phone: { contains: cleanPhone } } }] : []),
-    ],
-  };
+// Orders a customer can see: only the ones they placed (customerId). A phone match on the customer or the
+// delivery address would leak another customer's orders to whoever owns that number.
+const NO_ORDERS_WHERE = { id: { in: [] } };
+function customerOrdersWhere(userId) {
+  return typeof userId === "string" && userId !== "" ? { customerId: userId } : NO_ORDERS_WHERE;
 }
 
 // All orders (Admin / DR). Supports ?limit=&cursor=&includeOpen=1 and ?regionId= for a district.
@@ -3299,7 +3288,7 @@ app.get("/api/v1/orders/summary", requireAuth, async (req, res) => {
       if (!own) return res.status(403).json({ error: "Vendor profile not found for this account" });
       return res.json(await computeOrdersSummary({ items: { some: { vendorId: own.id } } }, { vendorId: own.id }));
     }
-    res.json(await computeOrdersSummary(customerOrdersWhere(req.auth.userId, req.auth.phone)));
+    res.json(await computeOrdersSummary(customerOrdersWhere(req.auth.userId)));
   } catch (err) {
     sendServerError(res, err, "Orders summary");
   }
@@ -3309,7 +3298,7 @@ app.get("/api/v1/orders/summary", requireAuth, async (req, res) => {
 app.get("/api/v1/orders/me", requireAuth, async (req, res) => {
   const paginated = !!getPageParams(req);
   try {
-    const list = await listOrders(req, customerOrdersWhere(req.auth?.userId, req.auth?.phone), { include: CUSTOMER_ORDER_INCLUDE });
+    const list = await listOrders(req, customerOrdersWhere(req.auth?.userId), { include: CUSTOMER_ORDER_INCLUDE });
     sendOrderList(res, list, withVendorNames(list.orders));
   } catch (err) {
     if (paginated) return sendServerError(res, err, "My orders");
@@ -3321,9 +3310,18 @@ app.get("/api/v1/orders/me", requireAuth, async (req, res) => {
 app.get("/api/v1/orders/user/:userId", requireAuth, requireSelfOrAdmin("userId"), async (req, res) => {
   const paginated = !!getPageParams(req);
   try {
-    const targetUserId = req.auth?.role === "ADMIN" ? req.params.userId : (req.auth?.userId || req.params.userId);
-    const phone = req.auth?.phone || req.params.userId || "";
-    const list = await listOrders(req, customerOrdersWhere(targetUserId, phone), { include: CUSTOMER_ORDER_INCLUDE });
+    // Non-admins only ever see their own orders (requireSelfOrAdmin already matched the param to them)
+    let where = customerOrdersWhere(req.auth.userId);
+    if (req.auth.role === "ADMIN") {
+      // The param is the target customer's id, or their phone number (old admin screens)
+      let target = await prisma.user.findUnique({ where: { id: req.params.userId }, select: { id: true } });
+      // Only a real phone input (10 digits, or 0/91-prefixed), never the digits scraped out of an unknown uuid
+      if (!target && /^[+\d\s-]+$/.test(req.params.userId) && isValidPhoneInput(req.params.userId)) {
+        target = await prisma.user.findUnique({ where: { phone: normalizePhone(req.params.userId) }, select: { id: true } });
+      }
+      where = target ? customerOrdersWhere(target.id) : NO_ORDERS_WHERE;
+    }
+    const list = await listOrders(req, where, { include: CUSTOMER_ORDER_INCLUDE });
     sendOrderList(res, list, withVendorNames(list.orders));
   } catch (err) {
     if (paginated) return sendServerError(res, err, "User orders");
@@ -4717,22 +4715,10 @@ app.post("/api/v1/reviews", requireAuth, async (req, res) => {
 // 13. NOTIFICATIONS ENDPOINTS (Admin Broadcast & Real-Time Customer Alerts)
 app.get("/api/v1/notifications/me", requireAuth, async (req, res) => {
   try {
-    const targetUserId = req.auth?.userId;
-    const userRole = (req.auth?.role || "").toUpperCase();
-
-    let whereClause = {};
-    if (userRole === "ADMIN") {
-      whereClause = {};
-    } else if (targetUserId) {
-      whereClause = {
-        OR: [
-          { userId: targetUserId },
-          { user: { role: "ADMIN" } },
-        ],
-      };
-    } else {
-      whereClause = { user: { role: "ADMIN" } };
-    }
+    // Admins see only their own rows (= the broadcasts they sent); everyone else sees their own rows plus broadcasts
+    const whereClause = req.auth.role === "ADMIN"
+      ? { userId: req.auth.userId }
+      : { OR: [{ userId: req.auth.userId }, { isBroadcast: true }] };
 
     const rawList = await prisma.notification.findMany({
       where: whereClause,
@@ -4777,37 +4763,28 @@ app.get("/api/v1/notifications", requireAuth, requireRole("ADMIN"), async (req, 
 
 app.post("/api/v1/notifications", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
-    const { title, message, userId } = req.body;
-    if (!title || !message) {
+    const { title, message, userId } = req.body || {};
+    if (typeof title !== "string" || typeof message !== "string" || !title.trim() || !message.trim()) {
       return res.status(400).json({ error: "Title and message are required" });
     }
 
-    let targetUser = null;
-    if (userId && userId.length > 20) {
-      targetUser = await prisma.user.findUnique({ where: { id: userId } }).catch(() => null);
+    // With a userId: a private notice to that user. Without: a broadcast, stored on the sending admin's own row.
+    const isBroadcast = userId === undefined || userId === null || userId === "";
+    if (!isBroadcast && typeof userId !== "string") {
+      return res.status(400).json({ error: "userId must be a string" });
     }
+    const targetUser = await prisma.user.findUnique({ where: { id: isBroadcast ? req.auth.userId : userId }, select: { id: true } });
     if (!targetUser) {
-      targetUser = await prisma.user.findFirst({ where: { role: "ADMIN" } }).catch(() => null);
-    }
-    if (!targetUser) {
-      targetUser = await prisma.user.findFirst().catch(() => null);
-    }
-    if (!targetUser) {
-      targetUser = await prisma.user.create({
-        data: {
-          phone: "7607650875",
-          name: "BuildCity Central System",
-          role: "ADMIN",
-        },
-      }).catch(() => null);
+      return res.status(404).json({ error: "User not found" });
     }
 
     const notif = await prisma.notification.create({
       data: {
-        userId: targetUser ? targetUser.id : (await prisma.user.findFirst()).id,
+        userId: targetUser.id,
         title: title.trim(),
         message: message.trim(),
         isRead: false,
+        isBroadcast,
       },
     });
 
@@ -4882,13 +4859,8 @@ app.post("/api/v1/notifications/device-token/deregister", optionalAuth, async (r
 
 app.delete("/api/v1/notifications", requireAuth, async (req, res) => {
   try {
-    const userRole = (req.auth?.role || "").toUpperCase();
-    const targetUserId = req.auth?.userId;
-    if (userRole === "ADMIN") {
-      await prisma.notification.deleteMany({});
-    } else if (targetUserId) {
-      await prisma.notification.deleteMany({ where: { userId: targetUserId } });
-    }
+    // Every role clears only its own rows (for an admin: the broadcasts it sent)
+    await prisma.notification.deleteMany({ where: { userId: req.auth.userId } });
     res.json({ success: true });
   } catch (err) {
     sendServerError(res, err);
@@ -4934,6 +4906,8 @@ enforceBoot(prisma).then(async () => {
   await ensureOtpSchema(prisma, { shouldStop: () => shuttingDown });
   if (shuttingDown) return;
   await ensureStaffSchema(prisma, { shouldStop: () => shuttingDown });
+  if (shuttingDown) return;
+  await ensureNotificationSchema(prisma, { shouldStop: () => shuttingDown });
   if (shuttingDown) return;
   server = app.listen(PORT, () => {
     console.log(`🚀 BuildCity Express Gateway running live on http://localhost:${PORT}`);

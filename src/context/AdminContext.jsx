@@ -913,7 +913,8 @@ export function AdminProvider({ children }) {
 
   // Staff create: a non-2xx answer is thrown as { message, code } for the form (no local fallback row).
   // A customer's number is only converted after the admin/DR confirms the server's question.
-  const postStaffCreate = async (path, body) => {
+  // confirmConvert: async (message) => boolean; absent means the conversion is cancelled.
+  const postStaffCreate = async (path, body, confirmConvert) => {
     const send = (extra) => authFetch(`${API_BASE_URL}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -923,7 +924,8 @@ export function AdminProvider({ children }) {
     if (res.ok) return res;
     let data = await res.json().catch(() => ({}));
     if (data.code === "CONVERT_CONFIRM_REQUIRED") {
-      if (!window.confirm(data.error)) {
+      const ok = confirmConvert ? await confirmConvert(data.error) : false;
+      if (!ok) {
         throw Object.assign(new Error(data.error), { code: data.code, staffError: true, cancelled: true });
       }
       res = await send({ confirmConvert: true });
@@ -939,7 +941,7 @@ export function AdminProvider({ children }) {
     return Object.assign(new Error(body.error || `Request failed (${res.status})`), { code: body.code, staffError: true });
   };
 
-  const addDr = async (drData) => {
+  const addDr = async (drData, { confirmConvert } = {}) => {
     const regionObj = regions.find((r) => r.id === drData.regionId) || {};
     const targetRegionName = regionObj.name || drData.regionName || "Varanasi";
 
@@ -949,7 +951,7 @@ export function AdminProvider({ children }) {
         phone: drData.phone.trim(),
         password: (drData.password || "").trim(),
         regionId: drData.regionId,
-      });
+      }, confirmConvert);
       if (res.ok) {
         const created = await res.json();
         const formattedNewDr = {
@@ -1084,7 +1086,7 @@ export function AdminProvider({ children }) {
     }
   };
 
-  const addVendor = async (vendorData) => {
+  const addVendor = async (vendorData, { confirmConvert } = {}) => {
     const regionObj = regions.find((r) => r.id === vendorData.regionId || r.name?.toLowerCase() === (vendorData.regionName || "").toLowerCase()) || {};
     const targetRegionName = regionObj.name || vendorData.regionName || vendorData.districtName || "Mirzapur";
 
@@ -1100,7 +1102,7 @@ export function AdminProvider({ children }) {
         districtName: targetRegionName,
         commissionRate: vendorData.commissionRate,
         addedByDr: vendorData.addedByDr,
-      });
+      }, confirmConvert);
       if (res.ok) {
         const createdV = await res.json();
         const formattedNewVendor = {

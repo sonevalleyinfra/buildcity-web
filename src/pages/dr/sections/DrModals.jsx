@@ -124,7 +124,7 @@ export default function DrModals({
                   placeholder="Password (min 8 characters)"
                   value={vendorForm.password}
                   onChange={(e) => setVendorForm({ ...vendorForm, password: e.target.value })}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 font-mono text-xs text-slate-900 outline-none focus:border-brand-500 focus:bg-white"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs text-slate-900 outline-none focus:border-brand-500 focus:bg-white"
                 />
               </div>
 
@@ -385,7 +385,7 @@ export default function DrModals({
       {editingVendor && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
           <div
-            onClick={() => setEditingVendor(null)}
+            onClick={() => { if (!isSubmittingEditVendor) setEditingVendor(null); }}
             className="vd-scrim fixed inset-0 bg-slate-900/60 backdrop-blur-xs"
           />
           <div className="vd-sheet relative z-10 w-full max-w-md rounded-t-3xl sm:rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl">
@@ -396,7 +396,8 @@ export default function DrModals({
               <button
                 type="button"
                 onClick={() => setEditingVendor(null)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+                disabled={isSubmittingEditVendor}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <CloseIcon className="h-4 w-4" />
               </button>
@@ -451,14 +452,15 @@ export default function DrModals({
                   placeholder="New password (min 8 characters)"
                   value={editingVendor.password || ""}
                   onChange={(e) => setEditingVendor({ ...editingVendor, password: e.target.value })}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 font-mono text-xs font-semibold text-slate-900 outline-none focus:border-brand-500 focus:bg-white"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-900 outline-none focus:border-brand-500 focus:bg-white"
                 />
               </div>
               <div className="flex justify-end gap-2 border-t border-slate-100 pt-3.5">
                 <button
                   type="button"
                   onClick={() => setEditingVendor(null)}
-                  className="h-10 rounded-xl bg-slate-100 px-4 text-xs font-semibold text-slate-600 hover:bg-slate-200 cursor-pointer"
+                  disabled={isSubmittingEditVendor}
+                  className="h-10 rounded-xl bg-slate-100 px-4 text-xs font-semibold text-slate-600 hover:bg-slate-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>

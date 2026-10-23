@@ -114,7 +114,7 @@ export function AlertProvider({ children }) {
             {/* peeche ka blur background */}
             <div
               className="absolute inset-0 bg-slate-950/50 vendor-fade"
-              onClick={hideAlert}
+              onClick={config.isConfirm ? handleCancelAction : hideAlert}
             />
 
             {/* bich me popup modal */}
@@ -142,7 +142,7 @@ export function AlertProvider({ children }) {
 
                 <button
                   type="button"
-                  onClick={hideAlert}
+                  onClick={config.isConfirm ? handleCancelAction : hideAlert}
                   aria-label="Close"
                   className="w-9 h-9 -mr-1.5 -mt-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-colors cursor-pointer shrink-0"
                 >

@@ -54,6 +54,10 @@ const STATUS_STYLE = {
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
   const { showAlert, showConfirm } = useAlert();
+  const confirmConvert = (message) => new Promise((resolve) => {
+    showConfirm({ title: "Convert customer?", message, confirmText: "Convert", type: "warning",
+      onConfirm: () => resolve(true), onCancel: () => resolve(false) });
+  });
   const {
     drs = [],
     vendors = [],
@@ -563,10 +567,10 @@ export default function AdminDashboard() {
         commissionRate: Number(vendorForm.commissionRate) || 10,
         status: "APPROVED",
         addedByDr: "Super Admin",
-      });
+      }, { confirmConvert });
       setVendorForm({ shopName: "", ownerName: "", phone: "", password: "", regionId: "", commissionRate: 10 });
       setShowVendorForm(false);
-      showAlert({ title: "Vendor Added", message: `Vendor "${vendorForm.shopName.trim()}" successfully added to Supabase Cloud Database!`, type: "success" });
+      showAlert({ title: "Vendor Added", message: "Vendor added.", type: "success" });
     } catch (err) {
       if (err.cancelled) return;
       showAlert({ title: "Error", message: "Failed to add vendor: " + err.message, type: "error" });
@@ -615,10 +619,10 @@ export default function AdminDashboard() {
         phone: drForm.phone.trim(),
         password: drForm.password.trim(),
         regionId: drForm.regionId,
-      });
+      }, { confirmConvert });
       setDrForm({ name: "", phone: "", password: "", regionId: "" });
       setShowDrForm(false);
-      showAlert({ title: "DR Added", message: "District Representative & Password added to Database successfully!", type: "success" });
+      showAlert({ title: "DR Added", message: "DR added.", type: "success" });
     } catch (err) {
       if (err.cancelled) return;
       showAlert({ title: "Error", message: "Failed to add DR: " + err.message, type: "error" });
@@ -637,13 +641,16 @@ export default function AdminDashboard() {
       showAlert({ title: "Validation Error", message: "Password must be at least 8 characters.", type: "warning" });
       return;
     }
-    const drToSave = { ...editingDr };
-    setEditingDr(null);
+    if (isSubmittingEditDr) return;
+    setIsSubmittingEditDr(true);
     try {
-      await updateDr(drToSave.id, drToSave);
-      showAlert({ title: "DR Updated", message: "DR details updated successfully!", type: "success" });
+      await updateDr(editingDr.id, { ...editingDr });
+      setEditingDr(null);
+      showAlert({ title: "DR Updated", message: "Changes saved.", type: "success" });
     } catch (err) {
       showAlert({ title: "Error", message: "Failed to update DR: " + err.message, type: "error" });
+    } finally {
+      setIsSubmittingEditDr(false);
     }
   };
 
@@ -655,13 +662,16 @@ export default function AdminDashboard() {
       showAlert({ title: "Validation Error", message: "Password must be at least 8 characters.", type: "warning" });
       return;
     }
-    const vendorToSave = { ...editingVendor };
-    setEditingVendor(null);
+    if (isSubmittingEditVendor) return;
+    setIsSubmittingEditVendor(true);
     try {
-      await updateVendor(vendorToSave.id, vendorToSave);
-      showAlert({ title: "Vendor Updated", message: "Vendor details & password updated successfully!", type: "success" });
+      await updateVendor(editingVendor.id, { ...editingVendor });
+      setEditingVendor(null);
+      showAlert({ title: "Vendor Updated", message: "Changes saved.", type: "success" });
     } catch (err) {
       showAlert({ title: "Error", message: "Failed to update vendor: " + err.message, type: "error" });
+    } finally {
+      setIsSubmittingEditVendor(false);
     }
   };
 
@@ -1291,14 +1301,14 @@ export default function AdminDashboard() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-navy-900 mb-1">Set DR Login Password</label>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Set DR Login Password *</label>
                     <input
                       type="password"
                       autoComplete="new-password"
                       placeholder="Password (min 8 characters)"
                       value={drForm.password || ""}
                       onChange={(e) => setDrForm({ ...drForm, password: e.target.value })}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-mono font-bold"
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-bold"
                     />
                   </div>
                   <div>
@@ -1515,7 +1525,7 @@ export default function AdminDashboard() {
                       placeholder="Password (min 8 characters)"
                       value={vendorForm.password}
                       onChange={(e) => setVendorForm({ ...vendorForm, password: e.target.value })}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-mono"
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
                     />
                   </div>
                 </div>
@@ -3747,7 +3757,7 @@ export default function AdminDashboard() {
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
               <h3 className="font-bold text-navy-900 text-base">Edit District Representative (DR)</h3>
-              <button onClick={() => setEditingDr(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none">✕</button>
+              <button onClick={() => { if (!isSubmittingEditDr) setEditingDr(null); }} disabled={isSubmittingEditDr} className="text-slate-400 hover:text-navy-900 text-lg leading-none disabled:opacity-60 disabled:cursor-not-allowed">✕</button>
             </div>
             <form onSubmit={handleUpdateDrSubmit} className="space-y-4">
               <div>
@@ -3779,7 +3789,7 @@ export default function AdminDashboard() {
                   placeholder="New password (min 8 characters)"
                   value={editingDr.password || ""}
                   onChange={(e) => setEditingDr({ ...editingDr, password: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold font-mono"
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
                 />
               </div>
               <div>
@@ -3795,7 +3805,7 @@ export default function AdminDashboard() {
                 </select>
               </div>
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                <button type="button" onClick={() => setEditingDr(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="button" onClick={() => setEditingDr(null)} disabled={isSubmittingEditDr} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl disabled:opacity-60 disabled:cursor-not-allowed">Cancel</button>
                 <button
                   type="submit"
                   disabled={isSubmittingEditDr}
@@ -3822,7 +3832,7 @@ export default function AdminDashboard() {
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
               <h3 className="font-bold text-navy-900 text-base">Edit Vendor Details</h3>
-              <button onClick={() => setEditingVendor(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none">✕</button>
+              <button onClick={() => { if (!isSubmittingEditVendor) setEditingVendor(null); }} disabled={isSubmittingEditVendor} className="text-slate-400 hover:text-navy-900 text-lg leading-none disabled:opacity-60 disabled:cursor-not-allowed">✕</button>
             </div>
             <form onSubmit={handleUpdateVendorSubmit} className="space-y-4">
               <div>
@@ -3873,11 +3883,11 @@ export default function AdminDashboard() {
                   placeholder="New password (min 8 characters)"
                   value={editingVendor.password || ""}
                   onChange={(e) => setEditingVendor({ ...editingVendor, password: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold font-mono"
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
                 />
               </div>
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                <button type="button" onClick={() => setEditingVendor(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="button" onClick={() => setEditingVendor(null)} disabled={isSubmittingEditVendor} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl disabled:opacity-60 disabled:cursor-not-allowed">Cancel</button>
                 <button
                   type="submit"
                   disabled={isSubmittingEditVendor}

@@ -16,7 +16,8 @@ const ok = (cond, name, extra) => {
 
 const LOCAL_URL = process.env.DATABASE_URL || "";
 const root = path.join(__dirname, "..");
-const PREVIOUS_SCHEMA_REF = "146a7d5";
+// Committed copy of server/prisma/schema.prisma at 146a7d5 (CI checks out shallow, so no `git show`)
+const PREVIOUS_SCHEMA = path.join(__dirname, "fixtures", "schema-pre-pr4.prisma");
 const WARN = (name, code) => `[staff] unique index ${name} not created (${code}): duplicate live phones; run node scripts/staff-phone-report.js`;
 
 // ---- Unit
@@ -212,8 +213,9 @@ async function processTests() {
   let db = null;
   try {
     fs.mkdirSync(tmpDir, { recursive: true });
-    const oldSchema = path.join(tmpDir, `schema-${PREVIOUS_SCHEMA_REF}.prisma`);
-    fs.writeFileSync(oldSchema, execFileSync("git", ["show", `${PREVIOUS_SCHEMA_REF}:server/prisma/schema.prisma`], { cwd: root }));
+    // Copied next to a scratch path so prisma resolves nothing else from the fixtures dir
+    const oldSchema = path.join(tmpDir, "schema-pre-pr4.prisma");
+    fs.copyFileSync(PREVIOUS_SCHEMA, oldSchema);
     ok(!fs.readFileSync(oldSchema, "utf8").includes("disabled_at"), "previous schema has no disabled_at column");
 
     await admin.$executeRawUnsafe(`CREATE DATABASE "${name}"`);

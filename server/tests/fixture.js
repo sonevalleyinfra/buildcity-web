@@ -7,6 +7,7 @@ async function main() {
   const tables = ["order_items", "orders", "addresses", "vendor_products", "product_images", "product_masters", "categories", "vendors", "district_representatives", "notifications", "otp_verifications", "audit_logs", "reviews", "coupons", "banners", "users", "regions"];
   await prisma.$executeRawUnsafe(`TRUNCATE ${tables.join(",")} CASCADE`);
   await prisma.$executeRawUnsafe(`DO $$ BEGIN IF to_regclass('vendor_fcm_tokens') IS NOT NULL THEN TRUNCATE vendor_fcm_tokens; END IF; END $$`);
+  await prisma.$executeRawUnsafe(`DO $$ BEGIN IF to_regclass('customer_fcm_tokens') IS NOT NULL THEN TRUNCATE customer_fcm_tokens; END IF; END $$`);
 
   const reg = await prisma.region.create({ data: { name: "Varanasi", baseDeliveryCharge: 49 } });
   const cat = await prisma.category.create({ data: { name: "Cement" } });

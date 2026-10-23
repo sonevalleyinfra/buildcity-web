@@ -276,6 +276,19 @@ async function drCanManageVendor(auth, vendorOrId) {
   return drRegionIds.includes(vendor.regionId);
 }
 
+// FCM device tokens: a non-empty string of at most 4096 chars (trimmed), else null
+function cleanDeviceToken(v) {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t.length >= 1 && t.length <= 4096 ? t : null;
+}
+
+// Exact vendor lookup for a DR/ADMIN-supplied id (vendor id or the vendor's user id); never fuzzy
+function findVendorByExactId(id) {
+  if (typeof id !== "string" || !id) return null;
+  return prisma.vendor.findFirst({ where: { OR: [{ id }, { userId: id }] } });
+}
+
 // Orders a DR may access: delivered into, or fulfilled by a shop in, one of the given regions
 function ordersInRegionsWhere(regionIds) {
   return {
@@ -863,11 +876,12 @@ app.post("/api/v1/auth/vendor/login", partnerLoginLimiter, async (req, res) => {
     // FCM device token registration during login. saveToken() puts the token in its in-memory
     // map synchronously (so pushes work immediately), then persists it to the DB with several
     // round trips; those run in the background so they don't hold up the login response.
-    if (fcmToken) {
+    const loginDeviceToken = cleanDeviceToken(fcmToken);
+    if (loginDeviceToken) {
       const vId = vendor?.id || vendor?.userId || resUser.id;
       if (vId) {
         const { saveToken } = require("./pushService");
-        saveToken(vId, fcmToken, cleanPhone)
+        saveToken(vId, loginDeviceToken, cleanPhone)
           .then(() => console.log(`✅ FCM device token saved during login for vendor ${vId}`))
           .catch((fcmErr) => console.warn("Login FCM save note:", fcmErr.message));
       }
@@ -4628,20 +4642,28 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
 // Vendor FCM Device Token Registration (for background push notifications when app is killed)
 app.post("/api/v1/vendor/fcm-token", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
-    const { token } = req.body;
-    let { vendorId, phone } = req.body;
+    const token = cleanDeviceToken(req.body?.token);
+    let vendor;
     if (req.auth.role === "VENDOR") {
       // A device can only be bound to the logged-in vendor's own shop
-      const own = await resolveOwnVendor(req);
-      if (!own) return res.status(403).json({ error: "Vendor profile not found for this account" });
-      vendorId = own.id;
-      phone = own.phone;
+      vendor = await resolveOwnVendor(req);
+      if (!vendor) return res.status(403).json({ error: "Vendor profile not found for this account" });
+    } else {
+      // DR / ADMIN: an existing vendor only, and for a DR one in their own district
+      if (typeof req.body?.vendorId !== "string" || !req.body.vendorId) {
+        return res.status(400).json({ error: "vendorId and token are required" });
+      }
+      vendor = await findVendorByExactId(req.body.vendorId);
+      if (!vendor) return res.status(404).json({ error: "Vendor not found" });
+      if (req.auth.role === "DR" && !(await drCanManageVendor(req.auth, vendor))) {
+        return res.status(403).json({ error: "You do not have permission for this action" });
+      }
     }
-    if (!vendorId || !token || typeof token !== "string" || token.length > 4096) {
+    if (!token) {
       return res.status(400).json({ error: "vendorId and token are required" });
     }
     const { saveToken } = require("./pushService");
-    await saveToken(vendorId, token, phone);
+    await saveToken(vendor.id, token, vendor.phone);
     res.json({ success: true, message: "FCM token registered successfully" });
   } catch (err) {
     sendServerError(res, err, "FCM token save");
@@ -4649,15 +4671,27 @@ app.post("/api/v1/vendor/fcm-token", requireAuth, requireRole("VENDOR", "DR", "A
 });
 
 // Vendor FCM Device Token Deregistration (Called when vendor logs out).
-// Anyone holding the device token may unlink that device; unlinking by vendorId needs that vendor's session.
+// Anyone holding the device token may unlink that device; unlinking by vendorId needs that vendor's session,
+// a DR of that vendor's district, or an admin.
 async function handleRemoveFcmToken(req, res) {
   try {
-    const { token } = req.body || {};
+    const rawToken = req.body?.token;
+    const token = cleanDeviceToken(rawToken);
+    if (rawToken !== undefined && rawToken !== null && rawToken !== "" && !token) {
+      return res.status(400).json({ error: "token is required" });
+    }
     let vendorId = null;
     if (req.auth?.role === "VENDOR") {
       vendorId = (await resolveOwnVendor(req))?.id || null;
-    } else if (req.auth?.role === "ADMIN") {
-      vendorId = req.body?.vendorId || null;
+    } else if (req.auth?.role === "ADMIN" || req.auth?.role === "DR") {
+      // Logout sends the caller's own user id, which matches no vendor: then only the token is unlinked
+      const vendor = await findVendorByExactId(req.body?.vendorId);
+      if (vendor) {
+        if (req.auth.role === "DR" && !(await drCanManageVendor(req.auth, vendor))) {
+          return res.status(403).json({ error: "You do not have permission for this action" });
+        }
+        vendorId = vendor.id;
+      }
     }
     if (!token && !vendorId) {
       return res.status(400).json({ error: "token is required" });
@@ -4868,34 +4902,36 @@ app.patch("/api/v1/notifications/read-all", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/v1/notifications/device-token", optionalAuth, async (req, res) => {
+// A device is bound only to the customer in the verified session; body userId / phone are ignored
+app.post("/api/v1/notifications/device-token", requireAuth, async (req, res) => {
   try {
-    const { token, phone, userId } = req.body;
-    const targetUserId = req.auth?.userId || userId;
-    const targetPhone = req.auth?.phone || phone;
-    if (token && (targetUserId || targetPhone)) {
-      const { saveCustomerToken } = require("./pushService");
-      await saveCustomerToken(targetUserId || targetPhone, token, targetPhone);
-      console.log(`✅ Customer device FCM token saved: ${targetUserId || targetPhone}`);
-    }
+    const token = cleanDeviceToken(req.body?.token);
+    if (!token) return res.status(400).json({ error: "token is required" });
+    const { saveCustomerToken } = require("./pushService");
+    await saveCustomerToken(req.auth.userId, token, req.auth.phone || null);
+    console.log(`✅ Customer device FCM token saved: ${req.auth.userId}`);
     res.json({ success: true });
   } catch (err) {
-    console.warn("Save customer device token error:", err.message);
-    res.json({ success: false });
+    sendServerError(res, err, "Save customer device token");
   }
 });
 
+// Signed in: unlinks the caller's own rows (and the given token). Anonymous: only the exact device token.
 app.post("/api/v1/notifications/device-token/deregister", optionalAuth, async (req, res) => {
   try {
-    const { token, userId } = req.body;
-    const targetUserId = req.auth?.userId || userId;
+    const rawToken = req.body?.token;
+    const token = cleanDeviceToken(rawToken);
+    if (rawToken !== undefined && rawToken !== null && rawToken !== "" && !token) {
+      return res.status(400).json({ error: "token is required" });
+    }
+    const userId = req.auth?.userId || null;
+    if (!userId && !token) return res.status(400).json({ error: "token is required" });
     const { removeCustomerToken } = require("./pushService");
-    await removeCustomerToken(targetUserId, token);
-    console.log(`🔒 Customer device FCM token unlinked on logout for: ${targetUserId || token}`);
+    await removeCustomerToken(userId, token);
+    console.log(`🔒 Customer device FCM token unlinked on logout for: ${userId || "device token"}`);
     res.json({ success: true });
   } catch (err) {
-    console.warn("Deregister customer device token error:", err.message);
-    res.json({ success: false });
+    sendServerError(res, err, "Deregister customer device token");
   }
 });
 

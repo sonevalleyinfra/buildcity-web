@@ -230,6 +230,117 @@ async function otpHardening() {
   }
 }
 
+// --- Push binding (Security PR2)
+const custRows = (where, arg) => prisma.$queryRawUnsafe(`SELECT user_id, token FROM customer_fcm_tokens WHERE ${where}`, arg).catch(() => []);
+const vendRows = (where, arg) => prisma.$queryRawUnsafe(`SELECT vendor_id, token FROM vendor_fcm_tokens WHERE ${where}`, arg).catch(() => []);
+
+async function pushBinding(ids, { admin, vA, c1, c2 }) {
+  const run = Date.now();
+  const tok = (name) => `pr2-${name}-${run}`;
+  const jwt = require("jsonwebtoken");
+
+  // Vendor C in another district, and a DR for the fixture's Varanasi region
+  const mzp = await prisma.region.create({ data: { name: `Mirzapur ${run}` } });
+  const uc = await prisma.user.create({ data: { phone: "9000000003", name: "Vendor C", role: "VENDOR" } });
+  const vc = await prisma.vendor.create({ data: { userId: uc.id, shopName: "Shop C", ownerName: "C", phone: "9000000003", regionId: mzp.id, status: "APPROVED" } });
+  const drUser = await prisma.user.create({ data: { phone: "9100000001", name: "DR One", role: "DR" } });
+  await prisma.dR.create({ data: { userId: drUser.id, name: "DR One", phone: "9100000001", regionId: ids.reg } });
+  const dr = jwt.sign({ sub: drUser.id, phone: "9100000001", role: "DR", tv: 1 }, process.env.JWT_SECRET.trim(), { expiresIn: "1h" });
+
+  const C2_DEVICE = tok("c2");
+  await scenario("a) anonymous customer device-token registration", async () => {
+    const seed = await req("POST", "/notifications/device-token", { token: c2, body: { token: C2_DEVICE } });
+    ok(seed.status === 200, "c2 registers own device", seed.status);
+    const T = tok("anon");
+    const r = await req("POST", "/notifications/device-token", { body: { userId: ids.c2, phone: "8000000002", token: T } });
+    ok(r.status === 401, "anonymous device-token registration rejected", r.status);
+    ok((await custRows("token = $1", T)).length === 0, "anonymous device-token stores nothing");
+    const own = await custRows("user_id = $1", ids.c2);
+    ok(own.length === 1 && own[0].token === C2_DEVICE, "c2's device row unchanged after anonymous attempt", own);
+  });
+
+  await scenario("b) customer cannot bind a device to another customer", async () => {
+    const T2 = tok("hijack");
+    const r = await req("POST", "/notifications/device-token", { token: c1, body: { userId: ids.c2, phone: "8000000002", token: T2 } });
+    const rows = await custRows("token = $1", T2);
+    ok(r.status === 200 && rows.length === 1 && rows[0].user_id === ids.c1, "device-token binds to the JWT customer only", { s: r.status, rows });
+    const own = await custRows("user_id = $1", ids.c2);
+    ok(own.length === 1 && own[0].token === C2_DEVICE, "c2's device row survives c1's body userId", own);
+  });
+
+  await scenario("c) customer device-token deregister", async () => {
+    const byId = await req("POST", "/notifications/device-token/deregister", { body: { userId: ids.c2 } });
+    let own = await custRows("user_id = $1", ids.c2);
+    ok((byId.status === 400 || byId.status === 401) && own.length === 1, "anonymous deregister by userId rejected", { s: byId.status, own });
+    await req("POST", "/notifications/device-token/deregister", { body: { userId: ids.c2, token: tok("other") } });
+    own = await custRows("user_id = $1", ids.c2);
+    ok(own.length === 1 && own[0].token === C2_DEVICE, "anonymous deregister with another token leaves c2's row", own);
+    const exact = await req("POST", "/notifications/device-token/deregister", { body: { token: C2_DEVICE } });
+    own = await custRows("user_id = $1", ids.c2);
+    ok(exact.status === 200 && own.length === 0, "anonymous deregister with the exact token unlinks the device", { s: exact.status, own });
+    await req("POST", "/notifications/device-token", { token: c2, body: { token: C2_DEVICE } });
+    const self = await req("POST", "/notifications/device-token/deregister", { token: c1, body: {} });
+    const c1Rows = await custRows("user_id = $1", ids.c1);
+    own = await custRows("user_id = $1", ids.c2);
+    ok(self.status === 200 && c1Rows.length === 0 && own.length === 1, "authenticated deregister removes only own rows", { s: self.status, c1Rows, own });
+    const long = await req("POST", "/notifications/device-token", { token: c1, body: { token: "x".repeat(4097) } });
+    ok(long.status === 400, "over-long device token rejected", long.status);
+  });
+
+  await scenario("d) vendor fcm-token binding by role", async () => {
+    const TC = tok("dr-c");
+    const drC = await req("POST", "/vendor/fcm-token", { token: dr, body: { vendorId: vc.id, token: TC } });
+    ok(drC.status === 403 && (await vendRows("token = $1", TC)).length === 0, "DR cannot bind a device to a vendor outside own district", drC.status);
+    const TA = tok("dr-a");
+    const drA = await req("POST", "/vendor/fcm-token", { token: dr, body: { vendorId: ids.va, token: TA } });
+    const aRows = await vendRows("token = $1", TA);
+    ok(drA.status === 200 && aRows.some((r) => r.vendor_id === ids.va), "DR binds a device to a vendor in own district", { s: drA.status, aRows });
+    const TX = tok("dr-x");
+    const drX = await req("POST", "/vendor/fcm-token", { token: dr, body: { vendorId: "no-such-vendor", token: TX } });
+    ok(drX.status === 404 && (await vendRows("vendor_id = $1", "no-such-vendor")).length === 0, "DR cannot bind a device to a non-existent vendor", drX.status);
+    const TV = tok("va-b");
+    await req("POST", "/vendor/fcm-token", { token: vA, body: { vendorId: ids.vb, token: TV } });
+    const vRows = await vendRows("token = $1", TV);
+    ok(vRows.length > 0 && vRows.every((r) => r.vendor_id === ids.va || r.vendor_id === ids.ua), "vendor A's device binds to vendor A only", vRows);
+    const TAD = tok("admin-c");
+    const adC = await req("POST", "/vendor/fcm-token", { token: admin, body: { vendorId: vc.id, token: TAD } });
+    ok(adC.status === 200 && (await vendRows("token = $1", TAD)).some((r) => r.vendor_id === vc.id), "admin binds a device to any vendor", adC.status);
+
+    const drDeC = await req("POST", "/vendor/fcm-token/deregister", { token: dr, body: { vendorId: vc.id } });
+    ok(drDeC.status === 403 && (await vendRows("vendor_id = $1", vc.id)).length === 1, "DR cannot unlink a vendor outside own district", drDeC.status);
+    const drDeA = await req("POST", "/vendor/fcm-token/deregister", { token: dr, body: { vendorId: ids.va } });
+    ok(drDeA.status === 200 && (await vendRows("vendor_id = $1", ids.va)).length === 0, "DR unlinks a vendor in own district", drDeA.status);
+    const anon = await req("POST", "/vendor/fcm-token/deregister", { body: { vendorId: vc.id } });
+    ok(anon.status === 400 && (await vendRows("vendor_id = $1", vc.id)).length === 1, "anonymous unlink by vendorId rejected", anon.status);
+  });
+
+  await scenario("e) push token lookups are exact", async () => {
+    process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "pr2-push-"));
+    const push = require("../src/pushService");
+    push.setPrismaClient(prisma);
+    const TB = tok("vb");
+    await push.getTokenForVendor("warm-up-table"); // creates the token tables if missing
+    await prisma.$executeRawUnsafe("DELETE FROM vendor_fcm_tokens WHERE vendor_id = ANY($1::text[])", [ids.vb, ids.ub]);
+    await prisma.$executeRawUnsafe("INSERT INTO vendor_fcm_tokens (vendor_id, token, phone) VALUES ($1, $2, $3)", ids.vb, TB, "9000000002");
+    ok(await push.getTokenForVendor("no-such-vendor", "0000002") === null, "vendor lookup ignores a 7-digit phone substring");
+    ok(await push.getTokenForVendor("no-such-vendor", "900000000") === null, "vendor lookup ignores a 9-digit phone prefix");
+    ok(await push.getTokenForVendor(ids.vb) === TB, "vendor lookup by id");
+    ok(await push.getTokenForVendor("no-such-vendor", "9000000002") === TB, "vendor lookup by exact phone");
+    ok(await push.getTokenForVendor("no-such-vendor", "+91 90000 00002") === TB, "vendor lookup by +91 formatted phone");
+
+    const TCU = tok("cust");
+    await prisma.$executeRawUnsafe("DELETE FROM customer_fcm_tokens WHERE phone = $1", "8000000002");
+    await prisma.$executeRawUnsafe("INSERT INTO customer_fcm_tokens (user_id, token, phone) VALUES ($1, $2, $3)", `pr2-user-${run}`, TCU, "8000000002");
+    ok(await push.getTokenForCustomer(null, "0000002") === null, "customer lookup ignores a phone substring");
+    ok(await push.getTokenForCustomer(null, "8000000002") === TCU, "customer lookup by exact phone");
+
+    const TS = tok("save");
+    await push.saveToken("no-such-vendor", TS, "0000002");
+    const sRows = await vendRows("token = $1", TS);
+    ok(!sRows.some((r) => r.vendor_id === ids.vb || r.vendor_id === ids.ub), "saveToken does not resolve a vendor by phone substring", sRows);
+  });
+}
+
 (async () => {
   const ids = JSON.parse(execFileSync("node", [path.join(__dirname, "fixture.js")]).toString().trim().split("\n").pop());
 
@@ -331,6 +442,8 @@ async function otpHardening() {
   ok(pc.headers.get("x-cache") === "HIT", "public catalog stays cached across cart writes", pc.headers.get("x-cache"));
   const cart = await req("GET", "/cart", { token: c1 });
   ok(cart.body.cartItems?.length === 1, "cart persisted", cart.body);
+
+  await pushBinding(ids, { admin, vA, c1, c2 });
 
   // --- Brute force protection on partner password login
   let last;

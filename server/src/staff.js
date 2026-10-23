@@ -236,6 +236,13 @@ async function ensureStaffSchema(prisma, opts = {}) {
       else if (rows[0].indisvalid !== true) code = "invalid";
     } catch (e) {
       code = pgCode(e);
+      // A racing boot may have built it first (the loser gets 23505 on pg_class): a valid index is success
+      try {
+        const rows = await prisma.$queryRawUnsafe("SELECT indisvalid FROM pg_index WHERE indexrelid = to_regclass($1)", idx.name);
+        if (Array.isArray(rows) && rows.length === 1 && rows[0].indisvalid === true) code = null;
+      } catch {
+        // Re-check failed too: keep the original error
+      }
     }
     if (code) {
       log.error(`[staff] unique index ${idx.name} not created (${code}): duplicate live phones; run node scripts/staff-phone-report.js`);

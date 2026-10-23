@@ -22,9 +22,11 @@ const WARN = (name, code) => `[staff] unique index ${name} not created (${code})
 
 // ---- Unit
 
-function fakePrisma({ hasColumns = false, alter = [], index = {}, invalid = [] } = {}) {
+function fakePrisma({ hasColumns = false, alter = [], index = {}, invalid = [], raced = [], recheckFails = false } = {}) {
   // alter: per-attempt outcomes (an Error rejects); past the end the last entry repeats.
-  // index: { [indexName]: Error } makes that CREATE INDEX reject. invalid: index names whose pg_index row is not valid.
+  // index: { [indexName]: Error } makes that CREATE INDEX reject (the index is then absent unless listed in raced,
+  // i.e. a racing boot built it). invalid: index names whose pg_index row is not valid. recheckFails: the pg_index
+  // query after a failed CREATE rejects.
   const pick = (list, i) => (list.length ? list[Math.min(i, list.length - 1)] : undefined);
   return {
     sql: [],
@@ -32,7 +34,11 @@ function fakePrisma({ hasColumns = false, alter = [], index = {}, invalid = [] }
     async $queryRawUnsafe(sql, ...args) {
       this.sql.push(sql);
       if (sql.includes("pg_attribute")) return hasColumns ? [{ tbl: "vendors" }, { tbl: "district_representatives" }] : [];
-      if (sql.includes("pg_index")) return [{ indisvalid: !invalid.includes(args[0]) }];
+      if (sql.includes("pg_index")) {
+        if (index[args[0]] && recheckFails) throw new Error("connection reset");
+        if (index[args[0]] && !raced.includes(args[0])) return [];
+        return [{ indisvalid: !invalid.includes(args[0]) }];
+      }
       return [];
     },
     $executeRawUnsafe(sql) { return sql; },
@@ -102,6 +108,22 @@ async function unitTests() {
   ok(!thrown && r.indexes.vendors === false && r.indexes.drs === true, "unit: vendors index 23505 -> resolves with vendors false, drs true", { r, thrown: thrown && thrown.message });
   ok(h.errors.length === 1 && h.errors[0] === WARN("vendors_phone_live_key", "23505"), "unit: exactly one warning line for the failed index", h.errors);
   ok(noWrites(p), "unit: never issues DELETE/UPDATE/DROP", p.sql);
+
+  p = fakePrisma({ hasColumns: true, index: { vendors_phone_live_key: dupErr() }, raced: ["vendors_phone_live_key"] });
+  h = harness();
+  r = await ensureStaffSchema(p, h.opts);
+  ok(r.indexes.vendors === true && r.indexes.drs === true && h.errors.length === 0, "unit: CREATE fails but a racing boot left a valid index -> true, no warning", { r, e: h.errors });
+
+  p = fakePrisma({ hasColumns: true, index: { vendors_phone_live_key: dupErr() }, raced: ["vendors_phone_live_key"], invalid: ["vendors_phone_live_key"] });
+  h = harness();
+  r = await ensureStaffSchema(p, h.opts);
+  ok(r.indexes.vendors === false && h.errors.length === 1 && h.errors[0] === WARN("vendors_phone_live_key", "23505"), "unit: CREATE fails and the index is invalid -> false + warning", { r, e: h.errors });
+
+  p = fakePrisma({ hasColumns: true, index: { vendors_phone_live_key: dupErr() }, recheckFails: true });
+  h = harness();
+  thrown = null;
+  try { r = await ensureStaffSchema(p, h.opts); } catch (e) { thrown = e; }
+  ok(!thrown && r.indexes.vendors === false && h.errors.length === 1 && h.errors[0] === WARN("vendors_phone_live_key", "23505"), "unit: re-check query fails -> original error path", { r, e: h.errors, thrown: thrown && thrown.message });
 
   p = fakePrisma({ hasColumns: true, invalid: ["district_representatives_phone_live_key"] });
   h = harness();
@@ -255,6 +277,22 @@ async function processTests() {
       ok(!s.out.stderr.includes("[staff]") && !s.out.stdout.includes("[staff] added"), "boot 2: no staff schema warnings or ALTERs", { out: s.out.stdout, err: s.out.stderr });
     } finally {
       await stopServer(s);
+    }
+
+    // Two boots racing on the index build (test setup drops them first): neither logs a duplicate-phone error
+    await db.$executeRawUnsafe("DROP INDEX vendors_phone_live_key");
+    await db.$executeRawUnsafe("DROP INDEX district_representatives_phone_live_key");
+    const { ensureStaffSchema } = require("../src/staff");
+    const racers = [new PrismaClient({ datasources: { db: { url } } }), new PrismaClient({ datasources: { db: { url } } })];
+    try {
+      await Promise.all(racers.map((c) => c.$connect()));
+      const hs = racers.map(() => harness());
+      const results = await Promise.all(racers.map((c, i) => ensureStaffSchema(c, hs[i].opts)));
+      ok(results.every((x) => x.indexes.vendors === true && x.indexes.drs === true), "parallel ensureStaffSchema: both report both indexes", results);
+      ok(hs.every((x) => !x.errors.some((m) => m.includes("duplicate live phones"))), "parallel ensureStaffSchema: no duplicate-phone error", hs.map((x) => x.errors));
+      ok(JSON.stringify(await indexes(db)) === JSON.stringify(["district_representatives_phone_live_key", "vendors_phone_live_key"]), "parallel ensureStaffSchema: both indexes present", await indexes(db));
+    } finally {
+      await Promise.all(racers.map((c) => c.$disconnect()));
     }
   } finally {
     if (db) await db.$disconnect();

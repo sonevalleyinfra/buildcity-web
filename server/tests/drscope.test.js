@@ -10,7 +10,19 @@ const scenario = async (name, fn) => {
 const sorted = (a) => [...a].sort();
 const same = (a, b) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
 
-function fakePrisma({ failDrsTimes = 0, failRegionsTimes = 0 } = {}) {
+const DEFAULT_DRS = [{ id: "dr1", regionId: "r-var", status: "ACTIVE", disabledAt: null, region: { id: "r-var", name: "Varanasi" } }];
+
+// Applies only the resolver's live/ACTIVE filters (the identity part is the caller's own row here)
+function liveActive(where, row) {
+  const parts = where?.AND || [];
+  const wantsLive = parts.some((p) => p && "disabledAt" in p && p.disabledAt === null);
+  const st = parts.find((p) => p && p.status)?.status;
+  if (wantsLive && row.disabledAt) return false;
+  if (st && String(row.status).toLowerCase() !== String(st.equals).toLowerCase()) return false;
+  return true;
+}
+
+function fakePrisma({ failDrsTimes = 0, failRegionsTimes = 0, drs = DEFAULT_DRS } = {}) {
   const calls = { drs: 0, regions: 0, lastDrWhere: null };
   const prisma = {
     dR: {
@@ -18,7 +30,7 @@ function fakePrisma({ failDrsTimes = 0, failRegionsTimes = 0 } = {}) {
         calls.drs++;
         calls.lastDrWhere = args?.where;
         if (calls.drs <= failDrsTimes) throw new Error("connection reset");
-        return [{ id: "dr1", regionId: "r-var", region: { id: "r-var", name: "Varanasi" } }];
+        return drs.filter((row) => liveActive(args?.where, row));
       },
     },
     region: {
@@ -112,6 +124,21 @@ const EXPECTED = ["r-var", "r-ban"];
     ok(results.every((x) => x.status === "rejected") && calls.drs === 1, "concurrent callers both reject from one query", { results: results.map((x) => x.status), calls });
     const next = await r.resolve(AUTH);
     ok(same(next, EXPECTED) && calls.drs === 2, "next call after shared failure re-queries", calls);
+  });
+
+  await scenario("resolver: deleted or non-ACTIVE DR rows give no scope", async () => {
+    for (const [label, row] of [
+      ["deleted", { ...DEFAULT_DRS[0], disabledAt: new Date() }],
+      ["SUSPENDED", { ...DEFAULT_DRS[0], status: "SUSPENDED" }],
+      ["INACTIVE", { ...DEFAULT_DRS[0], status: "INACTIVE" }],
+    ]) {
+      const { prisma, calls } = fakePrisma({ drs: [row] });
+      const r = createDrRegionResolver(prisma);
+      const ids = await r.resolve(AUTH);
+      ok(Array.isArray(ids) && ids.length === 0, `${label} DR row resolves to []`, { ids, where: calls.lastDrWhere });
+    }
+    const { prisma } = fakePrisma({ drs: [{ ...DEFAULT_DRS[0], status: "active" }] });
+    ok(same(await createDrRegionResolver(prisma).resolve(AUTH), EXPECTED), "status match is case-insensitive (legacy 'active')");
   });
 
   await scenario("resolver: no identity -> [] without querying", async () => {

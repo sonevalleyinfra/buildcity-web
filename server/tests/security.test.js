@@ -666,6 +666,58 @@ async function staffLifecycle(ids, { admin, mzp }) {
     }
   });
 
+  await scenario("d5) old tokens of deleted or suspended DRs/vendors lose their data scope at once", async () => {
+    // Fresh DR + vendor in the Mirzapur test district with one order on that vendor; tokens kept from before the change
+    const makeDr = async (phone) => {
+      const m = await req("POST", "/drs", { token: admin, body: { name: `DR Scope ${phone}`, phone, password: STRONG, regionId: mzp.id } });
+      return { id: m.body.id, tok: (await req("POST", "/auth/vendor/login", { body: { phone, password: STRONG } })).body.token };
+    };
+    const makeVendor = async (phone) => {
+      const m = await req("POST", "/vendors", { token: admin, body: { shopName: `Scope ${phone}`, ownerName: "Scope", phone, password: STRONG, regionName: mzp.name, regionId: mzp.id } });
+      return { id: m.body.id, tok: (await req("POST", "/auth/vendor/login", { body: { phone, password: STRONG } })).body.token };
+    };
+    const orderFor = (vendorId) => prisma.order.create({ data: { customerId: ids.c1, totalAmount: 300, items: { create: [{ vendorId, productName: "Cement Bag", priceAtPurchase: 300, quantity: 1, totalPrice: 300 }] } } });
+    const listIds = (r) => (Array.isArray(r.body) ? r.body : r.body?.orders || []).map((o) => o.id);
+
+    const d = await makeDr("9300000010");
+    const v = await makeVendor("9200000060");
+    const order = await orderFor(v.id);
+    ok(!!d.tok && !!v.tok, "d5) setup: fresh DR and vendor log in", { d, v });
+    const drSees = await req("GET", "/orders", { token: d.tok });
+    const vSees = await req("GET", `/orders/vendor/${v.id}`, { token: v.tok });
+    ok(drSees.status === 200 && listIds(drSees).includes(order.id), "d5) sanity: DR token sees the district order", drSees.status);
+    ok(vSees.status === 200 && listIds(vSees).includes(order.id), "d5) sanity: vendor token sees its order", vSees.status);
+
+    const delDr = await req("DELETE", `/drs/${d.id}`, { token: admin });
+    const delV = await req("DELETE", `/vendors/${v.id}`, { token: admin });
+    ok(delDr.status === 200 && delV.status === 200, "d5) admin deletes the DR and the vendor", [delDr.status, delV.status]);
+
+    const drList = await req("GET", "/orders", { token: d.tok });
+    ok(drList.status === 200 && listIds(drList).length === 0, "d5) deleted DR's old token: GET /orders is empty", { s: drList.status, n: listIds(drList).length });
+    const drPatch = await req("PATCH", `/orders/${order.id}/status`, { token: d.tok, body: { status: "CONFIRMED" } });
+    ok(drPatch.status === 403, "d5) deleted DR's old token: PATCH /orders/:id/status -> 403", drPatch);
+    const vList = await req("GET", `/orders/vendor/${v.id}`, { token: v.tok });
+    ok(vList.status === 403, "d5) deleted vendor's old token: GET /orders/vendor/:id -> 403", { s: vList.status, n: listIds(vList).length });
+    const vSum = await req("GET", "/orders/summary", { token: v.tok });
+    ok(vSum.status === 403, "d5) deleted vendor's old token: GET /orders/summary -> 403", vSum);
+    const vPatch = await req("PATCH", `/orders/${order.id}/status`, { token: v.tok, body: { status: "CONFIRMED" } });
+    ok(vPatch.status === 403, "d5) deleted vendor's old token: PATCH /orders/:id/status -> 403", vPatch);
+    ok((await prisma.order.findUnique({ where: { id: order.id } })).status === "PENDING", "d5) order status unchanged");
+
+    // Suspend instead of delete: same immediate loss of scope
+    const sd = await makeDr("9300000011");
+    const sv = await makeVendor("9200000061");
+    await orderFor(sv.id);
+    ok(listIds(await req("GET", "/orders", { token: sd.tok })).length > 0 && (await req("GET", "/orders/summary", { token: sv.tok })).status === 200, "d5) sanity: fresh DR/vendor have scope before suspend");
+    const susDr = await req("PATCH", `/drs/${sd.id}`, { token: admin, body: { status: "SUSPENDED" } });
+    const susV = await req("PATCH", `/vendors/${sv.id}`, { token: admin, body: { status: "SUSPENDED" } });
+    ok(susDr.status === 200 && susV.status === 200, "d5) admin suspends the DR and the vendor via the edit routes", [susDr.status, susV.status]);
+    const sdList = await req("GET", "/orders", { token: sd.tok });
+    ok(sdList.status === 200 && listIds(sdList).length === 0, "d5) suspended DR's old token: GET /orders is empty", { s: sdList.status, n: listIds(sdList).length });
+    const svSum = await req("GET", "/orders/summary", { token: sv.tok });
+    ok(svSum.status === 403, "d5) suspended vendor's old token: GET /orders/summary -> 403", svSum);
+  });
+
   let suspendedVendorId = null, suspendedDrId = null;
   await scenario("e) partner login failures are indistinguishable", async () => {
     const sv = await req("POST", "/vendors", { token: admin, body: { shopName: "Sus Shop", ownerName: "Sus", phone: "9200000030", password: STRONG, regionName: "Varanasi" } });

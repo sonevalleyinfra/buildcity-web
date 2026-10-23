@@ -230,16 +230,18 @@ async function computeOrdersSummary(where, { vendorId } = {}) {
 }
 
 // Resolves the Vendor row owned by the authenticated VENDOR (token sub is the vendor's user id)
-// (falls back to the phone in the signed token for legacy vendor rows without a linked user)
+// (falls back to the phone in the signed token for legacy vendor rows without a linked user).
+// Only a live, APPROVED row counts (same rule as login and /users/me), so an old token of a deleted
+// or suspended vendor gets no vendor scope at once.
 async function resolveOwnVendor(req) {
   const byUser = await prisma.vendor.findFirst({
-    where: { OR: [{ userId: req.auth.userId }, { id: req.auth.userId }] },
+    where: { OR: [{ userId: req.auth.userId }, { id: req.auth.userId }], disabledAt: null, status: "APPROVED" },
   }).catch(() => null);
   if (byUser) return byUser;
 
   const cleanPhone = String(req.auth?.phone || "").replace(/\D/g, "");
   if (cleanPhone.length !== 10) return null;
-  return prisma.vendor.findFirst({ where: { phone: cleanPhone } }).catch(() => null);
+  return prisma.vendor.findFirst({ where: { phone: cleanPhone, disabledAt: null, status: "APPROVED" } }).catch(() => null);
 }
 
 // Region IDs covering the logged-in DR's assigned district(s); rejects with DrScopeUnavailableError
@@ -2116,11 +2118,12 @@ async function checkStaffPhoneChange(model, row, rawPhone) {
 }
 
 // Mirrors name/phone/password onto the row's login and revokes its sessions when the status changes.
-// The shared admin login (9999999999 / ADMIN) is never touched from a staff row.
-async function updateLinkedStaffUser(tx, userId, userData, statusChanged) {
+// The shared admin login (9999999999 / ADMIN) is never touched from a staff row, nor is a user whose role
+// is not the row's (legacy inconsistent data: that user is not this row's login).
+async function updateLinkedStaffUser(tx, userId, userData, statusChanged, expectedRole) {
   if (!userId) return;
   const linked = await tx.user.findUnique({ where: { id: userId }, select: { phone: true, role: true } });
-  if (!linked || linked.phone === ADMIN_PHONE || linked.role === "ADMIN") return;
+  if (!linked || linked.phone === ADMIN_PHONE || linked.role === "ADMIN" || linked.role !== expectedRole) return;
   const data = { ...userData };
   if (statusChanged) data.tokenVersion = { increment: 1 };
   if (Object.keys(data).length > 0) await tx.user.update({ where: { id: userId }, data });
@@ -2220,7 +2223,7 @@ app.patch("/api/v1/drs/:id", requireAuth, requireRole("ADMIN"), async (req, res)
 
     const updatedDr = await prisma.$transaction(async (tx) => {
       const updated = await tx.dR.update({ where: { id: dr.id }, data: dataToUpdate, include: { region: true, user: true } });
-      await updateLinkedStaffUser(tx, dr.userId, userUpdateData, statusChanged);
+      await updateLinkedStaffUser(tx, dr.userId, userUpdateData, statusChanged, "DR");
       const target = { targetType: "DR", targetId: dr.id, targetUserId: dr.userId };
       if (hashedPassword) await writeAudit(tx, req, "STAFF_PASSWORD_RESET", target);
       if (statusChanged) await writeAudit(tx, req, "STAFF_STATUS_CHANGE", { ...target, from: fromStatus, to: st.value });
@@ -2367,7 +2370,7 @@ function updateVendorTx(req, vendor, { data, userData = {}, newStatus, passwordR
   const statusChanged = !!newStatus && newStatus !== vendor.status;
   return prisma.$transaction(async (tx) => {
     const updated = await tx.vendor.update({ where: { id: vendor.id }, data, include });
-    await updateLinkedStaffUser(tx, vendor.userId, userData, statusChanged);
+    await updateLinkedStaffUser(tx, vendor.userId, userData, statusChanged, "VENDOR");
 
     // Synchronize Vendor Products Active state with Vendor Status
     if (statusChanged && newStatus === "SUSPENDED") {
@@ -3337,6 +3340,7 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
     if (req.auth.role === "VENDOR") {
       // Vendors always get their own orders, whatever id the client sent
       vendor = await resolveOwnVendor(req);
+      if (!vendor) return res.status(403).json({ error: "Vendor profile not found for this account" });
     } else {
       const cleanPhone = vendorId.replace(/^v-/, "").replace(/\D/g, "");
       vendor = await prisma.vendor.findFirst({

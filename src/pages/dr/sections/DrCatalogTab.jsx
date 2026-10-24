@@ -7,7 +7,6 @@ import {
   CheckIcon,
   CloseIcon,
 } from "../../vendor/ui/icons";
-import { EditIcon } from "../DrShell";
 import {
   Card,
   SearchField,
@@ -40,7 +39,6 @@ export default function DrCatalogTab({
   searchTerm,
   setSearchTerm,
   onAddProduct,
-  onEditMasterProduct,
   busyListingAction,
   onListingAction,
 }) {
@@ -86,9 +84,9 @@ export default function DrCatalogTab({
                 placeholder={isMasterMode ? "Search master catalog..." : "Search district products..."}
               />
             </div>
-            <Button size="sm" onClick={onAddProduct} className="shrink-0">
+            <Button size="sm" onClick={() => onAddProduct()} className="shrink-0">
               <PlusIcon className="h-4 w-4" strokeWidth={2.25} />
-              {isMasterMode ? "Add Master Product" : "Add Product"}
+              Add Listing
             </Button>
           </div>
         </div>
@@ -122,11 +120,11 @@ export default function DrCatalogTab({
               <EmptyState
                 icon={PackageIcon}
                 title="No products found"
-                description={`Add construction products with category, brand, grade, and pricing for ${districtName}.`}
+                description={`List master catalog products for ${districtName} vendors.`}
                 action={
-                  <Button size="sm" onClick={onAddProduct}>
+                  <Button size="sm" onClick={() => onAddProduct()}>
                     <PlusIcon className="h-4 w-4" />
-                    Add Product Now
+                    Add Listing
                   </Button>
                 }
               />
@@ -381,13 +379,7 @@ export default function DrCatalogTab({
               <EmptyState
                 icon={PackageIcon}
                 title="No master catalog products found"
-                description="Add a new master product to make it available across the platform."
-                action={
-                  <Button size="sm" onClick={onAddProduct}>
-                    <PlusIcon className="h-4 w-4" />
-                    Add Master Product
-                  </Button>
-                }
+                description="Master products are managed by admin."
               />
             </Card>
           ) : (
@@ -432,11 +424,11 @@ export default function DrCatalogTab({
                       </div>
                       <button
                         type="button"
-                        onClick={() => onEditMasterProduct(p)}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-slate-100 px-3 text-xs font-semibold text-slate-800 hover:bg-slate-200 active:scale-95 cursor-pointer"
+                        onClick={() => onAddProduct(p.id)}
+                        className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-xl bg-slate-100 px-3 text-xs font-semibold text-slate-800 hover:bg-slate-200 active:scale-[0.98] cursor-pointer"
                       >
-                        <EditIcon className="h-3.5 w-3.5" />
-                        Edit Catalog
+                        <PlusIcon className="h-3.5 w-3.5" />
+                        Add Listing
                       </button>
                     </div>
                   </Card>
@@ -502,11 +494,11 @@ export default function DrCatalogTab({
                           <td className="py-3.5 px-4 text-right">
                             <button
                               type="button"
-                              onClick={() => onEditMasterProduct(p)}
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-200 active:scale-[0.98] cursor-pointer"
+                              onClick={() => onAddProduct(p.id)}
+                              className="inline-flex shrink-0 items-center whitespace-nowrap gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-200 active:scale-[0.98] cursor-pointer"
                             >
-                              <EditIcon className="h-3.5 w-3.5" />
-                              Edit Catalog
+                              <PlusIcon className="h-3.5 w-3.5" />
+                              Add Listing
                             </button>
                           </td>
                         </tr>

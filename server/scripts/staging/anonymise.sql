@@ -46,7 +46,10 @@ WITH src AS (
   SELECT norm FROM src
   WHERE norm ~ '^(10000[0-9]{5}|9999999999|7777777777)$' OR norm IN (SELECT newph FROM public.anon_issued)
 ), base AS (
-  SELECT coalesce(max(substr(newph, 2)::bigint), 0) AS b FROM public.anon_issued
+  -- start above every issued number AND every existing 2xxxxxxxxx phone, so no new number collides
+  SELECT greatest(coalesce(max(substr(newph, 2)::bigint), 0),
+                  coalesce((SELECT max(substr(norm, 2)::bigint) FROM src WHERE norm ~ '^2[0-9]{9}$'), 0)) AS b
+  FROM public.anon_issued
 ), todo AS (
   SELECT norm, row_number() OVER (ORDER BY norm) AS rn
   FROM src
@@ -61,11 +64,17 @@ UNION ALL
 SELECT t.norm, '2' || lpad((t.rn + base.b)::text, 9, '0'), (t.rn + base.b)::text
 FROM todo t, base;
 
--- Never go past 10 digits ('2' + 9 digits), and remember what was issued for re-runs.
+-- Never go past 10 digits ('2' + 9 digits), and remember what was issued for re-runs. lpad truncates
+-- past 9 digits, so check the issued counter (the numeric label) rather than the padded number.
+-- Kept anonymised numbers have labels <= 999999999, test numbers start with 1, staff labels with S.
 DO $$
 BEGIN
-  IF (SELECT count(*) FROM phone_map WHERE newph ~ '^2[0-9]{10,}$' OR length(newph) > 10) > 0 THEN
+  IF (SELECT count(*) FROM phone_map WHERE newph ~ '^2[0-9]{10,}$' OR length(newph) > 10
+        OR (newph LIKE '2%' AND label ~ '^[0-9]+$' AND label::bigint > 999999999)) > 0 THEN
     RAISE EXCEPTION 'anonymise: phone number space exhausted';
+  END IF;
+  IF (SELECT count(*) <> count(DISTINCT newph) FROM phone_map) THEN
+    RAISE EXCEPTION 'anonymise: two numbers mapped to the same new number';
   END IF;
 END $$;
 INSERT INTO public.anon_issued SELECT newph FROM phone_map WHERE newph ~ '^2[0-9]{9}$' ON CONFLICT DO NOTHING;
@@ -137,5 +146,12 @@ BEGIN
     END IF;
   END LOOP;
 END $$;
+
+-- Carts hold product snapshots with image URLs (Unsplash ids are 13 digits): staging starts with empty carts.
+UPDATE users SET "cartItems" = '[]'::jsonb WHERE "cartItems" IS NOT NULL AND "cartItems" <> '[]'::jsonb;
+-- Idempotency keys embed a 13-digit ms timestamp. Derive a digit-free key from the order id: ids are lowercase
+-- uuids, so mapping digits to UPPERCASE letters is injective (keys stay UNIQUE) and a re-run yields the same value.
+UPDATE orders SET "idempotencyKey" = 'stg_' || translate(id, '0123456789', 'ABCDEFGHIJ')
+WHERE "idempotencyKey" IS NOT NULL AND "idempotencyKey" IS DISTINCT FROM 'stg_' || translate(id, '0123456789', 'ABCDEFGHIJ');
 
 COMMIT;

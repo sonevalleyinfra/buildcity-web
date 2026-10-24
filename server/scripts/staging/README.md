@@ -29,7 +29,9 @@ Run it from a directory without spaces in its path (the `$PWD` mount). `PSQL` ne
 2. Creates `buildcity_staging_tmp` on the staging server, marks it `buildcity.env = 'staging'`, restores into it
    (`migration/restore.sh` guards apply), and deletes the dump.
 3. `anonymise.sql`, then 4. `verify-anon.sql` (both with `ON_ERROR_STOP`). A failure drops the tmp DB, exits 1, and
-   the current staging DB and API are untouched.
+   the current staging DB and API are untouched. The anonymiser also empties `users.cartItems` and replaces
+   `orders.idempotencyKey` with `stg_<order id, digits as letters>`: both carry long digit runs (image ids, ms
+   timestamps) that the verifier would flag.
 5. `seed-test-accounts.js` seeds the E2E accounts and the test product.
 6. Stops the staging API, renames `buildcity_staging` to `buildcity_staging_old`, renames the tmp DB to
    `buildcity_staging`, sets and re-reads the marker in a new session, starts the API, then drops the old DB.

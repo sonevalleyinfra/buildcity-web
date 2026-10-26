@@ -1325,6 +1325,174 @@ app.get("/api/v1/admin/wallet-users", requireAuth, requireRole("ADMIN"), async (
   }
 });
 
+
+// Admin: Get Referral Network for a user (Upline referrer & Downline referees)
+app.get("/api/v1/admin/referral-network/:userId", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        referralCode: true,
+        referredBy: true,
+        walletBalance: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+
+    // 1. Upline: Who referred this customer?
+    let referrer = null;
+    if (user.referredBy) {
+      referrer = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { id: user.referredBy },
+            { referralCode: user.referredBy },
+          ],
+        },
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          referralCode: true,
+          createdAt: true,
+          walletBalance: true,
+        },
+      });
+    }
+
+    // 2. Downline: Who did this customer refer?
+    const referees = await prisma.user.findMany({
+      where: {
+        OR: [
+          { referredBy: user.id },
+          ...(user.referralCode ? [{ referredBy: user.referralCode }] : []),
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        referralCode: true,
+        walletBalance: true,
+        createdAt: true,
+        orders: {
+          select: {
+            id: true,
+            status: true,
+            totalAmount: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    // 3. Referral commissions earned from wallet transactions
+    const referralEarnings = await prisma.walletTransaction.findMany({
+      where: {
+        userId: user.id,
+        type: { in: ["REFERRAL", "REFERRAL_BONUS"] },
+      },
+      select: {
+        id: true,
+        amount: true,
+        description: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    }).catch(() => []);
+
+    res.json({
+      user: {
+        id: user.id,
+        name: user.name,
+        phone: user.phone,
+        referralCode: user.referralCode,
+        walletBalance: Number(user.walletBalance) || 0,
+        createdAt: user.createdAt,
+      },
+      referrer: referrer
+        ? {
+            id: referrer.id,
+            name: referrer.name,
+            phone: referrer.phone,
+            referralCode: referrer.referralCode,
+            walletBalance: Number(referrer.walletBalance) || 0,
+            createdAt: referrer.createdAt,
+          }
+        : null,
+      referees: referees.map((r) => ({
+        id: r.id,
+        name: r.name,
+        phone: r.phone,
+        referralCode: r.referralCode,
+        walletBalance: Number(r.walletBalance) || 0,
+        createdAt: r.createdAt,
+        orderCount: (r.orders || []).length,
+        deliveredOrdersCount: (r.orders || []).filter((o) => o.status === "DELIVERED").length,
+      })),
+      totalReferredCount: referees.length,
+      referralEarnings: referralEarnings.map((e) => ({
+        ...e,
+        amount: Number(e.amount) || 0,
+      })),
+    });
+  } catch (err) {
+    sendServerError(res, err);
+  }
+});
+
+// Admin: Get Full Wallet Transaction History for a user
+app.get("/api/v1/admin/wallet-history/:userId", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        walletBalance: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+
+    const transactions = await prisma.walletTransaction.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+
+    res.json({
+      user: {
+        id: user.id,
+        name: user.name,
+        phone: user.phone,
+        walletBalance: Number(user.walletBalance) || 0,
+      },
+      transactions: transactions.map((t) => ({
+        ...t,
+        amount: Number(t.amount) || 0,
+      })),
+    });
+  } catch (err) {
+    sendServerError(res, err);
+  }
+});
+
 // 4. Admin: Manual Wallet Adjustment (+Credit / -Debit)
 app.post("/api/v1/admin/wallet-adjust", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {

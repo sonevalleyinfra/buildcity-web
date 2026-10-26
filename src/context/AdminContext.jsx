@@ -1912,6 +1912,30 @@ export function AdminProvider({ children }) {
     }
   };
 
+    const fetchReferralNetwork = async (userId) => {
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/admin/referral-network/${userId}`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn("fetchReferralNetwork note:", err.message);
+    }
+    return null;
+  };
+
+  const fetchWalletHistory = async (userId) => {
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/admin/wallet-history/${userId}`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn("fetchWalletHistory note:", err.message);
+    }
+    return null;
+  };
+
   const readServerError = async (res, fallback) => {
     const data = await res.json().catch(() => null);
     return data?.error || data?.message || `${fallback} (${res.status})`;
@@ -2353,6 +2377,8 @@ export function AdminProvider({ children }) {
         walletUsers,
         fetchWalletUsers,
         adjustUserWallet,
+        fetchReferralNetwork,
+        fetchWalletHistory,
       }}
     >
       {children}

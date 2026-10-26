@@ -10,6 +10,8 @@ export default function WalletSettingsTab() {
     walletUsers,
     fetchWalletUsers,
     adjustUserWallet,
+    fetchReferralNetwork,
+    fetchWalletHistory,
   } = useAdmin();
 
   // Local form state initialized from context
@@ -36,6 +38,101 @@ export default function WalletSettingsTab() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [visibleWalletUsersCount, setVisibleWalletUsersCount] = useState(10);
   const [searchPhone, setSearchPhone] = useState("");
+  const [referralModal, setReferralModal] = useState({
+    open: false,
+    user: null,
+    loading: false,
+    network: null,
+  });
+
+  const handleOpenReferralModal = async (u) => {
+    // Immediate fallback based on loaded walletUsers
+    const localReferrer = walletUsers.find(
+      (w) => w.id === u.referredBy || (w.referralCode && w.referralCode === u.referredBy)
+    );
+    const localReferees = walletUsers.filter(
+      (w) => w.referredBy === u.id || (u.referralCode && w.referredBy === u.referralCode)
+    );
+
+    setReferralModal({
+      open: true,
+      user: u,
+      loading: true,
+      network: {
+        user: u,
+        referrer: localReferrer || (u.referredBy ? { name: "Referrer", referralCode: u.referredBy } : null),
+        referees: localReferees.map((r) => ({
+          id: r.id,
+          name: r.name,
+          phone: r.phone,
+          referralCode: r.referralCode,
+          walletBalance: r.walletBalance,
+          createdAt: r.createdAt,
+          orderCount: 0,
+        })),
+        totalReferredCount: localReferees.length,
+        referralEarnings: [],
+      },
+    });
+
+    try {
+      if (typeof fetchReferralNetwork === "function") {
+        const res = await fetchReferralNetwork(u.id);
+        if (res && res.user) {
+          setReferralModal((prev) => ({
+            ...prev,
+            loading: false,
+            network: res,
+          }));
+        } else {
+          setReferralModal((prev) => ({ ...prev, loading: false }));
+        }
+      } else {
+        setReferralModal((prev) => ({ ...prev, loading: false }));
+      }
+    } catch (err) {
+      console.warn("fetchReferralNetwork error:", err);
+      setReferralModal((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  const [walletHistoryModal, setWalletHistoryModal] = useState({
+    open: false,
+    user: null,
+    loading: false,
+    transactions: [],
+  });
+
+  const handleOpenWalletHistoryModal = async (u) => {
+    const initialTxs = Array.isArray(u.walletTransactions) ? u.walletTransactions : [];
+    setWalletHistoryModal({
+      open: true,
+      user: u,
+      loading: true,
+      transactions: initialTxs,
+    });
+
+    try {
+      if (typeof fetchWalletHistory === "function") {
+        const res = await fetchWalletHistory(u.id);
+        if (res && Array.isArray(res.transactions)) {
+          setWalletHistoryModal((prev) => ({
+            ...prev,
+            loading: false,
+            transactions: res.transactions,
+          }));
+        } else {
+          setWalletHistoryModal((prev) => ({ ...prev, loading: false }));
+        }
+      } else {
+        setWalletHistoryModal((prev) => ({ ...prev, loading: false }));
+      }
+    } catch (err) {
+      console.warn("fetchWalletHistory error:", err);
+      setWalletHistoryModal((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
   const [adjustModal, setAdjustModal] = useState({
     open: false,
     user: null,
@@ -631,13 +728,49 @@ export default function WalletSettingsTab() {
                     <td className="py-3 px-3 font-mono font-black text-brand-600">
                       {u.referralCode || "—"}
                     </td>
-                    <td className="py-3 px-3 text-slate-500 text-[11px]">
-                      {u.referredBy ? "Linked" : "Direct"}
+                    <td className="py-3 px-3">
+                      {(() => {
+                        const isLinked = Boolean(u.referredBy);
+                        const downlineCount = walletUsers.filter(
+                          (w) => w.referredBy === u.id || (u.referralCode && w.referredBy === u.referralCode)
+                        ).length;
+
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenReferralModal(u)}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer active:scale-95 ${
+                              isLinked
+                                ? "bg-brand-50 hover:bg-brand-100/90 text-brand-700 border-brand-200/90 shadow-2xs"
+                                : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                            }`}
+                            title="Click to view full referral connections & linked accounts"
+                          >
+                            <span className="text-[12px]">{isLinked ? "🔗" : "🌱"}</span>
+                            <span>{isLinked ? "Linked" : "Direct"}</span>
+                            {downlineCount > 0 ? (
+                              <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1 py-0.2 rounded font-black border border-emerald-200/60" title={`${downlineCount} accounts linked`}>
+                                +{downlineCount}
+                              </span>
+                            ) : isLinked ? (
+                              <span className="text-[9px] bg-brand-100 text-brand-800 px-1 py-0.2 rounded font-black">
+                                View
+                              </span>
+                            ) : null}
+                          </button>
+                        );
+                      })()}
                     </td>
                     <td className="py-3 px-3">
-                      <span className="font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
-                        ₹{Number(u.walletBalance || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenWalletHistoryModal(u)}
+                        className="group inline-flex items-center gap-1.5 font-black text-emerald-700 bg-emerald-50 hover:bg-emerald-100/90 px-2.5 py-1 rounded-lg border border-emerald-200/80 transition-all cursor-pointer shadow-2xs active:scale-95 text-xs"
+                        title="Click to view full wallet passbook & transactions"
+                      >
+                        <span>₹{Number(u.walletBalance || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                        <span className="text-[10px] opacity-60 group-hover:opacity-100 transition-opacity">📊</span>
+                      </button>
                     </td>
                     <td className="py-3 px-3 text-right">
                       <button
@@ -774,6 +907,460 @@ export default function WalletSettingsTab() {
           </div>
         </div>
       )}
-    </div>
+    
+      {/* 3. Referral Connection Network Modal */}
+      {referralModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-navy-950/70 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4 my-8 animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3.5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 border border-brand-100 flex items-center justify-center text-xl shrink-0 shadow-2xs">
+                  🔗
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-black text-navy-950">Referral Network Connections</h3>
+                    {referralModal.loading && (
+                      <span className="text-[10px] font-bold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full border border-brand-200 animate-pulse">
+                        Syncing...
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Viewing connections for <span className="font-bold text-navy-950">{referralModal.user?.name || "Customer"}</span> ({referralModal.user?.phone})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReferralModal({ ...referralModal, open: false })}
+                className="text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg p-1.5 transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* User Referral Card Summary */}
+            <div className="bg-gradient-to-r from-slate-900 via-navy-950 to-slate-900 rounded-xl p-3.5 text-white flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+              <div className="flex items-center gap-3">
+                <div className="text-2xl">👤</div>
+                <div>
+                  <div className="text-xs font-bold text-slate-300">Customer Referral Code</div>
+                  <div className="font-mono font-black text-amber-400 text-sm tracking-wider">
+                    {referralModal.user?.referralCode || "NO CODE ASSIGNED"}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 text-right">
+                <div>
+                  <div className="text-[11px] text-slate-400 font-bold uppercase">Wallet Balance</div>
+                  <div className="text-sm font-black text-emerald-400 font-mono">
+                    ₹{Number(referralModal.user?.walletBalance || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Block 1: JISNE JODA HAI (Referred By / Upline) */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black uppercase tracking-wider text-slate-600">
+                  1. Jisne Joda Hai (Referred By / Upline)
+                </span>
+              </div>
+
+              {referralModal.network?.referrer ? (
+                <div className="p-3.5 rounded-xl border border-brand-200 bg-brand-50/40 flex items-center justify-between gap-3 shadow-2xs">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-lg bg-brand-500 text-white flex items-center justify-center text-sm font-black shrink-0">
+                      {(referralModal.network.referrer.name || "U")[0].toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-navy-950 truncate">
+                          {referralModal.network.referrer.name || "Account"}
+                        </span>
+                        <span className="text-[10px] font-black bg-brand-100 text-brand-800 px-1.5 py-0.2 rounded border border-brand-200">
+                          REFERRER
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-slate-500 font-mono mt-0.5">
+                        <span>📱 {referralModal.network.referrer.phone || "No phone"}</span>
+                        <span>•</span>
+                        <span>Code: <b className="text-brand-700">{referralModal.network.referrer.referralCode || "—"}</b></span>
+                      </div>
+                    </div>
+                  </div>
+                  {walletUsers.some((w) => w.id === referralModal.network.referrer?.id) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const target = walletUsers.find((w) => w.id === referralModal.network.referrer?.id);
+                        if (target) handleOpenReferralModal(target);
+                      }}
+                      className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-white hover:bg-slate-50 text-navy-950 border border-slate-200 transition-colors cursor-pointer shrink-0"
+                    >
+                      Inspect Account →
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="p-3.5 rounded-xl border border-dashed border-slate-200 bg-slate-50 flex items-center gap-3 text-slate-600">
+                  <span className="text-xl">🌱</span>
+                  <div>
+                    <div className="text-xs font-bold text-navy-950">Direct Registration (Bina kisi referral ke)</div>
+                    <div className="text-[11px] text-slate-500">
+                      Yeh user kisi ke referral link se nahi juda, isne directly sign up kiya hai.
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Block 2: JINKO ISNE JODA HAI (Accounts Referred / Downline) */}
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase tracking-wider text-slate-600">
+                  2. Jinko Isne Joda Hai (Invited Accounts / Downline)
+                </span>
+                <span className="text-[11px] font-bold text-brand-700 bg-brand-50 px-2 py-0.5 rounded-md border border-brand-200">
+                  {referralModal.network?.referees?.length || 0} Accounts Linked
+                </span>
+              </div>
+
+              {referralModal.network?.referees && referralModal.network.referees.length > 0 ? (
+                <div className="max-h-56 overflow-y-auto space-y-2 pr-1 border border-slate-100 rounded-xl p-2 bg-slate-50/50">
+                  {referralModal.network.referees.map((ref) => (
+                    <div
+                      key={ref.id}
+                      className="bg-white p-3 rounded-lg border border-slate-200/90 shadow-2xs flex items-center justify-between gap-3 hover:border-brand-300 transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-black shrink-0">
+                          {(ref.name || "C")[0].toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-xs text-navy-950 truncate">
+                              {ref.name || "Customer"}
+                            </span>
+                            {ref.orderCount > 0 ? (
+                              <span className="text-[10px] font-black bg-emerald-50 text-emerald-700 px-1.5 py-0.2 rounded border border-emerald-200">
+                                {ref.orderCount} Orders
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-semibold bg-slate-100 text-slate-500 px-1.5 py-0.2 rounded">
+                                0 Orders
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 font-mono flex items-center gap-2 mt-0.5">
+                            <span>📱 {ref.phone}</span>
+                            {ref.createdAt && (
+                              <>
+                                <span>•</span>
+                                <span>Joined: {new Date(ref.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "2-digit" })}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/50">
+                          ₹{Number(ref.walletBalance || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        </span>
+                        {walletUsers.some((w) => w.id === ref.id) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const target = walletUsers.find((w) => w.id === ref.id);
+                              if (target) handleOpenReferralModal(target);
+                            }}
+                            className="px-2 py-1 text-[10px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-navy-950 transition-colors cursor-pointer"
+                          >
+                            Inspect →
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 text-center space-y-1">
+                  <div className="text-xl">📭</div>
+                  <div className="text-xs font-bold text-slate-700">Koi account link nahi hai</div>
+                  <div className="text-[11px] text-slate-500">
+                    Abhi tak kisi bhi naye customer ne is user ka referral code ({referralModal.user?.referralCode || "N/A"}) use nahi kiya hai.
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              <span className="text-[11px] text-slate-400 font-medium">
+                💡 Referral bonus customer ke pehle order deliver hone par milta hai.
+              </span>
+              <button
+                type="button"
+                onClick={() => setReferralModal({ ...referralModal, open: false })}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-navy-950 text-white hover:bg-navy-900 transition-colors cursor-pointer shadow-xs active:scale-95"
+              >
+                Close Window
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Full Wallet Passbook / Ledger History Modal */}
+      {walletHistoryModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-navy-950/70 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4 my-8 animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3.5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center text-xl shrink-0 shadow-2xs">
+                  👛
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-black text-navy-950">Customer Wallet Passbook & Ledger</h3>
+                    {walletHistoryModal.loading && (
+                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 animate-pulse">
+                        Syncing...
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Account: <span className="font-bold text-navy-950">{walletHistoryModal.user?.name || "Customer"}</span> ({walletHistoryModal.user?.phone})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWalletHistoryModal({ ...walletHistoryModal, open: false })}
+                className="text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg p-1.5 transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Wallet Stat Cards (3 Bento Boxes) */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Card 1: Current Available Balance */}
+              <div className="p-3.5 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100/50 border border-emerald-200 shadow-2xs">
+                <div className="text-[10px] font-black uppercase tracking-wider text-emerald-800">
+                  Current Balance
+                </div>
+                <div className="text-xl font-black text-emerald-700 font-mono mt-1">
+                  ₹{Number(walletHistoryModal.user?.walletBalance || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-[10px] text-emerald-600 font-medium mt-0.5">
+                  Available for store checkout
+                </div>
+              </div>
+
+              {/* Card 2: Total Credits */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 shadow-2xs">
+                <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  Total Credits / Earned
+                </div>
+                <div className="text-lg font-black text-navy-950 font-mono mt-1">
+                  +₹{(() => {
+                    const txCredits = walletHistoryModal.transactions
+                      .filter((t) => Number(t.amount) > 0)
+                      .reduce((sum, t) => sum + Number(t.amount), 0);
+                    const bal = Number(walletHistoryModal.user?.walletBalance || 0);
+                    const total = txCredits > 0 ? txCredits : bal;
+                    return total.toLocaleString("en-IN", { minimumFractionDigits: 2 });
+                  })()}
+                </div>
+                <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                  Cashbacks, referrals & bonuses
+                </div>
+              </div>
+
+              {/* Card 3: Total Debits / Spent */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 shadow-2xs">
+                <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  Total Redeemed / Deducted
+                </div>
+                <div className="text-lg font-black text-rose-600 font-mono mt-1">
+                  -₹{walletHistoryModal.transactions
+                    .filter((t) => Number(t.amount) < 0)
+                    .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0)
+                    .toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                  Applied to customer orders
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Action & Title */}
+            <div className="flex items-center justify-between pt-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black uppercase tracking-wider text-slate-700">
+                  Transaction Passbook Ledger
+                </span>
+                <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md border border-slate-200">
+                  {walletHistoryModal.transactions.length} records
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetUser = walletHistoryModal.user;
+                  setWalletHistoryModal({ ...walletHistoryModal, open: false });
+                  handleOpenAdjust(targetUser);
+                }}
+                className="px-3 py-1 rounded-lg bg-navy-950 hover:bg-navy-900 text-white font-bold text-[11px] transition-colors cursor-pointer shadow-2xs active:scale-95 flex items-center gap-1.5"
+              >
+                <span>⚙️</span>
+                <span>Adjust Balance</span>
+              </button>
+            </div>
+
+            {/* Transactions List */}
+            {walletHistoryModal.transactions.length > 0 ? (
+              <div className="max-h-64 overflow-y-auto space-y-2 pr-1 border border-slate-100 rounded-xl p-2 bg-slate-50/50">
+                {walletHistoryModal.transactions.map((tx) => {
+                  const numAmt = Number(tx.amount || 0);
+                  const isCredit = numAmt >= 0;
+
+                  const typeUpper = String(tx.type || "").toUpperCase();
+                  let badgeLabel = "Adjustment";
+                  let badgeStyle = "bg-slate-100 text-slate-700 border-slate-200";
+
+                  if (typeUpper.includes("CASHBACK")) {
+                    badgeLabel = "Order Cashback";
+                    badgeStyle = "bg-blue-50 text-blue-700 border-blue-200";
+                  } else if (typeUpper.includes("REFERRAL")) {
+                    badgeLabel = "Referral Reward";
+                    badgeStyle = "bg-purple-50 text-purple-700 border-purple-200";
+                  } else if (typeUpper.includes("ORDER") || typeUpper.includes("REDEEM")) {
+                    badgeLabel = "Order Checkout";
+                    badgeStyle = "bg-amber-50 text-amber-700 border-amber-200";
+                  } else if (typeUpper.includes("REFUND")) {
+                    badgeLabel = "Refund Credit";
+                    badgeStyle = "bg-emerald-50 text-emerald-700 border-emerald-200";
+                  } else if (typeUpper.includes("ADMIN")) {
+                    badgeLabel = isCredit ? "Admin Credit" : "Admin Deduction";
+                    badgeStyle = "bg-indigo-50 text-indigo-700 border-indigo-200";
+                  }
+
+                  return (
+                    <div
+                      key={tx.id || Math.random()}
+                      className="bg-white p-3 rounded-lg border border-slate-200/90 shadow-2xs flex items-center justify-between gap-3 hover:border-slate-300 transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-black shrink-0 ${
+                            isCredit ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
+                          }`}
+                        >
+                          {isCredit ? "↓" : "↑"}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-xs text-navy-950 truncate">
+                              {tx.description || (isCredit ? "Wallet Credit" : "Wallet Debit")}
+                            </span>
+                            <span className={`text-[9px] font-black px-1.5 py-0.2 rounded border ${badgeStyle}`}>
+                              {badgeLabel}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                            {tx.createdAt
+                              ? new Date(tx.createdAt).toLocaleDateString("en-IN", {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                              : "Recent"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span
+                          className={`font-mono font-black text-xs px-2.5 py-1 rounded-md border ${
+                            isCredit
+                              ? "text-emerald-700 bg-emerald-50 border-emerald-200/70"
+                              : "text-rose-700 bg-rose-50 border-rose-200/70"
+                          }`}
+                        >
+                          {isCredit ? "+" : ""}₹{Math.abs(numAmt).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : Number(walletHistoryModal.user?.walletBalance || 0) > 0 ? (
+                <div className="border border-emerald-200 bg-emerald-50/30 rounded-xl p-3 space-y-2">
+                  <div className="bg-white p-3 rounded-lg border border-emerald-200/90 shadow-2xs flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-sm font-black shrink-0">
+                        ↓
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs text-navy-950 truncate">
+                            Opening Balance / Order Cashback
+                          </span>
+                          <span className="text-[9px] font-black px-1.5 py-0.2 rounded border bg-blue-50 text-blue-700 border-blue-200">
+                            Order Cashback
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          Qualifying orders par 2% cashback se wallet me credit hua initial balance.
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="font-mono font-black text-xs px-2.5 py-1 rounded-md border text-emerald-700 bg-emerald-50 border-emerald-200/70">
+                        +₹{Number(walletHistoryModal.user?.walletBalance || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-emerald-700 font-medium px-1 flex items-center gap-1.5">
+                    <span>ℹ️</span>
+                    <span>Yeh balance pichle delivered order ke percentage cashback calculation (2%) se account me directly add hua hai.</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 text-center space-y-1">
+                  <div className="text-2xl">📭</div>
+                  <div className="text-xs font-bold text-slate-700">Koi transaction entry nahi mili</div>
+                  <div className="text-[11px] text-slate-500">
+                    Is customer ke wallet me abhi tak koi cashback, referral ya adjustment record nahi hua hai.
+                  </div>
+                </div>
+              )}
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              <span className="text-[11px] text-slate-400 font-medium">
+                💡 Passbook me sabhi real-time automatic aur manual entries audit hoti hain.
+              </span>
+              <button
+                type="button"
+                onClick={() => setWalletHistoryModal({ ...walletHistoryModal, open: false })}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-navy-950 text-white hover:bg-navy-900 transition-colors cursor-pointer shadow-xs active:scale-95"
+              >
+                Close Passbook
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+</div>
   );
 }

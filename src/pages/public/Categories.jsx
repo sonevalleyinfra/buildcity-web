@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams, useNavigationType } from "react-router-dom";
 import { useCart } from "../../context/CartContext";
 import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
@@ -62,6 +62,7 @@ const category8Grid = [
 export default function Categories() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const navType = useNavigationType();
   const initialCat = searchParams.get("cat") || "All";
 
   const { user } = useAuth();
@@ -98,11 +99,14 @@ export default function Categories() {
     const catFromUrl = searchParams.get("cat");
     if (catFromUrl) {
       setActivePill(catFromUrl);
-      setTimeout(() => {
-        scrollToProducts();
-      }, 250);
+      // Only auto-scroll to products on fresh navigation, NEVER on back button (POP)
+      if (navType !== "POP") {
+        setTimeout(() => {
+          scrollToProducts();
+        }, 250);
+      }
     }
-  }, [searchParams]);
+  }, [searchParams, navType]);
 
   useEffect(() => {
     const timer = setInterval(() => {

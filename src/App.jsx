@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { CartProvider } from "./context/CartContext";
 import { OrderProvider } from "./context/OrderContext";
@@ -41,6 +41,11 @@ function NativeBackButtonHandler() {
 
     let sub;
     CapApp.addListener("backButton", ({ canGoBack }) => {
+      // 0. If any modal (e.g. Image Zoom) is open, close modal first
+      if (typeof window.__buildcity_modal_back_handler === "function") {
+        const handled = window.__buildcity_modal_back_handler();
+        if (handled) return;
+      }
       // 1. If Vendor Dashboard has an open modal or tab history, let it handle back press first!
       if (typeof window.__buildcity_vendor_back_handler === "function") {
         const handled = window.__buildcity_vendor_back_handler();
@@ -127,10 +132,14 @@ function StorefrontLocationModal() {
 
 function ScrollToTop() {
   const { pathname } = useLocation();
+  const navType = useNavigationType();
 
   useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
-  }, [pathname]);
+    // Only scroll to top on forward navigation ("PUSH"), never on back ("POP")
+    if (navType !== "POP") {
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    }
+  }, [pathname, navType]);
 
   return null;
 }

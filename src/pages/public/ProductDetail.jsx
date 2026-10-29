@@ -310,7 +310,7 @@ export default function ProductDetail() {
 
   // Jab product badle toh page top par smoothly scroll karo
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }, [id]);
 
   // "You May Also Like" - Cross-selling & Complementary Products matching logic
@@ -737,7 +737,7 @@ export default function ProductDetail() {
         <div className="grid md:grid-cols-2 gap-8">
           {/* Product images ka slider */}
           <div>
-            <ProductImageSlider images={product.images} name={product.name} />
+            <ProductImageSlider key={product.id || id} images={product.images} name={product.name} categoryName={product.category} />
           </div>
 
           {/* Product details aur pricing block */}

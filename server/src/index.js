@@ -2248,6 +2248,45 @@ app.post("/api/v1/users", requireAuth, requireRole("ADMIN"), async (req, res) =>
   }
 });
 
+// Admin Delete Customer Endpoint — Admin customer account aur uske related data ko delete kar sake
+app.delete("/api/v1/users/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  try {
+    const rawId = req.params.id;
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [{ id: rawId }, { phone: rawId }],
+      },
+    });
+    if (!user) return res.status(404).json({ error: "Customer not found" });
+    if (user.role === "ADMIN") return res.status(403).json({ error: "Cannot delete Admin account" });
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete associated orders, returns and items if customer had placed orders
+      const custOrders = await tx.order.findMany({ where: { customerId: user.id }, select: { id: true } });
+      if (custOrders.length > 0) {
+        const orderIds = custOrders.map((o) => o.id);
+        await tx.orderReturn.deleteMany({ where: { orderId: { in: orderIds } } });
+        await tx.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
+        await tx.order.deleteMany({ where: { id: { in: orderIds } } });
+      }
+
+      // 2. Delete user's addresses, notifications, wallet transactions, audit logs, OTP rows
+      await tx.address.deleteMany({ where: { userId: user.id } });
+      await tx.notification.deleteMany({ where: { userId: user.id } });
+      await tx.walletTransaction.deleteMany({ where: { userId: user.id } });
+      await tx.auditLog.deleteMany({ where: { userId: user.id } });
+      await tx.oTPVerification.deleteMany({ where: { phone: user.phone } }).catch(() => {});
+
+      // 3. Delete user row
+      await tx.user.delete({ where: { id: user.id } });
+    });
+
+    res.json({ success: true, message: "Customer account deleted successfully", id: user.id, phone: user.phone });
+  } catch (err) {
+    sendServerError(res, err);
+  }
+});
+
 // 2. DISTRICT REPRESENTATIVE (DR) ENDPOINTS
 // Staff rows are soft-deleted (disabledAt set) and never listed again; their history and orders stay.
 const DR_STATUSES = ["ACTIVE", "SUSPENDED"];

@@ -82,6 +82,7 @@ export default function AdminDashboard() {
     updateVendor,
     setVendorStatus,
     removeVendor,
+    removeCustomer,
     addCategory,
     updateCategory,
     removeCategory,
@@ -533,6 +534,28 @@ export default function AdminDashboard() {
           showAlert({ title: "Delete Failed", message: err.message || "Failed to delete vendor. Please try again or suspend the vendor instead.", type: "error" });
         } finally {
           setDeletingVendorId(null);
+        }
+      },
+    });
+  };
+
+  // Customer Delete Handler — Permanent removal with confirm dialog
+  const [deletingUserId, setDeletingUserId] = useState(null);
+  const handleDeleteCustomer = async (cust) => {
+    showConfirm({
+      title: "Delete Customer Account?",
+      message: `Are you sure you want to permanently delete customer "${cust.name || cust.phone}" (${cust.phone}) from database?`,
+      type: "error",
+      confirmText: "Delete Customer",
+      onConfirm: async () => {
+        setDeletingUserId(cust.id);
+        try {
+          await removeCustomer(cust.id);
+          showAlert({ title: "Customer Deleted", message: `Customer account (${cust.phone}) removed successfully.`, type: "success" });
+        } catch (err) {
+          showAlert({ title: "Delete Failed", message: err.message || "Failed to delete customer.", type: "error" });
+        } finally {
+          setDeletingUserId(null);
         }
       },
     });
@@ -1228,12 +1251,29 @@ export default function AdminDashboard() {
                               {u.createdAt ? new Date(u.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Recently"}
                             </td>
                             <td className="p-3.5 pr-4 text-right">
-                              <a
-                                href={`tel:${u.phone}`}
-                                className="inline-flex items-center gap-1 bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-[11px] px-3 py-1.5 rounded-lg border border-brand-200 transition-colors"
-                              >
-                                📞 Call Customer
-                              </a>
+                              <div className="flex items-center justify-end gap-2">
+                                <a
+                                  href={`tel:${u.phone}`}
+                                  className="inline-flex items-center gap-1 bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-[11px] px-2.5 py-1.5 rounded-lg border border-brand-200 transition-colors"
+                                >
+                                  📞 Call
+                                </a>
+                                <button
+                                  type="button"
+                                  disabled={deletingUserId === u.id}
+                                  onClick={() => handleDeleteCustomer(u)}
+                                  className="inline-flex items-center gap-1 text-[11px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
+                                >
+                                  {deletingUserId === u.id ? (
+                                    <>
+                                      <span className="w-3 h-3 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
+                                      Deleting...
+                                    </>
+                                  ) : (
+                                    "🗑️ Delete"
+                                  )}
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );

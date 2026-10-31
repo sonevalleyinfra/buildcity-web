@@ -82,6 +82,7 @@ export default function AdminDashboard() {
     updateVendor,
     setVendorStatus,
     removeVendor,
+    removeCustomer,
     addCategory,
     updateCategory,
     removeCategory,
@@ -191,6 +192,7 @@ export default function AdminDashboard() {
   const tabsContainerRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [listingFilter, setListingFilter] = useState("ALL");
+  const [vendorStatusTabFilter, setVendorStatusTabFilter] = useState("ALL");
 
   // Modals state (Naya DR, Vendor, Category, Region, Product add karne ke liye)
   const [showDrForm, setShowDrForm] = useState(false);
@@ -532,6 +534,28 @@ export default function AdminDashboard() {
           showAlert({ title: "Delete Failed", message: err.message || "Failed to delete vendor. Please try again or suspend the vendor instead.", type: "error" });
         } finally {
           setDeletingVendorId(null);
+        }
+      },
+    });
+  };
+
+  // Customer Delete Handler — Permanent removal with confirm dialog
+  const [deletingUserId, setDeletingUserId] = useState(null);
+  const handleDeleteCustomer = async (cust) => {
+    showConfirm({
+      title: "Delete Customer Account?",
+      message: `Are you sure you want to permanently delete customer "${cust.name || cust.phone}" (${cust.phone}) from database?`,
+      type: "error",
+      confirmText: "Delete Customer",
+      onConfirm: async () => {
+        setDeletingUserId(cust.id);
+        try {
+          await removeCustomer(cust.id);
+          showAlert({ title: "Customer Deleted", message: `Customer account (${cust.phone}) removed successfully.`, type: "success" });
+        } catch (err) {
+          showAlert({ title: "Delete Failed", message: err.message || "Failed to delete customer.", type: "error" });
+        } finally {
+          setDeletingUserId(null);
         }
       },
     });
@@ -1227,12 +1251,29 @@ export default function AdminDashboard() {
                               {u.createdAt ? new Date(u.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Recently"}
                             </td>
                             <td className="p-3.5 pr-4 text-right">
-                              <a
-                                href={`tel:${u.phone}`}
-                                className="inline-flex items-center gap-1 bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-[11px] px-3 py-1.5 rounded-lg border border-brand-200 transition-colors"
-                              >
-                                📞 Call Customer
-                              </a>
+                              <div className="flex items-center justify-end gap-2">
+                                <a
+                                  href={`tel:${u.phone}`}
+                                  className="inline-flex items-center gap-1 bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-[11px] px-2.5 py-1.5 rounded-lg border border-brand-200 transition-colors"
+                                >
+                                  📞 Call
+                                </a>
+                                <button
+                                  type="button"
+                                  disabled={deletingUserId === u.id}
+                                  onClick={() => handleDeleteCustomer(u)}
+                                  className="inline-flex items-center gap-1 text-[11px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
+                                >
+                                  {deletingUserId === u.id ? (
+                                    <>
+                                      <span className="w-3 h-3 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
+                                      Deleting...
+                                    </>
+                                  ) : (
+                                    "🗑️ Delete"
+                                  )}
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1549,29 +1590,108 @@ export default function AdminDashboard() {
               </form>
             )}
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200/90 bg-slate-50/90 text-[11px] font-black text-slate-500 uppercase tracking-wider">
-                    <th className="py-3 px-4">Shop Name</th>
-                    <th className="py-3 px-4">Owner & Mobile</th>
-                    <th className="py-3 px-4">District</th>
-                    <th className="py-3 px-4">Products Added</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Commission Rate</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                {productsLoading ? (
-                  renderTableSkeleton(7)
-                ) : (
-                  <tbody className="divide-y divide-slate-100">
-                    {vendors.map((v) => {
-                      const vItemCount = products.filter(
-                        (p) => p.vendorId === v.id || (p.vendorName || "").toLowerCase() === (v.shopName || "").toLowerCase()
-                      ).length;
+            {/* Filter Pills for Vendors: All, Pending Requests, Approved, Suspended */}
+            {(() => {
+              const pendingCount = vendors.filter((v) => v.status === "PENDING").length;
+              const approvedCount = vendors.filter((v) => v.status === "APPROVED").length;
+              const suspendedCount = vendors.filter((v) => v.status === "SUSPENDED").length;
 
-                      return (
+              const filteredVendors = vendors.filter((v) => {
+                if (vendorStatusTabFilter === "PENDING") return v.status === "PENDING";
+                if (vendorStatusTabFilter === "APPROVED") return v.status === "APPROVED";
+                if (vendorStatusTabFilter === "SUSPENDED") return v.status === "SUSPENDED";
+                return true;
+              });
+
+              return (
+                <>
+                  <div className="px-5 py-3 border-b border-slate-100 flex flex-wrap items-center gap-2 bg-slate-50/30">
+                    <button
+                      type="button"
+                      onClick={() => setVendorStatusTabFilter("ALL")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        vendorStatusTabFilter === "ALL"
+                          ? "bg-navy-900 text-white shadow-2xs"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      All Partners ({vendors.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVendorStatusTabFilter("PENDING")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        vendorStatusTabFilter === "PENDING"
+                          ? "bg-amber-600 text-white shadow-2xs"
+                          : "bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100"
+                      }`}
+                    >
+                      <span>Pending Requests</span>
+                      {pendingCount > 0 && (
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                          vendorStatusTabFilter === "PENDING" ? "bg-white text-amber-700" : "bg-amber-600 text-white"
+                        }`}>
+                          {pendingCount}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVendorStatusTabFilter("APPROVED")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        vendorStatusTabFilter === "APPROVED"
+                          ? "bg-emerald-600 text-white shadow-2xs"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      Approved ({approvedCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVendorStatusTabFilter("SUSPENDED")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        vendorStatusTabFilter === "SUSPENDED"
+                          ? "bg-rose-600 text-white shadow-2xs"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      Suspended ({suspendedCount})
+                    </button>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200/90 bg-slate-50/90 text-[11px] font-black text-slate-500 uppercase tracking-wider">
+                          <th className="py-3 px-4">Shop Name</th>
+                          <th className="py-3 px-4">Owner & Mobile</th>
+                          <th className="py-3 px-4">District</th>
+                          <th className="py-3 px-4">Products Added</th>
+                          <th className="py-3 px-4">Status</th>
+                          <th className="py-3 px-4">Commission Rate</th>
+                          <th className="py-3 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      {productsLoading ? (
+                        renderTableSkeleton(7)
+                      ) : filteredVendors.length === 0 ? (
+                        <tbody>
+                          <tr>
+                            <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
+                              {vendorStatusTabFilter === "PENDING"
+                                ? "No pending partner registration requests at this time."
+                                : "No vendors match the selected filter."}
+                            </td>
+                          </tr>
+                        </tbody>
+                      ) : (
+                        <tbody className="divide-y divide-slate-100">
+                          {filteredVendors.map((v) => {
+                            const vItemCount = products.filter(
+                              (p) => p.vendorId === v.id || (p.vendorName || "").toLowerCase() === (v.shopName || "").toLowerCase()
+                            ).length;
+
+                            return (
                         <tr key={v.id} className="hover:bg-slate-50/80 transition-colors duration-150">
                           <td className="py-3.5 px-4 font-bold text-navy-900">{v.shopName}</td>
                           <td className="py-3.5 px-4">
@@ -1657,8 +1777,11 @@ export default function AdminDashboard() {
                 )}
               </table>
             </div>
-          </div>
-        )}
+          </>
+        );
+      })()}
+    </div>
+  )}
 
         {/* PRODUCTS TAB */}
         {tab === "Products" && (

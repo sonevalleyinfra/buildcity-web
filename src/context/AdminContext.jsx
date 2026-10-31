@@ -1287,6 +1287,32 @@ export function AdminProvider({ children }) {
     }
   };
 
+  const removeCustomer = async (id) => {
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/users/${id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setUsers((prev) => {
+          const updated = prev.filter((u) => u.id !== id && u.phone !== id);
+          try {
+            localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
+        await fetchCloudData();
+        return { success: true };
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to delete customer from database");
+      }
+    } catch (err) {
+      console.warn("Delete customer error:", err.message);
+      await fetchCloudData();
+      throw err;
+    }
+  };
+
   const addCategory = async (categoryData) => {
     const newCat = {
       id: "c-" + Date.now(),
@@ -2342,6 +2368,7 @@ export function AdminProvider({ children }) {
         updateVendor,
         setVendorStatus,
         removeVendor,
+        removeCustomer,
         addCategory,
         updateCategory,
         removeCategory,

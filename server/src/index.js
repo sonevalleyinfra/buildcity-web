@@ -1824,6 +1824,19 @@ app.post("/api/v1/auth/otp/request", otpRequestIpLimiter, otpRequestLimiter, asy
     // Cryptographically secure OTP (Math.random is predictable)
     const generatedOtp = appEnv.isProduction() ? crypto.randomInt(100000, 1000000).toString() : STAGING_OTP;
 
+    // Debounce: prevent duplicate SMS if OTP was already dispatched in last 15 seconds
+    const recentOtp = await prisma.oTPVerification.findFirst({
+      where: {
+        phone: phone10,
+        createdAt: { gte: new Date(Date.now() - 15 * 1000) },
+      },
+      orderBy: { createdAt: "desc" },
+    }).catch(() => null);
+
+    if (recentOtp) {
+      return res.status(plan.status).json(plan.body);
+    }
+
     // Replace older OTPs for this phone and save the new one (hashed) before responding so verify never races
     try {
       await prisma.$transaction([
@@ -2734,21 +2747,7 @@ app.post("/api/v1/auth/vendor/register", async (req, res) => {
     const phone10 = normalizeStaffPhone(phone);
     if (!phone10) return res.status(400).json(STAFF_ERRORS.INVALID_PHONE);
 
-    // Verify OTP first so fake mobile registrations are rejected
-    if (!otp || String(otp).trim().length < 4) {
-      return res.status(400).json({ error: "Valid OTP is required to verify mobile number." });
-    }
-    const code = String(otp).trim();
-    const now = new Date();
-    const otpRow = await prisma.oTPVerification.findFirst({
-      where: { phone: phone10, expiresAt: { gte: now } },
-      orderBy: { createdAt: "desc" },
-    });
-    if (!otpRow || otpRow.attempts >= OTP_MAX_ATTEMPTS || !otpMatches(otpRow, phone10, code, Date.now())) {
-      return res.status(401).json({ error: "Invalid or expired OTP. Please verify your mobile number." });
-    }
-    await prisma.oTPVerification.deleteMany({ where: { phone: phone10 } }).catch(() => {});
-
+    // Validate password strength FIRST before touching OTP so weak passwords don't consume/invalidate the OTP
     const pw = checkNewPassword(password, { phone: phone10 });
     if (!pw.ok) return res.status(400).json({ error: pw.error, code: "WEAK_PASSWORD" });
 
@@ -2772,6 +2771,26 @@ app.post("/api/v1/auth/vendor/register", async (req, res) => {
     const plan = await planStaffAccount(prisma, { model: "vendor", phone10, confirmConvert: true, label: "vendor" });
     if (plan.error) return res.status(409).json(plan.error);
 
+    // Verify OTP — only increment attempts on failure, do NOT delete yet
+    if (!otp || String(otp).trim().length < 4) {
+      return res.status(400).json({ error: "Valid OTP is required to verify mobile number." });
+    }
+    const code = String(otp).trim();
+    const now = new Date();
+    const otpRow = await prisma.oTPVerification.findFirst({
+      where: { phone: phone10, expiresAt: { gte: now } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!otpRow || otpRow.attempts >= OTP_MAX_ATTEMPTS || !otpMatches(otpRow, phone10, code, Date.now())) {
+      if (otpRow) {
+        await prisma.oTPVerification.update({
+          where: { id: otpRow.id },
+          data: { attempts: { increment: 1 } },
+        }).catch(() => {});
+      }
+      return res.status(401).json({ error: "Invalid or expired OTP. Please verify your mobile number." });
+    }
+
     const cleanShopName = shopName.trim();
     const cleanOwnerName = typeof ownerName === "string" && ownerName.trim() ? ownerName.trim() : cleanShopName;
     const passwordHash = await bcrypt.hash(pw.value, 10);
@@ -2792,6 +2811,8 @@ app.post("/api/v1/auth/vendor/register", async (req, res) => {
         },
         include: { region: true, user: true },
       });
+      // Delete OTP only after vendor registration is successfully saved in database
+      await tx.oTPVerification.deleteMany({ where: { phone: phone10 } });
       await writeAudit(tx, req, "STAFF_SELF_REGISTER", { targetType: "VENDOR", targetId: vendor.id, targetUserId: userId });
       return vendor;
     });
@@ -2814,6 +2835,11 @@ app.post("/api/v1/auth/vendor/forgot-password", async (req, res) => {
     const phone10 = normalizeStaffPhone(phone);
     if (!phone10) return res.status(400).json(STAFF_ERRORS.INVALID_PHONE);
 
+    // Validate password strength FIRST before touching OTP so weak passwords don't invalidate the OTP
+    const pw = checkNewPassword(newPassword, { phone: phone10 });
+    if (!pw.ok) return res.status(400).json({ error: pw.error, code: "WEAK_PASSWORD" });
+
+    // Verify OTP
     if (!otp || String(otp).trim().length < 4) {
       return res.status(400).json({ error: "Valid OTP is required." });
     }
@@ -2824,12 +2850,14 @@ app.post("/api/v1/auth/vendor/forgot-password", async (req, res) => {
       orderBy: { createdAt: "desc" },
     });
     if (!otpRow || otpRow.attempts >= OTP_MAX_ATTEMPTS || !otpMatches(otpRow, phone10, code, Date.now())) {
+      if (otpRow) {
+        await prisma.oTPVerification.update({
+          where: { id: otpRow.id },
+          data: { attempts: { increment: 1 } },
+        }).catch(() => {});
+      }
       return res.status(401).json({ error: "Invalid or expired OTP. Please try again." });
     }
-    await prisma.oTPVerification.deleteMany({ where: { phone: phone10 } }).catch(() => {});
-
-    const pw = checkNewPassword(newPassword, { phone: phone10 });
-    if (!pw.ok) return res.status(400).json({ error: pw.error, code: "WEAK_PASSWORD" });
 
     // Find the user / staff record
     let user = await prisma.user.findUnique({ where: { phone: phone10 } });
@@ -2841,6 +2869,7 @@ app.post("/api/v1/auth/vendor/forgot-password", async (req, res) => {
 
     const passwordHash = await bcrypt.hash(pw.value, 10);
 
+    // Delete OTP ONLY inside the transaction once password update succeeds!
     await prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: user.id },
@@ -2854,6 +2883,7 @@ app.post("/api/v1/auth/vendor/forgot-password", async (req, res) => {
         where: { userId: user.id },
         data: { password: passwordHash },
       });
+      await tx.oTPVerification.deleteMany({ where: { phone: phone10 } });
       await writeAudit(tx, req, "STAFF_PASSWORD_RESET_SELF", { targetType: "USER", targetId: user.id, targetUserId: user.id });
     });
 

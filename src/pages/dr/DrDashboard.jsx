@@ -15,13 +15,12 @@ import DrReturnsTab from "./sections/DrReturnsTab";
 import DrProfileTab from "./sections/DrProfileTab";
 import DrModals from "./sections/DrModals";
 
-const PRESET_IMAGES = [
-  { label: "Cement Bag", url: "/categories/cement.png" },
-  { label: "Paint Bucket", url: "/categories/paints.png" },
-  { label: "Steel Rebars", url: "/categories/steel.png" },
-  { label: "Pipes & Plumbing", url: "/categories/plumbing.png" },
-  { label: "Tiles / Ceramic", url: "/categories/tiles.png" },
-];
+const EMPTY_LISTING_FORM = {
+  masterProductId: "",
+  vendorId: "",
+  price: "",
+  stockQty: "",
+};
 
 // Canonical district name resolver
 const getCanonicalDistrict = (name) => {
@@ -106,6 +105,10 @@ const areProductsEqual = (listA, listB) => {
 export default function DrDashboard() {
   const { user, logout } = useAuth();
   const { showAlert, showConfirm } = useAlert();
+  const confirmConvert = (message) => new Promise((resolve) => {
+    showConfirm({ title: "Convert customer?", message, confirmText: "Convert", type: "warning",
+      onConfirm: () => resolve(true), onCancel: () => resolve(false) });
+  });
   const {
     drs = [],
     masterProducts = [],
@@ -118,8 +121,6 @@ export default function DrDashboard() {
     addVendor,
     updateVendor,
     removeVendor,
-    addMasterProduct,
-    updateMasterProduct,
     assignMasterProductToVendor,
     setVendorStatus,
     updateListingApprovalStatus,
@@ -646,7 +647,6 @@ export default function DrDashboard() {
   const [showVendorModal, setShowVendorModal] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingVendor, setEditingVendor] = useState(null);
-  const [editingProduct, setEditingProduct] = useState(null);
 
   // Android Back Button & Modal Scroll Lock (Vendor Dashboard style)
   useEffect(() => {
@@ -663,10 +663,6 @@ export default function DrDashboard() {
         setEditingVendor(null);
         return true;
       }
-      if (editingProduct) {
-        setEditingProduct(null);
-        return true;
-      }
       if (tabHistory.length > 1) {
         const updated = tabHistory.slice(0, -1);
         setTabHistory(updated);
@@ -681,66 +677,14 @@ export default function DrDashboard() {
   });
 
   useEffect(() => {
-    const anySheetOpen = showVendorModal || showProductModal || Boolean(editingVendor) || Boolean(editingProduct);
+    const anySheetOpen = showVendorModal || showProductModal || Boolean(editingVendor);
     if (!anySheetOpen) return;
     const origOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = origOverflow;
     };
-  }, [showVendorModal, showProductModal, editingVendor, editingProduct]);
-
-  const [drEditImageSlotCount, setDrEditImageSlotCount] = useState(3);
-
-  useEffect(() => {
-    if (editingProduct) {
-      const list =
-        Array.isArray(editingProduct.images) && editingProduct.images.length > 0
-          ? editingProduct.images.filter(Boolean)
-          : (editingProduct.imageUrl || "")
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean);
-      setDrEditImageSlotCount(Math.min(6, Math.max(3, list.length)));
-    } else {
-      setDrEditImageSlotCount(3);
-    }
-  }, [editingProduct?.id]);
-
-  const editingImages = useMemo(() => {
-    if (!editingProduct) return ["", "", ""];
-    const list =
-      Array.isArray(editingProduct.images) && editingProduct.images.length > 0
-        ? editingProduct.images.filter(Boolean)
-        : (editingProduct.imageUrl || "")
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean);
-
-    const count = Math.min(6, Math.max(3, drEditImageSlotCount, list.length));
-    const slots = [];
-    for (let i = 0; i < count; i++) {
-      const explicitVal = editingProduct[`img${i + 1}`];
-      slots.push(explicitVal !== undefined ? explicitVal : list[i] || "");
-    }
-    return slots;
-  }, [editingProduct, drEditImageSlotCount]);
-
-  const handleEditImageSlotChange = (slotIdx, val) => {
-    if (!editingProduct) return;
-    const nextSlots = [...editingImages];
-    nextSlots[slotIdx] = val;
-    const validList = nextSlots.map((s) => (s || "").trim()).filter(Boolean);
-    const updatedProps = {
-      ...editingProduct,
-      imageUrl: validList.join(", "),
-      images: validList,
-    };
-    nextSlots.forEach((v, idx) => {
-      updatedProps[`img${idx + 1}`] = v;
-    });
-    setEditingProduct(updatedProps);
-  };
+  }, [showVendorModal, showProductModal, editingVendor]);
 
   // Forms
   const [vendorForm, setVendorForm] = useState({
@@ -752,19 +696,7 @@ export default function DrDashboard() {
     commissionRate: 10,
   });
 
-  const [productForm, setProductForm] = useState({
-    name: "",
-    categoryId: "",
-    brand: "",
-    type: "",
-    grade: "",
-    unit: "50kg Bag",
-    price: "",
-    stockQty: "",
-    vendorId: "",
-    imageUrl: PRESET_IMAGES[0].url,
-    description: "",
-  });
+  const [productForm, setProductForm] = useState(EMPTY_LISTING_FORM);
 
   // Find current logged-in DR info dynamically
   const currentDr =
@@ -1114,6 +1046,10 @@ export default function DrDashboard() {
       showAlert({ title: "Validation Error", message: "Please fill all required vendor details!", type: "warning" });
       return;
     }
+    if (vendorForm.password.trim().length < 8) {
+      showAlert({ title: "Validation Error", message: "Password must be at least 8 characters.", type: "warning" });
+      return;
+    }
     if (isSubmittingVendor) return;
 
     setIsSubmittingVendor(true);
@@ -1126,7 +1062,7 @@ export default function DrDashboard() {
         shopName: vendorForm.shopName.trim(),
         ownerName: vendorForm.ownerName.trim(),
         phone: vendorForm.phone.trim(),
-        password: vendorForm.password.trim() || "vendor123",
+        password: vendorForm.password.trim(),
         regionId: targetRegionId,
         regionName: targetRegionName,
         districtName: targetRegionName,
@@ -1134,7 +1070,7 @@ export default function DrDashboard() {
         commissionRate: Number(vendorForm.commissionRate) || 10,
         addedByDr: `${user?.name || "DR"} (${targetRegionName})`,
         drId: currentDr.id,
-      });
+      }, { confirmConvert });
 
       if (created) {
         setDirectVendors((prev) => [created, ...prev.filter((v) => v.id !== created.id)]);
@@ -1146,10 +1082,11 @@ export default function DrDashboard() {
       setShowVendorModal(false);
       showAlert({
         title: "Vendor Added",
-        message: `Vendor "${vendorForm.shopName.trim()}" successfully added to Supabase Cloud Database!`,
+        message: "Vendor added.",
         type: "success",
       });
     } catch (err) {
+      if (err.cancelled) return;
       showAlert({ title: "Error", message: "Failed to add vendor: " + err.message, type: "error" });
     } finally {
       setIsSubmittingVendor(false);
@@ -1159,121 +1096,78 @@ export default function DrDashboard() {
   const handleUpdateVendorSubmit = async (e) => {
     e.preventDefault();
     if (!editingVendor) return;
+    const typedPassword = (editingVendor.password || "").trim();
+    if (typedPassword && typedPassword.length < 8) {
+      showAlert({ title: "Validation Error", message: "Password must be at least 8 characters.", type: "warning" });
+      return;
+    }
+    if (isSubmittingEditVendor) return;
     setIsSubmittingEditVendor(true);
     const vendorToSave = { ...editingVendor };
     markRecentDrEdit(vendorToSave.id, vendorToSave);
     setDirectVendors((prev) => prev.map((v) => (v.id === vendorToSave.id ? { ...v, ...vendorToSave } : v)));
-    setEditingVendor(null);
-    setIsSubmittingEditVendor(false);
-    showAlert({
-      title: "Vendor Updated",
-      message: `Vendor "${vendorToSave.shopName}" details & password updated successfully!`,
-      type: "success",
-    });
 
     try {
       await updateVendor(vendorToSave.id, vendorToSave);
+      setEditingVendor(null);
       fetchLiveVendorsDirect();
       window.dispatchEvent(new CustomEvent("buildcity_vendors_updated"));
+      showAlert({ title: "Vendor Updated", message: "Changes saved.", type: "success" });
     } catch (err) {
-      console.warn("Background update vendor note:", err.message);
+      // Revert the optimistic row to the server's state
+      fetchLiveVendorsDirect();
+      showAlert({ title: "Error", message: "Failed to update vendor: " + err.message, type: "error" });
+    } finally {
+      setIsSubmittingEditVendor(false);
     }
   };
 
-  const handleCreateProduct = async (e) => {
+  const openAddListing = (masterProductId = "") => {
+    setProductForm({
+      ...EMPTY_LISTING_FORM,
+      masterProductId: masterProductId ? String(masterProductId) : "",
+      vendorId: districtVendors.length > 0 ? String(districtVendors[0].id) : "",
+    });
+    setShowProductModal(true);
+  };
+
+  const handleCreateListing = async (e) => {
     e.preventDefault();
-    if (!productForm.name.trim() || !productForm.categoryId) {
-      showAlert({ title: "Validation Error", message: "Please select Category and enter Product Name!", type: "warning" });
+    if (isSubmittingProduct) return;
+    const targetVendorId = productForm.vendorId || (districtVendors.length > 0 ? districtVendors[0].id : null);
+    if (!productForm.masterProductId || !targetVendorId || !(Number(productForm.price) > 0)) {
+      showAlert({ title: "Validation Error", message: "Choose a product and vendor, and enter a price.", type: "warning" });
       return;
     }
-    if (isSubmittingProduct) return;
 
     setIsSubmittingProduct(true);
     try {
-      const createdMp = await addMasterProduct({
-        name: productForm.name.trim(),
-        categoryId: productForm.categoryId,
-        brand: productForm.brand.trim() || "Generic",
-        type: productForm.type.trim() || "Standard",
-        grade: productForm.grade.trim() || "Standard Grade",
-        unit: productForm.unit.trim() || "Piece",
-        suggestedPrice: Number(productForm.price) || 100,
-        price: Number(productForm.price) || 100,
-        imageUrl: productForm.imageUrl || PRESET_IMAGES[0].url,
-        description: productForm.description?.trim() || null,
-        addedBy: `DR: ${user?.name || "DR"} (${districtName})`,
+      await assignMasterProductToVendor({
+        masterProductId: productForm.masterProductId,
+        vendorId: targetVendorId,
+        regionId: drRegionId,
+        regionName: districtName,
+        districtName: districtName,
+        price: Number(productForm.price),
+        stockQty: Number(productForm.stockQty) || 100,
+        addedBy: `DR: ${user?.name || "DR"}`,
       });
 
-      const targetVendorId = productForm.vendorId || (districtVendors.length > 0 ? districtVendors[0].id : null);
-      if (createdMp && targetVendorId) {
-        await assignMasterProductToVendor({
-          masterProductId: createdMp.id,
-          vendorId: targetVendorId,
-          regionId: drRegionId,
-          regionName: districtName,
-          districtName: districtName,
-          price: Number(productForm.price) || 100,
-          stockQty: Number(productForm.stockQty) || 100,
-          description: productForm.description?.trim() || null,
-          addedBy: `DR: ${user?.name || "DR"}`,
-        }).catch(() => null);
-      }
-
-      setProductForm({
-        name: "",
-        categoryId: "",
-        brand: "",
-        type: "",
-        grade: "",
-        unit: "50kg Bag",
-        price: "",
-        stockQty: "",
-        vendorId: "",
-        imageUrl: PRESET_IMAGES[0].url,
-        description: "",
-      });
+      const mp = masterProducts.find((p) => String(p.id) === String(productForm.masterProductId));
+      setProductForm(EMPTY_LISTING_FORM);
       await fetchLiveProductsDirect();
       window.dispatchEvent(new CustomEvent("buildcity_products_updated"));
       setShowProductModal(false);
       showAlert({
-        title: "Product Added",
-        message: `Product "${productForm.name.trim()}" added to Master Catalog & District Listings!`,
+        title: "Listing Added",
+        message: `"${mp?.name || "Product"}" listed in ${districtName}.`,
         type: "success",
       });
     } catch (err) {
-      showAlert({ title: "Error", message: "Failed to add product: " + (err.message || err), type: "error" });
+      showAlert({ title: "Error", message: "Failed to add listing: " + (err?.message || err), type: "error" });
     } finally {
       setIsSubmittingProduct(false);
     }
-  };
-
-  const handleEditMasterProduct = (p) => {
-    const defaultDesc = `High-quality certified ${p.name || "Product"} by ${p.brand || "Authorized Brand"}. Supplied directly via BuildCity Certified Delivery Network.`;
-    setEditingProduct({
-      ...p,
-      description: p.description && p.description.trim() ? p.description : defaultDesc,
-    });
-  };
-
-  const handleSaveEditedMasterProduct = (e) => {
-    e.preventDefault();
-    if (!editingProduct) return;
-    const finalImgs = editingImages.map((s) => (s || "").trim()).filter(Boolean);
-    const finalImageUrl = finalImgs.join(", ") || editingProduct.imageUrl || "";
-
-    const prodToSave = {
-      ...editingProduct,
-      imageUrl: finalImageUrl,
-      images: finalImgs,
-      description: editingProduct.description !== undefined ? editingProduct.description?.trim() || null : undefined,
-    };
-    for (let i = 1; i <= 6; i++) {
-      delete prodToSave[`img${i}`];
-    }
-
-    setEditingProduct(null);
-    updateMasterProduct(prodToSave.id || prodToSave.masterProductId, prodToSave);
-    showAlert({ title: "Product Updated", message: `Product "${prodToSave.name}" updated successfully!`, type: "success" });
   };
 
   return (
@@ -1285,7 +1179,7 @@ export default function DrDashboard() {
       onTabChange={setActiveTab}
       stats={stats}
       onAddVendor={() => setShowVendorModal(true)}
-      onAddProduct={() => setShowProductModal(true)}
+      onAddProduct={() => openAddListing()}
       onOpenPendingApprovals={() => {
         setListingFilter(stats.pendingApprovalsCount > 0 ? "PENDING_REVIEW" : "ALL");
         setActiveTab("listings");
@@ -1295,7 +1189,8 @@ export default function DrDashboard() {
         <DrModals
           districtName={districtName}
           categories={categories}
-          presetImages={PRESET_IMAGES}
+          masterProducts={masterProducts}
+          districtVendors={districtVendors}
           showVendorModal={showVendorModal}
           setShowVendorModal={setShowVendorModal}
           vendorForm={vendorForm}
@@ -1307,17 +1202,11 @@ export default function DrDashboard() {
           productForm={productForm}
           setProductForm={setProductForm}
           isSubmittingProduct={isSubmittingProduct}
-          handleCreateProduct={handleCreateProduct}
+          handleCreateListing={handleCreateListing}
           editingVendor={editingVendor}
           setEditingVendor={setEditingVendor}
           isSubmittingEditVendor={isSubmittingEditVendor}
           handleUpdateVendorSubmit={handleUpdateVendorSubmit}
-          editingProduct={editingProduct}
-          setEditingProduct={setEditingProduct}
-          editingImages={editingImages}
-          handleEditImageSlotChange={handleEditImageSlotChange}
-          setEditImageSlotCount={setDrEditImageSlotCount}
-          onSaveEditedMasterProduct={handleSaveEditedMasterProduct}
         />
       }
     >
@@ -1383,8 +1272,7 @@ export default function DrDashboard() {
           setListingFilter={setListingFilter}
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}
-          onAddProduct={() => setShowProductModal(true)}
-          onEditMasterProduct={handleEditMasterProduct}
+          onAddProduct={openAddListing}
           busyListingAction={busyListingAction}
           onListingAction={handleListingAction}
         />
@@ -1428,7 +1316,7 @@ export default function DrDashboard() {
           districtName={districtName}
           stats={stats}
           onAddVendor={() => setShowVendorModal(true)}
-          onAddProduct={() => setShowProductModal(true)}
+          onAddProduct={() => openAddListing()}
           onLogout={logout}
         />
       )}

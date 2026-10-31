@@ -11,6 +11,38 @@ const { issueToken, requireAuth, optionalAuth, requireRole, requireSelfOrAdmin }
 const appEnv = require("./appEnv");
 const { enforceBoot, getEnvInfo } = appEnv;
 const outbox = require("./outbox");
+const { createDrRegionResolver, drSelfWhere, DrScopeUnavailableError } = require("./drScope");
+const {
+  OTP_MAX_ATTEMPTS,
+  OTP_TTL_MS,
+  OTP_GENERIC_ERROR,
+  ALLOWED_OTP_TYPES,
+  normalizePhone,
+  isValidPhoneInput,
+  hashOtp,
+  otpMatches,
+  legacyOtpHints,
+  planOtpRequest,
+  ensureOtpSchema,
+} = require("./otp");
+const {
+  SESSION_EXPIRED_BODY,
+  PARTNER_LOGIN_ERROR,
+  ADMIN_PHONE,
+  STAFF_ERRORS,
+  StaffError,
+  normalizeStaffPhone,
+  checkNewPassword,
+  isActiveStatus,
+  decidePartnerLogin,
+  stripPasswords,
+  planStaffAccount,
+  createOrConvertStaffUser,
+  writeAudit,
+  retireStaffUser,
+  ensureStaffSchema,
+} = require("./staff");
+const { ensureNotificationSchema } = require("./notifications");
 const STAGING_OTP = "654321";
 const TEST_PHONE_RE = /^10000\d{5}$/;
 
@@ -63,6 +95,10 @@ class ClientError extends Error {
 
 // Logs the real error server-side and returns a generic message (no Prisma/stack internals)
 function sendServerError(res, err, label = "Request") {
+  if (err instanceof DrScopeUnavailableError) {
+    console.error(`${label} error: DR scope lookup failed:`, err.cause);
+    return res.status(err.status).json({ error: err.message });
+  }
   if (err instanceof ClientError) {
     return res.status(err.status).json({ error: err.message });
   }
@@ -74,6 +110,13 @@ function sendServerError(res, err, label = "Request") {
   }
   console.error(`${label} error:`, err);
   return res.status(500).json({ error: "Something went wrong. Please try again." });
+}
+
+// Staff create/update/delete errors: fixed 4xx bodies, a unique-phone race as 409, everything else generic
+function sendStaffError(res, err, label) {
+  if (err instanceof StaffError) return res.status(err.status).json(err.body);
+  if (err?.code === "P2002") return res.status(409).json(STAFF_ERRORS.PHONE_IN_USE);
+  return sendServerError(res, err, label);
 }
 
 const SAFE_USER_SELECT = { id: true, name: true, phone: true, email: true, role: true };
@@ -188,70 +231,24 @@ async function computeOrdersSummary(where, { vendorId } = {}) {
 }
 
 // Resolves the Vendor row owned by the authenticated VENDOR (token sub is the vendor's user id)
-// (falls back to the phone in the signed token for legacy vendor rows without a linked user)
+// (falls back to the phone in the signed token for legacy vendor rows without a linked user).
+// Only a live, APPROVED row counts (same rule as login and /users/me), so an old token of a deleted
+// or suspended vendor gets no vendor scope at once.
 async function resolveOwnVendor(req) {
   const byUser = await prisma.vendor.findFirst({
-    where: { OR: [{ userId: req.auth.userId }, { id: req.auth.userId }] },
+    where: { OR: [{ userId: req.auth.userId }, { id: req.auth.userId }], disabledAt: null, status: "APPROVED" },
   }).catch(() => null);
   if (byUser) return byUser;
 
   const cleanPhone = String(req.auth?.phone || "").replace(/\D/g, "");
   if (cleanPhone.length !== 10) return null;
-  return prisma.vendor.findFirst({ where: { phone: cleanPhone } }).catch(() => null);
+  return prisma.vendor.findFirst({ where: { phone: cleanPhone, disabledAt: null, status: "APPROVED" } }).catch(() => null);
 }
 
-// Same district aliases as the DR dashboard, so "Banaras" and "Varanasi" region rows count as one district
-const DISTRICT_ALIASES = {
-  varanasi: ["varanasi", "varnasi", "banaras", "kashi", "vns"],
-  mirzapur: ["mirzapur", "mzp"],
-  prayagraj: ["prayagraj", "allahabad"],
-  jaunpur: ["jaunpur"],
-};
-function canonicalDistrict(name) {
-  const clean = String(name || "").toLowerCase().trim();
-  if (!clean) return "";
-  for (const [district, aliases] of Object.entries(DISTRICT_ALIASES)) {
-    if (aliases.some((alias) => clean.includes(alias))) return district;
-  }
-  return clean;
-}
-
-// Region IDs covering the logged-in DR's assigned district(s).
-// A DR dashboard load sends several requests at once (cloud-sync, orders, summary, vendors,
-// listings) that each need this, so results are cached briefly; any mutation clears the cache
-// (see invalidateCache), so a DR reassignment still applies immediately.
-const DR_REGION_CACHE_TTL_MS = 30000;
-const drRegionIdsCache = new Map();
-
-async function resolveCallerDrRegionIds(auth) {
-  const last10 = String(auth?.phone || "").replace(/\D/g, "").slice(-10);
-  const or = [];
-  if (auth?.userId) or.push({ id: auth.userId }, { userId: auth.userId });
-  if (last10.length === 10) or.push({ phone: { endsWith: last10 } });
-  if (or.length === 0) return [];
-
-  const cacheKey = `${auth?.userId || ""}|${last10}`;
-  const cached = drRegionIdsCache.get(cacheKey);
-  // Callers get their own copy so none can alter the cached list
-  if (cached && cached.expiresAt > Date.now()) return cached.promise.then((ids) => ids.slice());
-
-  const promise = (async () => {
-    // Both reads in parallel: the region list is small, and this saves a sequential round trip
-    const [drs, regions] = await Promise.all([
-      prisma.dR.findMany({ where: { OR: or }, include: { region: true } }).catch(() => []),
-      prisma.region.findMany({ select: { id: true, name: true } }).catch(() => []),
-    ]);
-    const regionIds = new Set(drs.map((d) => d.regionId).filter(Boolean));
-    const districts = new Set(drs.map((d) => canonicalDistrict(d.region?.name)).filter(Boolean));
-    for (const r of regions) {
-      if (districts.has(canonicalDistrict(r.name))) regionIds.add(r.id);
-    }
-    return Array.from(regionIds);
-  })();
-  drRegionIdsCache.set(cacheKey, { promise, expiresAt: Date.now() + DR_REGION_CACHE_TTL_MS });
-  promise.catch(() => drRegionIdsCache.delete(cacheKey));
-  return promise.then((ids) => ids.slice());
-}
+// Region IDs covering the logged-in DR's assigned district(s); rejects with DrScopeUnavailableError
+// (-> 503 via sendServerError) when the lookup fails, so a DB error never widens or drops the scope.
+const drRegionResolver = createDrRegionResolver(prisma);
+const resolveCallerDrRegionIds = (auth) => drRegionResolver.resolve(auth);
 
 // DRs may only manage shops (and their listings) in their own district
 async function drCanManageVendor(auth, vendorOrId) {
@@ -261,6 +258,19 @@ async function drCanManageVendor(auth, vendorOrId) {
   if (!vendor?.regionId) return false;
   const drRegionIds = await resolveCallerDrRegionIds(auth);
   return drRegionIds.includes(vendor.regionId);
+}
+
+// FCM device tokens: a non-empty string of at most 4096 chars (trimmed), else null
+function cleanDeviceToken(v) {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t.length >= 1 && t.length <= 4096 ? t : null;
+}
+
+// Exact vendor lookup for a DR/ADMIN-supplied id (vendor id or the vendor's user id); never fuzzy
+function findVendorByExactId(id) {
+  if (typeof id !== "string" || !id) return null;
+  return prisma.vendor.findFirst({ where: { OR: [{ id }, { userId: id }] } });
 }
 
 // Orders a DR may access: delivered into, or fulfilled by a shop in, one of the given regions
@@ -298,7 +308,10 @@ app.use((req, res, next) => {
 const otpRequestLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 5,
-  keyGenerator: (req) => String(req.body?.phone || req.ip),
+  keyGenerator: (req) => {
+    const p = normalizePhone(req.body?.phone);
+    return p.length === 10 ? `otp-req:${p}` : `otp-req-ip:${req.ip}`;
+  },
   message: { error: "Too many OTP requests. Please try again after an hour." },
   standardHeaders: true,
   legacyHeaders: false,
@@ -331,7 +344,10 @@ const partnerLoginLimiter = rateLimit({
 const otpVerifyLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 mins
   max: 10,
-  keyGenerator: (req) => String(req.body?.phone || req.ip),
+  keyGenerator: (req) => {
+    const p = normalizePhone(req.body?.phone);
+    return p.length === 10 ? `otp-ver:${p}` : `otp-ver-ip:${req.ip}`;
+  },
   message: { error: "Too many attempts. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
@@ -355,7 +371,7 @@ function setCached(key, data, ttlMs = 60000) {
 function invalidateCache(prefix) {
   if (!prefix) {
     memoryCache.clear();
-    drRegionIdsCache.clear();
+    drRegionResolver.clear();
   } else {
     for (const k of memoryCache.keys()) {
       if (k.startsWith(prefix)) memoryCache.delete(k);
@@ -497,7 +513,9 @@ app.get("/api/v1/public-catalog", async (req, res) => {
     const [categories, regions, listings, coupons, masterProducts, dbBanners] = await Promise.all([
       prisma.category.findMany({ orderBy: { name: "asc" } }).catch(() => []),
       prisma.region.findMany({ orderBy: { name: "asc" } }).catch(() => []),
+      // Storefront only: approved, active listings of shops that are neither suspended nor soft-deleted
       prisma.vendorProduct.findMany({
+        where: { approvalStatus: "APPROVED", isActive: true, vendor: { status: { not: "SUSPENDED" }, disabledAt: null } },
         include: {
           vendor: {
             select: {
@@ -518,12 +536,15 @@ app.get("/api/v1/public-catalog", async (req, res) => {
     ]);
 
     const finalBanners = dbBanners && dbBanners.length > 0 ? dbBanners : bannersList;
+    // The hardcoded list is only a fallback for an empty coupons table, never for "every DB coupon is inactive"
+    const dbCoupons = coupons || [];
+    const activeCoupons = dbCoupons.filter((c) => c.isActive === true);
 
     const result = {
       categories,
       regions,
       listings,
-      coupons: coupons && coupons.length > 0 ? coupons : couponsList,
+      coupons: dbCoupons.length > 0 ? activeCoupons : couponsList.filter((c) => c.isActive),
       masterProducts,
       banners: finalBanners,
     };
@@ -572,7 +593,8 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
     // Short per-role cache: a full sync reads almost every table, so many open dashboards (or a
     // client refresh bug) must not translate 1:1 into database egress. Any catalog/order mutation
     // clears the cache (see invalidateCache middleware), so staff still see changes immediately.
-    const cacheKey = `cloud_sync_${role}_${ownVendor ? ownVendor.id : ""}_${drRegionIds ? [...drRegionIds].sort().join(",") : ""}`;
+    // A DR's sync includes its own DR record, so DR entries are also keyed by caller
+    const cacheKey = `cloud_sync_${role}_${ownVendor ? ownVendor.id : ""}_${drRegionIds ? `${req.auth.userId}_${[...drRegionIds].sort().join(",")}` : ""}`;
     const cached = getCached(cacheKey);
     if (cached) {
       res.setHeader("X-Cache", "HIT");
@@ -583,14 +605,16 @@ app.get("/api/v1/cloud-sync", requireAuth, requireRole("ADMIN", "DR", "VENDOR"),
       ? { items: { some: { vendorId: ownVendor.id } } }
       : drRegionIds ? ordersInRegionsWhere(drRegionIds) : {};
 
+    // DRs see only their own DR record; vendors see none
+    const drsWhere = role === "DR" ? drSelfWhere(req.auth) : undefined;
     const fetchPromises = [
-      isVendor ? Promise.resolve([]) : prisma.dR.findMany({
-        where: drRegionIds ? { regionId: { in: drRegionIds } } : undefined,
+      isVendor || (role === "DR" && !drsWhere) ? Promise.resolve([]) : prisma.dR.findMany({
+        where: drsWhere ? { AND: [drsWhere, { disabledAt: null }] } : { disabledAt: null },
         include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
         orderBy: { joinedOn: "desc" },
       }).then(list => list.map(d => { const { password, ...safe } = d; return safe; })).catch(() => []),
       prisma.vendor.findMany({
-        where: isVendor ? { id: ownVendor.id } : drRegionIds ? { regionId: { in: drRegionIds } } : undefined,
+        where: { ...(isVendor ? { id: ownVendor.id } : drRegionIds ? { regionId: { in: drRegionIds } } : {}), disabledAt: null },
         include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
         orderBy: { joinedOn: "desc" },
       }).then(list => list.map(v => { const { password, ...safe } = v; return safe; })).catch(() => []),
@@ -697,28 +721,48 @@ app.post("/api/v1/auth/vendor/login", partnerLoginLimiter, async (req, res) => {
       return res.status(400).json({ error: "Mobile number and Password are required." });
     }
 
-    const cleanPhone = phone.trim().replace(/\D/g, "");
-    const cleanPassword = password.trim();
+    const rawPhone = String(phone);
+    const phone10 = normalizeStaffPhone(rawPhone) || rawPhone.trim().replace(/\D/g, "");
+    const cleanPassword = String(password).trim();
+    // Legacy rows may store the phone exactly as typed, so the raw value is matched too
+    const phones = [...new Set([phone10, rawPhone])];
 
-    // 1. Super Admin Check (Phone: 9999999999)
-    if (cleanPhone === "9999999999") {
-      const adminUser = await prisma.user.findUnique({ where: { phone: "9999999999" } }).catch(() => null);
+    // The User for this phone, else the user behind a legacy DR/vendor row with that phone
+    let user = phone10 ? await prisma.user.findUnique({ where: { phone: phone10 } }) : null;
+    if (!user && rawPhone !== phone10) user = await prisma.user.findUnique({ where: { phone: rawPhone } });
+    if (!user) {
+      const legacyRow =
+        (await prisma.dR.findFirst({ where: { phone: { in: phones } }, select: { userId: true } })) ||
+        (await prisma.vendor.findFirst({ where: { phone: { in: phones } }, select: { userId: true } }));
+      if (legacyRow) user = await prisma.user.findUnique({ where: { id: legacyRow.userId } });
+    }
+    const [dr, vendor] = user
+      ? await Promise.all([
+          prisma.dR.findFirst({
+            where: { userId: user.id, disabledAt: null, status: { equals: "ACTIVE", mode: "insensitive" } },
+            include: { user: true, region: true },
+          }),
+          prisma.vendor.findFirst({
+            where: { userId: user.id, disabledAt: null, status: "APPROVED" },
+            include: { region: true, user: true },
+            orderBy: { joinedOn: "desc" },
+          }),
+        ])
+      : [null, null];
 
-      if (!adminUser || !adminUser.password) {
-        return res.status(401).json({ error: "Invalid mobile number or password." });
-      }
+    // One generic 401 for every failure: unknown phone, wrong password, disabled/deleted/suspended/pending accounts
+    const decision = await decidePartnerLogin({ phone10, password: cleanPassword, user, dr, vendor }, (p, h) => bcrypt.compare(p, h));
+    if (!decision.ok) {
+      return res.status(401).json(PARTNER_LOGIN_ERROR);
+    }
 
-      const isMatch = await bcrypt.compare(cleanPassword, adminUser.password).catch(() => false);
-      if (!isMatch) {
-        return res.status(401).json({ error: "Invalid mobile number or password." });
-      }
-
+    if (decision.kind === "ADMIN") {
       const adminObj = {
-        id: adminUser.id || "u-admin-9999999999",
-        name: adminUser.name || "Super Admin",
-        phone: "9999999999",
+        id: user.id,
+        name: user.name || "Super Admin",
+        phone: ADMIN_PHONE,
         role: "ADMIN",
-        tokenVersion: adminUser.tokenVersion || 1,
+        tokenVersion: user.tokenVersion || 1,
       };
       const token = issueToken(adminObj);
 
@@ -734,47 +778,17 @@ app.post("/api/v1/auth/vendor/login", partnerLoginLimiter, async (req, res) => {
       });
     }
 
-    // 2-4. Look up the User, DR and Vendor rows for this phone in parallel (one DB round trip
-    // instead of three back-to-back ones); the role checks below still run in the same order.
-    const [userInDb, drInDb, vendor] = await Promise.all([
-      prisma.user.findFirst({
-        where: { OR: [{ phone: cleanPhone }, { phone }] },
-      }).catch(() => null),
-      prisma.dR.findFirst({
-        where: { OR: [{ phone: cleanPhone }, { phone }] },
-        include: { user: true, region: true },
-      }).catch(() => null),
-      prisma.vendor.findFirst({
-        where: { OR: [{ phone: cleanPhone }, { phone }] },
-        include: { region: true, user: true },
-      }).catch(() => null),
-    ]);
-
-    // 3. District Representative (DR) Check
-    if (drInDb || userInDb?.role === "DR") {
-      const storedPassword =
-        drInDb?.password ||
-        drInDb?.user?.password ||
-        userInDb?.password;
-
-      if (!storedPassword) {
-        return res.status(401).json({ error: "Invalid mobile number or password." });
-      }
-
-      const isMatch = await bcrypt.compare(cleanPassword, storedPassword).catch(() => false);
-      if (!isMatch) {
-        return res.status(401).json({ error: "Invalid mobile number or password." });
-      }
-
+    if (decision.kind === "DR") {
+      const safeDr = stripPasswords(dr);
       const drUserObj = {
-        id: userInDb?.id || drInDb?.userId || drInDb?.id || `u-dr-${cleanPhone}`,
-        name: drInDb?.name || userInDb?.name || "District Representative",
-        phone: cleanPhone,
+        id: user.id,
+        name: dr.name || user.name || "District Representative",
+        phone: phone10,
         role: "DR",
-        regionId: drInDb?.regionId || drInDb?.region?.id,
-        regionName: drInDb?.region?.name,
-        drInfo: drInDb || null,
-        tokenVersion: userInDb?.tokenVersion || drInDb?.user?.tokenVersion || 1,
+        regionId: dr.regionId || dr.region?.id,
+        regionName: dr.region?.name,
+        drInfo: safeDr,
+        tokenVersion: user.tokenVersion || 1,
       };
       const token = issueToken(drUserObj);
 
@@ -782,83 +796,37 @@ app.post("/api/v1/auth/vendor/login", partnerLoginLimiter, async (req, res) => {
         success: true,
         token,
         user: drUserObj,
-        dr: drInDb,
+        dr: safeDr,
       });
     }
 
-    // 4. Vendor record (looked up above)
-    let user = null;
-    if (vendor && vendor.user) {
-      user = vendor.user;
-    } else if (userInDb && userInDb.role === "VENDOR" && userInDb.phone === cleanPhone) {
-      user = userInDb;
-    } else {
-      user = await prisma.user.findFirst({
-        where: {
-          phone: cleanPhone,
-          role: "VENDOR",
-        },
-      }).catch(() => null);
-    }
-
-    if (!user && !vendor) {
-      return res.status(401).json({ error: "Invalid mobile number or password." });
-    }
-
-    // Verify Vendor Status (Must be APPROVED)
-    const currentStatus = vendor?.status || "APPROVED";
-    if (currentStatus === "SUSPENDED") {
-      return res.status(403).json({ error: "Your account is SUSPENDED. Please contact Super Admin." });
-    }
-    if (currentStatus === "PENDING" || currentStatus === "PENDING_REVIEW") {
-      return res.status(403).json({ error: "Your account is PENDING approval from Admin." });
-    }
-
-    // Verify Password with Bcrypt against Vendor or User password hash
-    const storedPassword = vendor?.password || user?.password || vendor?.user?.password;
-    if (!storedPassword) {
-      return res.status(401).json({ error: "Invalid mobile number or password." });
-    }
-
-    const isMatch = await bcrypt.compare(cleanPassword, storedPassword).catch(() => false);
-    if (!isMatch) {
-      return res.status(401).json({ error: "Invalid mobile number or password." });
-    }
-
-    const resUser = user || {
-      id: vendor?.userId || `u-vendor-${cleanPhone}`,
-      name: vendor?.ownerName || vendor?.shopName || "Vendor Partner",
-      phone: cleanPhone,
-      role: "VENDOR",
-      tokenVersion: user?.tokenVersion || 1,
-    };
-
+    const { password: _userPassword, ...safeUser } = user;
+    const safeVendor = stripPasswords(vendor);
     const vendorUserObj = {
-      ...resUser,
+      ...safeUser,
       role: "VENDOR",
-      vendorInfo: vendor,
-      tokenVersion: resUser.tokenVersion || 1,
+      vendorInfo: safeVendor,
+      tokenVersion: user.tokenVersion || 1,
     };
     const token = issueToken(vendorUserObj);
 
     // FCM device token registration during login. saveToken() puts the token in its in-memory
     // map synchronously (so pushes work immediately), then persists it to the DB with several
     // round trips; those run in the background so they don't hold up the login response.
-    if (fcmToken) {
-      const vId = vendor?.id || vendor?.userId || resUser.id;
-      if (vId) {
-        const { saveToken } = require("./pushService");
-        saveToken(vId, fcmToken, cleanPhone)
-          .then(() => console.log(`✅ FCM device token saved during login for vendor ${vId}`))
-          .catch((fcmErr) => console.warn("Login FCM save note:", fcmErr.message));
-      }
+    const loginDeviceToken = cleanDeviceToken(fcmToken);
+    if (loginDeviceToken) {
+      const vId = vendor.id;
+      const { saveToken } = require("./pushService");
+      saveToken(vId, loginDeviceToken, phone10)
+        .then(() => console.log(`✅ FCM device token saved during login for vendor ${vId}`))
+        .catch((fcmErr) => console.warn("Login FCM save note:", fcmErr.message));
     }
 
     res.json({
       success: true,
       token,
       user: vendorUserObj,
-      vendor,
+      vendor: safeVendor,
     });
   } catch (err) {
     sendServerError(res, err, "Vendor login");
@@ -868,7 +836,7 @@ app.post("/api/v1/auth/vendor/login", partnerLoginLimiter, async (req, res) => {
 // Coupons Endpoints with Prisma PostgreSQL DB
 app.get("/api/v1/coupons", async (req, res) => {
   try {
-    const dbCoupons = await prisma.coupon.findMany({ orderBy: { createdAt: "desc" } }).catch(() => []);
+    const dbCoupons = await prisma.coupon.findMany({ where: { isActive: true }, orderBy: { createdAt: "desc" } }).catch(() => []);
     res.json(dbCoupons || []);
   } catch {
     res.json([]);
@@ -1357,6 +1325,174 @@ app.get("/api/v1/admin/wallet-users", requireAuth, requireRole("ADMIN"), async (
   }
 });
 
+
+// Admin: Get Referral Network for a user (Upline referrer & Downline referees)
+app.get("/api/v1/admin/referral-network/:userId", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        referralCode: true,
+        referredBy: true,
+        walletBalance: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+
+    // 1. Upline: Who referred this customer?
+    let referrer = null;
+    if (user.referredBy) {
+      referrer = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { id: user.referredBy },
+            { referralCode: user.referredBy },
+          ],
+        },
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          referralCode: true,
+          createdAt: true,
+          walletBalance: true,
+        },
+      });
+    }
+
+    // 2. Downline: Who did this customer refer?
+    const referees = await prisma.user.findMany({
+      where: {
+        OR: [
+          { referredBy: user.id },
+          ...(user.referralCode ? [{ referredBy: user.referralCode }] : []),
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        referralCode: true,
+        walletBalance: true,
+        createdAt: true,
+        orders: {
+          select: {
+            id: true,
+            status: true,
+            totalAmount: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    // 3. Referral commissions earned from wallet transactions
+    const referralEarnings = await prisma.walletTransaction.findMany({
+      where: {
+        userId: user.id,
+        type: { in: ["REFERRAL", "REFERRAL_BONUS"] },
+      },
+      select: {
+        id: true,
+        amount: true,
+        description: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    }).catch(() => []);
+
+    res.json({
+      user: {
+        id: user.id,
+        name: user.name,
+        phone: user.phone,
+        referralCode: user.referralCode,
+        walletBalance: Number(user.walletBalance) || 0,
+        createdAt: user.createdAt,
+      },
+      referrer: referrer
+        ? {
+            id: referrer.id,
+            name: referrer.name,
+            phone: referrer.phone,
+            referralCode: referrer.referralCode,
+            walletBalance: Number(referrer.walletBalance) || 0,
+            createdAt: referrer.createdAt,
+          }
+        : null,
+      referees: referees.map((r) => ({
+        id: r.id,
+        name: r.name,
+        phone: r.phone,
+        referralCode: r.referralCode,
+        walletBalance: Number(r.walletBalance) || 0,
+        createdAt: r.createdAt,
+        orderCount: (r.orders || []).length,
+        deliveredOrdersCount: (r.orders || []).filter((o) => o.status === "DELIVERED").length,
+      })),
+      totalReferredCount: referees.length,
+      referralEarnings: referralEarnings.map((e) => ({
+        ...e,
+        amount: Number(e.amount) || 0,
+      })),
+    });
+  } catch (err) {
+    sendServerError(res, err);
+  }
+});
+
+// Admin: Get Full Wallet Transaction History for a user
+app.get("/api/v1/admin/wallet-history/:userId", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        walletBalance: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+
+    const transactions = await prisma.walletTransaction.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+
+    res.json({
+      user: {
+        id: user.id,
+        name: user.name,
+        phone: user.phone,
+        walletBalance: Number(user.walletBalance) || 0,
+      },
+      transactions: transactions.map((t) => ({
+        ...t,
+        amount: Number(t.amount) || 0,
+      })),
+    });
+  } catch (err) {
+    sendServerError(res, err);
+  }
+});
+
 // 4. Admin: Manual Wallet Adjustment (+Credit / -Debit)
 app.post("/api/v1/admin/wallet-adjust", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
@@ -1655,127 +1791,114 @@ const { sendRealSMSOTP } = require("./smsService");
 
 // 1. AUTHENTICATION & USERS ENDPOINTS (INSTANT HIGH SPEED OPTIMIZED)
 app.post("/api/v1/auth/otp/request", otpRequestIpLimiter, otpRequestLimiter, async (req, res) => {
-  const { phone, type = "login" } = req.body;
-  if (!phone || !/^\d{10}$/.test(phone)) {
+  const { phone } = req.body || {};
+  const type = req.body?.type ?? "login";
+  if (typeof type !== "string" || !ALLOWED_OTP_TYPES.includes(type)) {
+    return res.status(400).json({ error: "Invalid request type" });
+  }
+  if (!isValidPhoneInput(phone)) {
     return res.status(400).json({ error: "Valid 10-digit phone number required" });
   }
+  const phone10 = normalizePhone(phone);
 
   try {
-    // Clean 10-digit mobile number
-    const cleanPhone = phone.trim().replace(/\D/g, "").slice(-10);
-
     // Off-production only the reserved test numbers may request an OTP (no real user is ever messaged).
-    if (!appEnv.isProduction() && !TEST_PHONE_RE.test(cleanPhone)) {
+    if (!appEnv.isProduction() && !TEST_PHONE_RE.test(phone10)) {
       return res.status(403).json({ error: "Staging: use a test number" });
     }
 
-    // Fast Partner Phone Check
-    const isSpecialAdminOrDr = cleanPhone === "9999999999" || cleanPhone === "7777777777";
-    if (isSpecialAdminOrDr) {
-      return res.status(403).json({
-        error: "Special Admin and DR accounts cannot log in using Mobile OTP. Please click 'Partner Login (Password)' at the bottom.",
-        isStaffBlocked: true,
-      });
-    }
+    const isSpecial = phone10 === "9999999999" || phone10 === "7777777777";
+    const existingUser = isSpecial
+      ? null
+      : await prisma.user.findUnique({ where: { phone: phone10 }, select: { role: true } });
 
-    if (cleanPhone.length !== 10) {
-      return res.status(400).json({ error: "Please enter a valid 10-digit mobile number" });
-    }
+    const plan = planOtpRequest({
+      phone10,
+      type,
+      existingRole: existingUser ? existingUser.role : null,
+      isSpecial,
+      legacyHints: legacyOtpHints(),
+    });
+    if (!plan.issue) return res.status(plan.status).json(plan.body);
 
-    // Single Ultra-Fast Indexed User Lookup (1ms exact index query)
-    const existingUser = await prisma.user.findUnique({
-      where: { phone: cleanPhone },
-      select: { id: true, role: true, name: true },
-    }).catch(() => null);
-
-    // Block Staff (Vendor, DR, Admin) from Customer OTP
-    if (existingUser && ["ADMIN", "DR", "VENDOR"].includes(existingUser.role)) {
-      return res.status(403).json({
-        error: "Vendor, DR, and Admin accounts cannot log in using Mobile OTP. Please click 'Partner Login (Password)' at the bottom.",
-        isStaffBlocked: true,
-      });
-    }
-
-    // If logging in, user MUST be registered
-    if (type === "login" && !existingUser) {
-      return res.status(200).json({
-        success: false,
-        notRegistered: true,
-        error: "This mobile number is not registered. Please create an account first.",
-      });
-    }
-
-    // If registering, check if already registered
-    if (type === "register" && existingUser) {
-      return res.status(200).json({
-        success: false,
-        alreadyRegistered: true,
-        error: "This mobile number is already registered. Please log in directly.",
-      });
-    }
-
-    // Generate 6-digit OTP code instantly
     // Cryptographically secure OTP (Math.random is predictable)
     const generatedOtp = appEnv.isProduction() ? crypto.randomInt(100000, 1000000).toString() : STAGING_OTP;
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins expiry
 
-    // Replace older OTPs for this phone and save the new one before responding so verify never races
-    await prisma.oTPVerification.deleteMany({ where: { phone: cleanPhone } }).catch(() => null);
-    await prisma.oTPVerification.create({
-      data: {
-        phone: cleanPhone,
-        otp: generatedOtp,
-        expiresAt,
-        createdAt: new Date(),
-      },
-    }).catch((e) => console.warn("OTP save note:", e.message));
+    // Replace older OTPs for this phone and save the new one (hashed) before responding so verify never races
+    try {
+      await prisma.$transaction([
+        prisma.oTPVerification.deleteMany({ where: { phone: phone10 } }),
+        prisma.oTPVerification.create({
+          data: { phone: phone10, otp: hashOtp(phone10, generatedOtp), expiresAt: new Date(Date.now() + OTP_TTL_MS), attempts: 0 },
+        }),
+      ]);
+    } catch (e) {
+      console.error("[otp] could not save OTP row:", e.message);
+      return sendServerError(res, e, "OTP dispatch");
+    }
 
     // Dispatch Live SMS via parallel fastest-gateway in background
-    sendRealSMSOTP(cleanPhone, generatedOtp).catch((smsErr) => {
+    sendRealSMSOTP(phone10, generatedOtp).catch((smsErr) => {
       console.warn("[Background SMS Notice]:", smsErr.message);
     });
 
     // Instant Response to Frontend (<100ms) so OTP entry screen opens immediately
-    return res.json({
-      success: true,
-      message: `OTP dispatched to +91 ${cleanPhone.slice(-10)}`,
-      gateway: "AradhyaSMS",
-      smsStatus: "dispatched",
-      isRegistered: !!existingUser,
-    });
+    return res.status(plan.status).json(plan.body);
   } catch (err) {
     sendServerError(res, err, "OTP dispatch");
   }
 });
 
 app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
-  const { phone, otp, name } = req.body;
-  if (!phone || !otp) return res.status(400).json({ error: "Phone and OTP required" });
+  const { phone, otp, name } = req.body || {};
+  if (!phone || otp === undefined || otp === null || otp === "" || !["string", "number"].includes(typeof otp)) {
+    return res.status(400).json({ error: "Phone and OTP required" });
+  }
+  const phone10 = normalizePhone(phone);
+  if (phone10.length !== 10) return res.status(400).json({ error: "Phone and OTP required" });
+  const code = String(otp).trim();
 
   try {
-    const cleanPhone = phone.trim().replace(/\D/g, "").slice(-10);
-
-    // Single Fast Customer OTP Match Query (Indexed 2ms lookup)
-    const validRecord = await prisma.oTPVerification.findFirst({
-      where: {
-        phone: cleanPhone,
-        otp: otp.trim(),
-        expiresAt: { gte: new Date() },
-      },
+    const now = new Date();
+    const row = await prisma.oTPVerification.findFirst({
+      where: { phone: phone10, expiresAt: { gte: now } },
       orderBy: { createdAt: "desc" },
-    }).catch(() => null);
-
-    if (!validRecord) {
-      return res.status(401).json({ error: "Invalid or expired OTP. Please enter the exact OTP code sent to your mobile." });
+      select: { id: true, otp: true, attempts: true },
+    });
+    if (!row || row.attempts >= OTP_MAX_ATTEMPTS) {
+      return res.status(401).json({ error: OTP_GENERIC_ERROR });
     }
 
-    // One-time use: consume every OTP for this phone so it can't be replayed
-    await prisma.oTPVerification.deleteMany({ where: { phone: cleanPhone } }).catch(() => null);
+    // Reserve an attempt atomically before comparing, so parallel guesses can't exceed the cap
+    const slot = await prisma.oTPVerification.updateMany({
+      where: { id: row.id, attempts: { lt: OTP_MAX_ATTEMPTS }, expiresAt: { gte: now } },
+      data: { attempts: { increment: 1 } },
+    });
+    if (slot.count !== 1) return res.status(401).json({ error: OTP_GENERIC_ERROR });
+
+    if (!otpMatches(row, phone10, code, Date.now())) {
+      await prisma.oTPVerification
+        .deleteMany({ where: { id: row.id, attempts: { gte: OTP_MAX_ATTEMPTS } } })
+        .catch((e) => console.error("[otp] could not delete exhausted OTP row:", e.message));
+      return res.status(401).json({ error: OTP_GENERIC_ERROR });
+    }
+
+    // One-time use: only the request that deletes the row wins; a concurrent verify gets 401
+    const consumed = await prisma.oTPVerification.deleteMany({ where: { id: row.id } });
+    if (consumed.count !== 1) return res.status(401).json({ error: OTP_GENERIC_ERROR });
+    await prisma.oTPVerification
+      .deleteMany({ where: { phone: phone10 } })
+      .catch((e) => console.error("[otp] could not clear other OTP rows:", e.message));
 
     // Fast Indexed User Lookup
     let user = await prisma.user.findUnique({
-      where: { phone: cleanPhone },
+      where: { phone: phone10 },
     }).catch(() => null);
+
+    // A disabled account gets the same answer as a wrong code
+    if (user && !isActiveStatus(user.status)) {
+      return res.status(401).json({ error: OTP_GENERIC_ERROR });
+    }
 
     // Block Staff accounts if found
     if (user && ["ADMIN", "DR", "VENDOR"].includes(user.role)) {
@@ -1806,7 +1929,7 @@ app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
       }
     } else {
       // Create new user in DB with exact Name, preferred region, and referral code
-      const customerName = name && name.trim().length >= 2 ? name.trim() : `Customer ${cleanPhone.slice(-4)}`;
+      const customerName = name && name.trim().length >= 2 ? name.trim() : `Customer ${phone10.slice(-4)}`;
       const myRefCode = await generateUniqueReferralCode();
 
       // Check if a valid referral code was passed during signup
@@ -1819,13 +1942,13 @@ app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
         }).catch(() => null);
         if (referrerUser && referrerUser.id) {
           referrerId = referrerUser.id;
-          console.log(`🤝 Linked new customer (${cleanPhone}) to referrer ${referrerId}`);
+          console.log(`🤝 Linked new customer (${phone10}) to referrer ${referrerId}`);
         }
       }
 
       user = await prisma.user.create({
         data: {
-          phone: cleanPhone,
+          phone: phone10,
           name: customerName,
           role: "CUSTOMER",
           preferredRegionId: req.body.preferredRegionId || null,
@@ -1852,9 +1975,19 @@ app.post("/api/v1/auth/otp/verify", otpVerifyLimiter, async (req, res) => {
 // Fetch Current Authenticated User Profile (Zero PII in URL)
 app.get("/api/v1/users/me", requireAuth, async (req, res) => {
   try {
-    let user = await prisma.user.findUnique({ where: { id: req.auth.userId } }).catch(() => null);
+    // No .catch here: a DB error must be a 500, never a 401 that logs a healthy session out
+    let user = await prisma.user.findUnique({ where: { id: req.auth.userId } });
     if (!user && req.auth.phone) {
-      user = await prisma.user.findUnique({ where: { phone: req.auth.phone } }).catch(() => null);
+      user = await prisma.user.findUnique({ where: { phone: req.auth.phone } });
+    }
+
+    // Disabled, converted or deleted accounts: the token is not refreshed (no silent role change)
+    if (user && (!isActiveStatus(user.status) || user.role !== req.auth.role)) {
+      return res.status(401).json(SESSION_EXPIRED_BODY);
+    }
+    // No account row (every role, ADMIN included): never mint a synthetic profile or a fresh token
+    if (!user) {
+      return res.status(401).json(SESSION_EXPIRED_BODY);
     }
 
     // Always attach DR profile details if user has DR role
@@ -1867,9 +2000,12 @@ app.get("/api/v1/users/me", requireAuth, async (req, res) => {
             ...(req.auth.phone ? [{ phone: req.auth.phone }] : []),
             ...(user?.phone ? [{ phone: user.phone }] : []),
           ],
+          disabledAt: null,
+          status: { equals: "ACTIVE", mode: "insensitive" },
         },
         include: { region: true, user: true },
-      }).catch(() => null);
+      });
+      if (!dr) return res.status(401).json(SESSION_EXPIRED_BODY);
 
       if (dr || user) {
         const safeDr = dr ? (({ password, ...rest }) => rest)(dr) : null;
@@ -1903,9 +2039,12 @@ app.get("/api/v1/users/me", requireAuth, async (req, res) => {
             ...(req.auth.phone ? [{ phone: req.auth.phone }] : []),
             ...(user?.phone ? [{ phone: user.phone }] : []),
           ],
+          disabledAt: null,
+          status: "APPROVED",
         },
         include: { region: true, user: true },
-      }).catch(() => null);
+      });
+      if (!vendor) return res.status(401).json(SESSION_EXPIRED_BODY);
 
       if (vendor || user) {
         const safeVendor = vendor ? (({ password, ...rest }) => rest)(vendor) : null;
@@ -1928,19 +2067,6 @@ app.get("/api/v1/users/me", requireAuth, async (req, res) => {
         });
       }
     }
-
-    if (!user && req.auth.role === "ADMIN") {
-      const adminPayload = {
-        id: req.auth.userId || "u-admin-9999999999",
-        name: "Super Admin",
-        phone: req.auth.phone || "9999999999",
-        role: "ADMIN",
-      };
-      const refreshedToken = issueToken(adminPayload);
-      return res.json({ ...adminPayload, token: refreshedToken });
-    }
-
-    if (!user) return res.status(404).json({ error: "User not found" });
 
     if (user.role === "CUSTOMER") {
       if (!user.referralCode) {
@@ -2122,10 +2248,95 @@ app.post("/api/v1/users", requireAuth, requireRole("ADMIN"), async (req, res) =>
   }
 });
 
+// Admin Delete Customer Endpoint — Admin customer account aur uske related data ko delete kar sake
+app.delete("/api/v1/users/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
+  try {
+    const rawId = req.params.id;
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [{ id: rawId }, { phone: rawId }],
+      },
+    });
+    if (!user) return res.status(404).json({ error: "Customer not found" });
+    if (user.role === "ADMIN") return res.status(403).json({ error: "Cannot delete Admin account" });
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete associated orders, returns and items if customer had placed orders
+      const custOrders = await tx.order.findMany({ where: { customerId: user.id }, select: { id: true } });
+      if (custOrders.length > 0) {
+        const orderIds = custOrders.map((o) => o.id);
+        await tx.orderReturn.deleteMany({ where: { orderId: { in: orderIds } } });
+        await tx.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
+        await tx.order.deleteMany({ where: { id: { in: orderIds } } });
+      }
+
+      // 2. Delete user's addresses, notifications, wallet transactions, audit logs, OTP rows
+      await tx.address.deleteMany({ where: { userId: user.id } });
+      await tx.notification.deleteMany({ where: { userId: user.id } });
+      await tx.walletTransaction.deleteMany({ where: { userId: user.id } });
+      await tx.auditLog.deleteMany({ where: { userId: user.id } });
+      await tx.oTPVerification.deleteMany({ where: { phone: user.phone } }).catch(() => {});
+
+      // 3. Delete user row
+      await tx.user.delete({ where: { id: user.id } });
+    });
+
+    res.json({ success: true, message: "Customer account deleted successfully", id: user.id, phone: user.phone });
+  } catch (err) {
+    sendServerError(res, err);
+  }
+});
+
 // 2. DISTRICT REPRESENTATIVE (DR) ENDPOINTS
+// Staff rows are soft-deleted (disabledAt set) and never listed again; their history and orders stay.
+const DR_STATUSES = ["ACTIVE", "SUSPENDED"];
+const VENDOR_STATUSES = ["PENDING", "APPROVED", "SUSPENDED"];
+
+// { value } (upper-cased, null when not given) or { error }
+function parseStaffStatus(raw, allowed) {
+  if (!raw) return { value: null };
+  const value = typeof raw === "string" ? raw.trim().toUpperCase() : "";
+  return allowed.includes(value) ? { value } : { error: STAFF_ERRORS.INVALID_STATUS };
+}
+
+// Password reset on an edit: empty means "unchanged"; anything else must pass the new-password rules
+function parseResetPassword(raw, phone) {
+  if (raw === undefined || raw === null || (typeof raw === "string" && !raw.trim())) return { value: null };
+  const pw = checkNewPassword(raw, { phone });
+  return pw.ok ? { value: pw.value } : { error: { error: pw.error, code: "WEAK_PASSWORD" } };
+}
+
+// Phone edit on a DR/vendor row: { phone10, changed } or { status, body }
+async function checkStaffPhoneChange(model, row, rawPhone) {
+  if (!rawPhone) return { phone10: null, changed: false };
+  const phone10 = normalizeStaffPhone(rawPhone);
+  if (!phone10) return { status: 400, body: STAFF_ERRORS.INVALID_PHONE };
+  if (phone10 === row.phone) return { phone10, changed: false };
+  const otherUser = await prisma.user.findFirst({ where: { phone: phone10, ...(row.userId ? { id: { not: row.userId } } : {}) }, select: { id: true } });
+  const otherRow = await prisma[model].findFirst({ where: { phone: phone10, disabledAt: null, id: { not: row.id } }, select: { id: true } });
+  if (otherUser || otherRow) return { status: 409, body: STAFF_ERRORS.PHONE_IN_USE };
+  return { phone10, changed: true };
+}
+
+// Mirrors name/phone/password onto the row's login and revokes its sessions when the status changes.
+// The shared admin login (9999999999 / ADMIN) is never touched from a staff row, nor is a user whose role
+// is not the row's (legacy inconsistent data: that user is not this row's login).
+async function updateLinkedStaffUser(tx, userId, userData, statusChanged, expectedRole) {
+  if (!userId) return;
+  const linked = await tx.user.findUnique({ where: { id: userId }, select: { phone: true, role: true } });
+  if (!linked || linked.phone === ADMIN_PHONE || linked.role === "ADMIN" || linked.role !== expectedRole) return;
+  const data = { ...userData };
+  if (statusChanged) data.tokenVersion = { increment: 1 };
+  if (Object.keys(data).length > 0) await tx.user.update({ where: { id: userId }, data });
+}
+
 app.get("/api/v1/drs", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
+    // A DR only ever gets its own record (no co-DR phones/emails)
+    const self = req.auth.role === "DR" ? drSelfWhere(req.auth) : undefined;
+    if (req.auth.role === "DR" && !self) return res.json([]);
     const drs = await prisma.dR.findMany({
+      where: self ? { AND: [self, { disabledAt: null }] } : { disabledAt: null },
       include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
       orderBy: { joinedOn: "desc" },
     });
@@ -2138,10 +2349,14 @@ app.get("/api/v1/drs", requireAuth, requireRole("ADMIN", "DR"), async (req, res)
 
 app.post("/api/v1/drs", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
-    const { name, phone, password, regionId } = req.body;
-    const cleanPhone = phone?.trim().replace(/\D/g, "");
-    const rawPassword = (password && password.trim()) || null;
-    const drHashedPassword = rawPassword ? await bcrypt.hash(rawPassword, 10) : null;
+    const { name, phone, password, regionId } = req.body || {};
+    if (typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ error: "DR name is required." });
+    }
+    const phone10 = normalizeStaffPhone(phone);
+    if (!phone10) return res.status(400).json(STAFF_ERRORS.INVALID_PHONE);
+    const pw = checkNewPassword(password, { phone: phone10 });
+    if (!pw.ok) return res.status(400).json({ error: pw.error, code: "WEAK_PASSWORD" });
 
     let targetRegionId = regionId;
     let validRegion = targetRegionId ? await prisma.region.findUnique({ where: { id: targetRegionId } }).catch(() => null) : null;
@@ -2157,89 +2372,73 @@ app.post("/api/v1/drs", requireAuth, requireRole("ADMIN"), async (req, res) => {
       }
     }
 
-    let user = await prisma.user.findUnique({ where: { phone: cleanPhone || phone } }).catch(() => null);
-    if (!user) {
-      user = await prisma.user.create({
-        data: { phone: cleanPhone || phone, name, password: drHashedPassword, role: "DR", tokenVersion: 1 },
-      });
-    } else {
-      const userUpdateData = { role: "DR", name };
-      if (drHashedPassword) {
-        userUpdateData.password = drHashedPassword;
-      }
-      await prisma.user.update({
-        where: { id: user.id },
-        data: userUpdateData,
-      }).catch(() => null);
-    }
+    const plan = await planStaffAccount(prisma, { model: "dR", phone10, confirmConvert: req.body.confirmConvert, label: "DR" });
+    if (plan.error) return res.status(409).json(plan.error);
 
-    const newDr = await prisma.dR.create({
-      data: {
-        userId: user.id,
-        name,
-        phone: cleanPhone || phone,
-        password: drHashedPassword,
-        regionId: targetRegionId,
-        status: "ACTIVE",
-      },
-      include: { region: true, user: true },
+    const passwordHash = await bcrypt.hash(pw.value, 10);
+    const newDr = await prisma.$transaction(async (tx) => {
+      const userId = await createOrConvertStaffUser(tx, plan.existing, { role: "DR", name: name.trim(), phone10, passwordHash });
+      const dr = await tx.dR.create({
+        data: { userId, name: name.trim(), phone: phone10, password: passwordHash, regionId: targetRegionId, status: "ACTIVE" },
+        include: { region: true, user: true },
+      });
+      await writeAudit(tx, req, plan.existing ? "STAFF_CONVERT" : "STAFF_CREATE", { targetType: "DR", targetId: dr.id, targetUserId: userId });
+      return dr;
     });
-    console.log(`✅ DR created in DB: ${newDr.name} (${newDr.phone})`);
-    res.status(201).json(newDr);
+    console.log(`✅ DR ${plan.existing ? "converted" : "created"} in DB: ${newDr.name}`);
+    res.status(201).json(stripPasswords(newDr));
   } catch (err) {
-    console.error("Add DR error:", err);
-    sendServerError(res, err);
+    sendStaffError(res, err, "Add DR");
   }
 });
 
 app.patch("/api/v1/drs/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const rawId = req.params.id;
-    const { name, phone, password, regionId, status } = req.body;
-
-    const dataToUpdate = {};
-    if (name) dataToUpdate.name = name;
-    if (phone) dataToUpdate.phone = phone.trim().replace(/\D/g, "");
-    if (password && password.trim()) {
-      dataToUpdate.password = await bcrypt.hash(password.trim(), 10);
-    }
-    if (regionId) dataToUpdate.regionId = regionId;
-    if (status) dataToUpdate.status = status;
+    const { name, phone, password, regionId, status } = req.body || {};
 
     let dr = await prisma.dR.findUnique({ where: { id: rawId } }).catch(() => null);
     if (!dr) {
       dr = await prisma.dR.findFirst({ where: { OR: [{ id: rawId }, { phone: rawId }] } }).catch(() => null);
     }
+    if (!dr) return res.status(404).json({ error: "DR not found" });
+    if (dr.disabledAt) return res.status(409).json(STAFF_ERRORS.STAFF_DISABLED);
 
-    if (dr) {
-      const updatedDr = await prisma.dR.update({
-        where: { id: dr.id },
-        data: dataToUpdate,
-        include: { region: true, user: true },
-      });
+    const ph = await checkStaffPhoneChange("dR", dr, phone);
+    if (ph.status) return res.status(ph.status).json(ph.body);
+    const pw = parseResetPassword(password, ph.phone10 || dr.phone);
+    if (pw.error) return res.status(400).json(pw.error);
+    const st = parseStaffStatus(status, DR_STATUSES);
+    if (st.error) return res.status(400).json(st.error);
+    const hashedPassword = pw.value ? await bcrypt.hash(pw.value, 10) : null;
+    const fromStatus = String(dr.status || "ACTIVE").toUpperCase();
+    const statusChanged = !!st.value && st.value !== fromStatus;
 
-      if (dr.userId) {
-        const userUpdateData = {};
-        if (name) userUpdateData.name = name;
-        if (phone) userUpdateData.phone = phone.trim().replace(/\D/g, "");
-        if (dataToUpdate.password) userUpdateData.password = dataToUpdate.password;
+    const dataToUpdate = {};
+    const userUpdateData = {};
+    if (name) dataToUpdate.name = userUpdateData.name = name;
+    if (ph.changed) dataToUpdate.phone = userUpdateData.phone = ph.phone10;
+    if (hashedPassword) dataToUpdate.password = userUpdateData.password = hashedPassword;
+    if (regionId) dataToUpdate.regionId = regionId;
+    if (st.value) dataToUpdate.status = st.value;
 
-        if (Object.keys(userUpdateData).length > 0) {
-          await prisma.user.update({
-            where: { id: dr.userId },
-            data: userUpdateData,
-          }).catch(() => null);
-        }
-      }
-      console.log(`✅ DR updated in DB: ${updatedDr.name} (${updatedDr.phone})`);
-      return res.json(updatedDr);
-    }
-    return res.status(404).json({ error: "DR not found" });
+    const updatedDr = await prisma.$transaction(async (tx) => {
+      const updated = await tx.dR.update({ where: { id: dr.id }, data: dataToUpdate, include: { region: true, user: true } });
+      await updateLinkedStaffUser(tx, dr.userId, userUpdateData, statusChanged, "DR");
+      const target = { targetType: "DR", targetId: dr.id, targetUserId: dr.userId };
+      if (hashedPassword) await writeAudit(tx, req, "STAFF_PASSWORD_RESET", target);
+      if (statusChanged) await writeAudit(tx, req, "STAFF_STATUS_CHANGE", { ...target, from: fromStatus, to: st.value });
+      return updated;
+    });
+    console.log(`✅ DR updated in DB: ${updatedDr.name}`);
+    return res.json(stripPasswords(updatedDr));
   } catch (err) {
-    sendServerError(res, err);
+    sendStaffError(res, err, "Update DR");
   }
 });
 
+// Soft delete: the row, user, orders and history stay; the login is disabled (or reverted to the customer it was
+// converted from) and its sessions revoked
 app.delete("/api/v1/drs/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const rawId = req.params.id;
@@ -2247,21 +2446,27 @@ app.delete("/api/v1/drs/:id", requireAuth, requireRole("ADMIN"), async (req, res
     if (!dr) {
       dr = await prisma.dR.findFirst({ where: { OR: [{ id: rawId }, { phone: rawId }] } }).catch(() => null);
     }
+    if (!dr) return res.status(404).json({ error: "DR not found" });
+    if (dr.disabledAt) return res.json({ success: true, message: "DR already deleted", id: dr.id });
 
-    if (dr) {
-      await prisma.dR.delete({ where: { id: dr.id } });
-      return res.json({ success: true, message: "DR deleted successfully" });
-    }
-    return res.status(404).json({ error: "DR not found" });
+    await prisma.$transaction(async (tx) => {
+      const marked = await tx.dR.updateMany({ where: { id: dr.id, disabledAt: null }, data: { status: "DISABLED", disabledAt: new Date() } });
+      if (marked.count !== 1) return; // a parallel delete already did it
+      const mode = await retireStaffUser(tx, dr.userId, { exceptDrId: dr.id });
+      await writeAudit(tx, req, "STAFF_DELETE", { targetType: "DR", targetId: dr.id, targetUserId: dr.userId, mode });
+    });
+    return res.json({ success: true, message: "DR deleted", id: dr.id });
   } catch (err) {
-    sendServerError(res, err);
+    sendStaffError(res, err, "Delete DR");
   }
 });
 
 // 3. VENDOR ENDPOINTS
 app.get("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
-    const where = req.auth.role === "DR" ? { regionId: { in: await resolveCallerDrRegionIds(req.auth) } } : undefined;
+    const where = req.auth.role === "DR"
+      ? { regionId: { in: await resolveCallerDrRegionIds(req.auth) }, disabledAt: null }
+      : { disabledAt: null };
     const vendors = await prisma.vendor.findMany({
       where,
       include: { region: true, user: { select: { id: true, name: true, phone: true, email: true, role: true } } },
@@ -2277,11 +2482,17 @@ app.get("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req, 
 // Vendor Add Endpoint — Admin ya DR dwara naya Vendor Supabase DB me create karne ke liye
 app.post("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
-    const { shopName, ownerName, phone, password, regionId, regionName, districtName, commissionRate, addedByDr, status } = req.body;
+    const { shopName, ownerName, phone, password, regionId, regionName, districtName, commissionRate, addedByDr, status } = req.body || {};
+    if (typeof shopName !== "string" || !shopName.trim()) {
+      return res.status(400).json({ error: "Shop name is required." });
+    }
+    const phone10 = normalizeStaffPhone(phone);
+    if (!phone10) return res.status(400).json(STAFF_ERRORS.INVALID_PHONE);
+    const pw = checkNewPassword(password, { phone: phone10 });
+    if (!pw.ok) return res.status(400).json({ error: pw.error, code: "WEAK_PASSWORD" });
+    const st = parseStaffStatus(status, VENDOR_STATUSES);
+    if (st.error) return res.status(400).json(st.error);
     const reqRegName = regionName || districtName || "Mirzapur";
-    const cleanPhone = phone ? phone.trim().replace(/\D/g, "") : "";
-    const rawPassword = password?.trim() || null;
-    const vendorHashedPassword = rawPassword ? await bcrypt.hash(rawPassword, 10) : null;
 
     // 1. Try finding region by regionId UUID if valid
     let validRegion = null;
@@ -2322,53 +2533,65 @@ app.post("/api/v1/vendors", requireAuth, requireRole("ADMIN", "DR"), async (req,
       return res.status(400).json({ error: "Could not locate or create a valid Region in DB" });
     }
 
-    let user = await prisma.user.findUnique({ where: { phone: cleanPhone || phone } }).catch(() => null);
-    if (user && (user.role === "ADMIN" || user.role === "DR")) {
-      return res.status(409).json({ error: "This mobile number belongs to a staff account and cannot be registered as a vendor." });
-    }
-    if (!user) {
-      user = await prisma.user.create({
-        data: { phone: cleanPhone || phone, name: ownerName || shopName, password: vendorHashedPassword, role: "VENDOR", tokenVersion: 1 },
-      });
-    } else {
-      const userUpdateData = { role: "VENDOR", name: ownerName || shopName };
-      if (vendorHashedPassword) {
-        userUpdateData.password = vendorHashedPassword;
-      }
-      await prisma.user.update({
-        where: { id: user.id },
-        data: userUpdateData,
-      }).catch(() => null);
-    }
+    const plan = await planStaffAccount(prisma, { model: "vendor", phone10, confirmConvert: req.body.confirmConvert, label: "vendor" });
+    if (plan.error) return res.status(409).json(plan.error);
 
-    const newVendor = await prisma.vendor.create({
-      data: {
-        userId: user.id,
-        shopName,
-        ownerName,
-        phone: cleanPhone || phone,
-        password: vendorHashedPassword,
-        regionId: validRegion.id,
-        commissionRate: Number(commissionRate) || 10,
-        addedByDr: addedByDr || "Admin",
-        status: status || "APPROVED",
-      },
-      include: { region: true, user: true },
+    const cleanShopName = shopName.trim();
+    const cleanOwnerName = typeof ownerName === "string" && ownerName.trim() ? ownerName.trim() : cleanShopName;
+    const passwordHash = await bcrypt.hash(pw.value, 10);
+    const newVendor = await prisma.$transaction(async (tx) => {
+      const userId = await createOrConvertStaffUser(tx, plan.existing, { role: "VENDOR", name: cleanOwnerName, phone10, passwordHash });
+      const vendor = await tx.vendor.create({
+        data: {
+          userId,
+          shopName: cleanShopName,
+          ownerName: cleanOwnerName,
+          phone: phone10,
+          password: passwordHash,
+          regionId: validRegion.id,
+          commissionRate: Number(commissionRate) || 10,
+          addedByDr: addedByDr || "Admin",
+          status: st.value || "APPROVED",
+        },
+        include: { region: true, user: true },
+      });
+      await writeAudit(tx, req, plan.existing ? "STAFF_CONVERT" : "STAFF_CREATE", { targetType: "VENDOR", targetId: vendor.id, targetUserId: userId });
+      return vendor;
     });
 
-    console.log(`✅ Vendor created successfully in Supabase DB: ${newVendor.shopName} (${validRegion.name})`);
-    res.status(201).json(newVendor);
+    console.log(`✅ Vendor ${plan.existing ? "converted" : "created"} in DB: ${newVendor.shopName} (${validRegion.name})`);
+    res.status(201).json(stripPasswords(newVendor));
   } catch (err) {
-    console.error("Add Vendor error:", err);
-    sendServerError(res, err);
+    sendStaffError(res, err, "Add Vendor");
   }
 });
+
+// One transaction for a vendor edit: the row, its login, listing visibility on a status change, and the audit trail
+function updateVendorTx(req, vendor, { data, userData = {}, newStatus, passwordReset, include }) {
+  const statusChanged = !!newStatus && newStatus !== vendor.status;
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.vendor.update({ where: { id: vendor.id }, data, include });
+    await updateLinkedStaffUser(tx, vendor.userId, userData, statusChanged, "VENDOR");
+
+    // Synchronize Vendor Products Active state with Vendor Status
+    if (statusChanged && newStatus === "SUSPENDED") {
+      await tx.vendorProduct.updateMany({ where: { vendorId: vendor.id }, data: { isActive: false } });
+    } else if (statusChanged && newStatus === "APPROVED") {
+      await tx.vendorProduct.updateMany({ where: { vendorId: vendor.id, approvalStatus: "APPROVED" }, data: { isActive: true } });
+    }
+
+    const target = { targetType: "VENDOR", targetId: vendor.id, targetUserId: vendor.userId };
+    if (passwordReset) await writeAudit(tx, req, "STAFF_PASSWORD_RESET", target);
+    if (statusChanged) await writeAudit(tx, req, "STAFF_STATUS_CHANGE", { ...target, from: vendor.status, to: newStatus });
+    return updated;
+  });
+}
 
 // Update Vendor Details & Password Endpoint (Supports PATCH and PUT)
 const handleUpdateVendor = async (req, res) => {
   try {
     const rawId = req.params.id;
-    const { shopName, ownerName, phone, password, commissionRate, status, regionId } = req.body;
+    const { shopName, ownerName, phone, password, commissionRate, status, regionId } = req.body || {};
 
     let vendor = await prisma.vendor.findUnique({ where: { id: rawId } }).catch(() => null);
     if (!vendor) {
@@ -2376,72 +2599,46 @@ const handleUpdateVendor = async (req, res) => {
         where: { OR: [{ id: rawId }, { phone: rawId }] },
       }).catch(() => null);
     }
+    if (!vendor) return res.status(404).json({ error: "Vendor not found" });
 
-    if (vendor && req.auth.role === "DR") {
+    if (req.auth.role === "DR") {
       const drRegionIds = await resolveCallerDrRegionIds(req.auth);
       if (!drRegionIds.includes(vendor.regionId) || (regionId && !drRegionIds.includes(regionId))) {
         return res.status(403).json({ error: "You can only manage vendors in your own district." });
       }
     }
+    if (vendor.disabledAt) return res.status(409).json(STAFF_ERRORS.STAFF_DISABLED);
 
-    if (vendor) {
-      const cleanPhone = (phone || vendor.phone || "").trim().replace(/\D/g, "");
-      let hashedPassword = null;
-      if (password && password.trim()) {
-        hashedPassword = await bcrypt.hash(password.trim(), 10);
-      }
+    const ph = await checkStaffPhoneChange("vendor", vendor, phone);
+    if (ph.status) return res.status(ph.status).json(ph.body);
+    const pw = parseResetPassword(password, ph.phone10 || vendor.phone);
+    if (pw.error) return res.status(400).json(pw.error);
+    const st = parseStaffStatus(status, VENDOR_STATUSES);
+    if (st.error) return res.status(400).json(st.error);
+    const hashedPassword = pw.value ? await bcrypt.hash(pw.value, 10) : null;
 
-      const prismaUpdateData = {};
-      if (shopName) prismaUpdateData.shopName = shopName.trim();
-      if (ownerName) prismaUpdateData.ownerName = ownerName.trim();
-      if (phone) prismaUpdateData.phone = cleanPhone || phone.trim();
-      if (hashedPassword) prismaUpdateData.password = hashedPassword;
-      if (commissionRate !== undefined) prismaUpdateData.commissionRate = Number(commissionRate);
-      if (status) prismaUpdateData.status = status;
-      if (regionId) prismaUpdateData.regionId = regionId;
+    const prismaUpdateData = {};
+    const userUpdateData = {};
+    if (shopName) prismaUpdateData.shopName = shopName.trim();
+    if (ownerName) prismaUpdateData.ownerName = userUpdateData.name = ownerName.trim();
+    if (ph.changed) prismaUpdateData.phone = userUpdateData.phone = ph.phone10;
+    if (hashedPassword) prismaUpdateData.password = userUpdateData.password = hashedPassword;
+    if (commissionRate !== undefined) prismaUpdateData.commissionRate = Number(commissionRate);
+    if (st.value) prismaUpdateData.status = st.value;
+    if (regionId) prismaUpdateData.regionId = regionId;
 
-      const updatedVendor = await prisma.vendor.update({
-        where: { id: vendor.id },
-        data: prismaUpdateData,
-        include: { region: true, user: true },
-      });
+    const updatedVendor = await updateVendorTx(req, vendor, {
+      data: prismaUpdateData,
+      userData: userUpdateData,
+      newStatus: st.value,
+      passwordReset: !!hashedPassword,
+      include: { region: true, user: true },
+    });
 
-      // Synchronize User account linked to this vendor
-      if (vendor.userId) {
-        const userUpdateData = {};
-        if (ownerName) userUpdateData.name = ownerName.trim();
-        if (phone && cleanPhone) userUpdateData.phone = cleanPhone;
-        if (hashedPassword) userUpdateData.password = hashedPassword;
-
-        if (Object.keys(userUpdateData).length > 0) {
-          await prisma.user.update({
-            where: { id: vendor.userId },
-            data: userUpdateData,
-          }).catch(() => null);
-        }
-      }
-
-      // Synchronize Vendor Products if status changed
-      if (status === "SUSPENDED") {
-        await prisma.vendorProduct.updateMany({
-          where: { vendorId: vendor.id },
-          data: { isActive: false },
-        }).catch(() => null);
-      } else if (status === "APPROVED") {
-        await prisma.vendorProduct.updateMany({
-          where: { vendorId: vendor.id, approvalStatus: "APPROVED" },
-          data: { isActive: true },
-        }).catch(() => null);
-      }
-
-      console.log(`✅ Vendor updated successfully in Supabase DB: ${updatedVendor.shopName} (ID: ${vendor.id})`);
-
-      return res.json(updatedVendor);
-    }
-    return res.status(404).json({ error: "Vendor not found" });
+    console.log(`✅ Vendor updated successfully in Supabase DB: ${updatedVendor.shopName} (ID: ${vendor.id})`);
+    return res.json(stripPasswords(updatedVendor));
   } catch (err) {
-    console.error("Update Vendor error:", err);
-    sendServerError(res, err);
+    sendStaffError(res, err, "Update Vendor");
   }
 };
 
@@ -2452,7 +2649,7 @@ app.put("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), handleUp
 app.patch("/api/v1/vendors/:id/status", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const rawId = req.params.id;
-    const { status } = req.body; // PENDING | APPROVED | SUSPENDED
+    const { status } = req.body || {}; // PENDING | APPROVED | SUSPENDED
 
     let vendor = await prisma.vendor.findUnique({ where: { id: rawId } }).catch(() => null);
     if (!vendor) {
@@ -2462,40 +2659,24 @@ app.patch("/api/v1/vendors/:id/status", requireAuth, requireRole("ADMIN", "DR"),
         },
       }).catch(() => null);
     }
+    if (!vendor) return res.status(404).json({ error: "Vendor not found" });
 
-    if (vendor && req.auth.role === "DR" && !(await drCanManageVendor(req.auth, vendor))) {
+    if (req.auth.role === "DR" && !(await drCanManageVendor(req.auth, vendor))) {
       return res.status(403).json({ error: "You can only manage vendors in your own district." });
     }
+    if (vendor.disabledAt) return res.status(409).json(STAFF_ERRORS.STAFF_DISABLED);
 
-    if (vendor) {
-      const updatedVendor = await prisma.vendor.update({
-        where: { id: vendor.id },
-        data: { status },
-      });
+    const st = parseStaffStatus(status, VENDOR_STATUSES);
+    if (st.error || !st.value) return res.status(400).json(STAFF_ERRORS.INVALID_STATUS);
 
-      // Synchronize Vendor Products Active state with Vendor Status
-      if (status === "SUSPENDED") {
-        await prisma.vendorProduct.updateMany({
-          where: { vendorId: vendor.id },
-          data: { isActive: false },
-        }).catch(() => null);
-      } else if (status === "APPROVED") {
-        await prisma.vendorProduct.updateMany({
-          where: { vendorId: vendor.id, approvalStatus: "APPROVED" },
-          data: { isActive: true },
-        }).catch(() => null);
-      }
-
-      return res.json(updatedVendor);
-    }
-
-    res.json({ message: "Vendor status updated", status });
+    const updatedVendor = await updateVendorTx(req, vendor, { data: { status: st.value }, newStatus: st.value, passwordReset: false });
+    return res.json(stripPasswords(updatedVendor));
   } catch (err) {
-    sendServerError(res, err);
+    sendStaffError(res, err, "Vendor status");
   }
 });
 
-// Vendor Delete Endpoint — Admin ya DR dwara Vendor ko Supabase DB se permanent delete karne ke liye (Foreign Key cleanup ke sath)
+// Vendor Delete Endpoint — soft delete: the row, listings and orders stay, the shop and its login stop working
 app.delete("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
   try {
     const rawId = req.params.id;
@@ -2512,54 +2693,174 @@ app.delete("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), async
         },
       }).catch(() => null);
     }
+    if (!vendor) return res.status(404).json({ error: "Vendor not found" });
 
-    if (req.auth.role === "DR") {
-      if (!vendor) return res.status(404).json({ error: "Vendor not found" });
-      if (!(await drCanManageVendor(req.auth, vendor))) {
-        return res.status(403).json({ error: "You can only manage vendors in your own district." });
-      }
+    if (req.auth.role === "DR" && !(await drCanManageVendor(req.auth, vendor))) {
+      return res.status(403).json({ error: "You can only manage vendors in your own district." });
+    }
+    if (vendor.disabledAt) return res.json({ success: true, message: "Vendor already deleted", id: vendor.id });
+
+    await prisma.$transaction(async (tx) => {
+      const marked = await tx.vendor.updateMany({ where: { id: vendor.id, disabledAt: null }, data: { status: "SUSPENDED", disabledAt: new Date() } });
+      if (marked.count !== 1) return; // a parallel delete already did it
+      await tx.vendorProduct.updateMany({ where: { vendorId: vendor.id }, data: { isActive: false } });
+      await tx.vendorFcmToken.deleteMany({ where: { vendorId: vendor.id } });
+      const mode = await retireStaffUser(tx, vendor.userId, { exceptVendorId: vendor.id });
+      await writeAudit(tx, req, "STAFF_DELETE", { targetType: "VENDOR", targetId: vendor.id, targetUserId: vendor.userId, mode });
+    });
+
+    // Device tokens also live in memory and the local token file; cleared only once the delete is committed
+    try {
+      const { removeToken } = require("./pushService");
+      await removeToken(vendor.id);
+    } catch (pushErr) {
+      console.error("Vendor delete: push token cleanup failed:", pushErr.message);
     }
 
-    if (vendor) {
-      const targetId = vendor.id;
-      const linkedUserId = vendor.userId;
-      const vendorPhone = vendor.phone;
-
-      // 1. Delete FCM tokens
-      await prisma.$executeRawUnsafe(`DELETE FROM vendor_fcm_tokens WHERE vendor_id = $1`, targetId).catch(() => null);
-
-      // 2. Foreign Key constraint satisfied karne ke liye child records pehle delete karein
-      await prisma.vendorProduct.deleteMany({ where: { vendorId: targetId } }).catch(() => null);
-
-      // 3. Delete Vendor record
-      await prisma.vendor.delete({ where: { id: targetId } }).catch(() => null);
-
-      // 4. Delete linked User login account(s) by BOTH ID and Phone so no orphaned user can ever remain in users table
-      await prisma.user.deleteMany({
-        where: {
-          OR: [
-            ...(linkedUserId ? [{ id: linkedUserId }] : []),
-            ...(vendorPhone ? [{ phone: vendorPhone, role: "VENDOR" }] : []),
-          ],
-        },
-      }).catch(() => null);
-    } else {
-      // If vendor record was already gone, check if an orphaned VENDOR user exists with this ID or phone
-      await prisma.user.deleteMany({
-        where: {
-          OR: [
-            { id: rawId },
-            { phone: rawId },
-          ],
-          role: "VENDOR",
-        },
-      }).catch(() => null);
-    }
-
-    res.json({ message: "Vendor and associated user login deleted successfully from Supabase DB", id: rawId });
+    res.json({ success: true, message: "Vendor deleted", id: vendor.id });
   } catch (err) {
-    console.error("Delete vendor endpoint error:", err);
-    sendServerError(res, err);
+    sendStaffError(res, err, "Delete vendor");
+  }
+});
+
+// Public Partner Self-Registration Endpoint — Naye Dealer / Vendor dwara app se sign up request bhejna
+app.post("/api/v1/auth/vendor/register", async (req, res) => {
+  try {
+    const { shopName, ownerName, phone, password, regionId, regionName, districtName, address, otp } = req.body || {};
+
+    if (typeof shopName !== "string" || !shopName.trim()) {
+      return res.status(400).json({ error: "Shop / Business name is required." });
+    }
+    const phone10 = normalizeStaffPhone(phone);
+    if (!phone10) return res.status(400).json(STAFF_ERRORS.INVALID_PHONE);
+
+    // Verify OTP first so fake mobile registrations are rejected
+    if (!otp || String(otp).trim().length < 4) {
+      return res.status(400).json({ error: "Valid OTP is required to verify mobile number." });
+    }
+    const code = String(otp).trim();
+    const now = new Date();
+    const otpRow = await prisma.oTPVerification.findFirst({
+      where: { phone: phone10, expiresAt: { gte: now } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!otpRow || otpRow.attempts >= OTP_MAX_ATTEMPTS || !otpMatches(otpRow, phone10, code, Date.now())) {
+      return res.status(401).json({ error: "Invalid or expired OTP. Please verify your mobile number." });
+    }
+    await prisma.oTPVerification.deleteMany({ where: { phone: phone10 } }).catch(() => {});
+
+    const pw = checkNewPassword(password, { phone: phone10 });
+    if (!pw.ok) return res.status(400).json({ error: pw.error, code: "WEAK_PASSWORD" });
+
+    const reqRegName = regionName || districtName || "Varanasi";
+    let validRegion = null;
+    if (regionId && regionId.length > 10) {
+      validRegion = await prisma.region.findUnique({ where: { id: regionId } }).catch(() => null);
+    }
+    if (!validRegion && reqRegName) {
+      validRegion = await prisma.region.findFirst({
+        where: { name: { equals: reqRegName.trim(), mode: "insensitive" } },
+      }).catch(() => null);
+    }
+    if (!validRegion) {
+      validRegion = await prisma.region.findFirst().catch(() => null);
+    }
+    if (!validRegion) {
+      return res.status(400).json({ error: "Please select a valid district / region." });
+    }
+
+    const plan = await planStaffAccount(prisma, { model: "vendor", phone10, confirmConvert: true, label: "vendor" });
+    if (plan.error) return res.status(409).json(plan.error);
+
+    const cleanShopName = shopName.trim();
+    const cleanOwnerName = typeof ownerName === "string" && ownerName.trim() ? ownerName.trim() : cleanShopName;
+    const passwordHash = await bcrypt.hash(pw.value, 10);
+
+    const newVendor = await prisma.$transaction(async (tx) => {
+      const userId = await createOrConvertStaffUser(tx, plan.existing, { role: "VENDOR", name: cleanOwnerName, phone10, passwordHash });
+      const vendor = await tx.vendor.create({
+        data: {
+          userId,
+          shopName: cleanShopName,
+          ownerName: cleanOwnerName,
+          phone: phone10,
+          password: passwordHash,
+          regionId: validRegion.id,
+          commissionRate: 10,
+          addedByDr: address ? `Self-Register: ${String(address).trim()}` : "Self-Register",
+          status: "PENDING", // Super Admin approval required
+        },
+        include: { region: true, user: true },
+      });
+      await writeAudit(tx, req, "STAFF_SELF_REGISTER", { targetType: "VENDOR", targetId: vendor.id, targetUserId: userId });
+      return vendor;
+    });
+
+    console.log(`✅ New Partner Registration Request: ${newVendor.shopName} (${newVendor.phone}, Region: ${validRegion.name})`);
+    return res.status(201).json({
+      success: true,
+      message: "Application submitted successfully! Your account will be activated once approved by BuildCity Admin.",
+      vendor: stripPasswords(newVendor),
+    });
+  } catch (err) {
+    sendStaffError(res, err, "Register Vendor Partner");
+  }
+});
+
+// Partner Password Reset Endpoint — OTP verify karke naya password set karna
+app.post("/api/v1/auth/vendor/forgot-password", async (req, res) => {
+  try {
+    const { phone, otp, newPassword } = req.body || {};
+    const phone10 = normalizeStaffPhone(phone);
+    if (!phone10) return res.status(400).json(STAFF_ERRORS.INVALID_PHONE);
+
+    if (!otp || String(otp).trim().length < 4) {
+      return res.status(400).json({ error: "Valid OTP is required." });
+    }
+    const code = String(otp).trim();
+    const now = new Date();
+    const otpRow = await prisma.oTPVerification.findFirst({
+      where: { phone: phone10, expiresAt: { gte: now } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!otpRow || otpRow.attempts >= OTP_MAX_ATTEMPTS || !otpMatches(otpRow, phone10, code, Date.now())) {
+      return res.status(401).json({ error: "Invalid or expired OTP. Please try again." });
+    }
+    await prisma.oTPVerification.deleteMany({ where: { phone: phone10 } }).catch(() => {});
+
+    const pw = checkNewPassword(newPassword, { phone: phone10 });
+    if (!pw.ok) return res.status(400).json({ error: pw.error, code: "WEAK_PASSWORD" });
+
+    // Find the user / staff record
+    let user = await prisma.user.findUnique({ where: { phone: phone10 } });
+    if (!user) {
+      const v = await prisma.vendor.findFirst({ where: { phone: phone10 } });
+      if (v) user = await prisma.user.findUnique({ where: { id: v.userId } });
+    }
+    if (!user) return res.status(404).json({ error: "No account found with this mobile number." });
+
+    const passwordHash = await bcrypt.hash(pw.value, 10);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { password: passwordHash, tokenVersion: { increment: 1 } },
+      });
+      await tx.vendor.updateMany({
+        where: { userId: user.id },
+        data: { password: passwordHash },
+      });
+      await tx.dR.updateMany({
+        where: { userId: user.id },
+        data: { password: passwordHash },
+      });
+      await writeAudit(tx, req, "STAFF_PASSWORD_RESET_SELF", { targetType: "USER", targetId: user.id, targetUserId: user.id });
+    });
+
+    console.log(`🔐 Password successfully reset via OTP for mobile: ${phone10}`);
+    return res.json({ success: true, message: "Password reset successful! You can now log in with your new password." });
+  } catch (err) {
+    sendStaffError(res, err, "Reset Password");
   }
 });
 
@@ -2584,7 +2885,7 @@ app.get("/api/v1/master-products", async (req, res) => {
   }
 });
 
-app.post("/api/v1/master-products", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
+app.post("/api/v1/master-products", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const { name, categoryId, brand, type, grade, unit, suggestedPrice, imageUrl, addedBy, description, customPacks } = req.body;
     
@@ -2617,7 +2918,7 @@ app.post("/api/v1/master-products", requireAuth, requireRole("ADMIN", "DR"), asy
 });
 
 // Master Product Update Endpoint — Admin dwara Product Title, Brand, Grade, Unit, Price, Image, Description update karne ke liye
-app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN", "DR"), async (req, res) => {
+app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
     const rawId = req.params.id;
     const { name, categoryId, brand, type, grade, unit, suggestedPrice, price, imageUrl, description, customPacks } = req.body;
@@ -3293,16 +3594,11 @@ const withVendorNames = (orders) =>
     }),
   }));
 
-// Orders a customer can see: placed by them, or delivered to their phone number
-function customerOrdersWhere(userId, phone) {
-  const cleanPhone = String(phone || "").replace(/\D/g, "").slice(-10);
-  return {
-    OR: [
-      ...(userId ? [{ customerId: userId }] : []),
-      ...(cleanPhone ? [{ customer: { phone: { contains: cleanPhone } } }] : []),
-      ...(cleanPhone ? [{ address: { phone: { contains: cleanPhone } } }] : []),
-    ],
-  };
+// Orders a customer can see: only the ones they placed (customerId). A phone match on the customer or the
+// delivery address would leak another customer's orders to whoever owns that number.
+const NO_ORDERS_WHERE = { id: { in: [] } };
+function customerOrdersWhere(userId) {
+  return typeof userId === "string" && userId !== "" ? { customerId: userId } : NO_ORDERS_WHERE;
 }
 
 // All orders (Admin / DR). Supports ?limit=&cursor=&includeOpen=1 and ?regionId= for a district.
@@ -3340,7 +3636,7 @@ app.get("/api/v1/orders/summary", requireAuth, async (req, res) => {
       if (!own) return res.status(403).json({ error: "Vendor profile not found for this account" });
       return res.json(await computeOrdersSummary({ items: { some: { vendorId: own.id } } }, { vendorId: own.id }));
     }
-    res.json(await computeOrdersSummary(customerOrdersWhere(req.auth.userId, req.auth.phone)));
+    res.json(await computeOrdersSummary(customerOrdersWhere(req.auth.userId)));
   } catch (err) {
     sendServerError(res, err, "Orders summary");
   }
@@ -3350,7 +3646,7 @@ app.get("/api/v1/orders/summary", requireAuth, async (req, res) => {
 app.get("/api/v1/orders/me", requireAuth, async (req, res) => {
   const paginated = !!getPageParams(req);
   try {
-    const list = await listOrders(req, customerOrdersWhere(req.auth?.userId, req.auth?.phone), { include: CUSTOMER_ORDER_INCLUDE });
+    const list = await listOrders(req, customerOrdersWhere(req.auth?.userId), { include: CUSTOMER_ORDER_INCLUDE });
     sendOrderList(res, list, withVendorNames(list.orders));
   } catch (err) {
     if (paginated) return sendServerError(res, err, "My orders");
@@ -3362,9 +3658,18 @@ app.get("/api/v1/orders/me", requireAuth, async (req, res) => {
 app.get("/api/v1/orders/user/:userId", requireAuth, requireSelfOrAdmin("userId"), async (req, res) => {
   const paginated = !!getPageParams(req);
   try {
-    const targetUserId = req.auth?.role === "ADMIN" ? req.params.userId : (req.auth?.userId || req.params.userId);
-    const phone = req.auth?.phone || req.params.userId || "";
-    const list = await listOrders(req, customerOrdersWhere(targetUserId, phone), { include: CUSTOMER_ORDER_INCLUDE });
+    // Non-admins only ever see their own orders (requireSelfOrAdmin already matched the param to them)
+    let where = customerOrdersWhere(req.auth.userId);
+    if (req.auth.role === "ADMIN") {
+      // The param is the target customer's id, or their phone number (old admin screens)
+      let target = await prisma.user.findUnique({ where: { id: req.params.userId }, select: { id: true } });
+      // Only a real phone input (10 digits, or 0/91-prefixed), never the digits scraped out of an unknown uuid
+      if (!target && /^[+\d\s-]+$/.test(req.params.userId) && isValidPhoneInput(req.params.userId)) {
+        target = await prisma.user.findUnique({ where: { phone: normalizePhone(req.params.userId) }, select: { id: true } });
+      }
+      where = target ? customerOrdersWhere(target.id) : NO_ORDERS_WHERE;
+    }
+    const list = await listOrders(req, where, { include: CUSTOMER_ORDER_INCLUDE });
     sendOrderList(res, list, withVendorNames(list.orders));
   } catch (err) {
     if (paginated) return sendServerError(res, err, "User orders");
@@ -3381,6 +3686,7 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
     if (req.auth.role === "VENDOR") {
       // Vendors always get their own orders, whatever id the client sent
       vendor = await resolveOwnVendor(req);
+      if (!vendor) return res.status(403).json({ error: "Vendor profile not found for this account" });
     } else {
       const cleanPhone = vendorId.replace(/^v-/, "").replace(/\D/g, "");
       vendor = await prisma.vendor.findFirst({
@@ -3630,9 +3936,9 @@ app.get("/api/v1/returns/search", requireAuth, requireRole("DR", "ADMIN"), async
     let scopeWhere = {};
     if (req.auth.role === "DR") {
       const drRegionIds = await resolveCallerDrRegionIds(req.auth);
-      if (drRegionIds.length > 0) {
-        scopeWhere = ordersInRegionsWhere(drRegionIds);
-      }
+      // No district assigned -> nothing to search (never an unscoped search)
+      if (drRegionIds.length === 0) return res.json([]);
+      scopeWhere = ordersInRegionsWhere(drRegionIds);
     }
 
     const searchOr = [];
@@ -3751,9 +4057,9 @@ app.get("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req, 
     let where = {};
     if (req.auth.role === "DR") {
       const drRegionIds = await resolveCallerDrRegionIds(req.auth);
-      if (drRegionIds.length > 0) {
-        where = { order: ordersInRegionsWhere(drRegionIds) };
-      }
+      // No district assigned -> no returns (never every district's)
+      if (drRegionIds.length === 0) return res.json([]);
+      where = { order: ordersInRegionsWhere(drRegionIds) };
     }
 
     const returnsList = await prisma.orderReturn.findMany({
@@ -4627,20 +4933,28 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
 // Vendor FCM Device Token Registration (for background push notifications when app is killed)
 app.post("/api/v1/vendor/fcm-token", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
-    const { token } = req.body;
-    let { vendorId, phone } = req.body;
+    const token = cleanDeviceToken(req.body?.token);
+    let vendor;
     if (req.auth.role === "VENDOR") {
       // A device can only be bound to the logged-in vendor's own shop
-      const own = await resolveOwnVendor(req);
-      if (!own) return res.status(403).json({ error: "Vendor profile not found for this account" });
-      vendorId = own.id;
-      phone = own.phone;
+      vendor = await resolveOwnVendor(req);
+      if (!vendor) return res.status(403).json({ error: "Vendor profile not found for this account" });
+    } else {
+      // DR / ADMIN: an existing vendor only, and for a DR one in their own district
+      if (typeof req.body?.vendorId !== "string" || !req.body.vendorId) {
+        return res.status(400).json({ error: "vendorId and token are required" });
+      }
+      vendor = await findVendorByExactId(req.body.vendorId);
+      if (!vendor) return res.status(404).json({ error: "Vendor not found" });
+      if (req.auth.role === "DR" && !(await drCanManageVendor(req.auth, vendor))) {
+        return res.status(403).json({ error: "You do not have permission for this action" });
+      }
     }
-    if (!vendorId || !token || typeof token !== "string" || token.length > 4096) {
+    if (!token) {
       return res.status(400).json({ error: "vendorId and token are required" });
     }
     const { saveToken } = require("./pushService");
-    await saveToken(vendorId, token, phone);
+    await saveToken(vendor.id, token, vendor.phone);
     res.json({ success: true, message: "FCM token registered successfully" });
   } catch (err) {
     sendServerError(res, err, "FCM token save");
@@ -4648,15 +4962,27 @@ app.post("/api/v1/vendor/fcm-token", requireAuth, requireRole("VENDOR", "DR", "A
 });
 
 // Vendor FCM Device Token Deregistration (Called when vendor logs out).
-// Anyone holding the device token may unlink that device; unlinking by vendorId needs that vendor's session.
+// Anyone holding the device token may unlink that device; unlinking by vendorId needs that vendor's session,
+// a DR of that vendor's district, or an admin.
 async function handleRemoveFcmToken(req, res) {
   try {
-    const { token } = req.body || {};
+    const rawToken = req.body?.token;
+    const token = cleanDeviceToken(rawToken);
+    if (rawToken !== undefined && rawToken !== null && rawToken !== "" && !token) {
+      return res.status(400).json({ error: "token is required" });
+    }
     let vendorId = null;
     if (req.auth?.role === "VENDOR") {
       vendorId = (await resolveOwnVendor(req))?.id || null;
-    } else if (req.auth?.role === "ADMIN") {
-      vendorId = req.body?.vendorId || null;
+    } else if (req.auth?.role === "ADMIN" || req.auth?.role === "DR") {
+      // Logout sends the caller's own user id, which matches no vendor: then only the token is unlinked
+      const vendor = await findVendorByExactId(req.body?.vendorId);
+      if (vendor) {
+        if (req.auth.role === "DR" && !(await drCanManageVendor(req.auth, vendor))) {
+          return res.status(403).json({ error: "You do not have permission for this action" });
+        }
+        vendorId = vendor.id;
+      }
     }
     if (!token && !vendorId) {
       return res.status(400).json({ error: "token is required" });
@@ -4737,22 +5063,10 @@ app.post("/api/v1/reviews", requireAuth, async (req, res) => {
 // 13. NOTIFICATIONS ENDPOINTS (Admin Broadcast & Real-Time Customer Alerts)
 app.get("/api/v1/notifications/me", requireAuth, async (req, res) => {
   try {
-    const targetUserId = req.auth?.userId;
-    const userRole = (req.auth?.role || "").toUpperCase();
-
-    let whereClause = {};
-    if (userRole === "ADMIN") {
-      whereClause = {};
-    } else if (targetUserId) {
-      whereClause = {
-        OR: [
-          { userId: targetUserId },
-          { user: { role: "ADMIN" } },
-        ],
-      };
-    } else {
-      whereClause = { user: { role: "ADMIN" } };
-    }
+    // Admins see only their own rows (= the broadcasts they sent); everyone else sees their own rows plus broadcasts
+    const whereClause = req.auth.role === "ADMIN"
+      ? { userId: req.auth.userId }
+      : { OR: [{ userId: req.auth.userId }, { isBroadcast: true }] };
 
     const rawList = await prisma.notification.findMany({
       where: whereClause,
@@ -4797,37 +5111,28 @@ app.get("/api/v1/notifications", requireAuth, requireRole("ADMIN"), async (req, 
 
 app.post("/api/v1/notifications", requireAuth, requireRole("ADMIN"), async (req, res) => {
   try {
-    const { title, message, userId } = req.body;
-    if (!title || !message) {
+    const { title, message, userId } = req.body || {};
+    if (typeof title !== "string" || typeof message !== "string" || !title.trim() || !message.trim()) {
       return res.status(400).json({ error: "Title and message are required" });
     }
 
-    let targetUser = null;
-    if (userId && userId.length > 20) {
-      targetUser = await prisma.user.findUnique({ where: { id: userId } }).catch(() => null);
+    // With a userId: a private notice to that user. Without: a broadcast, stored on the sending admin's own row.
+    const isBroadcast = userId === undefined || userId === null || userId === "";
+    if (!isBroadcast && typeof userId !== "string") {
+      return res.status(400).json({ error: "userId must be a string" });
     }
+    const targetUser = await prisma.user.findUnique({ where: { id: isBroadcast ? req.auth.userId : userId }, select: { id: true } });
     if (!targetUser) {
-      targetUser = await prisma.user.findFirst({ where: { role: "ADMIN" } }).catch(() => null);
-    }
-    if (!targetUser) {
-      targetUser = await prisma.user.findFirst().catch(() => null);
-    }
-    if (!targetUser) {
-      targetUser = await prisma.user.create({
-        data: {
-          phone: "7607650875",
-          name: "BuildCity Central System",
-          role: "ADMIN",
-        },
-      }).catch(() => null);
+      return res.status(404).json({ error: "User not found" });
     }
 
     const notif = await prisma.notification.create({
       data: {
-        userId: targetUser ? targetUser.id : (await prisma.user.findFirst()).id,
+        userId: targetUser.id,
         title: title.trim(),
         message: message.trim(),
         isRead: false,
+        isBroadcast,
       },
     });
 
@@ -4867,46 +5172,43 @@ app.patch("/api/v1/notifications/read-all", requireAuth, async (req, res) => {
   }
 });
 
-app.post("/api/v1/notifications/device-token", optionalAuth, async (req, res) => {
+// A device is bound only to the customer in the verified session; body userId / phone are ignored
+app.post("/api/v1/notifications/device-token", requireAuth, async (req, res) => {
   try {
-    const { token, phone, userId } = req.body;
-    const targetUserId = req.auth?.userId || userId;
-    const targetPhone = req.auth?.phone || phone;
-    if (token && (targetUserId || targetPhone)) {
-      const { saveCustomerToken } = require("./pushService");
-      await saveCustomerToken(targetUserId || targetPhone, token, targetPhone);
-      console.log(`✅ Customer device FCM token saved: ${targetUserId || targetPhone}`);
-    }
+    const token = cleanDeviceToken(req.body?.token);
+    if (!token) return res.status(400).json({ error: "token is required" });
+    const { saveCustomerToken } = require("./pushService");
+    await saveCustomerToken(req.auth.userId, token, req.auth.phone || null);
+    console.log(`✅ Customer device FCM token saved: ${req.auth.userId}`);
     res.json({ success: true });
   } catch (err) {
-    console.warn("Save customer device token error:", err.message);
-    res.json({ success: false });
+    sendServerError(res, err, "Save customer device token");
   }
 });
 
+// Signed in: unlinks the caller's own rows (and the given token). Anonymous: only the exact device token.
 app.post("/api/v1/notifications/device-token/deregister", optionalAuth, async (req, res) => {
   try {
-    const { token, userId } = req.body;
-    const targetUserId = req.auth?.userId || userId;
+    const rawToken = req.body?.token;
+    const token = cleanDeviceToken(rawToken);
+    if (rawToken !== undefined && rawToken !== null && rawToken !== "" && !token) {
+      return res.status(400).json({ error: "token is required" });
+    }
+    const userId = req.auth?.userId || null;
+    if (!userId && !token) return res.status(400).json({ error: "token is required" });
     const { removeCustomerToken } = require("./pushService");
-    await removeCustomerToken(targetUserId, token);
-    console.log(`🔒 Customer device FCM token unlinked on logout for: ${targetUserId || token}`);
+    await removeCustomerToken(userId, token);
+    console.log(`🔒 Customer device FCM token unlinked on logout for: ${userId || "device token"}`);
     res.json({ success: true });
   } catch (err) {
-    console.warn("Deregister customer device token error:", err.message);
-    res.json({ success: false });
+    sendServerError(res, err, "Deregister customer device token");
   }
 });
 
 app.delete("/api/v1/notifications", requireAuth, async (req, res) => {
   try {
-    const userRole = (req.auth?.role || "").toUpperCase();
-    const targetUserId = req.auth?.userId;
-    if (userRole === "ADMIN") {
-      await prisma.notification.deleteMany({});
-    } else if (targetUserId) {
-      await prisma.notification.deleteMany({ where: { userId: targetUserId } });
-    }
+    // Every role clears only its own rows (for an admin: the broadcasts it sent)
+    await prisma.notification.deleteMany({ where: { userId: req.auth.userId } });
     res.json({ success: true });
   } catch (err) {
     sendServerError(res, err);
@@ -4947,11 +5249,22 @@ process.on("unhandledRejection", (reason) => {
 // Start Express Server, only once APP_ENV matches the database marker
 let server = null;
 let shuttingDown = false;
-enforceBoot(prisma).then(() => {
+enforceBoot(prisma).then(async () => {
+  if (shuttingDown) return;
+  await ensureOtpSchema(prisma, { shouldStop: () => shuttingDown });
+  if (shuttingDown) return;
+  await ensureStaffSchema(prisma, { shouldStop: () => shuttingDown });
+  if (shuttingDown) return;
+  await ensureNotificationSchema(prisma, { shouldStop: () => shuttingDown });
   if (shuttingDown) return;
   server = app.listen(PORT, () => {
     console.log(`🚀 BuildCity Express Gateway running live on http://localhost:${PORT}`);
   });
+}).catch(async (e) => {
+  // Never listen with a half-provisioned schema: exit non-zero so the deploy stays on the old container.
+  console.error("[boot] refusing to start: " + String((e && e.message) || e).replace(/\s+/g, " ").trim());
+  await prisma.$disconnect().catch(() => null);
+  process.exit(1);
 });
 
 // Graceful shutdown: finish in-flight requests (e.g. checkouts) before the platform stops the container

@@ -54,6 +54,10 @@ const STATUS_STYLE = {
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
   const { showAlert, showConfirm } = useAlert();
+  const confirmConvert = (message) => new Promise((resolve) => {
+    showConfirm({ title: "Convert customer?", message, confirmText: "Convert", type: "warning",
+      onConfirm: () => resolve(true), onCancel: () => resolve(false) });
+  });
   const {
     drs = [],
     vendors = [],
@@ -78,6 +82,7 @@ export default function AdminDashboard() {
     updateVendor,
     setVendorStatus,
     removeVendor,
+    removeCustomer,
     addCategory,
     updateCategory,
     removeCategory,
@@ -187,6 +192,7 @@ export default function AdminDashboard() {
   const tabsContainerRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [listingFilter, setListingFilter] = useState("ALL");
+  const [vendorStatusTabFilter, setVendorStatusTabFilter] = useState("ALL");
 
   // Modals state (Naya DR, Vendor, Category, Region, Product add karne ke liye)
   const [showDrForm, setShowDrForm] = useState(false);
@@ -533,11 +539,37 @@ export default function AdminDashboard() {
     });
   };
 
+  // Customer Delete Handler — Permanent removal with confirm dialog
+  const [deletingUserId, setDeletingUserId] = useState(null);
+  const handleDeleteCustomer = async (cust) => {
+    showConfirm({
+      title: "Delete Customer Account?",
+      message: `Are you sure you want to permanently delete customer "${cust.name || cust.phone}" (${cust.phone}) from database?`,
+      type: "error",
+      confirmText: "Delete Customer",
+      onConfirm: async () => {
+        setDeletingUserId(cust.id);
+        try {
+          await removeCustomer(cust.id);
+          showAlert({ title: "Customer Deleted", message: `Customer account (${cust.phone}) removed successfully.`, type: "success" });
+        } catch (err) {
+          showAlert({ title: "Delete Failed", message: err.message || "Failed to delete customer.", type: "error" });
+        } finally {
+          setDeletingUserId(null);
+        }
+      },
+    });
+  };
+
   // Admin Add Vendor Handler — Direct APPROVED status aur submission spinner ke sath Naya Vendor save karein
   const handleAddVendorSubmit = async (e) => {
     e.preventDefault();
     if (!vendorForm.shopName.trim() || !vendorForm.ownerName.trim() || !vendorForm.phone.trim()) {
       showAlert({ title: "Validation Error", message: "Please fill all Vendor details!", type: "warning" });
+      return;
+    }
+    if (vendorForm.password.trim().length < 8) {
+      showAlert({ title: "Validation Error", message: "Password must be at least 8 characters.", type: "warning" });
       return;
     }
     if (isSubmittingVendor) return;
@@ -552,18 +584,19 @@ export default function AdminDashboard() {
         shopName: vendorForm.shopName.trim(),
         ownerName: vendorForm.ownerName.trim(),
         phone: vendorForm.phone.trim(),
-        password: vendorForm.password.trim() || "vendor123",
+        password: vendorForm.password.trim(),
         regionId: finalRegId,
         regionName: finalRegName,
         districtName: finalRegName,
         commissionRate: Number(vendorForm.commissionRate) || 10,
         status: "APPROVED",
         addedByDr: "Super Admin",
-      });
+      }, { confirmConvert });
       setVendorForm({ shopName: "", ownerName: "", phone: "", password: "", regionId: "", commissionRate: 10 });
       setShowVendorForm(false);
-      showAlert({ title: "Vendor Added", message: `Vendor "${vendorForm.shopName.trim()}" successfully added to Supabase Cloud Database!`, type: "success" });
+      showAlert({ title: "Vendor Added", message: "Vendor added.", type: "success" });
     } catch (err) {
+      if (err.cancelled) return;
       showAlert({ title: "Error", message: "Failed to add vendor: " + err.message, type: "error" });
     } finally {
       setIsSubmittingVendor(false);
@@ -597,6 +630,10 @@ export default function AdminDashboard() {
       showAlert({ title: "Validation Error", message: "Please fill all District Rep details!", type: "warning" });
       return;
     }
+    if ((drForm.password || "").trim().length < 8) {
+      showAlert({ title: "Validation Error", message: "Password must be at least 8 characters.", type: "warning" });
+      return;
+    }
     if (isSubmittingDr) return;
 
     setIsSubmittingDr(true);
@@ -604,13 +641,14 @@ export default function AdminDashboard() {
       await addDr({
         name: drForm.name.trim(),
         phone: drForm.phone.trim(),
-        password: drForm.password ? drForm.password.trim() : "dr123",
+        password: drForm.password.trim(),
         regionId: drForm.regionId,
-      });
+      }, { confirmConvert });
       setDrForm({ name: "", phone: "", password: "", regionId: "" });
       setShowDrForm(false);
-      showAlert({ title: "DR Added", message: "District Representative & Password added to Database successfully!", type: "success" });
+      showAlert({ title: "DR Added", message: "DR added.", type: "success" });
     } catch (err) {
+      if (err.cancelled) return;
       showAlert({ title: "Error", message: "Failed to add DR: " + err.message, type: "error" });
     } finally {
       setIsSubmittingDr(false);
@@ -622,26 +660,42 @@ export default function AdminDashboard() {
   const handleUpdateDrSubmit = async (e) => {
     e.preventDefault();
     if (!editingDr) return;
-    const drToSave = { ...editingDr };
-    setEditingDr(null);
-    showAlert({ title: "DR Updated", message: "DR details updated successfully!", type: "success" });
+    const typedPassword = (editingDr.password || "").trim();
+    if (typedPassword && typedPassword.length < 8) {
+      showAlert({ title: "Validation Error", message: "Password must be at least 8 characters.", type: "warning" });
+      return;
+    }
+    if (isSubmittingEditDr) return;
+    setIsSubmittingEditDr(true);
     try {
-      await updateDr(drToSave.id, drToSave);
+      await updateDr(editingDr.id, { ...editingDr });
+      setEditingDr(null);
+      showAlert({ title: "DR Updated", message: "Changes saved.", type: "success" });
     } catch (err) {
-      console.warn("Background update DR note:", err.message);
+      showAlert({ title: "Error", message: "Failed to update DR: " + err.message, type: "error" });
+    } finally {
+      setIsSubmittingEditDr(false);
     }
   };
 
   const handleUpdateVendorSubmit = async (e) => {
     e.preventDefault();
     if (!editingVendor) return;
-    const vendorToSave = { ...editingVendor };
-    setEditingVendor(null);
-    showAlert({ title: "Vendor Updated", message: "Vendor details & password updated successfully!", type: "success" });
+    const typedPassword = (editingVendor.password || "").trim();
+    if (typedPassword && typedPassword.length < 8) {
+      showAlert({ title: "Validation Error", message: "Password must be at least 8 characters.", type: "warning" });
+      return;
+    }
+    if (isSubmittingEditVendor) return;
+    setIsSubmittingEditVendor(true);
     try {
-      await updateVendor(vendorToSave.id, vendorToSave);
+      await updateVendor(editingVendor.id, { ...editingVendor });
+      setEditingVendor(null);
+      showAlert({ title: "Vendor Updated", message: "Changes saved.", type: "success" });
     } catch (err) {
-      console.warn("Background update vendor note:", err.message);
+      showAlert({ title: "Error", message: "Failed to update vendor: " + err.message, type: "error" });
+    } finally {
+      setIsSubmittingEditVendor(false);
     }
   };
 
@@ -751,7 +805,6 @@ export default function AdminDashboard() {
     }
 
     setEditingProduct(null);
-    showAlert({ title: "Product Updated", message: "Product details aur images successfully update ho gaye!", type: "success" });
 
     try {
       const targetPrice = Number(prodToSave.suggestedPrice || prodToSave.price || 100);
@@ -764,8 +817,9 @@ export default function AdminDashboard() {
         suggestedPrice: targetPrice,
         description: prodToSave.description,
       });
+      showAlert({ title: "Product Updated", message: "Product details aur images successfully update ho gaye!", type: "success" });
     } catch (err) {
-      console.warn("Background update product note:", err.message);
+      showAlert({ title: "Error", message: "Failed to update master product: " + (err.message || err), type: "error" });
     }
   };
 
@@ -1197,12 +1251,29 @@ export default function AdminDashboard() {
                               {u.createdAt ? new Date(u.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Recently"}
                             </td>
                             <td className="p-3.5 pr-4 text-right">
-                              <a
-                                href={`tel:${u.phone}`}
-                                className="inline-flex items-center gap-1 bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-[11px] px-3 py-1.5 rounded-lg border border-brand-200 transition-colors"
-                              >
-                                📞 Call Customer
-                              </a>
+                              <div className="flex items-center justify-end gap-2">
+                                <a
+                                  href={`tel:${u.phone}`}
+                                  className="inline-flex items-center gap-1 bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-[11px] px-2.5 py-1.5 rounded-lg border border-brand-200 transition-colors"
+                                >
+                                  📞 Call
+                                </a>
+                                <button
+                                  type="button"
+                                  disabled={deletingUserId === u.id}
+                                  onClick={() => handleDeleteCustomer(u)}
+                                  className="inline-flex items-center gap-1 text-[11px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg px-2.5 py-1.5 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
+                                >
+                                  {deletingUserId === u.id ? (
+                                    <>
+                                      <span className="w-3 h-3 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
+                                      Deleting...
+                                    </>
+                                  ) : (
+                                    "🗑️ Delete"
+                                  )}
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1271,13 +1342,14 @@ export default function AdminDashboard() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-navy-900 mb-1">Set DR Login Password</label>
+                    <label className="block text-xs font-bold text-navy-900 mb-1">Set DR Login Password *</label>
                     <input
-                      type="text"
-                      placeholder="Login Password (default: dr123)"
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Password (min 8 characters)"
                       value={drForm.password || ""}
                       onChange={(e) => setDrForm({ ...drForm, password: e.target.value })}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-mono font-bold"
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-bold"
                     />
                   </div>
                   <div>
@@ -1489,11 +1561,12 @@ export default function AdminDashboard() {
                   <div>
                     <label className="block text-xs font-bold text-navy-900 mb-1">Set Login Password *</label>
                     <input
-                      type="text"
-                      placeholder="Password (default: vendor123)"
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Password (min 8 characters)"
                       value={vendorForm.password}
                       onChange={(e) => setVendorForm({ ...vendorForm, password: e.target.value })}
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-mono"
+                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500"
                     />
                   </div>
                 </div>
@@ -1517,29 +1590,108 @@ export default function AdminDashboard() {
               </form>
             )}
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200/90 bg-slate-50/90 text-[11px] font-black text-slate-500 uppercase tracking-wider">
-                    <th className="py-3 px-4">Shop Name</th>
-                    <th className="py-3 px-4">Owner & Mobile</th>
-                    <th className="py-3 px-4">District</th>
-                    <th className="py-3 px-4">Products Added</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Commission Rate</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                {productsLoading ? (
-                  renderTableSkeleton(7)
-                ) : (
-                  <tbody className="divide-y divide-slate-100">
-                    {vendors.map((v) => {
-                      const vItemCount = products.filter(
-                        (p) => p.vendorId === v.id || (p.vendorName || "").toLowerCase() === (v.shopName || "").toLowerCase()
-                      ).length;
+            {/* Filter Pills for Vendors: All, Pending Requests, Approved, Suspended */}
+            {(() => {
+              const pendingCount = vendors.filter((v) => v.status === "PENDING").length;
+              const approvedCount = vendors.filter((v) => v.status === "APPROVED").length;
+              const suspendedCount = vendors.filter((v) => v.status === "SUSPENDED").length;
 
-                      return (
+              const filteredVendors = vendors.filter((v) => {
+                if (vendorStatusTabFilter === "PENDING") return v.status === "PENDING";
+                if (vendorStatusTabFilter === "APPROVED") return v.status === "APPROVED";
+                if (vendorStatusTabFilter === "SUSPENDED") return v.status === "SUSPENDED";
+                return true;
+              });
+
+              return (
+                <>
+                  <div className="px-5 py-3 border-b border-slate-100 flex flex-wrap items-center gap-2 bg-slate-50/30">
+                    <button
+                      type="button"
+                      onClick={() => setVendorStatusTabFilter("ALL")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        vendorStatusTabFilter === "ALL"
+                          ? "bg-navy-900 text-white shadow-2xs"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      All Partners ({vendors.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVendorStatusTabFilter("PENDING")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        vendorStatusTabFilter === "PENDING"
+                          ? "bg-amber-600 text-white shadow-2xs"
+                          : "bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100"
+                      }`}
+                    >
+                      <span>Pending Requests</span>
+                      {pendingCount > 0 && (
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                          vendorStatusTabFilter === "PENDING" ? "bg-white text-amber-700" : "bg-amber-600 text-white"
+                        }`}>
+                          {pendingCount}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVendorStatusTabFilter("APPROVED")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        vendorStatusTabFilter === "APPROVED"
+                          ? "bg-emerald-600 text-white shadow-2xs"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      Approved ({approvedCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVendorStatusTabFilter("SUSPENDED")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        vendorStatusTabFilter === "SUSPENDED"
+                          ? "bg-rose-600 text-white shadow-2xs"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      Suspended ({suspendedCount})
+                    </button>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200/90 bg-slate-50/90 text-[11px] font-black text-slate-500 uppercase tracking-wider">
+                          <th className="py-3 px-4">Shop Name</th>
+                          <th className="py-3 px-4">Owner & Mobile</th>
+                          <th className="py-3 px-4">District</th>
+                          <th className="py-3 px-4">Products Added</th>
+                          <th className="py-3 px-4">Status</th>
+                          <th className="py-3 px-4">Commission Rate</th>
+                          <th className="py-3 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      {productsLoading ? (
+                        renderTableSkeleton(7)
+                      ) : filteredVendors.length === 0 ? (
+                        <tbody>
+                          <tr>
+                            <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
+                              {vendorStatusTabFilter === "PENDING"
+                                ? "No pending partner registration requests at this time."
+                                : "No vendors match the selected filter."}
+                            </td>
+                          </tr>
+                        </tbody>
+                      ) : (
+                        <tbody className="divide-y divide-slate-100">
+                          {filteredVendors.map((v) => {
+                            const vItemCount = products.filter(
+                              (p) => p.vendorId === v.id || (p.vendorName || "").toLowerCase() === (v.shopName || "").toLowerCase()
+                            ).length;
+
+                            return (
                         <tr key={v.id} className="hover:bg-slate-50/80 transition-colors duration-150">
                           <td className="py-3.5 px-4 font-bold text-navy-900">{v.shopName}</td>
                           <td className="py-3.5 px-4">
@@ -1625,8 +1777,11 @@ export default function AdminDashboard() {
                 )}
               </table>
             </div>
-          </div>
-        )}
+          </>
+        );
+      })()}
+    </div>
+  )}
 
         {/* PRODUCTS TAB */}
         {tab === "Products" && (
@@ -3725,7 +3880,7 @@ export default function AdminDashboard() {
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
               <h3 className="font-bold text-navy-900 text-base">Edit District Representative (DR)</h3>
-              <button onClick={() => setEditingDr(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none">✕</button>
+              <button onClick={() => { if (!isSubmittingEditDr) setEditingDr(null); }} disabled={isSubmittingEditDr} className="text-slate-400 hover:text-navy-900 text-lg leading-none disabled:opacity-60 disabled:cursor-not-allowed">✕</button>
             </div>
             <form onSubmit={handleUpdateDrSubmit} className="space-y-4">
               <div>
@@ -3752,11 +3907,12 @@ export default function AdminDashboard() {
               <div>
                 <label className="block text-xs font-bold text-navy-900 mb-1">DR Login Password</label>
                 <input
-                  type="text"
-                  placeholder="Set / Change Login Password (default: dr123)"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="New password (min 8 characters)"
                   value={editingDr.password || ""}
                   onChange={(e) => setEditingDr({ ...editingDr, password: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold font-mono"
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
                 />
               </div>
               <div>
@@ -3772,7 +3928,7 @@ export default function AdminDashboard() {
                 </select>
               </div>
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                <button type="button" onClick={() => setEditingDr(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="button" onClick={() => setEditingDr(null)} disabled={isSubmittingEditDr} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl disabled:opacity-60 disabled:cursor-not-allowed">Cancel</button>
                 <button
                   type="submit"
                   disabled={isSubmittingEditDr}
@@ -3799,7 +3955,7 @@ export default function AdminDashboard() {
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
               <h3 className="font-bold text-navy-900 text-base">Edit Vendor Details</h3>
-              <button onClick={() => setEditingVendor(null)} className="text-slate-400 hover:text-navy-900 text-lg leading-none">✕</button>
+              <button onClick={() => { if (!isSubmittingEditVendor) setEditingVendor(null); }} disabled={isSubmittingEditVendor} className="text-slate-400 hover:text-navy-900 text-lg leading-none disabled:opacity-60 disabled:cursor-not-allowed">✕</button>
             </div>
             <form onSubmit={handleUpdateVendorSubmit} className="space-y-4">
               <div>
@@ -3845,15 +4001,16 @@ export default function AdminDashboard() {
               <div>
                 <label className="block text-xs font-bold text-navy-900 mb-1">Vendor Login Password</label>
                 <input
-                  type="text"
-                  placeholder="Set / Change Login Password"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="New password (min 8 characters)"
                   value={editingVendor.password || ""}
                   onChange={(e) => setEditingVendor({ ...editingVendor, password: e.target.value })}
-                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold font-mono"
+                  className="w-full bg-slate-50 text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none font-bold"
                 />
               </div>
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                <button type="button" onClick={() => setEditingVendor(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="button" onClick={() => setEditingVendor(null)} disabled={isSubmittingEditVendor} className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xl disabled:opacity-60 disabled:cursor-not-allowed">Cancel</button>
                 <button
                   type="submit"
                   disabled={isSubmittingEditVendor}

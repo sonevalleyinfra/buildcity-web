@@ -119,6 +119,15 @@ function loadTokens() {
   return {};
 }
 
+// Exact stored forms of an Indian mobile number; [] unless it normalises to exactly 10 digits
+function phoneVariants(raw) {
+  let d = String(raw || "").replace(/\D/g, "");
+  if (d.length === 12 && d.startsWith("91")) d = d.slice(2);
+  else if (d.length === 11 && d.startsWith("0")) d = d.slice(1);
+  if (d.length !== 10) return [];
+  return [d, "+91" + d, "91" + d, "0" + d];
+}
+
 /**
  * Saves FCM token to memory cache, local file backup, and Supabase DB table vendor_fcm_tokens.
  * Guaranteed to survive Railway restarts and redeploys!
@@ -154,16 +163,9 @@ async function saveToken(vendorId, token, phone = null) {
     const p = getPrisma();
     if (p) {
       await ensureTokenTable(p);
-      // Find linked vendor record to save token for both vendor.id and vendor.userId
-      const cleanPhone = (phoneStr || "").replace(/\D/g, "").slice(-10);
+      // Find linked vendor record (exact id / userId only) to save token for both vendor.id and vendor.userId
       const vRec = await p.vendor.findFirst({
-        where: {
-          OR: [
-            { id: vIdStr },
-            { userId: vIdStr },
-            ...(cleanPhone.length >= 7 ? [{ phone: { contains: cleanPhone } }] : []),
-          ],
-        },
+        where: { OR: [{ id: vIdStr }, { userId: vIdStr }] },
         select: { id: true, userId: true, phone: true },
       }).catch(() => null);
 
@@ -332,20 +334,19 @@ async function getTokenForVendor(vendorId, phone = null) {
       }
 
       // 4. Resolve vendor record to check candidate IDs (vendor.id, vendor.userId) and vendor phone
-      const cleanPhone = (phoneStr || "").replace(/\D/g, "").slice(-10);
-      const vendorRecord = await p.vendor.findFirst({
-        where: {
-          OR: [
-            ...(vIdStr ? [{ id: vIdStr }, { userId: vIdStr }] : []),
-            ...(cleanPhone.length >= 7 ? [{ phone: { contains: cleanPhone } }] : []),
-          ],
-        },
+      const phoneList = phoneVariants(phoneStr);
+      const vendorOr = [
+        ...(vIdStr ? [{ id: vIdStr }, { userId: vIdStr }] : []),
+        ...(phoneList.length ? [{ phone: { in: phoneList } }] : []),
+      ];
+      const vendorRecord = vendorOr.length ? await p.vendor.findFirst({
+        where: { OR: vendorOr },
         select: { id: true, userId: true, phone: true },
-      }).catch(() => null);
+      }).catch(() => null) : null;
 
       if (vendorRecord) {
         const candidateIds = [vendorRecord.id, vendorRecord.userId].filter(Boolean);
-        const candidatePhone = (vendorRecord.phone || "").replace(/\D/g, "").slice(-10);
+        const candidatePhones = phoneVariants(vendorRecord.phone);
 
         // Check memory / local with linked IDs
         for (const cId of candidateIds) {
@@ -365,11 +366,11 @@ async function getTokenForVendor(vendorId, phone = null) {
           }
         }
 
-        // Check DB for vendor's registered phone
-        if (candidatePhone.length >= 7) {
+        // Check DB for vendor's registered phone (exact forms only)
+        if (candidatePhones.length) {
           const phoneRows = await p.$queryRawUnsafe(
-            `SELECT token FROM vendor_fcm_tokens WHERE phone LIKE $1 LIMIT 1`,
-            `%${candidatePhone}%`
+            `SELECT token FROM vendor_fcm_tokens WHERE phone = ANY($1::text[]) LIMIT 1`,
+            candidatePhones
           );
           if (phoneRows && phoneRows.length > 0 && phoneRows[0].token) {
             return phoneRows[0].token;
@@ -377,11 +378,11 @@ async function getTokenForVendor(vendorId, phone = null) {
         }
       }
 
-      // 5. Fallback strictly by vendor phone passed in
-      if (cleanPhone.length >= 7) {
+      // 5. Fallback strictly by the exact vendor phone passed in
+      if (phoneList.length) {
         const phoneRows = await p.$queryRawUnsafe(
-          `SELECT token FROM vendor_fcm_tokens WHERE phone LIKE $1 LIMIT 1`,
-          `%${cleanPhone}%`
+          `SELECT token FROM vendor_fcm_tokens WHERE phone = ANY($1::text[]) LIMIT 1`,
+          phoneList
         );
         if (phoneRows && phoneRows.length > 0 && phoneRows[0].token) {
           return phoneRows[0].token;
@@ -522,6 +523,7 @@ async function saveCustomerToken(userId, token, phone = null) {
 /**
  * Removes / unlinks customer FCM token when customer logs out.
  * Ensures signed-out customer NEVER receives notifications on this device!
+ * userId must come from a verified session; token removes only rows holding that exact device token.
  */
 async function removeCustomerToken(userId, token = null) {
   const uIdStr = userId ? String(userId).trim() : "";
@@ -544,18 +546,13 @@ async function removeCustomerToken(userId, token = null) {
   if (p) {
     try {
       await ensureTokenTable(p);
-      if (uIdStr && tokenStr) {
-        await p.$executeRawUnsafe(
-          `DELETE FROM customer_fcm_tokens WHERE user_id = $1 OR token = $2`,
-          uIdStr,
-          tokenStr
-        ).catch(() => null);
-      } else if (uIdStr) {
+      if (uIdStr) {
         await p.$executeRawUnsafe(
           `DELETE FROM customer_fcm_tokens WHERE user_id = $1`,
           uIdStr
         ).catch(() => null);
-      } else if (tokenStr) {
+      }
+      if (tokenStr) {
         await p.$executeRawUnsafe(
           `DELETE FROM customer_fcm_tokens WHERE token = $1`,
           tokenStr
@@ -598,16 +595,16 @@ async function getTokenForCustomer(userId, phone = null) {
     return null;
   }
 
-  // If userId was NOT provided (phone only), check phone strictly
-  const cleanPhone = (phoneStr || "").replace(/\D/g, "").slice(-10);
-  if (cleanPhone.length >= 7) {
+  // If userId was NOT provided (phone only), check the exact phone forms only
+  const phoneList = phoneVariants(phoneStr);
+  if (phoneList.length) {
     const p = getPrisma();
     if (p) {
       try {
         await ensureTokenTable(p);
         const phoneRows = await p.$queryRawUnsafe(
-          `SELECT token FROM customer_fcm_tokens WHERE phone LIKE $1 LIMIT 1`,
-          `%${cleanPhone}%`
+          `SELECT token FROM customer_fcm_tokens WHERE phone = ANY($1::text[]) LIMIT 1`,
+          phoneList
         );
         if (phoneRows && phoneRows.length > 0 && phoneRows[0].token) {
           return phoneRows[0].token;

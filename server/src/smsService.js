@@ -9,8 +9,10 @@ const outbox = require("./outbox");
 const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 50, timeout: 5000 });
 const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 50, timeout: 5000, rejectUnauthorized: false });
 
-// Gateway credentials must come from the environment only (never commit them to source)
-if (!(process.env.SMS_USERNAME || process.env.ARADHYA_SMS_USERNAME) || !(process.env.SMS_APIKEY || process.env.ARADHYA_SMS_APIKEY)) {
+// Gateway credentials must come from the environment only (never commit them to source).
+// Off-production SMS always goes to the outbox, so credentials are not needed there: only warn in production.
+// (isProduction() is not settled at module load; the APP_ENV string is.)
+if (process.env.APP_ENV === "production" && (!(process.env.SMS_USERNAME || process.env.ARADHYA_SMS_USERNAME) || !(process.env.SMS_APIKEY || process.env.ARADHYA_SMS_APIKEY))) {
   console.warn("⚠️ SMS_USERNAME / SMS_APIKEY are not set. OTP SMS delivery is disabled until they are configured.");
 }
 

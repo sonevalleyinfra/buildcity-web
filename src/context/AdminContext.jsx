@@ -911,21 +911,47 @@ export function AdminProvider({ children }) {
     };
   }, [user, userRole]);
 
-  const addDr = async (drData) => {
+  // Staff create: a non-2xx answer is thrown as { message, code } for the form (no local fallback row).
+  // A customer's number is only converted after the admin/DR confirms the server's question.
+  // confirmConvert: async (message) => boolean; absent means the conversion is cancelled.
+  const postStaffCreate = async (path, body, confirmConvert) => {
+    const send = (extra) => authFetch(`${API_BASE_URL}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...body, ...extra }),
+    });
+    let res = await send({});
+    if (res.ok) return res;
+    let data = await res.json().catch(() => ({}));
+    if (data.code === "CONVERT_CONFIRM_REQUIRED") {
+      const ok = confirmConvert ? await confirmConvert(data.error) : false;
+      if (!ok) {
+        throw Object.assign(new Error(data.error), { code: data.code, staffError: true, cancelled: true });
+      }
+      res = await send({ confirmConvert: true });
+      if (res.ok) return res;
+      data = await res.json().catch(() => ({}));
+    }
+    throw await staffRequestError(res, data);
+  };
+
+  // Non-2xx staff answer -> Error carrying the server's { error, code } (shown by the calling form)
+  const staffRequestError = async (res, data) => {
+    const body = data || (await res.json().catch(() => ({})));
+    return Object.assign(new Error(body.error || `Request failed (${res.status})`), { code: body.code, staffError: true });
+  };
+
+  const addDr = async (drData, { confirmConvert } = {}) => {
     const regionObj = regions.find((r) => r.id === drData.regionId) || {};
     const targetRegionName = regionObj.name || drData.regionName || "Varanasi";
 
     try {
-      const res = await authFetch(`${API_BASE_URL}/api/v1/drs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: drData.name,
-          phone: drData.phone.trim(),
-          password: drData.password ? drData.password.trim() : "dr123",
-          regionId: drData.regionId,
-        }),
-      });
+      const res = await postStaffCreate("/api/v1/drs", {
+        name: drData.name,
+        phone: drData.phone.trim(),
+        password: (drData.password || "").trim(),
+        regionId: drData.regionId,
+      }, confirmConvert);
       if (res.ok) {
         const created = await res.json();
         const formattedNewDr = {
@@ -948,6 +974,7 @@ export function AdminProvider({ children }) {
         return formattedNewDr;
       }
     } catch (err) {
+      if (err.staffError) throw err;
       console.warn("DB DR add note:", err.message);
     }
 
@@ -1009,10 +1036,10 @@ export function AdminProvider({ children }) {
           regionId: drData.regionId,
         }),
       });
-      if (res.ok) {
-        fetchCloudData();
-      }
+      fetchCloudData();
+      if (!res.ok) throw await staffRequestError(res);
     } catch (err) {
+      if (err.staffError) throw err;
       console.warn("Update DR error:", err.message);
     }
   };
@@ -1049,38 +1076,33 @@ export function AdminProvider({ children }) {
       return updated;
     });
     try {
-      const res = await authFetch(`${API_BASE_URL}/api/v1/drs/${id}`, {
+      await authFetch(`${API_BASE_URL}/api/v1/drs/${id}`, {
         method: "DELETE",
       });
-      if (res.ok) {
-        fetchCloudData();
-      }
+      // Success shows the server's list; a refusal reverts the optimistic removal
+      fetchCloudData();
     } catch (err) {
       console.warn("Delete DR error:", err.message);
     }
   };
 
-  const addVendor = async (vendorData) => {
+  const addVendor = async (vendorData, { confirmConvert } = {}) => {
     const regionObj = regions.find((r) => r.id === vendorData.regionId || r.name?.toLowerCase() === (vendorData.regionName || "").toLowerCase()) || {};
     const targetRegionName = regionObj.name || vendorData.regionName || vendorData.districtName || "Mirzapur";
 
     try {
-      const res = await authFetch(`${API_BASE_URL}/api/v1/vendors`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          shopName: vendorData.shopName,
-          ownerName: vendorData.ownerName,
-          phone: vendorData.phone,
-          password: vendorData.password,
-          status: vendorData.status || "APPROVED",
-          regionId: vendorData.regionId,
-          regionName: targetRegionName,
-          districtName: targetRegionName,
-          commissionRate: vendorData.commissionRate,
-          addedByDr: vendorData.addedByDr,
-        }),
-      });
+      const res = await postStaffCreate("/api/v1/vendors", {
+        shopName: vendorData.shopName,
+        ownerName: vendorData.ownerName,
+        phone: vendorData.phone,
+        password: vendorData.password,
+        status: vendorData.status || "APPROVED",
+        regionId: vendorData.regionId,
+        regionName: targetRegionName,
+        districtName: targetRegionName,
+        commissionRate: vendorData.commissionRate,
+        addedByDr: vendorData.addedByDr,
+      }, confirmConvert);
       if (res.ok) {
         const createdV = await res.json();
         const formattedNewVendor = {
@@ -1106,6 +1128,7 @@ export function AdminProvider({ children }) {
         return formattedNewVendor;
       }
     } catch (err) {
+      if (err.staffError) throw err;
       console.warn("Add vendor DB note:", err.message);
     }
 
@@ -1181,8 +1204,12 @@ export function AdminProvider({ children }) {
           return freshList;
         });
         fetchCloudData();
+      } else {
+        fetchCloudData();
+        throw await staffRequestError(res);
       }
     } catch (err) {
+      if (err.staffError) throw err;
       console.warn("Update vendor error:", err.message);
     }
   };
@@ -1224,6 +1251,8 @@ export function AdminProvider({ children }) {
           } catch {}
           return updated;
         });
+      } else {
+        fetchCloudData();
       }
     } catch (err) {
       console.warn("Set vendor status error:", err.message);
@@ -1253,6 +1282,32 @@ export function AdminProvider({ children }) {
       }
     } catch (err) {
       console.warn("Delete vendor network error:", err.message);
+      await fetchCloudData();
+      throw err;
+    }
+  };
+
+  const removeCustomer = async (id) => {
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/users/${id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setUsers((prev) => {
+          const updated = prev.filter((u) => u.id !== id && u.phone !== id);
+          try {
+            localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
+        await fetchCloudData();
+        return { success: true };
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to delete customer from database");
+      }
+    } catch (err) {
+      console.warn("Delete customer error:", err.message);
       await fetchCloudData();
       throw err;
     }
@@ -1883,6 +1938,35 @@ export function AdminProvider({ children }) {
     }
   };
 
+    const fetchReferralNetwork = async (userId) => {
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/admin/referral-network/${userId}`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn("fetchReferralNetwork note:", err.message);
+    }
+    return null;
+  };
+
+  const fetchWalletHistory = async (userId) => {
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/v1/admin/wallet-history/${userId}`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn("fetchWalletHistory note:", err.message);
+    }
+    return null;
+  };
+
+  const readServerError = async (res, fallback) => {
+    const data = await res.json().catch(() => null);
+    return data?.error || data?.message || `${fallback} (${res.status})`;
+  };
+
   const addMasterProduct = async (mpData) => {
     const catObj = categories.find((c) => c.id === mpData.categoryId) || {};
     const catName = catObj.name || mpData.categoryName || "General";
@@ -1918,35 +2002,37 @@ export function AdminProvider({ children }) {
         fetchCloudData();
         return formattedNewMp;
       }
+      throw new Error(await readServerError(res, "Failed to add master product"));
     } catch (err) {
       console.warn("DB Master product add note:", err.message);
+      throw err;
     }
-
-    const fallbackMp = {
-      id: mpData.id || "mp-" + Date.now(),
-      name: mpData.name,
-      categoryId: mpData.categoryId || "c1",
-      categoryName: catName,
-      brand: mpData.brand || "Generic",
-      type: mpData.type || "Standard",
-      grade: mpData.grade || "Standard Grade",
-      unit: mpData.unit || "Unit",
-      customPacks: mpData.customPacks || null,
-      suggestedPrice: Number(mpData.suggestedPrice) || 100,
-      imageUrl: (mpData.imageUrl && !mpData.imageUrl.includes("photo-1589939705384-5185137a7f0f")) ? mpData.imageUrl : "",
-      description: mpData.description || null,
-      addedBy: mpData.addedBy || "Admin",
-    };
-    setMasterProducts((prev) => {
-      const updated = [fallbackMp, ...prev];
-      try { localStorage.setItem(MASTER_PRODUCTS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
-      return updated;
-    });
-    return fallbackMp;
   };
 
   const updateMasterProduct = async (id, updates) => {
     const targetPrice = Number(updates.suggestedPrice !== undefined ? updates.suggestedPrice : updates.price);
+    // Snapshots so a rejected edit can be rolled back
+    const prevMasterProducts = masterProducts;
+    const prevProducts = products;
+    const prevRecentEdit = recentEditsRef.current.get(String(id));
+    const readStored = (key) => {
+      try { return localStorage.getItem(key); } catch { return null; }
+    };
+    const prevStoredMasterProducts = readStored(MASTER_PRODUCTS_STORAGE_KEY);
+    const prevStoredProducts = readStored(PRODUCTS_STORAGE_KEY);
+    const rollback = () => {
+      setMasterProducts(prevMasterProducts);
+      setProducts(prevProducts);
+      if (prevRecentEdit) recentEditsRef.current.set(String(id), prevRecentEdit);
+      else recentEditsRef.current.delete(String(id));
+      try {
+        if (prevStoredMasterProducts === null) localStorage.removeItem(MASTER_PRODUCTS_STORAGE_KEY);
+        else localStorage.setItem(MASTER_PRODUCTS_STORAGE_KEY, prevStoredMasterProducts);
+        if (prevStoredProducts === null) localStorage.removeItem(PRODUCTS_STORAGE_KEY);
+        else localStorage.setItem(PRODUCTS_STORAGE_KEY, prevStoredProducts);
+      } catch {}
+    };
+
     markRecentEdit(id, {
       ...updates,
       suggestedPrice: !isNaN(targetPrice) && targetPrice > 0 ? targetPrice : updates.suggestedPrice,
@@ -1992,11 +2078,14 @@ export function AdminProvider({ children }) {
         }),
       });
 
-      if (res.ok) {
-        fetchCloudData();
+      if (!res.ok) {
+        throw new Error(await readServerError(res, "Failed to update master product"));
       }
+      fetchCloudData();
     } catch (err) {
       console.warn("Update master product error:", err.message);
+      rollback();
+      throw err;
     }
   };
 
@@ -2099,9 +2188,13 @@ export function AdminProvider({ children }) {
             return updated;
           });
         }
+      } else {
+        throw new Error(await readServerError(res, "Failed to add listing"));
       }
     } catch (err) {
       console.warn("Assign master product error:", err.message);
+      setProducts((prev) => prev.filter((p) => p.id !== tempId));
+      throw err;
     }
   };
 
@@ -2275,6 +2368,7 @@ export function AdminProvider({ children }) {
         updateVendor,
         setVendorStatus,
         removeVendor,
+        removeCustomer,
         addCategory,
         updateCategory,
         removeCategory,
@@ -2310,6 +2404,8 @@ export function AdminProvider({ children }) {
         walletUsers,
         fetchWalletUsers,
         adjustUserWallet,
+        fetchReferralNetwork,
+        fetchWalletHistory,
       }}
     >
       {children}

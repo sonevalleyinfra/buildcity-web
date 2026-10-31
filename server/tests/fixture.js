@@ -7,6 +7,7 @@ async function main() {
   const tables = ["order_items", "orders", "addresses", "vendor_products", "product_images", "product_masters", "categories", "vendors", "district_representatives", "notifications", "otp_verifications", "audit_logs", "reviews", "coupons", "banners", "users", "regions"];
   await prisma.$executeRawUnsafe(`TRUNCATE ${tables.join(",")} CASCADE`);
   await prisma.$executeRawUnsafe(`DO $$ BEGIN IF to_regclass('vendor_fcm_tokens') IS NOT NULL THEN TRUNCATE vendor_fcm_tokens; END IF; END $$`);
+  await prisma.$executeRawUnsafe(`DO $$ BEGIN IF to_regclass('customer_fcm_tokens') IS NOT NULL THEN TRUNCATE customer_fcm_tokens; END IF; END $$`);
 
   const reg = await prisma.region.create({ data: { name: "Varanasi", baseDeliveryCharge: 49 } });
   const cat = await prisma.category.create({ data: { name: "Cement" } });
@@ -30,7 +31,7 @@ async function main() {
   const orderB = await prisma.order.create({
     data: { customerId: c1.id, totalAmount: 459, items: { create: [{ vendorId: vb.id, productName: "Cement Bag", priceAtPurchase: 410, quantity: 1, totalPrice: 410 }] } },
   });
-  await prisma.notification.create({ data: { userId: admin.id, title: "Hello", message: "Broadcast" } });
+  await prisma.notification.create({ data: { userId: admin.id, title: "Hello", message: "Broadcast", isBroadcast: true } });
   await prisma.notification.create({ data: { userId: c2.id, title: "Private", message: "For C2 only" } });
 
   const out = { admin: admin.id, ua: ua.id, ub: ub.id, va: va.id, vb: vb.id, c1: c1.id, c2: c2.id, la: la.id, lb: lb.id, laPending: laPending.id, orderB: orderB.id, reg: reg.id, mp: mp.id };

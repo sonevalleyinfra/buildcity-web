@@ -239,7 +239,7 @@ export default function DrShell({
             className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-slate-100 text-xs font-semibold text-slate-800 ring-1 ring-inset ring-slate-200/80 transition-colors hover:bg-slate-200/80 active:scale-[0.98] cursor-pointer"
           >
             <PlusIcon className="h-4 w-4 text-slate-600" strokeWidth={2} />
-            Add Product
+            Add Listing
           </button>
         </div>
       </aside>
@@ -358,7 +358,7 @@ export default function DrShell({
                   className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 hover:bg-slate-50 active:scale-[0.98] cursor-pointer"
                 >
                   <PlusIcon className="h-4 w-4 text-slate-600" strokeWidth={2.25} />
-                  Add Product
+                  Add Listing
                 </button>
               </div>
             </>

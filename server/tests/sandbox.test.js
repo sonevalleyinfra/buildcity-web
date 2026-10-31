@@ -144,9 +144,142 @@ async function integration() {
   }
 }
 
+// ---- unit (D11): staging with NO SMS / Firebase credentials still sandboxes cleanly ----
+const NO_CREDS_KEYS = ["APP_ENV", "SMS_USERNAME", "SMS_APIKEY", "ARADHYA_SMS_USERNAME", "ARADHYA_SMS_APIKEY", "FIREBASE_SERVICE_ACCOUNT", "FIREBASE_SERVICE_ACCOUNT_PATH"];
+async function unitNoCreds() {
+  const saved = Object.fromEntries(NO_CREDS_KEYS.map((k) => [k, process.env[k]]));
+  const http = require("http"), https = require("https");
+  const calls = [], errors = [];
+  const orig = { h: http.request, s: https.request, f: globalThis.fetch, e: console.error };
+  try {
+    process.env.APP_ENV = "staging";
+    for (const k of ["SMS_USERNAME", "SMS_APIKEY", "ARADHYA_SMS_USERNAME", "ARADHYA_SMS_APIKEY", "FIREBASE_SERVICE_ACCOUNT"]) delete process.env[k];
+    process.env.FIREBASE_SERVICE_ACCOUNT_PATH = path.join(os.tmpdir(), "does-not-exist-stgsbx.json");
+    http.request = () => { calls.push("http"); throw new Error("stub"); };
+    https.request = () => { calls.push("https"); throw new Error("stub"); };
+    globalThis.fetch = () => { calls.push("fetch"); throw new Error("stub"); };
+    console.error = (...a) => { errors.push(a.map(String).join(" ")); };
+
+    const appEnv = require("../src/appEnv");
+    const outbox = require("../src/outbox");
+    const sms = require("../src/smsService");
+    const push = require("../src/pushService");
+    appEnv._resetForTests();
+    outbox._resetForTests();
+
+    const r = await sms.sendRealSMSOTP("1000012347", "654321");
+    ok(r.success === true && r.sandbox === true, "no creds, staging: SMS sandbox result", r);
+    ok(outbox.list().some((e) => e.kind === "sms" && e.payload.to === "1000012347"), "no creds, staging: SMS in outbox");
+
+    // The send* helpers need a registered device token; dispatchFcm is their single send point.
+    const msg = { token: "t", notification: { title: "a", body: "b" } };
+    const pc = await push.dispatchFcm("customer_order_status", msg, "c1");
+    const pv = await push.dispatchFcm("vendor_order", msg, "v1");
+    ok(pc.sandbox === true && pv.sandbox === true, "no creds, staging: push sandboxed", { pc, pv });
+    ok(outbox.list().filter((e) => e.kind === "push").length === 2, "no creds, staging: push in outbox");
+    ok(calls.length === 0, "no creds, staging: zero network calls", calls);
+    ok(errors.length === 0, "no creds, staging: zero console.error calls", errors);
+  } finally {
+    http.request = orig.h; https.request = orig.s; globalThis.fetch = orig.f; console.error = orig.e;
+    for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    require("../src/appEnv")._resetForTests();
+  }
+}
+
+// ---- integration (D11): APP_ENV=staging API with NO SMS / Firebase env, on its own staging-marked local DB ----
+const STG_DB = "buildcity_test_stgsbx";
+const STG_ADMIN_PW = "stgsbx-admin-pw";
+async function integrationNoCreds() {
+  const base = new URL(process.env.DATABASE_URL || "");
+  if (!["localhost", "127.0.0.1"].includes(base.hostname)) throw new Error("refusing: DATABASE_URL is not localhost");
+  const stgUrl = new URL(base.href);
+  stgUrl.pathname = "/" + STG_DB;
+  const url = stgUrl.href;
+  // psql gets the connection via PG* env (never argv), so a failure message cannot leak the URL.
+  const pgEnv = {
+    ...process.env, PGHOST: base.hostname, PGPORT: base.port || "5432",
+    PGUSER: decodeURIComponent(base.username), PGPASSWORD: decodeURIComponent(base.password),
+    PGDATABASE: decodeURIComponent(base.pathname.slice(1)) || "postgres",
+  };
+  const psql = (sql) => {
+    try { execFileSync("psql", ["-v", "ON_ERROR_STOP=1", "-q", "-c", sql], { env: pgEnv, stdio: "ignore" }); }
+    catch { throw new Error(`psql failed: ${sql}`); }
+  };
+  const PORT3 = String(Number(process.env.TEST_PORT || 5055) + 3);
+  const B3 = `http://localhost:${PORT3}/api/v1`;
+  const LOG3 = path.join(fs.mkdtempSync(path.join(process.env.TMPDIR || os.tmpdir(), "sandbox-stg-")), "net.log");
+  const req3 = async (method, p, { token, body } = {}) => {
+    const res = await fetch(B3 + p, {
+      method,
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const text = await res.text();
+    let json; try { json = JSON.parse(text); } catch { json = text; }
+    return { status: res.status, body: json };
+  };
+  const calls3 = () => (fs.existsSync(LOG3) ? fs.readFileSync(LOG3, "utf8").trim() : "");
+
+  let server = null, client = null;
+  let stderr = "";
+  try {
+    psql(`DROP DATABASE IF EXISTS ${STG_DB} WITH (FORCE)`);
+    psql(`CREATE DATABASE ${STG_DB}`);
+    psql(`ALTER DATABASE ${STG_DB} SET buildcity.env = 'staging'`);
+    try {
+      execFileSync("npx", ["prisma", "db", "push", "--skip-generate"], { cwd: root, env: { ...process.env, DATABASE_URL: url, DIRECT_URL: url }, stdio: "ignore" });
+    } catch { throw new Error("prisma db push on the staging test DB failed"); }
+
+    const { PrismaClient } = require("@prisma/client");
+    const bcrypt = require("bcryptjs");
+    client = new PrismaClient({ datasources: { db: { url } } });
+    // /auth/vendor/login grants ADMIN only to the super-admin phone 9999999999.
+    await client.user.create({ data: { phone: "9999999999", name: "Staging Admin", role: "ADMIN", password: await bcrypt.hash(STG_ADMIN_PW, 10) } });
+
+    const env = {
+      ...process.env, PORT: PORT3, TEST_PORT: PORT3, APP_ENV: "staging", NODE_ENV: "production",
+      DATABASE_URL: url, DIRECT_URL: url, STUB_LOG: LOG3,
+      NODE_OPTIONS: `-r ${path.join(__dirname, "stubnet.js")}`,
+      FIREBASE_SERVICE_ACCOUNT_PATH: path.join(os.tmpdir(), "does-not-exist-stgsbx.json"),
+    };
+    for (const k of ["SMS_USERNAME", "SMS_APIKEY", "ARADHYA_SMS_USERNAME", "ARADHYA_SMS_APIKEY", "SMS_RELAY_SECRET", "FIREBASE_SERVICE_ACCOUNT"]) delete env[k];
+    server = spawn("node", ["src/index.js"], { cwd: root, env, stdio: ["ignore", "ignore", "pipe"] });
+    server.stderr.on("data", (d) => { stderr += d; });
+
+    let up = false;
+    for (let i = 0; i < 60 && !up; i++) {
+      try { up = (await fetch(`http://localhost:${PORT3}/health`)).ok; } catch {}
+      if (!up) await new Promise((r) => setTimeout(r, 200));
+    }
+    ok(up, "staging no-creds server started");
+    const envInfo = await req3("GET", "/env");
+    ok(envInfo.status === 200 && envInfo.body.env === "staging" && envInfo.body.db === "staging", "staging no-creds: /env reports staging", envInfo.body);
+
+    const otpReq = await req3("POST", "/auth/otp/request", { body: { phone: "1000012348", type: "register" } });
+    ok(otpReq.status === 200 && otpReq.body.success === true, "staging no-creds: OTP request succeeds", otpReq);
+    const admin = (await req3("POST", "/auth/vendor/login", { body: { phone: "9999999999", password: STG_ADMIN_PW } })).body.token;
+    const box = await req3("GET", "/_staging/outbox", { token: admin });
+    ok(box.status === 200 && box.body.entries.some((e) => e.kind === "sms" && e.payload.to === "1000012348"), "staging no-creds: SMS in outbox", box.body);
+    const good = await req3("POST", "/auth/otp/verify", { body: { phone: "1000012348", otp: "654321" } });
+    ok(good.status === 200 && !!good.body.token, "staging no-creds: 1000012348 + 654321 -> token", good.status);
+    ok(calls3() === "", "staging no-creds: no outbound call", calls3());
+    ok(!stderr.includes("Gateway credentials missing") && !stderr.includes("Firebase Admin initialization error"), "staging no-creds: no SMS/Firebase credential errors on stderr", stderr.slice(-300));
+  } finally {
+    if (server) {
+      const exited = new Promise((r) => server.once("exit", r));
+      server.kill("SIGTERM");
+      await Promise.race([exited, new Promise((r) => setTimeout(r, 3000))]);
+    }
+    if (client) await client.$disconnect().catch(() => {});
+    try { psql(`DROP DATABASE IF EXISTS ${STG_DB} WITH (FORCE)`); } catch (e) { console.log("WARN", e.message); }
+  }
+}
+
 (async () => {
   try { await unit(); } catch (e) { fail++; console.log("FAIL unit threw", e && e.stack); }
+  try { await unitNoCreds(); } catch (e) { fail++; console.log("FAIL unitNoCreds threw", e && e.stack); }
   try { await integration(); } catch (e) { fail++; console.log("FAIL integration threw", e && e.stack); }
+  try { await integrationNoCreds(); } catch (e) { fail++; console.log("FAIL integrationNoCreds threw", e && e.stack); }
   console.log(`\nsandbox: passed=${pass} failed=${fail}`);
   process.exit(fail ? 1 : 0);
 })();

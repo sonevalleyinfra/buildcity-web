@@ -141,9 +141,9 @@ export default function Login({ forceVendorMode = false }) {
     try {
       await requestOtp(cleanedMobile, "login");
       setStep("otp");
-      const expireTime = Date.now() + 90 * 1000;
+      const expireTime = Date.now() + 30 * 1000;
       try { sessionStorage.setItem("buildcity_otp_expire", expireTime.toString()); } catch {}
-      setCooldown(90);
+      setCooldown(30);
     } catch (err) {
       if (err.notRegistered) {
         setError(
@@ -253,6 +253,7 @@ export default function Login({ forceVendorMode = false }) {
 
   // 1. Partner Self-Registration Handlers
   const handleRegisterPartnerSendOtp = async () => {
+    if (loading || regCooldown > 0) return;
     setError("");
     setSuccessMsg("");
     const cleaned = regForm.phone.replace(/\D/g, "").slice(-10);
@@ -272,7 +273,7 @@ export default function Login({ forceVendorMode = false }) {
         throw new Error(data.error || "Failed to dispatch verification OTP.");
       }
       setRegOtpSent(true);
-      setRegCooldown(90);
+      setRegCooldown(30);
       setSuccessMsg(`OTP sent to +91 ${cleaned}. Please enter it below.`);
     } catch (err) {
       setError(err?.message || "Could not send OTP. Please check the number.");
@@ -305,6 +306,16 @@ export default function Login({ forceVendorMode = false }) {
     }
     if (!regForm.password || regForm.password.trim().length < 8) {
       setError("Password must be at least 8 characters long.");
+      return;
+    }
+    const cleanRegPw = regForm.password.trim();
+    const commonPasswords = ["12345678", "password", "password123", "vendor123", "admin123", "123456789", "buildcity123", "iloveyou"];
+    if (commonPasswords.includes(cleanRegPw.toLowerCase())) {
+      setError("This password is too common. Please choose a stronger password (e.g. MyShop@2026).");
+      return;
+    }
+    if (cleaned && (cleanRegPw.includes(cleaned) || cleanRegPw.replace(/\D/g, "") === cleaned)) {
+      setError("Password must not contain your mobile number.");
       return;
     }
     if (regForm.password !== regForm.confirmPassword) {
@@ -344,6 +355,7 @@ export default function Login({ forceVendorMode = false }) {
 
   // 2. Forgot Password Handlers
   const handleForgotSendOtp = async () => {
+    if (loading || forgotCooldown > 0) return;
     setError("");
     setSuccessMsg("");
     const cleaned = forgotForm.phone.replace(/\D/g, "").slice(-10);
@@ -363,7 +375,7 @@ export default function Login({ forceVendorMode = false }) {
         throw new Error(data.error || "Failed to send OTP.");
       }
       setForgotOtpSent(true);
-      setForgotCooldown(90);
+      setForgotCooldown(30);
       setSuccessMsg(`OTP sent to +91 ${cleaned}.`);
     } catch (err) {
       setError(err?.message || "Could not send OTP. Check mobile number.");
@@ -387,6 +399,16 @@ export default function Login({ forceVendorMode = false }) {
     }
     if (!forgotForm.newPassword || forgotForm.newPassword.trim().length < 8) {
       setError("New password must be at least 8 characters long.");
+      return;
+    }
+    const cleanForgotPw = forgotForm.newPassword.trim();
+    const commonPasswords = ["12345678", "password", "password123", "vendor123", "admin123", "123456789", "buildcity123", "iloveyou"];
+    if (commonPasswords.includes(cleanForgotPw.toLowerCase())) {
+      setError("This password is too common. Please choose a stronger password (e.g. MyShop@2026).");
+      return;
+    }
+    if (cleaned && (cleanForgotPw.includes(cleaned) || cleanForgotPw.replace(/\D/g, "") === cleaned)) {
+      setError("Password must not contain your mobile number.");
       return;
     }
     if (forgotForm.newPassword !== forgotForm.confirmPassword) {

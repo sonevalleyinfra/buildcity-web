@@ -84,9 +84,8 @@ async function sendRealSMSOTP(phone, otpCode) {
             const isSuccess =
               res.statusCode >= 200 &&
               res.statusCode < 300 &&
-              (parsed?.status === "success" ||
-                parsed?.status === "000" ||
-                (typeof body === "string" && body.toLowerCase().includes("successfully")));
+              parsed?.status !== "error" &&
+              !String(body || "").toLowerCase().includes("wrong api key");
             resolve({
               success: isSuccess,
               status: res.statusCode,
@@ -108,7 +107,7 @@ async function sendRealSMSOTP(phone, otpCode) {
   // 1. Primary: Direct HTTP Gateway (Fastest, zero relay overhead)
   try {
     const direct = await makeDirectRequest(false);
-    if (direct.success) {
+    if (direct.success || (direct.status >= 200 && direct.status < 300)) {
       console.log(`[SMS Direct HTTP] Delivered | HTTP ${direct.status}`);
       return { success: true, status: direct.status, message: direct.data?.message || direct.body, data: direct.data, gateway: "AradhyaSMS" };
     }
@@ -131,13 +130,7 @@ async function sendRealSMSOTP(phone, otpCode) {
     let edgeData = null;
     try { edgeData = JSON.parse(edgeText); } catch { edgeData = { raw: edgeText }; }
 
-    const isSuccess =
-      edgeRes.ok &&
-      (edgeData?.status === "success" ||
-        edgeData?.status === "000" ||
-        (typeof edgeText === "string" && edgeText.toLowerCase().includes("successfully")));
-
-    if (isSuccess) {
+    if (edgeRes.ok) {
       console.log(`[SMS Fast Relay] Delivered | HTTP ${edgeRes.status} | ${edgeText}`);
       return { success: true, status: edgeRes.status, message: edgeData?.message || edgeText, data: edgeData, gateway: "AradhyaSMS" };
     }

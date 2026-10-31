@@ -141,9 +141,9 @@ export default function Login({ forceVendorMode = false }) {
     try {
       await requestOtp(cleanedMobile, "login");
       setStep("otp");
-      const expireTime = Date.now() + 30 * 1000;
+      const expireTime = Date.now() + 90 * 1000;
       try { sessionStorage.setItem("buildcity_otp_expire", expireTime.toString()); } catch {}
-      setCooldown(30);
+      setCooldown(90);
     } catch (err) {
       if (err.notRegistered) {
         setError(
@@ -273,7 +273,7 @@ export default function Login({ forceVendorMode = false }) {
         throw new Error(data.error || "Failed to dispatch verification OTP.");
       }
       setRegOtpSent(true);
-      setRegCooldown(30);
+      setRegCooldown(90);
       setSuccessMsg(`OTP sent to +91 ${cleaned}. Please enter it below.`);
     } catch (err) {
       setError(err?.message || "Could not send OTP. Please check the number.");
@@ -375,7 +375,7 @@ export default function Login({ forceVendorMode = false }) {
         throw new Error(data.error || "Failed to send OTP.");
       }
       setForgotOtpSent(true);
-      setForgotCooldown(30);
+      setForgotCooldown(90);
       setSuccessMsg(`OTP sent to +91 ${cleaned}.`);
     } catch (err) {
       setError(err?.message || "Could not send OTP. Check mobile number.");

@@ -5,7 +5,7 @@ const crypto = require("crypto");
 const OTP_MAX_ATTEMPTS = 5;
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_GENERIC_ERROR = "Invalid or expired OTP. Please enter the exact OTP code sent to your mobile.";
-const ALLOWED_OTP_TYPES = ["login", "register"];
+const ALLOWED_OTP_TYPES = ["login", "register", "forgot_password"];
 const STAFF_ROLES = ["ADMIN", "DR", "VENDOR"];
 const HASH_PREFIX = "h1$";
 
@@ -81,6 +81,27 @@ function planOtpRequest({ phone10, type, existingRole, isSpecial, legacyHints })
   if (!legacyHints) {
     return { issue: !(isSpecial || isStaff), status: 200, body: { ...UNIFORM } };
   }
+  if (type === "forgot_password") {
+    if (!existingRole && !isSpecial) {
+      return {
+        issue: false,
+        status: 200,
+        body: { success: false, notRegistered: true, error: "This mobile number is not registered on BuildCity." },
+      };
+    }
+    return {
+      issue: true,
+      status: 200,
+      body: {
+        success: true,
+        message: `OTP dispatched to +91 ${phone10}`,
+        gateway: "AradhyaSMS",
+        smsStatus: "dispatched",
+        isRegistered: true,
+      },
+    };
+  }
+
   if (isSpecial) {
     return {
       issue: false,

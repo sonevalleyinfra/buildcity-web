@@ -2684,6 +2684,147 @@ app.delete("/api/v1/vendors/:id", requireAuth, requireRole("ADMIN", "DR"), async
   }
 });
 
+// Public Partner Self-Registration Endpoint — Naye Dealer / Vendor dwara app se sign up request bhejna
+app.post("/api/v1/auth/vendor/register", async (req, res) => {
+  try {
+    const { shopName, ownerName, phone, password, regionId, regionName, districtName, address, otp } = req.body || {};
+
+    if (typeof shopName !== "string" || !shopName.trim()) {
+      return res.status(400).json({ error: "Shop / Business name is required." });
+    }
+    const phone10 = normalizeStaffPhone(phone);
+    if (!phone10) return res.status(400).json(STAFF_ERRORS.INVALID_PHONE);
+
+    // Verify OTP first so fake mobile registrations are rejected
+    if (!otp || String(otp).trim().length < 4) {
+      return res.status(400).json({ error: "Valid OTP is required to verify mobile number." });
+    }
+    const code = String(otp).trim();
+    const now = new Date();
+    const otpRow = await prisma.oTPVerification.findFirst({
+      where: { phone: phone10, expiresAt: { gte: now } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!otpRow || otpRow.attempts >= OTP_MAX_ATTEMPTS || !otpMatches(otpRow, phone10, code, Date.now())) {
+      return res.status(401).json({ error: "Invalid or expired OTP. Please verify your mobile number." });
+    }
+    await prisma.oTPVerification.deleteMany({ where: { phone: phone10 } }).catch(() => {});
+
+    const pw = checkNewPassword(password, { phone: phone10 });
+    if (!pw.ok) return res.status(400).json({ error: pw.error, code: "WEAK_PASSWORD" });
+
+    const reqRegName = regionName || districtName || "Varanasi";
+    let validRegion = null;
+    if (regionId && regionId.length > 10) {
+      validRegion = await prisma.region.findUnique({ where: { id: regionId } }).catch(() => null);
+    }
+    if (!validRegion && reqRegName) {
+      validRegion = await prisma.region.findFirst({
+        where: { name: { equals: reqRegName.trim(), mode: "insensitive" } },
+      }).catch(() => null);
+    }
+    if (!validRegion) {
+      validRegion = await prisma.region.findFirst().catch(() => null);
+    }
+    if (!validRegion) {
+      return res.status(400).json({ error: "Please select a valid district / region." });
+    }
+
+    const plan = await planStaffAccount(prisma, { model: "vendor", phone10, confirmConvert: true, label: "vendor" });
+    if (plan.error) return res.status(409).json(plan.error);
+
+    const cleanShopName = shopName.trim();
+    const cleanOwnerName = typeof ownerName === "string" && ownerName.trim() ? ownerName.trim() : cleanShopName;
+    const passwordHash = await bcrypt.hash(pw.value, 10);
+
+    const newVendor = await prisma.$transaction(async (tx) => {
+      const userId = await createOrConvertStaffUser(tx, plan.existing, { role: "VENDOR", name: cleanOwnerName, phone10, passwordHash });
+      const vendor = await tx.vendor.create({
+        data: {
+          userId,
+          shopName: cleanShopName,
+          ownerName: cleanOwnerName,
+          phone: phone10,
+          password: passwordHash,
+          regionId: validRegion.id,
+          commissionRate: 10,
+          addedByDr: address ? `Self-Register: ${String(address).trim()}` : "Self-Register",
+          status: "PENDING", // Super Admin approval required
+        },
+        include: { region: true, user: true },
+      });
+      await writeAudit(tx, req, "STAFF_SELF_REGISTER", { targetType: "VENDOR", targetId: vendor.id, targetUserId: userId });
+      return vendor;
+    });
+
+    console.log(`✅ New Partner Registration Request: ${newVendor.shopName} (${newVendor.phone}, Region: ${validRegion.name})`);
+    return res.status(201).json({
+      success: true,
+      message: "Application submitted successfully! Your account will be activated once approved by BuildCity Admin.",
+      vendor: stripPasswords(newVendor),
+    });
+  } catch (err) {
+    sendStaffError(res, err, "Register Vendor Partner");
+  }
+});
+
+// Partner Password Reset Endpoint — OTP verify karke naya password set karna
+app.post("/api/v1/auth/vendor/forgot-password", async (req, res) => {
+  try {
+    const { phone, otp, newPassword } = req.body || {};
+    const phone10 = normalizeStaffPhone(phone);
+    if (!phone10) return res.status(400).json(STAFF_ERRORS.INVALID_PHONE);
+
+    if (!otp || String(otp).trim().length < 4) {
+      return res.status(400).json({ error: "Valid OTP is required." });
+    }
+    const code = String(otp).trim();
+    const now = new Date();
+    const otpRow = await prisma.oTPVerification.findFirst({
+      where: { phone: phone10, expiresAt: { gte: now } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!otpRow || otpRow.attempts >= OTP_MAX_ATTEMPTS || !otpMatches(otpRow, phone10, code, Date.now())) {
+      return res.status(401).json({ error: "Invalid or expired OTP. Please try again." });
+    }
+    await prisma.oTPVerification.deleteMany({ where: { phone: phone10 } }).catch(() => {});
+
+    const pw = checkNewPassword(newPassword, { phone: phone10 });
+    if (!pw.ok) return res.status(400).json({ error: pw.error, code: "WEAK_PASSWORD" });
+
+    // Find the user / staff record
+    let user = await prisma.user.findUnique({ where: { phone: phone10 } });
+    if (!user) {
+      const v = await prisma.vendor.findFirst({ where: { phone: phone10 } });
+      if (v) user = await prisma.user.findUnique({ where: { id: v.userId } });
+    }
+    if (!user) return res.status(404).json({ error: "No account found with this mobile number." });
+
+    const passwordHash = await bcrypt.hash(pw.value, 10);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { password: passwordHash, tokenVersion: { increment: 1 } },
+      });
+      await tx.vendor.updateMany({
+        where: { userId: user.id },
+        data: { password: passwordHash },
+      });
+      await tx.dR.updateMany({
+        where: { userId: user.id },
+        data: { password: passwordHash },
+      });
+      await writeAudit(tx, req, "STAFF_PASSWORD_RESET_SELF", { targetType: "USER", targetId: user.id, targetUserId: user.id });
+    });
+
+    console.log(`🔐 Password successfully reset via OTP for mobile: ${phone10}`);
+    return res.json({ success: true, message: "Password reset successful! You can now log in with your new password." });
+  } catch (err) {
+    sendStaffError(res, err, "Reset Password");
+  }
+});
+
 // 4. MASTER PRODUCT CATALOG ENDPOINTS
 app.get("/api/v1/master-products", async (req, res) => {
   try {

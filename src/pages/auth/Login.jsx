@@ -20,6 +20,7 @@ export default function Login({ forceVendorMode = false }) {
   // Mode do tarah ka hai: customer ke liye OTP aur partner/vendor ke liye password
   const isNativeCustomer = Capacitor.isNativePlatform() && !isVendorApp;
   const [mode, setMode] = useState(!isNativeCustomer && (isVendorApp || forceVendorMode) ? "vendor" : "standard");
+  const [partnerSubView, setPartnerSubView] = useState("login"); // "login" | "register" | "forgot"
   const [step, setStep] = useState("phone"); // "phone" ya "otp" step
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -27,6 +28,32 @@ export default function Login({ forceVendorMode = false }) {
   const [role, setRole] = useState("customer");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+
+  // Partner Registration Form State
+  const [regForm, setRegForm] = useState({
+    shopName: "",
+    ownerName: "",
+    phone: "",
+    district: "Varanasi",
+    address: "",
+    password: "",
+    confirmPassword: "",
+    otp: "",
+  });
+  const [regOtpSent, setRegOtpSent] = useState(false);
+  const [regCooldown, setRegCooldown] = useState(0);
+
+  // Forgot Password State
+  const [forgotForm, setForgotForm] = useState({
+    phone: "",
+    otp: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [forgotOtpSent, setForgotOtpSent] = useState(false);
+  const [forgotCooldown, setForgotCooldown] = useState(0);
+
   const [cooldown, setCooldown] = useState(() => {
     try {
       const savedExpire = sessionStorage.getItem("buildcity_otp_expire");
@@ -37,6 +64,18 @@ export default function Login({ forceVendorMode = false }) {
     } catch {}
     return 0;
   });
+
+  useEffect(() => {
+    if (regCooldown <= 0) return;
+    const t = setInterval(() => setRegCooldown((c) => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [regCooldown]);
+
+  useEffect(() => {
+    if (forgotCooldown <= 0) return;
+    const t = setInterval(() => setForgotCooldown((c) => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [forgotCooldown]);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -212,6 +251,175 @@ export default function Login({ forceVendorMode = false }) {
     }
   };
 
+  // 1. Partner Self-Registration Handlers
+  const handleRegisterPartnerSendOtp = async () => {
+    setError("");
+    setSuccessMsg("");
+    const cleaned = regForm.phone.replace(/\D/g, "").slice(-10);
+    if (cleaned.length !== 10) {
+      setError("Please enter a valid 10-digit mobile number.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/v1/auth/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: cleaned, type: "register" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || "Failed to dispatch verification OTP.");
+      }
+      setRegOtpSent(true);
+      setRegCooldown(90);
+      setSuccessMsg(`OTP sent to +91 ${cleaned}. Please enter it below.`);
+    } catch (err) {
+      setError(err?.message || "Could not send OTP. Please check the number.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePartnerRegisterSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccessMsg("");
+
+    if (!regForm.shopName.trim()) {
+      setError("Please enter your Shop / Business Name.");
+      return;
+    }
+    if (!regForm.ownerName.trim()) {
+      setError("Please enter Owner Name.");
+      return;
+    }
+    const cleaned = regForm.phone.replace(/\D/g, "").slice(-10);
+    if (cleaned.length !== 10) {
+      setError("Please enter a valid 10-digit mobile number.");
+      return;
+    }
+    if (!regForm.otp || regForm.otp.trim().length < 4) {
+      setError("Please verify your phone by entering the OTP sent to your number.");
+      return;
+    }
+    if (!regForm.password || regForm.password.trim().length < 8) {
+      setError("Password must be at least 8 characters long.");
+      return;
+    }
+    if (regForm.password !== regForm.confirmPassword) {
+      setError("Password and Confirm Password do not match.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/v1/auth/vendor/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shopName: regForm.shopName.trim(),
+          ownerName: regForm.ownerName.trim(),
+          phone: cleaned,
+          password: regForm.password.trim(),
+          districtName: regForm.district,
+          address: regForm.address.trim(),
+          otp: regForm.otp.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to submit partner application.");
+      }
+      setPartnerSubView("login");
+      setSuccessMsg("🎉 Partnership request submitted! BuildCity team will review and activate your account shortly.");
+      setPhone(cleaned);
+      setPassword("");
+    } catch (err) {
+      setError(err?.message || "Registration failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 2. Forgot Password Handlers
+  const handleForgotSendOtp = async () => {
+    setError("");
+    setSuccessMsg("");
+    const cleaned = forgotForm.phone.replace(/\D/g, "").slice(-10);
+    if (cleaned.length !== 10) {
+      setError("Please enter your 10-digit registered mobile number.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/v1/auth/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: cleaned, type: "forgot_password" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || "Failed to send OTP.");
+      }
+      setForgotOtpSent(true);
+      setForgotCooldown(90);
+      setSuccessMsg(`OTP sent to +91 ${cleaned}.`);
+    } catch (err) {
+      setError(err?.message || "Could not send OTP. Check mobile number.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccessMsg("");
+    const cleaned = forgotForm.phone.replace(/\D/g, "").slice(-10);
+    if (cleaned.length !== 10) {
+      setError("Enter registered 10-digit mobile number.");
+      return;
+    }
+    if (!forgotForm.otp || forgotForm.otp.trim().length < 4) {
+      setError("Please enter the verification OTP.");
+      return;
+    }
+    if (!forgotForm.newPassword || forgotForm.newPassword.trim().length < 8) {
+      setError("New password must be at least 8 characters long.");
+      return;
+    }
+    if (forgotForm.newPassword !== forgotForm.confirmPassword) {
+      setError("New password and confirm password do not match.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/v1/auth/vendor/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: cleaned,
+          otp: forgotForm.otp.trim(),
+          newPassword: forgotForm.newPassword.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Password reset failed.");
+      }
+      setPartnerSubView("login");
+      setSuccessMsg("🔐 Password reset successful! You can now sign in with your new password.");
+      setPhone(cleaned);
+      setPassword("");
+    } catch (err) {
+      setError(err?.message || "Password reset failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const footerVendorAction = null;
 
   return (
@@ -234,81 +442,392 @@ export default function Login({ forceVendorMode = false }) {
       )}
 
       <h1 className={mode === "vendor" ? "text-2xl font-semibold text-slate-900 mb-1 tracking-tight" : "text-2xl font-black text-navy-900 mb-1 tracking-tight"}>
-        {mode === "vendor" ? "Partner sign in" : "Welcome back "}
+        {mode === "vendor"
+          ? partnerSubView === "register"
+            ? "Become a BuildCity Partner 🏪"
+            : partnerSubView === "forgot"
+            ? "Reset Password 🔐"
+            : "Partner sign in"
+          : "Welcome back "}
       </h1>
-      <p className={mode === "vendor" ? "text-sm text-slate-500 mb-8" : "text-xs text-slate-500 mb-6"}>
-        {isVendorApp || mode === "vendor"
-          ? "Use your registered mobile number and password."
+      <p className={mode === "vendor" ? "text-sm text-slate-500 mb-6" : "text-xs text-slate-500 mb-6"}>
+        {mode === "vendor"
+          ? partnerSubView === "register"
+            ? "Fill in your shop details to join our vendor & supplier network."
+            : partnerSubView === "forgot"
+            ? "Verify your mobile number via OTP to set a new password."
+            : "Use your registered mobile number and password."
           : step === "phone"
           ? "Login with your registered phone number via OTP"
           : `Enter the OTP sent to +91 ${phone}`}
       </p>
 
-      {error && mode === "vendor" && (
-        <div role="alert" className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-700">
+      {successMsg && (
+        <div role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-800 font-medium animate-in fade-in">
+          {successMsg}
+        </div>
+      )}
+
+      {error && (
+        <div role="alert" className={`mb-5 p-3.5 rounded-xl border text-xs font-bold leading-relaxed shadow-2xs animate-in fade-in ${
+          typeof error === "string" && (error.includes("Partner") || error.includes("Vendor") || error.includes("DR") || error.includes("Admin"))
+            ? "bg-amber-50 border-amber-200 text-amber-900"
+            : "bg-rose-50 border-rose-200 text-rose-700"
+        }`}>
           {error}
         </div>
       )}
 
-      {error && mode !== "vendor" && (
-        <div className={`mb-5 p-3.5 rounded-2xl border ${
-          typeof error === "string" && (error.includes("Partner") || error.includes("Vendor") || error.includes("DR") || error.includes("Admin"))
-            ? "bg-amber-50 border-amber-200 text-amber-900"
-            : "bg-rose-50 border-rose-200 text-rose-700"
-        } text-xs font-bold leading-relaxed shadow-2xs animate-in fade-in`}>
-          <div>{error}</div>
-        </div>
-      )}
-
       {mode === "vendor" ? (
-        /* Partner aur vendor ka password login form */
-        <form onSubmit={handleVendorPasswordLogin} noValidate className="space-y-5">
-          <div>
-            <label htmlFor="partner-phone" className="block text-sm font-medium text-slate-700 mb-1.5">
-              Mobile number
-            </label>
-            <div className="flex h-12 items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 transition-colors focus-within:border-slate-400">
-              <span className="text-sm text-slate-500 shrink-0">+91</span>
-              <span className="h-5 w-px bg-slate-200" aria-hidden="true" />
+        partnerSubView === "register" ? (
+          /* ============================================================== */
+          /* 1. BECOME A PARTNER / VENDOR REGISTRATION FORM                 */
+          /* ============================================================== */
+          <form onSubmit={handlePartnerRegisterSubmit} noValidate className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Shop / Business Name *
+              </label>
               <input
-                id="partner-phone"
-                type="tel"
-                inputMode="numeric"
-                autoComplete="tel-national"
-                maxLength={10}
-                value={phone}
-                onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
-                placeholder="10-digit number"
-                className="w-full bg-transparent text-base text-slate-900 placeholder:text-slate-400 outline-none font-medium"
-                autoFocus
+                type="text"
+                required
+                value={regForm.shopName}
+                onChange={(e) => setRegForm({ ...regForm, shopName: e.target.value })}
+                placeholder="e.g. Shree Ram Hardware & Building Materials"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-brand-500 font-medium"
               />
             </div>
-          </div>
 
-          <div>
-            <label htmlFor="partner-password" className="block text-sm font-medium text-slate-700 mb-1.5">
-              Password
-            </label>
-            <input
-              id="partner-password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password"
-              className="h-12 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-base font-medium text-slate-900 placeholder:text-slate-400 outline-none transition-colors focus:border-slate-400"
-            />
-          </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Owner / Contact Person *
+              </label>
+              <input
+                type="text"
+                required
+                value={regForm.ownerName}
+                onChange={(e) => setRegForm({ ...regForm, ownerName: e.target.value })}
+                placeholder="e.g. Ramesh Kumar"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-brand-500 font-medium"
+              />
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 text-sm font-semibold text-white transition-colors hover:bg-brand-700 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {loading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" aria-hidden="true" />}
-            {loading ? "Signing in" : "Sign in"}
-          </button>
-        </form>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Mobile Number (For Login & OTP) *
+              </label>
+              <div className="flex gap-2">
+                <div className="flex h-11 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 focus-within:border-brand-500">
+                  <span className="text-xs text-slate-500 shrink-0 font-bold">+91</span>
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    value={regForm.phone}
+                    onChange={(e) => setRegForm({ ...regForm, phone: e.target.value.replace(/\D/g, "") })}
+                    placeholder="10-digit number"
+                    className="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400 outline-none font-bold"
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={loading || regCooldown > 0}
+                  onClick={handleRegisterPartnerSendOtp}
+                  className="px-3.5 h-11 text-xs font-bold rounded-xl bg-slate-900 hover:bg-slate-800 text-white shrink-0 disabled:opacity-50 cursor-pointer active:scale-95 transition-all"
+                >
+                  {regCooldown > 0 ? `${regCooldown}s` : regOtpSent ? "Resend OTP" : "Send OTP"}
+                </button>
+              </div>
+            </div>
+
+            {regOtpSent && (
+              <div>
+                <label className="block text-xs font-bold text-brand-700 mb-1">
+                  Enter 6-digit OTP sent to Mobile *
+                </label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={regForm.otp}
+                  onChange={(e) => setRegForm({ ...regForm, otp: e.target.value.replace(/\D/g, "") })}
+                  placeholder="Enter SMS OTP"
+                  className="h-11 w-full rounded-xl border border-brand-300 bg-brand-50/50 px-3.5 text-sm font-bold text-center tracking-widest text-slate-900 outline-none focus:border-brand-600 focus:bg-white"
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                District / Delivery Region *
+              </label>
+              <select
+                value={regForm.district}
+                onChange={(e) => setRegForm({ ...regForm, district: e.target.value })}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-brand-500 font-medium"
+              >
+                <option value="Varanasi">Varanasi</option>
+                <option value="Prayagraj">Prayagraj</option>
+                <option value="Mirzapur">Mirzapur</option>
+                <option value="Jaunpur">Jaunpur</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Shop Address / Landmark (Optional)
+              </label>
+              <input
+                type="text"
+                value={regForm.address}
+                onChange={(e) => setRegForm({ ...regForm, address: e.target.value })}
+                placeholder="e.g. Near Shiv Mandir, Main Road"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-brand-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Create Password *
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={regForm.password}
+                  onChange={(e) => setRegForm({ ...regForm, password: e.target.value })}
+                  placeholder="Min 8 characters"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-900 outline-none focus:border-brand-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Confirm Password *
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={regForm.confirmPassword}
+                  onChange={(e) => setRegForm({ ...regForm, confirmPassword: e.target.value })}
+                  placeholder="Re-enter password"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-900 outline-none focus:border-brand-500"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 text-sm font-semibold text-white transition-colors hover:bg-brand-700 cursor-pointer disabled:opacity-60 shadow-xs mt-2"
+            >
+              {loading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />}
+              {loading ? "Submitting Request..." : "Register as Partner"}
+            </button>
+
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setError("");
+                  setSuccessMsg("");
+                  setPartnerSubView("login");
+                }}
+                className="text-xs font-bold text-slate-600 hover:text-brand-600 cursor-pointer underline"
+              >
+                ← Already have an account? Sign In
+              </button>
+            </div>
+          </form>
+        ) : partnerSubView === "forgot" ? (
+          /* ============================================================== */
+          /* 2. FORGOT PASSWORD (OTP RESET) FORM                            */
+          /* ============================================================== */
+          <form onSubmit={handleForgotSubmit} noValidate className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Registered Mobile Number *
+              </label>
+              <div className="flex gap-2">
+                <div className="flex h-11 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 focus-within:border-brand-500">
+                  <span className="text-xs text-slate-500 shrink-0 font-bold">+91</span>
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    value={forgotForm.phone}
+                    onChange={(e) => setForgotForm({ ...forgotForm, phone: e.target.value.replace(/\D/g, "") })}
+                    placeholder="10-digit number"
+                    className="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400 outline-none font-bold"
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={loading || forgotCooldown > 0}
+                  onClick={handleForgotSendOtp}
+                  className="px-3.5 h-11 text-xs font-bold rounded-xl bg-slate-900 hover:bg-slate-800 text-white shrink-0 disabled:opacity-50 cursor-pointer active:scale-95 transition-all"
+                >
+                  {forgotCooldown > 0 ? `${forgotCooldown}s` : forgotOtpSent ? "Resend OTP" : "Send OTP"}
+                </button>
+              </div>
+            </div>
+
+            {forgotOtpSent && (
+              <div>
+                <label className="block text-xs font-bold text-brand-700 mb-1">
+                  Enter 6-digit OTP received via SMS *
+                </label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={forgotForm.otp}
+                  onChange={(e) => setForgotForm({ ...forgotForm, otp: e.target.value.replace(/\D/g, "") })}
+                  placeholder="Enter SMS OTP"
+                  className="h-11 w-full rounded-xl border border-brand-300 bg-brand-50/50 px-3.5 text-sm font-bold text-center tracking-widest text-slate-900 outline-none focus:border-brand-600 focus:bg-white"
+                />
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  New Password *
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={forgotForm.newPassword}
+                  onChange={(e) => setForgotForm({ ...forgotForm, newPassword: e.target.value })}
+                  placeholder="Min 8 characters"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-900 outline-none focus:border-brand-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Confirm Password *
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={forgotForm.confirmPassword}
+                  onChange={(e) => setForgotForm({ ...forgotForm, confirmPassword: e.target.value })}
+                  placeholder="Re-enter password"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-900 outline-none focus:border-brand-500"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading || !forgotOtpSent}
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 text-sm font-semibold text-white transition-colors hover:bg-brand-700 cursor-pointer disabled:opacity-60 shadow-xs mt-2"
+            >
+              {loading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />}
+              {loading ? "Resetting Password..." : "Reset Password & Login"}
+            </button>
+
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setError("");
+                  setSuccessMsg("");
+                  setPartnerSubView("login");
+                }}
+                className="text-xs font-bold text-slate-600 hover:text-brand-600 cursor-pointer underline"
+              >
+                ← Back to Partner Sign In
+              </button>
+            </div>
+          </form>
+        ) : (
+          /* ============================================================== */
+          /* 3. PARTNER SIGN IN (LOGIN) FORM                                */
+          /* ============================================================== */
+          <form onSubmit={handleVendorPasswordLogin} noValidate className="space-y-4">
+            <div>
+              <label htmlFor="partner-phone" className="block text-sm font-medium text-slate-700 mb-1.5">
+                Mobile number
+              </label>
+              <div className="flex h-12 items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 transition-colors focus-within:border-slate-400">
+                <span className="text-sm text-slate-500 shrink-0">+91</span>
+                <span className="h-5 w-px bg-slate-200" aria-hidden="true" />
+                <input
+                  id="partner-phone"
+                  type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel-national"
+                  maxLength={10}
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
+                  placeholder="10-digit number"
+                  className="w-full bg-transparent text-base text-slate-900 placeholder:text-slate-400 outline-none font-medium"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="partner-password" className="block text-sm font-medium text-slate-700">
+                  Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError("");
+                    setSuccessMsg("");
+                    setForgotForm({ phone: phone || "", otp: "", newPassword: "", confirmPassword: "" });
+                    setPartnerSubView("forgot");
+                  }}
+                  className="text-xs font-bold text-brand-600 hover:text-brand-700 cursor-pointer"
+                >
+                  Forgot Password?
+                </button>
+              </div>
+              <input
+                id="partner-password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password"
+                className="h-12 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-base font-medium text-slate-900 placeholder:text-slate-400 outline-none transition-colors focus:border-slate-400"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 text-sm font-semibold text-white transition-colors hover:bg-brand-700 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {loading && <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" aria-hidden="true" />}
+              {loading ? "Signing in" : "Sign in"}
+            </button>
+
+            {/* Become a Partner Callout */}
+            <div className="pt-4 mt-2 border-t border-slate-200/80 text-center">
+              <p className="text-xs text-slate-500 font-medium mb-2">New dealer or material supplier?</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setError("");
+                  setSuccessMsg("");
+                  setRegForm({
+                    shopName: "",
+                    ownerName: "",
+                    phone: phone || "",
+                    district: "Varanasi",
+                    address: "",
+                    password: "",
+                    confirmPassword: "",
+                    otp: "",
+                  });
+                  setPartnerSubView("register");
+                }}
+                className="w-full py-2.5 px-3 rounded-xl border border-brand-200 bg-brand-50 hover:bg-brand-100 text-brand-700 text-xs font-bold transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                🏪 Become a Partner / Register Shop →
+              </button>
+            </div>
+          </form>
+        )
       ) : step === "phone" ? (
         /* Customer phone number daal kar OTP request karne ka form */
         <form onSubmit={handleSendOtp} noValidate>

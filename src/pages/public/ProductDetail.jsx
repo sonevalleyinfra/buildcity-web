@@ -352,10 +352,12 @@ export default function ProductDetail() {
     setSelectedDiameter(initialDiameter);
   }, [initialDiameter, product?.id]);
 
-  // 3. Dynamic price based on selected diameter for steel products
+  // 3. Dynamic price based on selected diameter for steel products (ONLY if vendor turned mm pricing ON)
+  const isMmPricingOn = Boolean(product?.mmPricingEnabled === true || product?.hasDiameterPricing === true || product?.diameterPricingEnabled === true);
+
   const diameterAdjustedProduct = useMemo(() => {
     if (!product) return null;
-    if (!isSteelProduct) return product;
+    if (!isSteelProduct || !isMmPricingOn) return product;
 
     const basePrice = Number(product.price) || 680;
     const baseMrp = Number(product.mrp) || Math.round(basePrice * 1.15);
@@ -368,7 +370,7 @@ export default function ProductDetail() {
       mrp: diaMrp,
       selectedDiameter: selectedDiameter,
     };
-  }, [product, isSteelProduct, selectedDiameter, initialDiameter]);
+  }, [product, isSteelProduct, isMmPricingOn, selectedDiameter, initialDiameter]);
 
   // Rule-based automatic packs calculate karte hai
   const packs = useMemo(
@@ -914,8 +916,8 @@ export default function ProductDetail() {
               )}
             </div>
 
-            {/* Steel Rebar MM-Wise Diameter Selector */}
-            {isSteelProduct && (
+            {/* Steel Rebar MM-Wise Diameter Selector (ONLY if vendor turned mm pricing ON) */}
+            {isSteelProduct && isMmPricingOn && (
               <div className="mb-5 p-3.5 bg-blue-50/70 rounded-2xl border border-blue-200/90 shadow-2xs">
                 <div className="flex items-center justify-between mb-2.5">
                   <div className="flex items-center gap-1.5">
@@ -958,8 +960,8 @@ export default function ProductDetail() {
               </div>
             )}
 
-            {/* Pack ya quantity aur unit selector - mobile first grid layout */}
-            {packs && packs.length > 0 && (
+            {/* Pack ya quantity aur unit selector - ONLY show if vendor turned Bulk ON (more than 1 pack available) */}
+            {packs && packs.length > 1 && (
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-2.5">
                   <span className="text-xs font-extrabold text-navy-900 uppercase tracking-wider">

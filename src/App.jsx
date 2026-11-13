@@ -28,6 +28,7 @@ import VendorDashboard from "./pages/vendor/VendorDashboard";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import DrDashboard from "./pages/dr/DrDashboard";
 import LegalPolicyPage from "./pages/public/LegalPolicyPage";
+import ServiceBooking from "./pages/public/ServiceBooking";
 
 import BottomNav from "./components/BottomNav";
 import { isVendorApp } from "./config/appMode";
@@ -203,6 +204,7 @@ export default function App() {
                   <Route path="/product/:id" element={isVendorApp ? <VendorRoot /> : <ProductDetail />} />
                   <Route path="/search" element={isVendorApp ? <VendorRoot /> : <SearchResults />} />
                   <Route path="/cart" element={isVendorApp ? <VendorRoot /> : <Cart />} />
+                  <Route path="/services/book" element={isVendorApp ? <VendorRoot /> : <ServiceBooking />} />
 
                   {/* Public Legal & Compliance Routes (Play Store & Statutory Compliant) */}
                   <Route path="/privacy" element={<LegalPolicyPage defaultPolicyId="privacy" />} />

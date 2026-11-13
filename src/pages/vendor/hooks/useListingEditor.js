@@ -68,6 +68,7 @@ export default function useListingEditor({ updateVendorProductListing, showAlert
         mrp: Number(prod.mrp),
         stockQty: Number(prod.stockQty),
         customPacks: sanitizedPacks,
+        bulkEnabled: Boolean(sanitizedPacks && sanitizedPacks.length > 0),
       });
     } catch (err) {
       console.warn("Background update listing note:", err.message);

@@ -13,6 +13,7 @@ import Footer from "../../components/Footer";
 import SiteReviewsSection from "../../components/SiteReviewsSection";
 import { Capacitor } from "@capacitor/core";
 import { resolveCategoryBubbleImage } from "../vendor/utils/productImage";
+import { constructionServices } from "../../data/servicesData";
 
 const categoryTiles = [
   {
@@ -58,6 +59,7 @@ const categoryTiles = [
     img: "/categories/plumbing.png",
   },
 ];
+
 
 const brandItems = [
   {
@@ -224,6 +226,9 @@ export default function Home() {
   }, [activeSlides.length, slide]);
   const [justAddedId, setJustAddedId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedService, setSelectedService] = useState(null);
+  const [selectedSubCategory, setSelectedSubCategory] = useState("");
+  const [servicePackageType, setServicePackageType] = useState("with_material");
 
   const touchStartX = useRef(null);
   const touchEndX = useRef(null);
@@ -554,7 +559,8 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 2. Top brands circular logo list */}
+        {/* 2. Top brands (Temporarily hidden for review) */}
+        {/*
         <section className="space-y-1.5 sm:space-y-2.5">
           <div className="flex items-center justify-between">
             <h3 className="text-base sm:text-lg font-black text-navy-950 tracking-tight">Top Brands</h3>
@@ -588,6 +594,216 @@ export default function Home() {
             ))}
           </div>
         </section>
+        */}
+
+        {/* 2.5 Construction Services section */}
+        <section className="space-y-1.5 sm:space-y-2.5">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base sm:text-lg font-black text-navy-950 tracking-tight">Construction Services</h3>
+            <Link to="/categories" className="text-xs font-bold text-[#c2410c] hover:text-[#9a3412] hover:underline">
+              See all
+            </Link>
+          </div>
+
+          <div className="flex overflow-x-auto lg:grid lg:grid-cols-8 gap-2 sm:gap-2.5 pb-1 no-scrollbar scroll-smooth">
+            {constructionServices.map((s) => (
+              <div
+                key={s.id}
+                onClick={() => {
+                  setSelectedService(s);
+                  setSelectedSubCategory(s.subServices && s.subServices.length > 0 ? s.subServices[0] : "");
+                  setServicePackageType("with_material");
+                }}
+                className="w-[96px] sm:w-[108px] lg:w-auto shrink-0 lg:shrink rounded-2xl p-2 sm:p-2.5 flex flex-col items-center justify-center shadow-[0_2px_8px_-2px_rgba(15,23,42,0.06)] hover:shadow-[0_8px_20px_-6px_rgba(15,23,42,0.12)] border border-slate-200/80 hover:border-brand-500/60 active:scale-[0.94] transition-all duration-300 group min-h-[105px] sm:min-h-[115px] cursor-pointer select-none text-center"
+                style={{ backgroundColor: s.bg }}
+              >
+                <div className="w-12 h-12 sm:w-13 sm:h-13 rounded-full bg-white shadow-xs border border-white/90 flex items-center justify-center p-1.5 overflow-hidden group-hover:scale-110 group-hover:shadow-md transition-all duration-300 mb-1">
+                  <span className="text-2xl sm:text-[25px]">{s.icon}</span>
+                </div>
+                <span className="text-xs sm:text-[12.5px] font-black text-navy-950 group-hover:text-brand-600 transition-colors block truncate max-w-full leading-tight">
+                  {s.shortName || s.name}
+                </span>
+                <span className="text-[10px] text-slate-500 font-medium block truncate max-w-full mt-0.5">
+                  {s.subtitle}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Interactive Service Detail & With / Without Material Choice Modal */}
+        {selectedService && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn"
+            onClick={() => setSelectedService(null)}
+          >
+            <div
+              className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200/90 relative space-y-4 max-h-[90vh] overflow-y-auto no-scrollbar"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Close Button */}
+              <button
+                onClick={() => setSelectedService(null)}
+                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-sm transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+
+              {/* Header */}
+              <div className="flex items-center gap-3 pr-8">
+                <div
+                  className="w-13 h-13 rounded-2xl flex items-center justify-center text-3xl shadow-xs border border-slate-200/80 shrink-0"
+                  style={{ backgroundColor: selectedService.bg }}
+                >
+                  {selectedService.icon}
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-navy-950 leading-tight">
+                    {selectedService.name}
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    {selectedService.subtitle} • {region?.name || "Varanasi"} Region
+                  </p>
+                </div>
+              </div>
+
+              {/* 1. Sub-Category Selection */}
+              {selectedService.subServices && selectedService.subServices.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  <label className="text-[11px] font-black uppercase tracking-wider text-slate-600 block">
+                    Choose Sub-Category / Specific Work:
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {selectedService.subServices.map((sub) => {
+                      const isChosen = selectedSubCategory === sub;
+                      return (
+                        <button
+                          key={sub}
+                          type="button"
+                          onClick={() => setSelectedSubCategory(sub)}
+                          className={`p-2.5 rounded-xl text-xs font-bold transition-all border text-left flex items-center justify-between cursor-pointer active:scale-95 ${
+                            isChosen
+                              ? "border-brand-500 bg-orange-50/70 text-navy-950 font-black ring-1 ring-brand-500/30 shadow-2xs"
+                              : "border-slate-200 hover:border-slate-300 text-slate-700 bg-slate-50/50 hover:bg-white"
+                          }`}
+                        >
+                          <span className="truncate">{sub}</span>
+                          <span
+                            className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ml-1 ${
+                              isChosen ? "border-brand-600 bg-brand-600" : "border-slate-300"
+                            }`}
+                          >
+                            {isChosen && <span className="w-1 h-1 rounded-full bg-white" />}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 2. With / Without Material Selection */}
+              <div className="space-y-2 pt-1">
+                <label className="text-[11px] font-black uppercase tracking-wider text-slate-600 block">
+                  Choose Execution Type:
+                </label>
+
+                {/* Option 1: With Product (Turnkey) */}
+                <div
+                  onClick={() => setServicePackageType("with_material")}
+                  className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                    servicePackageType === "with_material"
+                      ? "border-brand-500 bg-orange-50/40 shadow-xs ring-1 ring-brand-500/20"
+                      : "border-slate-200 hover:border-slate-300 bg-white"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">📦</span>
+                      <span className="text-xs font-black text-navy-950">
+                        {selectedService.withMaterialTitle}
+                      </span>
+                    </div>
+                    <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                      servicePackageType === "with_material" ? "border-brand-600 bg-brand-600" : "border-slate-300"
+                    }`}>
+                      {servicePackageType === "with_material" && <span className="w-1.5 h-1.5 rounded-full bg-white"></span>}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 mt-1.5 pl-6 leading-relaxed font-medium">
+                    {selectedService.withMaterialDesc}
+                  </p>
+                  <div className="mt-2 pl-6 flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-slate-400">Estimated Rate:</span>
+                    <span className="font-black text-brand-600">₹{selectedService.withMaterialRate} / {selectedService.unit || "sq.ft"}</span>
+                  </div>
+                </div>
+
+                {/* Option 2: Without Product (Labour Rate Only) */}
+                <div
+                  onClick={() => setServicePackageType("without_material")}
+                  className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                    servicePackageType === "without_material"
+                      ? "border-brand-500 bg-orange-50/40 shadow-xs ring-1 ring-brand-500/20"
+                      : "border-slate-200 hover:border-slate-300 bg-white"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">👷</span>
+                      <span className="text-xs font-black text-navy-950">
+                        {selectedService.withoutMaterialTitle}
+                      </span>
+                    </div>
+                    <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                      servicePackageType === "without_material" ? "border-brand-600 bg-brand-600" : "border-slate-300"
+                    }`}>
+                      {servicePackageType === "without_material" && <span className="w-1.5 h-1.5 rounded-full bg-white"></span>}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 mt-1.5 pl-6 leading-relaxed font-medium">
+                    {selectedService.withoutMaterialDesc}
+                  </p>
+                  <div className="mt-2 pl-6 flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-slate-400">Labour Rate:</span>
+                    <span className="font-black text-navy-950">₹{selectedService.withoutMaterialRate} / {selectedService.unit || "sq.ft"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons to navigate to Booking Page */}
+              <div className="pt-2 space-y-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedService(null)}
+                    className="flex-1 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sId = selectedService.id;
+                      const mode = servicePackageType;
+                      const sub = selectedSubCategory;
+                      setSelectedService(null);
+                      navigate(`/services/book?service=${sId}&sub=${encodeURIComponent(sub)}&mode=${mode}`);
+                    }}
+                    className="flex-[2] py-3 rounded-2xl bg-[#0A192F] hover:bg-brand-600 text-white text-xs font-black transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <span>Proceed to Booking</span>
+                    <span>→</span>
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 text-center">
+                  ⚡ 100% Free Site Inspection • Zero Advance Payment • BuildCity Verified
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 3. Shop by category tiles list */}
         <section className="space-y-1.5 sm:space-y-2.5">

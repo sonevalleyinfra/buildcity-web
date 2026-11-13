@@ -296,21 +296,29 @@ export function generateProductPacks(product) {
     stock: product.stockQty !== undefined ? Number(product.stockQty) : 100,
   };
 
-  // 0. Agar vendor ne bulk rates explicitly OFF kiya ho (Toggle switch OFF)
-  if (product.bulkEnabled === false || product.bulk_enabled === false) {
-    return [basePack];
-  }
-  if (product.id && typeof window !== "undefined") {
+  // STRICT RULE: By default, Bulk Rates MUST BE OFF for all products!
+  // ONLY show bulk packs if the vendor has explicitly turned it ON in their listing!
+  let isBulkOnByVendor = Boolean(product.bulkEnabled === true || product.bulk_enabled === true);
+
+  if (!isBulkOnByVendor && product.id && typeof window !== "undefined") {
     try {
       const storedBulk = JSON.parse(localStorage.getItem("buildcity_bulk_enabled") || "{}");
-      if (storedBulk[product.id] === false) {
-        return [basePack];
+      if (storedBulk[product.id] === true) {
+        isBulkOnByVendor = true;
       }
     } catch {}
   }
 
-  // 1. Agar vendor ne manual custom bulk packs array set kiya hai
-  if (Array.isArray(rawCustom) && rawCustom.length > 0) {
+  // Check if vendor has specifically configured and saved custom packs
+  const hasVendorCustomPacks = Array.isArray(rawCustom) && rawCustom.length > 0 && rawCustom.some((pk) => Number(pk.qty) > 1);
+
+  // If vendor did NOT turn it on AND has no custom packs saved -> ONLY single unit (NO bulk rates)
+  if (!isBulkOnByVendor && !hasVendorCustomPacks) {
+    return [basePack];
+  }
+
+  // If vendor enabled custom bulk packs:
+  if (hasVendorCustomPacks) {
     const bulkOptions = rawCustom
       .filter((pk) => Number(pk.qty) > 1)
       .map((pk) => {
@@ -339,10 +347,12 @@ export function generateProductPacks(product) {
     }
   }
 
-  // 2. Fallback rule-based default packs (taaki Tata Steel, Rebars, Cement, Paints sabhi par bulk packs ON rahein!)
-  const defaultPacks = getDefaultPacksForProduct(product);
-  if (Array.isArray(defaultPacks) && defaultPacks.length > 0) {
-    return [basePack, ...defaultPacks];
+  // If vendor turned bulk toggle ON but has not set custom packs, use standard category default packs:
+  if (isBulkOnByVendor) {
+    const defaultPacks = getDefaultPacksForProduct(product);
+    if (Array.isArray(defaultPacks) && defaultPacks.length > 0) {
+      return [basePack, ...defaultPacks];
+    }
   }
 
   return [basePack];

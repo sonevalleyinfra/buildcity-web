@@ -246,8 +246,8 @@ export function getStandardPackLabel(unit) {
   return `1 ${raw} (Standard)`;
 }
 
-// Steel TMT Rebar Diameter Specs & Weight Multipliers (Standard IS 1786)
-export const STEEL_DIAMETERS = ["8mm", "10mm", "12mm", "16mm", "20mm", "25mm", "32mm"];
+// Steel TMT Rebar Diameter Specs & Weight Multipliers (Max 20mm)
+export const STEEL_DIAMETERS = ["8mm", "10mm", "12mm", "16mm", "20mm"];
 
 export const STEEL_DIAMETER_FACTORS = {
   "8mm": 0.72,
@@ -255,8 +255,6 @@ export const STEEL_DIAMETER_FACTORS = {
   "12mm": 1.44,
   "16mm": 2.56,
   "20mm": 4.0,
-  "25mm": 6.25,
-  "32mm": 10.2,
 };
 
 export function getDiameterPrice(basePrice, targetDia = "12mm", baseDia = "10mm") {

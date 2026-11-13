@@ -262,6 +262,15 @@ export default function ProductDetail() {
           } catch {}
           return undefined;
         })(),
+        mmPricingEnabled: (() => {
+          if (realProd.mmPricingEnabled !== undefined) return Boolean(realProd.mmPricingEnabled);
+          if (realProd.diameterPricingEnabled !== undefined) return Boolean(realProd.diameterPricingEnabled);
+          try {
+            const stored = JSON.parse(localStorage.getItem("buildcity_mm_pricing") || "{}");
+            if (stored[realProd.id] !== undefined) return Boolean(stored[realProd.id]);
+          } catch {}
+          return false;
+        })(),
         description:
           (realProd.description && realProd.description.trim()) ||
           (realProd.masterProduct?.description && realProd.masterProduct.description.trim()) ||
@@ -931,7 +940,7 @@ export default function ProductDetail() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5 sm:gap-2">
+                <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
                   {STEEL_DIAMETERS.map((dia) => {
                     const isChosen = selectedDiameter === dia;
                     const diaPrice = getDiameterPrice(product.price, dia, initialDiameter);

@@ -20,11 +20,47 @@ function EditListingSheetInner({
   onPriceChange,
   onStockChange,
   onCustomPacksChange,
+  onMmPricingChange,
   isSaving,
 }) {
   const price = Number(product.price || 0);
   const mrp = Number(product.mrp || 0);
   const discount = Number(product.discountPct || 0);
+
+  // Check if product is Steel / TMT Rebar / Sariya
+  const isSteelProduct = useMemo(() => {
+    const cat = String(product.categoryName || product.category || "").toLowerCase();
+    const name = String(product.name || "").toLowerCase();
+    return (
+      cat.includes("steel") ||
+      cat.includes("rebar") ||
+      cat.includes("tmt") ||
+      cat.includes("sariya") ||
+      name.includes("steel") ||
+      name.includes("tiscon") ||
+      name.includes("tmt") ||
+      name.includes("rebar") ||
+      name.includes("saria") ||
+      name.includes("sariya")
+    );
+  }, [product]);
+
+  // MM-wise pricing toggle state
+  const [mmPricingEnabled, setMmPricingEnabled] = useState(() => {
+    if (product.mmPricingEnabled !== undefined) return Boolean(product.mmPricingEnabled);
+    if (product.diameterPricingEnabled !== undefined) return Boolean(product.diameterPricingEnabled);
+    try {
+      const stored = JSON.parse(localStorage.getItem("buildcity_mm_pricing") || "{}");
+      if (stored[product.id] !== undefined) return Boolean(stored[product.id]);
+    } catch {}
+    return false;
+  });
+
+  const handleToggleMmPricing = () => {
+    const next = !mmPricingEnabled;
+    setMmPricingEnabled(next);
+    onMmPricingChange?.(next);
+  };
 
   // Standard rule-based packs for this product's category (starting from 5 units)
   const defaultPacks = useMemo(() => getDefaultPacksForProduct(product), [product]);
@@ -210,6 +246,52 @@ function EditListingSheetInner({
             )}
           </p>
         </div>
+
+        {/* MM-Wise Rebar Sizes Section with Toggle (8mm - 20mm Max) */}
+        {isSteelProduct && (
+          <div className="pt-3 border-t border-slate-200">
+            <div className="flex items-center justify-between mb-1.5">
+              <div>
+                <h4 className="text-xs font-extrabold text-navy-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>🔩</span> MM-Wise Rebar Sizes (8mm – 20mm)
+                </h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Allow customers to choose 8mm, 10mm, 12mm, 16mm, and 20mm thickness.
+                </p>
+              </div>
+
+              {/* Toggle Switch */}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={mmPricingEnabled}
+                onClick={handleToggleMmPricing}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  mmPricingEnabled ? "bg-brand-500" : "bg-slate-300"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                    mmPricingEnabled ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {mmPricingEnabled && (
+              <div className="mt-2 p-2.5 bg-blue-50/80 rounded-xl border border-blue-200/90 text-[11px] text-blue-900 flex items-center justify-between">
+                <span className="font-bold text-blue-950">Active Diameters (Max 20mm):</span>
+                <div className="flex gap-1.5">
+                  {["8mm", "10mm", "12mm", "16mm", "20mm"].map((dia) => (
+                    <span key={dia} className="px-2 py-0.5 bg-white rounded-md border border-blue-300 font-extrabold text-[10px] text-blue-900 shadow-2xs">
+                      {dia}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Pack Sizes & Bulk Rates Section with Toggle */}
         <div className="pt-3 border-t border-slate-200">

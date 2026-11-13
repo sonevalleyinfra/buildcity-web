@@ -2221,6 +2221,14 @@ export function AdminProvider({ children }) {
     } catch {}
 
     try {
+      if (updates.mmPricingEnabled !== undefined) {
+        const storedMm = JSON.parse(localStorage.getItem("buildcity_mm_pricing") || "{}");
+        storedMm[id] = Boolean(updates.mmPricingEnabled);
+        localStorage.setItem("buildcity_mm_pricing", JSON.stringify(storedMm));
+      }
+    } catch {}
+
+    try {
       const storedMrps = JSON.parse(localStorage.getItem("buildcity_listing_mrps") || "{}");
       if (updates.mrp && Number(updates.mrp) > 0) {
         storedMrps[id] = Number(updates.mrp);

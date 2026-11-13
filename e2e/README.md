@@ -43,3 +43,16 @@ those hosts. Do not weaken either.
 
 CI: `.github/workflows/e2e-local.yml` (check `e2e-local`). Trace is kept on failure only; the HTML report is an
 artifact for 7 days (staging/test data only).
+
+## Staging and promotion
+
+- `e2e-staging.yml` (push `main`, or `workflow_dispatch`): waits (20 min max) until the Vercel deployment for the SHA
+  succeeded and `api-staging /api/v1/env` reports `commit == SHA`, then runs this suite against
+  `https://staging.buildcity.in`. Its check `e2e-staging` lands on the commit. `api-staging` gets `SOURCE_COMMIT` from
+  Coolify ("Include Source Commit in Build"); if a deploy ever reports `commit: null`, the wait falls back to a 5-minute settle.
+- `preview-isolation.yml` (`deployment_status`): every Vercel preview's `/api/v1/env` must report `staging/staging`.
+- Vercel Deployment Protection covers previews and staging, so both workflows (and a local run against staging) send
+  `x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET` (GitHub secret, owner-managed), only to the origin under test.
+- `scripts/promote.sh <sha> [--dry-run]` (Office Manager, after the owner says ship): refuses a SHA not on `main`, without a
+  green `e2e-staging`, or that isn't a fast-forward of `production`; otherwise pushes `<sha>:refs/heads/production` and prints the prod smoke checklist.
+  Tests: `npm run test:ci-scripts` (stubbed `gh`, temp git remote).

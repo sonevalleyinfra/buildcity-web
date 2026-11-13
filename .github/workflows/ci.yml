@@ -53,6 +53,8 @@ jobs:
         run: npm run lint
       - name: Build
         run: npm run build
+      - name: CI scripts and promote.sh tests
+        run: npm run test:ci-scripts
       - name: Server security tests
         run: npm run test:security
         working-directory: server

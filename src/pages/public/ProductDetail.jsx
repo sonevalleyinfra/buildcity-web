@@ -9,6 +9,7 @@ import { useAdmin } from "../../context/AdminContext";
 import { useAuth } from "../../context/AuthContext";
 import { useOrders } from "../../context/OrderContext";
 import { authFetch } from "../../config/authFetch";
+import { API_BASE_URL } from "../../config/api";
 import { generateProductPacks, STEEL_DIAMETERS, getDiameterPrice } from "../../utils/productPacks";
 import { getCategorySpec } from "../../utils/categoryAttributes";
 
@@ -65,7 +66,7 @@ export default function ProductDetail() {
 
     if (!existing) {
       setDirectLoading(true);
-      authFetch(`${API_BASE_URL}/api/v1/vendor/listings`)
+      authFetch(`${API_BASE_URL}/api/v1/public-catalog`)
         .then((r) => r.json())
         .then((data) => {
           const list = Array.isArray(data) ? data : (data?.listings || []);

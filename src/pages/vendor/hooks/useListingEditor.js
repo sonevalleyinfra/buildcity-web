@@ -21,6 +21,10 @@ export default function useListingEditor({ updateVendorProductListing, showAlert
         ? customPacks.filter((pk) => Number(pk.qty) > 1)
         : null;
 
+    const isMmOn = p.mmPricingEnabled !== undefined
+      ? Boolean(p.mmPricingEnabled)
+      : (p.diameterPricingEnabled !== undefined ? Boolean(p.diameterPricingEnabled) : false);
+
     setEditingProduct({
       ...p,
       mrp,
@@ -28,6 +32,7 @@ export default function useListingEditor({ updateVendorProductListing, showAlert
       discountPct: mrp > price ? discountFor(mrp, price) : 0,
       stockQty: p.stockQty !== undefined ? p.stockQty : 100,
       customPacks: validCustomPacks,
+      mmPricingEnabled: isMmOn,
     });
   };
 
@@ -69,6 +74,7 @@ export default function useListingEditor({ updateVendorProductListing, showAlert
         stockQty: Number(prod.stockQty),
         customPacks: sanitizedPacks,
         bulkEnabled: Boolean(sanitizedPacks && sanitizedPacks.length > 0),
+        mmPricingEnabled: Boolean(prod.mmPricingEnabled),
       });
     } catch (err) {
       console.warn("Background update listing note:", err.message);
@@ -119,5 +125,6 @@ export default function useListingEditor({ updateVendorProductListing, showAlert
       setEditingProduct((p) => ({ ...p, stockQty: cleaned }));
     },
     onCustomPacksChange: (packs) => setEditingProduct((p) => ({ ...p, customPacks: packs })),
+    onMmPricingChange: (val) => setEditingProduct((p) => ({ ...p, mmPricingEnabled: Boolean(val) })),
   };
 }

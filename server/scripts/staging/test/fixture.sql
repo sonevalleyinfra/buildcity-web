@@ -18,7 +18,14 @@ INSERT INTO users (id, phone, name, email, password, role, "walletBalance", "upd
  ('u4', '9999999999', 'Real Admin Name', 'admin@buildcity.in', '$2a$10$prodadminhash', 'ADMIN', 0, now()),
  ('u5', '7777777777', NULL, NULL, NULL, 'CUSTOMER', 0, now()),
  ('u6', '6123456789', 'Meena Devi', NULL, NULL, 'CUSTOMER', 99.25, now()),
- ('u7', '9876500007', 'Om Gupta', NULL, NULL, 'VENDOR', 0, now());
+ ('u7', '9876500007', 'Om Gupta', NULL, NULL, 'VENDOR', 0, now()),
+ -- u10 sorts before u8's number and is inserted (so updated) first: with a base of 0 it would be issued
+ -- 2000000001 while u8, a real user whose phone looks like an issued number, still holds it.
+ ('u10', '1234500001', 'Early Sorter', NULL, NULL, 'CUSTOMER', 0, now()),
+ ('u8', '2000000001', 'Issued Lookalike', NULL, NULL, 'CUSTOMER', 0, now());
+-- Carts snapshot product image URLs; Unsplash ids are 13-digit numbers.
+UPDATE users SET "cartItems" = '[{"productId":"vp1","quantity":2,"imageUrl":"https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400"}]' WHERE id = 'u1';
+UPDATE users SET "cartItems" = '[]' WHERE id = 'u6';
 
 INSERT INTO vendors (id, "userId", "shopName", "ownerName", phone, password, "regionId", status, "addedByDr") VALUES
  ('v1', 'u2', 'Sharma Cement Store', 'Ramesh Sharma', '9876500002', '$2a$10$realhash2', 'r1', 'APPROVED', 'Suresh Kumar'),
@@ -35,9 +42,11 @@ INSERT INTO addresses (id, "userId", "regionId", "fullName", phone, street, pinc
  ('a3', 'u6', 'r2', 'Meena Devi', '6123456789', '8 Hazratganj', '226001'),
  ('a4', 'u1', 'r1', 'Anil Verma (shop)', '022-2345-6789', '9 Market Road', '221010');
 
-INSERT INTO orders (id, "orderNumber", "customerId", "addressId", "totalAmount", "walletDiscount", "cashbackEarned", status, "updatedAt") VALUES
- ('o1', 'ORD-1', 'u1', 'a1', 5000.50, 10, 100, 'DELIVERED', now()),
- ('o2', 'ORD-2', 'u6', 'a3', 1200, 0, 0, 'PENDING', now());
+-- Idempotency keys embed a 13-digit ms timestamp; multi-vendor siblings append __v<n>.
+INSERT INTO orders (id, "orderNumber", "customerId", "addressId", "totalAmount", "walletDiscount", "cashbackEarned", status, "idempotencyKey", "updatedAt") VALUES
+ ('o1', 'ORD-1', 'u1', 'a1', 5000.50, 10, 100, 'DELIVERED', 'web_ord_1792512345678_9_abcde', now()),
+ ('o2', 'ORD-2', 'u6', 'a3', 1200, 0, 0, 'PENDING', NULL, now()),
+ ('o3', 'ORD-3', 'u1', 'a1', 400, 0, 0, 'DELIVERED', 'web_ord_1792512345678_9_abcde__v2', now());
 INSERT INTO order_items (id, "orderId", "vendorProductId", "vendorId", "productName", "priceAtPurchase", quantity, "totalPrice") VALUES
  ('oi1', 'o1', 'vp1', 'v1', 'OPC 53 Grade 50kg', 400, 12, 4800),
  ('oi2', 'o2', 'vp1', 'v1', 'OPC 53 Grade 50kg', 400, 3, 1200);

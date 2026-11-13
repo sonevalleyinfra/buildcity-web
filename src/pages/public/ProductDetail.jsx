@@ -8,9 +8,9 @@ import { useRegion } from "../../context/RegionContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useAuth } from "../../context/AuthContext";
 import { useOrders } from "../../context/OrderContext";
-import { API_BASE_URL } from "../../config/api";
 import { authFetch } from "../../config/authFetch";
-import { generateProductPacks } from "../../utils/productPacks";
+import { API_BASE_URL } from "../../config/api";
+import { generateProductPacks, STEEL_DIAMETERS, getDiameterPrice } from "../../utils/productPacks";
 import { getCategorySpec } from "../../utils/categoryAttributes";
 
 
@@ -66,7 +66,7 @@ export default function ProductDetail() {
 
     if (!existing) {
       setDirectLoading(true);
-      authFetch(`${API_BASE_URL}/api/v1/vendor/listings`)
+      authFetch(`${API_BASE_URL}/api/v1/public-catalog`)
         .then((r) => r.json())
         .then((data) => {
           const list = Array.isArray(data) ? data : (data?.listings || []);
@@ -253,6 +253,15 @@ export default function ProductDetail() {
           } catch {}
           return realProd.masterProduct?.customPacks || null;
         })(),
+        bulkEnabled: (() => {
+          if (realProd.bulkEnabled !== undefined) return realProd.bulkEnabled;
+          if (realProd.bulk_enabled !== undefined) return realProd.bulk_enabled;
+          try {
+            const stored = JSON.parse(localStorage.getItem("buildcity_bulk_enabled") || "{}");
+            if (stored[realProd.id] !== undefined) return stored[realProd.id];
+          } catch {}
+          return undefined;
+        })(),
         description:
           (realProd.description && realProd.description.trim()) ||
           (realProd.masterProduct?.description && realProd.masterProduct.description.trim()) ||
@@ -295,18 +304,91 @@ export default function ProductDetail() {
   const [qty, setQty] = useState(1);
   const [justAdded, setJustAdded] = useState(false);
 
+  // 1. Detect if product is Steel / TMT Rebar / Sariya
+  const isSteelProduct = useMemo(() => {
+    if (!product) return false;
+    const cat = String(
+      (typeof product.category === "string" ? product.category : product.category?.name) ||
+      product.categoryName ||
+      product.masterProduct?.categoryName ||
+      ""
+    ).toLowerCase();
+    const name = String(product.name || "").toLowerCase();
+    return (
+      cat.includes("steel") ||
+      cat.includes("rebar") ||
+      cat.includes("tmt") ||
+      cat.includes("iron") ||
+      cat.includes("sariya") ||
+      name.includes("steel") ||
+      name.includes("tiscon") ||
+      name.includes("tmt") ||
+      name.includes("rebar") ||
+      name.includes("saria") ||
+      name.includes("sariya") ||
+      name.includes("jindal") ||
+      name.includes("kamdhenu") ||
+      name.includes("sail") ||
+      name.includes("rungta")
+    );
+  }, [product]);
+
+  // 2. Identify initial diameter from product name or customPacks
+  const initialDiameter = useMemo(() => {
+    if (!product) return "12mm";
+    const name = product.name || "";
+    for (const d of STEEL_DIAMETERS) {
+      if (name.toLowerCase().includes(d.toLowerCase())) return d;
+    }
+    if (product.customPacks && typeof product.customPacks === "object" && product.customPacks.diameter) {
+      return product.customPacks.diameter;
+    }
+    return "12mm";
+  }, [product]);
+
+  const [selectedDiameter, setSelectedDiameter] = useState(initialDiameter);
+
+  useEffect(() => {
+    setSelectedDiameter(initialDiameter);
+  }, [initialDiameter, product?.id]);
+
+  // 3. Dynamic price based on selected diameter for steel products
+  const diameterAdjustedProduct = useMemo(() => {
+    if (!product) return null;
+    if (!isSteelProduct) return product;
+
+    const basePrice = Number(product.price) || 680;
+    const baseMrp = Number(product.mrp) || Math.round(basePrice * 1.15);
+    const diaPrice = getDiameterPrice(basePrice, selectedDiameter, initialDiameter);
+    const diaMrp = getDiameterPrice(baseMrp, selectedDiameter, initialDiameter);
+
+    return {
+      ...product,
+      price: diaPrice,
+      mrp: diaMrp,
+      selectedDiameter: selectedDiameter,
+    };
+  }, [product, isSteelProduct, selectedDiameter, initialDiameter]);
+
   // Rule-based automatic packs calculate karte hai
-  const packs = useMemo(() => generateProductPacks(product), [product]);
+  const packs = useMemo(
+    () => generateProductPacks(diameterAdjustedProduct || product),
+    [diameterAdjustedProduct, product]
+  );
   const [selectedPackIndex, setSelectedPackIndex] = useState(0);
 
-  // Jab product badle toh pehla pack select karo
+  // Jab product badle ya diameter badle toh pehla pack select karo
   useEffect(() => {
     setSelectedPackIndex(0);
-  }, [product?.id]);
+  }, [product?.id, selectedDiameter]);
 
   const selectedPack = packs[selectedPackIndex] || packs[0];
-  const currentPrice = selectedPack ? selectedPack.price : (product?.price || 0);
-  const currentMrp = selectedPack ? selectedPack.mrp : (product?.mrp || 0);
+  const currentPrice = selectedPack
+    ? selectedPack.price
+    : (diameterAdjustedProduct ? diameterAdjustedProduct.price : (product?.price || 0));
+  const currentMrp = selectedPack
+    ? selectedPack.mrp
+    : (diameterAdjustedProduct ? diameterAdjustedProduct.mrp : (product?.mrp || 0));
 
   // Jab product badle toh page top par smoothly scroll karo
   useEffect(() => {
@@ -562,20 +644,33 @@ export default function ProductDetail() {
   const handleAddToCart = () => {
     if (!product?.isDeliverable) return;
     const isCustomPack = selectedPack && selectedPack.qty > 1;
+    const effectivePrice = selectedPack ? selectedPack.price : (diameterAdjustedProduct ? diameterAdjustedProduct.price : product.price);
+    const effectiveMrp = selectedPack ? selectedPack.mrp : (diameterAdjustedProduct ? diameterAdjustedProduct.mrp : product.mrp);
+
+    let baseName = product.name;
+    if (isSteelProduct && selectedDiameter && !baseName.toLowerCase().includes(selectedDiameter.toLowerCase())) {
+      baseName = `${baseName} (${selectedDiameter})`;
+    }
+    const finalName = isCustomPack ? `${baseName} (${selectedPack.label})` : baseName;
+    const finalId = isSteelProduct
+      ? `${product.id}-${selectedDiameter}${isCustomPack ? `-pack-${selectedPack.qty}` : ""}`
+      : (isCustomPack ? `${product.id}-pack-${selectedPack.qty}` : product.id);
+
     addItem(
       {
-        id: isCustomPack ? `${product.id}-pack-${selectedPack.qty}` : product.id,
-        name: isCustomPack ? `${product.name} (${selectedPack.label})` : product.name,
+        id: finalId,
+        name: finalName,
         brand: product.brand,
         img: product.images?.[0] || product.image,
-        price: selectedPack ? selectedPack.price : product.price,
-        basePrice: selectedPack ? selectedPack.price : product.price,
-        mrp: selectedPack ? selectedPack.mrp : product.mrp,
+        price: effectivePrice,
+        basePrice: effectivePrice,
+        mrp: effectiveMrp,
         packLabel: selectedPack ? selectedPack.label : null,
         packQty: selectedPack ? selectedPack.qty : 1,
         unit: selectedPack ? selectedPack.unitName : product.unit,
         vendorId: product.vendorId,
         vendorName: product.vendorName,
+        diameter: isSteelProduct ? selectedDiameter : undefined,
       },
       qty
     );
@@ -586,15 +681,27 @@ export default function ProductDetail() {
   const handleBuyNow = () => {
     if (!product?.isDeliverable) return;
     const isCustomPack = selectedPack && selectedPack.qty > 1;
+    const effectivePrice = selectedPack ? selectedPack.price : (diameterAdjustedProduct ? diameterAdjustedProduct.price : product.price);
+    const effectiveMrp = selectedPack ? selectedPack.mrp : (diameterAdjustedProduct ? diameterAdjustedProduct.mrp : product.mrp);
+
+    let baseName = product.name;
+    if (isSteelProduct && selectedDiameter && !baseName.toLowerCase().includes(selectedDiameter.toLowerCase())) {
+      baseName = `${baseName} (${selectedDiameter})`;
+    }
+    const finalName = isCustomPack ? `${baseName} (${selectedPack.label})` : baseName;
+    const finalId = isSteelProduct
+      ? `${product.id}-${selectedDiameter}${isCustomPack ? `-pack-${selectedPack.qty}` : ""}`
+      : (isCustomPack ? `${product.id}-pack-${selectedPack.qty}` : product.id);
+
     const directItem = {
-      id: isCustomPack ? `${product.id}-pack-${selectedPack.qty}` : product.id,
+      id: finalId,
       productId: product.id,
-      name: isCustomPack ? `${product.name} (${selectedPack.label})` : product.name,
+      name: finalName,
       brand: product.brand,
       img: product.images?.[0] || product.image,
-      price: selectedPack ? selectedPack.price : product.price,
-      basePrice: selectedPack ? selectedPack.price : product.price,
-      mrp: selectedPack ? selectedPack.mrp : product.mrp,
+      price: effectivePrice,
+      basePrice: effectivePrice,
+      mrp: effectiveMrp,
       packLabel: selectedPack ? selectedPack.label : null,
       packQty: selectedPack ? selectedPack.qty : 1,
       unit: selectedPack ? selectedPack.unitName : product.unit,
@@ -603,6 +710,7 @@ export default function ProductDetail() {
       qty: qty,
       addedRegionId: region?.id || null,
       addedRegionName: region?.name || null,
+      diameter: isSteelProduct ? selectedDiameter : undefined,
     };
     // Cart ke purane items ko touch kiye bina direct checkout me bhejte hain
     navigate("/checkout", { state: { directItem } });
@@ -806,12 +914,57 @@ export default function ProductDetail() {
               )}
             </div>
 
+            {/* Steel Rebar MM-Wise Diameter Selector */}
+            {isSteelProduct && (
+              <div className="mb-5 p-3.5 bg-blue-50/70 rounded-2xl border border-blue-200/90 shadow-2xs">
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-base">🔩</span>
+                    <span className="text-xs font-black text-navy-950 uppercase tracking-wider">
+                      Rebar Diameter: <span className="text-brand-600 font-extrabold normal-case text-sm">{selectedDiameter}</span>
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-bold text-blue-700 bg-blue-100/90 px-2 py-0.5 rounded-full border border-blue-200">
+                    ⚡ MM-Wise Price ON
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5 sm:gap-2">
+                  {STEEL_DIAMETERS.map((dia) => {
+                    const isChosen = selectedDiameter === dia;
+                    const diaPrice = getDiameterPrice(product.price, dia, initialDiameter);
+                    return (
+                      <button
+                        key={dia}
+                        type="button"
+                        onClick={() => {
+                          setSelectedDiameter(dia);
+                          setSelectedPackIndex(0);
+                        }}
+                        className={`p-2 rounded-xl text-center border transition-all cursor-pointer flex flex-col items-center justify-center active:scale-95 ${
+                          isChosen
+                            ? "bg-navy-950 text-white border-navy-950 shadow-xs ring-2 ring-brand-500/60"
+                            : "bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span className="text-xs font-black leading-tight">{dia}</span>
+                        <span className={`text-[10px] font-bold mt-0.5 ${isChosen ? "text-brand-300" : "text-slate-500"}`}>
+                          ₹{diaPrice.toLocaleString("en-IN")}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Pack ya quantity aur unit selector - mobile first grid layout */}
             {packs && packs.length > 0 && (
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-2.5">
                   <span className="text-xs font-extrabold text-navy-900 uppercase tracking-wider">
-                    Size: <span className="text-brand-600 font-black normal-case">{selectedPack?.label}</span>
+                    {isSteelProduct ? "Bulk / Quantity Option:" : "Size / Pack:"}{" "}
+                    <span className="text-brand-600 font-black normal-case">{selectedPack?.label}</span>
                   </span>
                   {selectedPack?.qty > 1 && selectedPack?.perUnitPrice && (
                     <span className="text-[11px] font-semibold text-slate-500">

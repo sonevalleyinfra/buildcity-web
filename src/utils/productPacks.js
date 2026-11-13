@@ -130,14 +130,21 @@ export function getDefaultPacksForProduct(product) {
     if (unitLower.includes("piece") || unitLower.includes("pc") || unitLower.includes("rod") || unitLower.includes("bar")) {
       cleanUnit = "1 Piece";
       packMultipliers = [5, 10, 25, 50, 100];
+      customLabels = {
+        5: "1 Bundle (5 Pcs)",
+        10: "2 Bundles (10 Pcs)",
+        25: "5 Bundles (25 Pcs)",
+        50: "10 Bundles (50 Pcs)",
+        100: "1 Ton Bulk (~100 Pcs)",
+      };
     } else {
       cleanUnit = "1 Ton";
-      packMultipliers = [5, 10, 20, 50];
+      packMultipliers = [3, 5, 10, 20];
       customLabels = {
-        5: "5 Ton",
-        10: "10 Ton",
-        20: "20 Ton",
-        50: "50 Ton",
+        3: "3 Ton (Mini Load)",
+        5: "5 Ton (Truck Load)",
+        10: "10 Ton (Project Bulk)",
+        20: "20 Ton (Trailer Load)",
       };
     }
   } else if (isTile) {
@@ -239,7 +246,28 @@ export function getStandardPackLabel(unit) {
   return `1 ${raw} (Standard)`;
 }
 
-// Master function: vendor dwara set custom bulk packs use karega, warna puraane products ke liye bulk packs OFF (empty array) rahega
+// Steel TMT Rebar Diameter Specs & Weight Multipliers (Standard IS 1786)
+export const STEEL_DIAMETERS = ["8mm", "10mm", "12mm", "16mm", "20mm", "25mm", "32mm"];
+
+export const STEEL_DIAMETER_FACTORS = {
+  "8mm": 0.72,
+  "10mm": 1.0,
+  "12mm": 1.44,
+  "16mm": 2.56,
+  "20mm": 4.0,
+  "25mm": 6.25,
+  "32mm": 10.2,
+};
+
+export function getDiameterPrice(basePrice, targetDia = "12mm", baseDia = "10mm") {
+  const p = Number(basePrice) || 680;
+  const targetFactor = STEEL_DIAMETER_FACTORS[targetDia] || 1.0;
+  const baseFactor = STEEL_DIAMETER_FACTORS[baseDia] || 1.0;
+  return Math.round((p * targetFactor) / baseFactor);
+}
+
+// Master function: vendor custom packs available hone par custom packs use karega,
+// warna rule-based default packs use karega taaki Tata Steel, Cement, Paint sabhi par bulk order ON rahe
 export function generateProductPacks(product) {
   if (!product) return [];
 
@@ -248,11 +276,6 @@ export function generateProductPacks(product) {
     try {
       rawCustom = JSON.parse(rawCustom);
     } catch {}
-  }
-
-  // Agar custom packs set nahi hain ya empty hain, toh puraane products ke liye bulk rates OFF rahenge
-  if (!Array.isArray(rawCustom) || rawCustom.length === 0) {
-    return [];
   }
 
   const basePrice = Number(product.price) || 100;
@@ -273,30 +296,55 @@ export function generateProductPacks(product) {
     stock: product.stockQty !== undefined ? Number(product.stockQty) : 100,
   };
 
-  const bulkOptions = rawCustom
-    .filter((pk) => Number(pk.qty) > 1)
-    .map((pk) => {
-      const qty = Number(pk.qty) || 5;
-      const price = Number(pk.price) > 0 ? Number(pk.price) : Math.round(basePrice * qty);
-      const mrp = Number(pk.mrp) > 0 ? Number(pk.mrp) : Math.round(baseMrp * qty);
-      const savings = Math.max(0, mrp - price);
-      const discountPct = (mrp > price && price > 0) ? Math.round(((mrp - price) / mrp) * 100) : 0;
+  // 0. Agar vendor ne bulk rates explicitly OFF kiya ho (Toggle switch OFF)
+  if (product.bulkEnabled === false || product.bulk_enabled === false) {
+    return [basePack];
+  }
+  if (product.id && typeof window !== "undefined") {
+    try {
+      const storedBulk = JSON.parse(localStorage.getItem("buildcity_bulk_enabled") || "{}");
+      if (storedBulk[product.id] === false) {
+        return [basePack];
+      }
+    } catch {}
+  }
 
-      return {
-        qty,
-        unitName: pk.unitName || pk.label || cleanUnit,
-        label: pk.label || `${cleanUnit}, Pack of ${qty}`,
-        price,
-        mrp,
-        savings,
-        discountPct,
-        perUnitPrice: Math.round(price / qty),
-        isBulk: true,
-        stock: pk.stock !== undefined && pk.stock !== "" ? Number(pk.stock) : (Number(product.stockQty) || 100),
-      };
-    });
+  // 1. Agar vendor ne manual custom bulk packs array set kiya hai
+  if (Array.isArray(rawCustom) && rawCustom.length > 0) {
+    const bulkOptions = rawCustom
+      .filter((pk) => Number(pk.qty) > 1)
+      .map((pk) => {
+        const qty = Number(pk.qty) || 5;
+        const price = Number(pk.price) > 0 ? Number(pk.price) : Math.round(basePrice * qty);
+        const mrp = Number(pk.mrp) > 0 ? Number(pk.mrp) : Math.round(baseMrp * qty);
+        const savings = Math.max(0, mrp - price);
+        const discountPct = (mrp > price && price > 0) ? Math.round(((mrp - price) / mrp) * 100) : 0;
 
-  if (bulkOptions.length === 0) return [];
-  return [basePack, ...bulkOptions];
+        return {
+          qty,
+          unitName: pk.unitName || pk.label || cleanUnit,
+          label: pk.label || `${cleanUnit}, Pack of ${qty}`,
+          price,
+          mrp,
+          savings,
+          discountPct,
+          perUnitPrice: Math.round(price / qty),
+          isBulk: true,
+          stock: pk.stock !== undefined && pk.stock !== "" ? Number(pk.stock) : (Number(product.stockQty) || 100),
+        };
+      });
+
+    if (bulkOptions.length > 0) {
+      return [basePack, ...bulkOptions];
+    }
+  }
+
+  // 2. Fallback rule-based default packs (taaki Tata Steel, Rebars, Cement, Paints sabhi par bulk packs ON rahein!)
+  const defaultPacks = getDefaultPacksForProduct(product);
+  if (Array.isArray(defaultPacks) && defaultPacks.length > 0) {
+    return [basePack, ...defaultPacks];
+  }
+
+  return [basePack];
 }
 

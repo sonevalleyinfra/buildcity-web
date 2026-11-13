@@ -2213,6 +2213,14 @@ export function AdminProvider({ children }) {
     } catch {}
 
     try {
+      if (updates.bulkEnabled !== undefined) {
+        const storedBulk = JSON.parse(localStorage.getItem("buildcity_bulk_enabled") || "{}");
+        storedBulk[id] = Boolean(updates.bulkEnabled);
+        localStorage.setItem("buildcity_bulk_enabled", JSON.stringify(storedBulk));
+      }
+    } catch {}
+
+    try {
       const storedMrps = JSON.parse(localStorage.getItem("buildcity_listing_mrps") || "{}");
       if (updates.mrp && Number(updates.mrp) > 0) {
         storedMrps[id] = Number(updates.mrp);

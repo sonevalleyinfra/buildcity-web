@@ -14,7 +14,6 @@ import SiteReviewsSection from "../../components/SiteReviewsSection";
 import { Capacitor } from "@capacitor/core";
 import { resolveCategoryBubbleImage } from "../vendor/utils/productImage";
 import { constructionServices } from "../../data/servicesData";
-import { renderServiceLogo } from "../../data/serviceIcons";
 
 const categoryTiles = [
   {
@@ -667,10 +666,10 @@ export default function Home() {
                 style={{ backgroundColor: s.cardBg || s.bg || "#F8FAFC" }}
               >
                 <div className="w-full flex-1 flex items-center justify-center py-1">
-                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white shadow-xs border border-white/90 ring-1 ring-slate-900/5 flex items-center justify-center p-2 overflow-hidden group-hover:scale-110 group-hover:shadow-md transition-all duration-300">
-                    {renderServiceLogo(s.id, "w-9 h-9 sm:w-10 sm:h-10 select-none group-hover:scale-110 transition-transform duration-300 drop-shadow-xs") || (
-                      <span className="text-2xl sm:text-3xl select-none">{s.icon}</span>
-                    )}
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white shadow-xs border border-white/90 flex items-center justify-center p-1.5 overflow-hidden group-hover:scale-110 group-hover:shadow-md transition-all duration-300">
+                    <span className="text-2xl sm:text-3xl select-none group-hover:scale-110 transition-transform duration-300 drop-shadow-xs">
+                      {s.icon}
+                    </span>
                   </div>
                 </div>
                 <div className="text-center w-full pt-1">
@@ -708,12 +707,10 @@ export default function Home() {
               {/* Header */}
               <div className="flex items-center gap-3 pr-8">
                 <div
-                  className="w-13 h-13 rounded-2xl flex items-center justify-center p-2 text-3xl shadow-xs border border-slate-200/80 shrink-0"
-                  style={{ backgroundColor: selectedService.cardBg || selectedService.bg }}
+                  className="w-13 h-13 rounded-2xl flex items-center justify-center text-3xl shadow-xs border border-slate-200/80 shrink-0"
+                  style={{ backgroundColor: selectedService.bg }}
                 >
-                  {renderServiceLogo(selectedService.id, "w-9 h-9 sm:w-10 sm:h-10") || (
-                    <span className="text-3xl">{selectedService.icon}</span>
-                  )}
+                  {selectedService.icon}
                 </div>
                 <div>
                   <h3 className="text-lg font-black text-navy-950 leading-tight">

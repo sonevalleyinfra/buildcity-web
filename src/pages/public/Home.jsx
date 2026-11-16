@@ -12,53 +12,8 @@ import ProductCard from "../../components/ProductCard";
 import Footer from "../../components/Footer";
 import SiteReviewsSection from "../../components/SiteReviewsSection";
 import { Capacitor } from "@capacitor/core";
-import { resolveCategoryBubbleImage } from "../vendor/utils/productImage";
 import { constructionServices } from "../../data/servicesData";
-
-const categoryTiles = [
-  {
-    name: "Paints",
-    tag: "Coatings & Finishes",
-    bg: "#FDEAE8",
-    img: "/categories/paints.png",
-  },
-  {
-    name: "Steel",
-    tag: "TMT & Angles",
-    bg: "#F0F4F8",
-    img: "/categories/steel.png",
-  },
-  {
-    name: "Cement",
-    tag: "OPC & PPC Bags",
-    bg: "#F8FAFC",
-    img: "/categories/cement.png",
-  },
-  {
-    name: "Rebars",
-    tag: "TMT Fe550D",
-    bg: "#F1F5F9",
-    img: "/categories/rebars.png",
-  },
-  {
-    name: "Crushed Stone",
-    tag: "Aggregates & Gitti",
-    bg: "#F5F3EF",
-    img: "/categories/crushed_stone.png",
-  },
-  {
-    name: "Tiles",
-    tag: "Floor & Wall",
-    bg: "#EFF6FF",
-    img: "/categories/tiles.png",
-  },
-  {
-    name: "Plumbing",
-    tag: "Pipes & Fittings",
-    bg: "#ECFEFF",
-    img: "/categories/plumbing.png",
-  },
-];
+import { renderServiceLogo } from "../../data/serviceIcons";
 
 
 const brandItems = [
@@ -597,12 +552,7 @@ export default function Home() {
         {/* 2.5 Construction Services section (Rich Card Style with Service Badges & Details) */}
         <section className="space-y-1.5 sm:space-y-2.5">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h3 className="text-base sm:text-lg font-black text-navy-950 tracking-tight">Construction Services</h3>
-              <span className="text-[10px] font-bold bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200/80">
-                ⚡ Free Inspection • 0 Advance
-              </span>
-            </div>
+            <h3 className="text-base sm:text-lg font-black text-navy-950 tracking-tight">Construction Services</h3>
             <Link to="/categories" className="text-xs font-bold text-[#c2410c] hover:text-[#9a3412] hover:underline flex items-center gap-1 active:scale-95 transition-transform">
               <span>See all</span>
               <span className="text-sm">→</span>
@@ -623,9 +573,11 @@ export default function Home() {
               >
                 <div className="w-full flex-1 flex items-center justify-center py-1">
                   <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white shadow-xs border border-white/90 flex items-center justify-center p-1.5 overflow-hidden group-hover:scale-110 group-hover:shadow-md transition-all duration-300">
-                    <span className="text-2xl sm:text-3xl select-none group-hover:scale-110 transition-transform duration-300 drop-shadow-xs">
-                      {s.icon}
-                    </span>
+                    {renderServiceLogo(s.id, "w-8 h-8 sm:w-9 sm:h-9 group-hover:scale-110 transition-transform duration-300 drop-shadow-xs") || (
+                      <span className="text-2xl sm:text-3xl select-none group-hover:scale-110 transition-transform duration-300 drop-shadow-xs">
+                        {s.icon}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="text-center w-full pt-1">
@@ -637,48 +589,6 @@ export default function Home() {
                   </span>
                 </div>
               </div>
-            ))}
-          </div>
-        </section>
-
-        {/* 3. Shop by category tiles list */}
-        <section className="space-y-1.5 sm:space-y-2.5">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base sm:text-lg font-extrabold text-navy-900 tracking-tight">Shop by Category</h3>
-            <Link to="/categories" className="text-xs font-bold text-[#c2410c] hover:text-[#9a3412] hover:underline">
-              See all
-            </Link>
-          </div>
-
-          <div className="flex overflow-x-auto lg:grid lg:grid-cols-7 gap-2.5 sm:gap-3.5 pb-1 no-scrollbar scroll-smooth">
-            {categoryTiles.map((c) => (
-              <Link
-                key={c.name}
-                to={`/categories?cat=${encodeURIComponent(c.name)}`}
-                className="w-[92px] sm:w-28 lg:w-auto shrink-0 lg:shrink rounded-2xl p-2.5 flex flex-col items-center justify-between shadow-[0_2px_8px_-2px_rgba(15,23,42,0.06)] hover:shadow-[0_8px_20px_-6px_rgba(15,23,42,0.12)] border border-slate-200/80 hover:border-slate-300 active:scale-[0.94] transition-all duration-300 group min-h-[115px] sm:min-h-[135px]"
-                style={{ backgroundColor: c.bg }}
-              >
-                <div className="w-full flex-1 flex items-center justify-center py-1">
-                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white/95 shadow-xs border border-white/90 flex items-center justify-center p-1.5 overflow-hidden group-hover:scale-110 group-hover:shadow-md transition-all duration-300">
-                    <img
-                      src={c.img}
-                      alt={c.name}
-                      className="w-full h-full object-cover rounded-full group-hover:scale-105 transition-transform duration-300"
-                      onError={(e) => {
-                        e.target.src = resolveCategoryBubbleImage(c.name);
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="text-center w-full pt-1">
-                  <span className="text-xs sm:text-[13px] font-black text-navy-950 group-hover:text-brand-600 transition-colors block truncate max-w-full leading-tight">
-                    {c.name}
-                  </span>
-                  <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 block truncate leading-none mt-0.5 opacity-80">
-                    {c.tag}
-                  </span>
-                </div>
-              </Link>
             ))}
           </div>
         </section>
@@ -708,7 +618,7 @@ export default function Home() {
                   className="w-13 h-13 rounded-2xl flex items-center justify-center text-3xl shadow-xs border border-slate-200/80 shrink-0"
                   style={{ backgroundColor: selectedService.bg }}
                 >
-                  {selectedService.icon}
+                  {renderServiceLogo(selectedService.id, "w-8 h-8 sm:w-9 sm:h-9") || selectedService.icon}
                 </div>
                 <div>
                   <h3 className="text-lg font-black text-navy-950 leading-tight">

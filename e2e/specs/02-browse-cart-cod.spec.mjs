@@ -20,8 +20,7 @@ test("customer browses, adds to cart and places a COD order", async ({ page }) =
   await expect(header.getByText(REGION_NAME)).toBeVisible();
 
   // Home -> category -> product
-  const categories = page.locator("section").filter({ has: page.getByRole("heading", { name: "Shop by Category" }) });
-  await categories.getByRole("link", { name: /Cement/ }).first().click();
+  await page.locator('a[href*="/categories?cat=Cement"]').first().click();
   await expect(page).toHaveURL(/\/categories\?cat=Cement/);
 
   await page.getByRole("link").filter({ hasText: PRODUCT_NAME }).first().click();

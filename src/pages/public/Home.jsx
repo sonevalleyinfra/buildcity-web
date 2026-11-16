@@ -663,15 +663,12 @@ export default function Home() {
                   setSelectedSubCategory(s.subServices && s.subServices.length > 0 ? s.subServices[0] : "");
                   setServicePackageType("with_material");
                 }}
-                className="w-[94px] sm:w-28 lg:w-auto shrink-0 lg:shrink rounded-2xl p-2.5 flex flex-col items-center justify-between border active:scale-[0.94] transition-all duration-300 group min-h-[118px] sm:min-h-[138px] cursor-pointer select-none text-center shadow-[0_2px_8px_-2px_rgba(15,23,42,0.06)] hover:shadow-[0_8px_20px_-4px_rgba(15,23,42,0.12)] hover:-translate-y-0.5"
-                style={{
-                  background: s.cardGradient || s.cardBg || "#F8FAFC",
-                  borderColor: s.borderColor || "#E2E8F0"
-                }}
+                className="w-[92px] sm:w-28 lg:w-auto shrink-0 lg:shrink rounded-2xl p-2.5 flex flex-col items-center justify-between shadow-[0_2px_8px_-2px_rgba(15,23,42,0.06)] hover:shadow-[0_8px_20px_-6px_rgba(15,23,42,0.12)] border border-slate-200/80 hover:border-brand-500/50 active:scale-[0.94] transition-all duration-300 group min-h-[115px] sm:min-h-[135px] cursor-pointer select-none text-center"
+                style={{ backgroundColor: s.cardBg || s.bg || "#F8FAFC" }}
               >
                 <div className="w-full flex-1 flex items-center justify-center py-1">
-                  <div className="w-13 h-13 sm:w-15 sm:h-15 rounded-full bg-white shadow-xs border border-white ring-1 ring-slate-900/5 flex items-center justify-center p-2 overflow-hidden group-hover:scale-110 group-hover:shadow-md transition-all duration-300">
-                    {renderServiceLogo(s.id, "w-8 h-8 sm:w-9 sm:h-9 drop-shadow-xs transition-transform duration-300 group-hover:scale-110") || (
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white shadow-xs border border-white/90 ring-1 ring-slate-900/5 flex items-center justify-center p-2 overflow-hidden group-hover:scale-110 group-hover:shadow-md transition-all duration-300">
+                    {renderServiceLogo(s.id, "w-9 h-9 sm:w-10 sm:h-10 select-none group-hover:scale-110 transition-transform duration-300 drop-shadow-xs") || (
                       <span className="text-2xl sm:text-3xl select-none">{s.icon}</span>
                     )}
                   </div>
@@ -711,13 +708,10 @@ export default function Home() {
               {/* Header */}
               <div className="flex items-center gap-3 pr-8">
                 <div
-                  className="w-14 h-14 rounded-2xl flex items-center justify-center p-2.5 shadow-xs border shrink-0"
-                  style={{
-                    background: selectedService.cardGradient || selectedService.bg,
-                    borderColor: selectedService.borderColor || "#E2E8F0"
-                  }}
+                  className="w-13 h-13 rounded-2xl flex items-center justify-center p-2 text-3xl shadow-xs border border-slate-200/80 shrink-0"
+                  style={{ backgroundColor: selectedService.cardBg || selectedService.bg }}
                 >
-                  {renderServiceLogo(selectedService.id, "w-8 h-8 sm:w-9 sm:h-9") || (
+                  {renderServiceLogo(selectedService.id, "w-9 h-9 sm:w-10 sm:h-10") || (
                     <span className="text-3xl">{selectedService.icon}</span>
                   )}
                 </div>

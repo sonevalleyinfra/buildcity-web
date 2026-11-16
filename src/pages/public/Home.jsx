@@ -559,8 +559,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 2. Top brands (Temporarily hidden for review) */}
-        {/*
+        {/* 2. Top Brands (Original Circular Bubbles) */}
         <section className="space-y-1.5 sm:space-y-2.5">
           <div className="flex items-center justify-between">
             <h3 className="text-base sm:text-lg font-black text-navy-950 tracking-tight">Top Brands</h3>
@@ -588,49 +587,6 @@ export default function Home() {
                 <div className="w-full min-h-[22px] flex items-center justify-center text-center mt-1 px-0.5">
                   <span className="text-[11px] sm:text-xs font-black text-navy-950 group-hover:text-brand-600 transition-colors leading-tight tracking-tight line-clamp-2">
                     {b.name}
-                  </span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </section>
-        */}
-
-        {/* 2. Shop by Category (Materials - Top Brands Circular Floating Bubble Style) */}
-        <section className="space-y-1.5 sm:space-y-2.5">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base sm:text-lg font-black text-navy-950 tracking-tight">Shop by Category</h3>
-            <Link to="/categories" className="text-xs font-bold text-[#c2410c] hover:text-[#9a3412] hover:underline flex items-center gap-1 active:scale-95 transition-transform">
-              <span>See all</span>
-              <span className="text-sm">→</span>
-            </Link>
-          </div>
-
-          <div className="flex lg:grid lg:grid-cols-7 gap-3.5 sm:gap-5 lg:gap-6 overflow-x-auto lg:overflow-visible pb-1 pt-0.5 no-scrollbar scroll-smooth px-1">
-            {categoryTiles.map((c) => (
-              <Link
-                key={c.name}
-                to={`/categories?cat=${encodeURIComponent(c.name)}`}
-                className="w-[74px] sm:w-[84px] lg:w-auto shrink-0 lg:shrink flex flex-col items-center text-center group active:scale-95 transition-all cursor-pointer"
-              >
-                <div
-                  className="w-16 h-16 sm:w-18 sm:h-18 lg:w-20 lg:h-20 rounded-full flex items-center justify-center p-2 shadow-[0_2px_8px_-2px_rgba(15,23,42,0.08)] border border-slate-200/90 group-hover:border-brand-500 group-hover:shadow-[0_6px_20px_-4px_rgba(234,88,12,0.2)] group-hover:scale-105 transition-all duration-300 select-none overflow-hidden"
-                  style={{ backgroundColor: c.bg || "#FFFFFF" }}
-                >
-                  <div className="w-full h-full max-w-[82%] max-h-[82%] flex items-center justify-center">
-                    <img
-                      src={c.img}
-                      alt={c.name}
-                      className="w-full h-full object-contain select-none group-hover:scale-110 transition-transform duration-300"
-                      onError={(e) => {
-                        e.target.src = resolveCategoryBubbleImage(c.name);
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="w-full min-h-[22px] flex items-center justify-center text-center mt-1 px-0.5">
-                  <span className="text-[11px] sm:text-xs font-black text-navy-950 group-hover:text-brand-600 transition-colors leading-tight tracking-tight line-clamp-2">
-                    {c.name}
                   </span>
                 </div>
               </Link>
@@ -681,6 +637,48 @@ export default function Home() {
                   </span>
                 </div>
               </div>
+            ))}
+          </div>
+        </section>
+
+        {/* 3. Shop by category tiles list */}
+        <section className="space-y-1.5 sm:space-y-2.5">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base sm:text-lg font-extrabold text-navy-900 tracking-tight">Shop by Category</h3>
+            <Link to="/categories" className="text-xs font-bold text-[#c2410c] hover:text-[#9a3412] hover:underline">
+              See all
+            </Link>
+          </div>
+
+          <div className="flex overflow-x-auto lg:grid lg:grid-cols-7 gap-2.5 sm:gap-3.5 pb-1 no-scrollbar scroll-smooth">
+            {categoryTiles.map((c) => (
+              <Link
+                key={c.name}
+                to={`/categories?cat=${encodeURIComponent(c.name)}`}
+                className="w-[92px] sm:w-28 lg:w-auto shrink-0 lg:shrink rounded-2xl p-2.5 flex flex-col items-center justify-between shadow-[0_2px_8px_-2px_rgba(15,23,42,0.06)] hover:shadow-[0_8px_20px_-6px_rgba(15,23,42,0.12)] border border-slate-200/80 hover:border-slate-300 active:scale-[0.94] transition-all duration-300 group min-h-[115px] sm:min-h-[135px]"
+                style={{ backgroundColor: c.bg }}
+              >
+                <div className="w-full flex-1 flex items-center justify-center py-1">
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white/95 shadow-xs border border-white/90 flex items-center justify-center p-1.5 overflow-hidden group-hover:scale-110 group-hover:shadow-md transition-all duration-300">
+                    <img
+                      src={c.img}
+                      alt={c.name}
+                      className="w-full h-full object-cover rounded-full group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        e.target.src = resolveCategoryBubbleImage(c.name);
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="text-center w-full pt-1">
+                  <span className="text-xs sm:text-[13px] font-black text-navy-950 group-hover:text-brand-600 transition-colors block truncate max-w-full leading-tight">
+                    {c.name}
+                  </span>
+                  <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 block truncate leading-none mt-0.5 opacity-80">
+                    {c.tag}
+                  </span>
+                </div>
+              </Link>
             ))}
           </div>
         </section>

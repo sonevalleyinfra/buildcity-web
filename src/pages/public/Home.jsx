@@ -559,8 +559,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 2. Top brands (Temporarily hidden for review) */}
-        {/*
+        {/* 2. Top Brands (Original Circular Bubbles) */}
         <section className="space-y-1.5 sm:space-y-2.5">
           <div className="flex items-center justify-between">
             <h3 className="text-base sm:text-lg font-black text-navy-950 tracking-tight">Top Brands</h3>
@@ -588,49 +587,6 @@ export default function Home() {
                 <div className="w-full min-h-[22px] flex items-center justify-center text-center mt-1 px-0.5">
                   <span className="text-[11px] sm:text-xs font-black text-navy-950 group-hover:text-brand-600 transition-colors leading-tight tracking-tight line-clamp-2">
                     {b.name}
-                  </span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </section>
-        */}
-
-        {/* 2. Shop by Category (Materials - Top Brands Circular Floating Bubble Style) */}
-        <section className="space-y-1.5 sm:space-y-2.5">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base sm:text-lg font-black text-navy-950 tracking-tight">Shop by Category</h3>
-            <Link to="/categories" className="text-xs font-bold text-[#c2410c] hover:text-[#9a3412] hover:underline flex items-center gap-1 active:scale-95 transition-transform">
-              <span>See all</span>
-              <span className="text-sm">→</span>
-            </Link>
-          </div>
-
-          <div className="flex lg:grid lg:grid-cols-7 gap-3.5 sm:gap-5 lg:gap-6 overflow-x-auto lg:overflow-visible pb-1 pt-0.5 no-scrollbar scroll-smooth px-1">
-            {categoryTiles.map((c) => (
-              <Link
-                key={c.name}
-                to={`/categories?cat=${encodeURIComponent(c.name)}`}
-                className="w-[74px] sm:w-[84px] lg:w-auto shrink-0 lg:shrink flex flex-col items-center text-center group active:scale-95 transition-all cursor-pointer"
-              >
-                <div
-                  className="w-16 h-16 sm:w-18 sm:h-18 lg:w-20 lg:h-20 rounded-full flex items-center justify-center p-2 shadow-[0_2px_8px_-2px_rgba(15,23,42,0.08)] border border-slate-200/90 group-hover:border-brand-500 group-hover:shadow-[0_6px_20px_-4px_rgba(234,88,12,0.2)] group-hover:scale-105 transition-all duration-300 select-none overflow-hidden"
-                  style={{ backgroundColor: c.bg || "#FFFFFF" }}
-                >
-                  <div className="w-full h-full max-w-[82%] max-h-[82%] flex items-center justify-center">
-                    <img
-                      src={c.img}
-                      alt={c.name}
-                      className="w-full h-full object-contain select-none group-hover:scale-110 transition-transform duration-300"
-                      onError={(e) => {
-                        e.target.src = resolveCategoryBubbleImage(c.name);
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="w-full min-h-[22px] flex items-center justify-center text-center mt-1 px-0.5">
-                  <span className="text-[11px] sm:text-xs font-black text-navy-950 group-hover:text-brand-600 transition-colors leading-tight tracking-tight line-clamp-2">
-                    {c.name}
                   </span>
                 </div>
               </Link>

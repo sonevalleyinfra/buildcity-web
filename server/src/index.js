@@ -3172,6 +3172,7 @@ app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "AD
         mrp: req.body.mrp ? Number(req.body.mrp) : (masterProd.mrp ? Number(masterProd.mrp) : Math.round(listingPrice * 1.2)),
         stockQty: listingStock,
         imageUrl: masterProd.imageUrl,
+        description: masterProd.description || null,
         customPacks: (() => {
           let cp = req.body.customPacks !== undefined ? req.body.customPacks : req.body.custom_packs;
           if (cp && typeof cp === "object" && !Array.isArray(cp)) return cp;
@@ -3191,6 +3192,7 @@ app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "AD
           }
           return masterProd.customPacks || null;
         })(),
+        approvalStatus: isAutoApproved ? "APPROVED" : "PENDING_REVIEW",
         isActive: isAutoApproved ? true : false,
         addedBy: isAutoApproved ? (req.auth.role === "ADMIN" ? "Admin" : "DR") : "Vendor",
       },

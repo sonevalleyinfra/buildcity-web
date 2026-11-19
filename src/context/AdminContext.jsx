@@ -367,11 +367,13 @@ export function AdminProvider({ children }) {
         let storedMrpsMap = {};
         let storedBulkMap = {};
         let storedMmMap = {};
+        let storedMmRatesMap = {};
         try {
           storedCustomPacksMap = JSON.parse(localStorage.getItem("buildcity_custom_packs") || "{}");
           storedMrpsMap = JSON.parse(localStorage.getItem("buildcity_listing_mrps") || "{}");
           storedBulkMap = JSON.parse(localStorage.getItem("buildcity_bulk_enabled") || "{}");
           storedMmMap = JSON.parse(localStorage.getItem("buildcity_mm_pricing") || "{}");
+          storedMmRatesMap = JSON.parse(localStorage.getItem("buildcity_mm_rates") || "{}");
         } catch {}
 
         const formattedListings = listingsRes.map((l) => {
@@ -409,6 +411,11 @@ export function AdminProvider({ children }) {
             isMmPricingEnabled = Boolean(storedMmMap[l.id]);
           }
 
+          let resolvedMmRates = (parsedCp && typeof parsedCp === "object" && parsedCp.mmRates) ? parsedCp.mmRates : (l.mmRates || null);
+          if (storedMmRatesMap[l.id]) {
+            resolvedMmRates = storedMmRatesMap[l.id];
+          }
+
           const rawMrp = Number(l.mrp || l.masterProduct?.mrp || matchedMaster.mrp || 0);
           const fallbackMrp = Number(storedMrpsMap[l.id] || 0);
           const resolvedMrp = rawMrp > 0 ? rawMrp : (fallbackMrp > 0 ? fallbackMrp : 0);
@@ -427,6 +434,7 @@ export function AdminProvider({ children }) {
             customPacks: resolvedCustomPacks,
             bulkEnabled: isBulkEnabled,
             mmPricingEnabled: isMmPricingEnabled,
+            mmRates: resolvedMmRates,
             vendorId: l.vendorId,
             vendorName: l.vendor?.shopName || l.vendorName || "District Vendor",
             regionId: resolvedRegionId,
@@ -761,11 +769,13 @@ export function AdminProvider({ children }) {
         let storedMrpsMap = {};
         let storedBulkMap = {};
         let storedMmMap = {};
+        let storedMmRatesMap = {};
         try {
           storedCustomPacksMap = JSON.parse(localStorage.getItem("buildcity_custom_packs") || "{}");
           storedMrpsMap = JSON.parse(localStorage.getItem("buildcity_listing_mrps") || "{}");
           storedBulkMap = JSON.parse(localStorage.getItem("buildcity_bulk_enabled") || "{}");
           storedMmMap = JSON.parse(localStorage.getItem("buildcity_mm_pricing") || "{}");
+          storedMmRatesMap = JSON.parse(localStorage.getItem("buildcity_mm_rates") || "{}");
         } catch {}
 
         const formattedListings = listingsRes.map((l) => {
@@ -802,6 +812,11 @@ export function AdminProvider({ children }) {
             isMmPricingEnabled = Boolean(storedMmMap[l.id]);
           }
 
+          let resolvedMmRates = (parsedCp && typeof parsedCp === "object" && parsedCp.mmRates) ? parsedCp.mmRates : (l.mmRates || null);
+          if (storedMmRatesMap[l.id]) {
+            resolvedMmRates = storedMmRatesMap[l.id];
+          }
+
           const rawMrp = Number(l.mrp || l.masterProduct?.mrp || 0);
           const fallbackMrp = Number(storedMrpsMap[l.id] || 0);
           const resolvedMrp = rawMrp > 0 ? rawMrp : (fallbackMrp > 0 ? fallbackMrp : 0);
@@ -820,6 +835,7 @@ export function AdminProvider({ children }) {
             customPacks: resolvedCustomPacks,
             bulkEnabled: isBulkEnabled,
             mmPricingEnabled: isMmPricingEnabled,
+            mmRates: resolvedMmRates,
             vendorId: l.vendorId,
             vendorName: l.vendor?.shopName || matchedVendor?.shopName || l.vendorName || "District Vendor",
             regionId: resolvedRegionId,
@@ -2275,6 +2291,14 @@ export function AdminProvider({ children }) {
         const storedMm = JSON.parse(localStorage.getItem("buildcity_mm_pricing") || "{}");
         storedMm[id] = Boolean(updates.mmPricingEnabled);
         localStorage.setItem("buildcity_mm_pricing", JSON.stringify(storedMm));
+      }
+    } catch {}
+
+    try {
+      if (updates.mmRates !== undefined) {
+        const storedMmRates = JSON.parse(localStorage.getItem("buildcity_mm_rates") || "{}");
+        storedMmRates[id] = updates.mmRates;
+        localStorage.setItem("buildcity_mm_rates", JSON.stringify(storedMmRates));
       }
     } catch {}
 

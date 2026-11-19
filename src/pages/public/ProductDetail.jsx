@@ -290,6 +290,21 @@ export default function ProductDetail() {
           } catch {}
           return false;
         })(),
+        mmRates: (() => {
+          if (realProd.mmRates) return realProd.mmRates;
+          let cp = realProd.customPacks || realProd.custom_packs;
+          if (typeof cp === "string") {
+            try { cp = JSON.parse(cp); } catch {}
+          }
+          if (cp && typeof cp === "object" && cp.mmRates) {
+            return cp.mmRates;
+          }
+          try {
+            const stored = JSON.parse(localStorage.getItem("buildcity_mm_rates") || "{}");
+            if (stored[realProd.id]) return stored[realProd.id];
+          } catch {}
+          return null;
+        })(),
         description:
           (realProd.description && realProd.description.trim()) ||
           (realProd.masterProduct?.description && realProd.masterProduct.description.trim()) ||
@@ -361,18 +376,35 @@ export default function ProductDetail() {
     );
   }, [product]);
 
-  // 2. Identify initial diameter from product name or customPacks
+  const mmRates = useMemo(() => {
+    if (!product) return null;
+    let rates = product.mmRates || product.customPacks?.mmRates || null;
+    if (typeof rates === "string") {
+      try { rates = JSON.parse(rates); } catch {}
+    }
+    return rates;
+  }, [product]);
+
+  // 2. Identify initial diameter from product name or customPacks (ensuring active)
   const initialDiameter = useMemo(() => {
     if (!product) return "12mm";
     const name = product.name || "";
+    let candidate = "12mm";
     for (const d of STEEL_DIAMETERS) {
-      if (name.toLowerCase().includes(d.toLowerCase())) return d;
+      if (name.toLowerCase().includes(d.toLowerCase())) {
+        candidate = d;
+        break;
+      }
     }
     if (product.customPacks && typeof product.customPacks === "object" && product.customPacks.diameter) {
-      return product.customPacks.diameter;
+      candidate = product.customPacks.diameter;
     }
-    return "12mm";
-  }, [product]);
+    if (mmRates && mmRates[candidate]?.active === false) {
+      const firstActive = STEEL_DIAMETERS.find((d) => mmRates[d]?.active !== false);
+      if (firstActive) candidate = firstActive;
+    }
+    return candidate;
+  }, [product, mmRates]);
 
   const [selectedDiameter, setSelectedDiameter] = useState(initialDiameter);
 
@@ -389,8 +421,13 @@ export default function ProductDetail() {
 
     const basePrice = Number(product.price) || 680;
     const baseMrp = Number(product.mrp) || Math.round(basePrice * 1.15);
-    const diaPrice = getDiameterPrice(basePrice, selectedDiameter, initialDiameter);
-    const diaMrp = getDiameterPrice(baseMrp, selectedDiameter, initialDiameter);
+    const customRate = mmRates?.[selectedDiameter];
+    const diaPrice = (customRate && Number(customRate.price) > 0)
+      ? Number(customRate.price)
+      : getDiameterPrice(basePrice, selectedDiameter, initialDiameter);
+    const diaMrp = (customRate && Number(customRate.mrp) > 0)
+      ? Number(customRate.mrp)
+      : getDiameterPrice(baseMrp, selectedDiameter, initialDiameter);
 
     return {
       ...product,
@@ -398,7 +435,7 @@ export default function ProductDetail() {
       mrp: diaMrp,
       selectedDiameter: selectedDiameter,
     };
-  }, [product, isSteelProduct, isMmPricingOn, selectedDiameter, initialDiameter]);
+  }, [product, isSteelProduct, isMmPricingOn, selectedDiameter, initialDiameter, mmRates]);
 
   // Rule-based automatic packs calculate karte hai
   const packs = useMemo(
@@ -962,24 +999,32 @@ export default function ProductDetail() {
                 <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
                   {STEEL_DIAMETERS.map((dia) => {
                     const isChosen = selectedDiameter === dia;
-                    const diaPrice = getDiameterPrice(product.price, dia, initialDiameter);
+                    const customRate = mmRates?.[dia];
+                    const isDiaActive = customRate ? customRate.active !== false : true;
+                    const diaPrice = (customRate && Number(customRate.price) > 0)
+                      ? Number(customRate.price)
+                      : getDiameterPrice(product.price, dia, initialDiameter);
                     return (
                       <button
                         key={dia}
                         type="button"
+                        disabled={!isDiaActive}
                         onClick={() => {
+                          if (!isDiaActive) return;
                           setSelectedDiameter(dia);
                           setSelectedPackIndex(0);
                         }}
-                        className={`p-2 rounded-xl text-center border transition-all cursor-pointer flex flex-col items-center justify-center active:scale-95 ${
-                          isChosen
-                            ? "bg-navy-950 text-white border-navy-950 shadow-xs ring-2 ring-brand-500/60"
-                            : "bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                        className={`p-2 rounded-xl text-center border transition-all flex flex-col items-center justify-center ${
+                          !isDiaActive
+                            ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60"
+                            : isChosen
+                            ? "bg-navy-950 text-white border-navy-950 shadow-xs ring-2 ring-brand-500/60 cursor-pointer active:scale-95"
+                            : "bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50 cursor-pointer active:scale-95"
                         }`}
                       >
                         <span className="text-xs font-black leading-tight">{dia}</span>
-                        <span className={`text-[10px] font-bold mt-0.5 ${isChosen ? "text-brand-300" : "text-slate-500"}`}>
-                          ₹{diaPrice.toLocaleString("en-IN")}
+                        <span className={`text-[10px] font-bold mt-0.5 ${!isDiaActive ? "text-slate-400" : isChosen ? "text-brand-300" : "text-slate-500"}`}>
+                          {isDiaActive ? `₹${diaPrice.toLocaleString("en-IN")}` : "Out of stock"}
                         </span>
                       </button>
                     );

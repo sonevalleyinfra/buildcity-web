@@ -3180,13 +3180,15 @@ app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "AD
             return {
               bulkEnabled: req.body.bulkEnabled !== undefined ? Boolean(req.body.bulkEnabled) : true,
               mmPricingEnabled: req.body.mmPricingEnabled !== undefined ? Boolean(req.body.mmPricingEnabled) : false,
+              mmRates: req.body.mmRates || null,
               packs: cp,
             };
           }
-          if (req.body.bulkEnabled !== undefined || req.body.mmPricingEnabled !== undefined) {
+          if (req.body.bulkEnabled !== undefined || req.body.mmPricingEnabled !== undefined || req.body.mmRates !== undefined) {
             return {
               bulkEnabled: Boolean(req.body.bulkEnabled),
               mmPricingEnabled: Boolean(req.body.mmPricingEnabled),
+              mmRates: req.body.mmRates || null,
               packs: [],
             };
           }
@@ -3264,7 +3266,7 @@ app.patch("/api/v1/vendor/listings/:id", requireAuth, requireRole("VENDOR", "DR"
         const m = Number(req.body.mrp);
         if (m > 0) updateData.mrp = m;
       }
-      if (req.body.customPacks !== undefined || req.body.bulkEnabled !== undefined || req.body.mmPricingEnabled !== undefined) {
+      if (req.body.customPacks !== undefined || req.body.bulkEnabled !== undefined || req.body.mmPricingEnabled !== undefined || req.body.mmRates !== undefined) {
         let cp = req.body.customPacks !== undefined ? req.body.customPacks : (req.body.custom_packs !== undefined ? req.body.custom_packs : listing.customPacks);
         let cpObj = {};
         if (cp && typeof cp === "object" && !Array.isArray(cp)) {
@@ -3274,6 +3276,7 @@ app.patch("/api/v1/vendor/listings/:id", requireAuth, requireRole("VENDOR", "DR"
         }
         if (req.body.bulkEnabled !== undefined) cpObj.bulkEnabled = Boolean(req.body.bulkEnabled);
         if (req.body.mmPricingEnabled !== undefined) cpObj.mmPricingEnabled = Boolean(req.body.mmPricingEnabled);
+        if (req.body.mmRates !== undefined) cpObj.mmRates = req.body.mmRates;
         if (Array.isArray(req.body.customPacks)) cpObj.packs = req.body.customPacks;
         updateData.customPacks = cpObj;
       }

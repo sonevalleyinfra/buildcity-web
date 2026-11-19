@@ -218,6 +218,10 @@ export default function VendorDashboard() {
               onCustomPacksChange={editor.onCustomPacksChange}
               onBulkChange={editor.onBulkChange}
               onMmPricingChange={editor.onMmPricingChange}
+              onMmRateChange={editor.onMmRateChange}
+              onAddCustomPack={editor.onAddCustomPack}
+              onRemoveCustomPack={editor.onRemoveCustomPack}
+              onPackFieldChange={editor.onPackFieldChange}
               isSaving={false}
             />
           )}

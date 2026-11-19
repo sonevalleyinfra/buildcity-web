@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { ProductThumb } from "./ProductsTab";
 import { Sheet, Field, Button, ApprovalBadge, Spinner } from "../ui/primitives";
 import { inr } from "../ui/format";
-import { getDefaultPacksForProduct } from "../../../utils/productPacks";
+import { getDefaultPacksForProduct, STEEL_DIAMETERS, getDiameterPrice } from "../../../utils/productPacks";
 import { getCategorySpec } from "../../../utils/categoryAttributes";
 
 export default function EditListingSheet(props) {
@@ -22,6 +22,10 @@ function EditListingSheetInner({
   onCustomPacksChange,
   onBulkChange,
   onMmPricingChange,
+  onMmRateChange,
+  onAddCustomPack,
+  onRemoveCustomPack,
+  onPackFieldChange,
   isSaving,
 }) {
   const price = Number(product.price || 0);
@@ -298,14 +302,100 @@ function EditListingSheetInner({
             </div>
 
             {mmPricingEnabled && (
-              <div className="mt-2 p-2.5 bg-blue-50/80 rounded-xl border border-blue-200/90 text-[11px] text-blue-900 flex items-center justify-between">
-                <span className="font-bold text-blue-950">Active Diameters (Max 20mm):</span>
-                <div className="flex gap-1.5">
-                  {["8mm", "10mm", "12mm", "16mm", "20mm"].map((dia) => (
-                    <span key={dia} className="px-2 py-0.5 bg-white rounded-md border border-blue-300 font-extrabold text-[10px] text-blue-900 shadow-2xs">
-                      {dia}
-                    </span>
-                  ))}
+              <div className="mt-3 space-y-2.5 bg-blue-50/70 p-3 rounded-xl border border-blue-200/90">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-extrabold text-blue-950 uppercase tracking-wide flex items-center gap-1.5">
+                    <span>⚡</span> Set Diameter Rates & Stock
+                  </span>
+                  <span className="text-[10px] text-blue-700 font-medium">
+                    Uncheck to disable unavailable sizes
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {STEEL_DIAMETERS.map((dia) => {
+                    const rateData = product.mmRates?.[dia] || {
+                      active: true,
+                      price: getDiameterPrice(price, dia, "10mm"),
+                      mrp: getDiameterPrice(mrp, dia, "10mm"),
+                    };
+                    const isActive = rateData.active !== false;
+                    const diaPrice = rateData.price !== undefined ? rateData.price : "";
+                    const diaMrp = rateData.mrp !== undefined ? rateData.mrp : "";
+                    const diaDiscount = (Number(diaMrp) > Number(diaPrice) && Number(diaPrice) > 0)
+                      ? Math.round(((Number(diaMrp) - Number(diaPrice)) / Number(diaMrp)) * 100)
+                      : 0;
+
+                    return (
+                      <div
+                        key={dia}
+                        className={`p-2.5 rounded-lg border transition-all ${
+                          isActive
+                            ? "bg-white border-blue-200/80 shadow-2xs"
+                            : "bg-slate-100/70 border-slate-200 opacity-60"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={isActive}
+                              onChange={(e) => onMmRateChange?.(dia, "active", e.target.checked)}
+                              className="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 border-slate-300"
+                            />
+                            <span className="text-xs font-black text-navy-900">{dia} Rebar</span>
+                            {!isActive && (
+                              <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.2 rounded border border-red-200">
+                                Disabled / Out of Stock
+                              </span>
+                            )}
+                          </label>
+                          {isActive && diaDiscount > 0 && (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                              {diaDiscount}% OFF
+                            </span>
+                          )}
+                        </div>
+
+                        {isActive && (
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-600 mb-0.5">
+                                Selling Price (₹)
+                              </label>
+                              <div className="relative flex items-center">
+                                <span className="absolute left-2 text-[11px] text-slate-400 font-bold">₹</span>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={diaPrice}
+                                  onChange={(e) => onMmRateChange?.(dia, "price", e.target.value)}
+                                  placeholder="e.g. 680"
+                                  className="w-full pl-5 pr-2 py-1 text-xs bg-slate-50 border border-slate-200 rounded-md font-bold text-slate-900 focus:border-brand-500 focus:bg-white outline-none"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-600 mb-0.5">
+                                Cut-off MRP (₹)
+                              </label>
+                              <div className="relative flex items-center">
+                                <span className="absolute left-2 text-[11px] text-slate-400 font-bold">₹</span>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={diaMrp}
+                                  onChange={(e) => onMmRateChange?.(dia, "mrp", e.target.value)}
+                                  placeholder="e.g. 750"
+                                  className="w-full pl-5 pr-2 py-1 text-xs bg-slate-50 border border-slate-200 rounded-md font-bold text-slate-900 focus:border-brand-500 focus:bg-white outline-none"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -354,13 +444,27 @@ function EditListingSheetInner({
                         <span className="text-xs font-extrabold text-slate-900">{pack.label}</span>
                         <span className="text-[10px] text-slate-400 font-mono">({pack.qty}x base)</span>
                       </div>
-                      {discountPct > 0 ? (
-                        <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80">
-                          {discountPct}% OFF
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-slate-400 font-medium">No discount</span>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {discountPct > 0 ? (
+                          <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80">
+                            {discountPct}% OFF
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 font-medium">No discount</span>
+                        )}
+                        {onRemoveCustomPack && (
+                          <button
+                            type="button"
+                            onClick={() => onRemoveCustomPack(idx)}
+                            className="p-1 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors"
+                            title="Remove pack"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2.5">
@@ -405,6 +509,19 @@ function EditListingSheetInner({
                   </div>
                 );
               })}
+
+              {onAddCustomPack && (
+                <button
+                  type="button"
+                  onClick={onAddCustomPack}
+                  className="w-full py-2.5 px-3 border border-dashed border-brand-300 bg-brand-50/60 hover:bg-brand-50 rounded-xl text-xs font-bold text-brand-700 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add Custom Pack Size
+                </button>
+              )}
             </div>
           ) : (
             <div className="rounded-xl bg-slate-50 p-3 border border-dashed border-slate-200 text-center">

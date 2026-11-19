@@ -264,6 +264,20 @@ export function getDiameterPrice(basePrice, targetDia = "12mm", baseDia = "10mm"
   return Math.round((p * targetFactor) / baseFactor);
 }
 
+export function getDefaultMmRates(basePrice, baseMrp, baseDia = "10mm") {
+  const p = Number(basePrice) || 680;
+  const m = Number(baseMrp) || Math.round(p * 1.2);
+  const rates = {};
+  for (const dia of STEEL_DIAMETERS) {
+    rates[dia] = {
+      active: true,
+      price: getDiameterPrice(p, dia, baseDia),
+      mrp: getDiameterPrice(m, dia, baseDia),
+    };
+  }
+  return rates;
+}
+
 // Master function: vendor custom packs available hone par custom packs use karega,
 // warna rule-based default packs use karega taaki Tata Steel, Cement, Paint sabhi par bulk order ON rahe
 export function generateProductPacks(product) {

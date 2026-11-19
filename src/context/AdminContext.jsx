@@ -365,9 +365,13 @@ export function AdminProvider({ children }) {
         const masterList = Array.isArray(masterRes) && masterRes.length > 0 ? masterRes : masterProducts;
         let storedCustomPacksMap = {};
         let storedMrpsMap = {};
+        let storedBulkMap = {};
+        let storedMmMap = {};
         try {
           storedCustomPacksMap = JSON.parse(localStorage.getItem("buildcity_custom_packs") || "{}");
           storedMrpsMap = JSON.parse(localStorage.getItem("buildcity_listing_mrps") || "{}");
+          storedBulkMap = JSON.parse(localStorage.getItem("buildcity_bulk_enabled") || "{}");
+          storedMmMap = JSON.parse(localStorage.getItem("buildcity_mm_pricing") || "{}");
         } catch {}
 
         const formattedListings = listingsRes.map((l) => {
@@ -381,11 +385,29 @@ export function AdminProvider({ children }) {
           const matchedMaster = masterList.find((m) => m.id === l.masterProductId) || {};
 
           const rawCp = l.customPacks || l.custom_packs;
-          const parsedCp = typeof rawCp === "string" ? (() => { try { return JSON.parse(rawCp); } catch { return null; } })() : rawCp;
+          let parsedCp = typeof rawCp === "string" ? (() => { try { return JSON.parse(rawCp); } catch { return null; } })() : rawCp;
           const fallbackCp = storedCustomPacksMap[l.id];
-          const resolvedCustomPacks = (Array.isArray(parsedCp) && parsedCp.length > 0)
-            ? parsedCp
-            : (Array.isArray(fallbackCp) && fallbackCp.length > 0 ? fallbackCp : (l.masterProduct?.customPacks || null));
+          if (!parsedCp && fallbackCp) parsedCp = fallbackCp;
+
+          let resolvedCustomPacks = null;
+          let isBulkEnabled = false;
+          let isMmPricingEnabled = false;
+
+          if (parsedCp && typeof parsedCp === "object" && !Array.isArray(parsedCp)) {
+            isBulkEnabled = Boolean(parsedCp.bulkEnabled);
+            isMmPricingEnabled = Boolean(parsedCp.mmPricingEnabled);
+            resolvedCustomPacks = Array.isArray(parsedCp.packs) ? parsedCp.packs : null;
+          } else if (Array.isArray(parsedCp) && parsedCp.length > 0) {
+            isBulkEnabled = true;
+            resolvedCustomPacks = parsedCp;
+          }
+
+          if (storedBulkMap[l.id] !== undefined) {
+            isBulkEnabled = Boolean(storedBulkMap[l.id]);
+          }
+          if (storedMmMap[l.id] !== undefined) {
+            isMmPricingEnabled = Boolean(storedMmMap[l.id]);
+          }
 
           const rawMrp = Number(l.mrp || l.masterProduct?.mrp || matchedMaster.mrp || 0);
           const fallbackMrp = Number(storedMrpsMap[l.id] || 0);
@@ -403,6 +425,8 @@ export function AdminProvider({ children }) {
             unit: l.unit || l.masterProduct?.unit || matchedMaster.unit || "Unit",
             description: l.description || l.masterProduct?.description || matchedMaster.description || null,
             customPacks: resolvedCustomPacks,
+            bulkEnabled: isBulkEnabled,
+            mmPricingEnabled: isMmPricingEnabled,
             vendorId: l.vendorId,
             vendorName: l.vendor?.shopName || l.vendorName || "District Vendor",
             regionId: resolvedRegionId,
@@ -735,9 +759,13 @@ export function AdminProvider({ children }) {
       if (listingsRes && Array.isArray(listingsRes)) {
         let storedCustomPacksMap = {};
         let storedMrpsMap = {};
+        let storedBulkMap = {};
+        let storedMmMap = {};
         try {
           storedCustomPacksMap = JSON.parse(localStorage.getItem("buildcity_custom_packs") || "{}");
           storedMrpsMap = JSON.parse(localStorage.getItem("buildcity_listing_mrps") || "{}");
+          storedBulkMap = JSON.parse(localStorage.getItem("buildcity_bulk_enabled") || "{}");
+          storedMmMap = JSON.parse(localStorage.getItem("buildcity_mm_pricing") || "{}");
         } catch {}
 
         const formattedListings = listingsRes.map((l) => {
@@ -750,11 +778,29 @@ export function AdminProvider({ children }) {
           const isListingApproved = l.approvalStatus === "APPROVED" || !l.approvalStatus || l.approvalStatus === "";
 
           const rawCp = l.customPacks || l.custom_packs;
-          const parsedCp = typeof rawCp === "string" ? (() => { try { return JSON.parse(rawCp); } catch { return null; } })() : rawCp;
+          let parsedCp = typeof rawCp === "string" ? (() => { try { return JSON.parse(rawCp); } catch { return null; } })() : rawCp;
           const fallbackCp = storedCustomPacksMap[l.id];
-          const resolvedCustomPacks = (Array.isArray(parsedCp) && parsedCp.length > 0)
-            ? parsedCp
-            : (Array.isArray(fallbackCp) && fallbackCp.length > 0 ? fallbackCp : (l.masterProduct?.customPacks || null));
+          if (!parsedCp && fallbackCp) parsedCp = fallbackCp;
+
+          let resolvedCustomPacks = null;
+          let isBulkEnabled = false;
+          let isMmPricingEnabled = false;
+
+          if (parsedCp && typeof parsedCp === "object" && !Array.isArray(parsedCp)) {
+            isBulkEnabled = Boolean(parsedCp.bulkEnabled);
+            isMmPricingEnabled = Boolean(parsedCp.mmPricingEnabled);
+            resolvedCustomPacks = Array.isArray(parsedCp.packs) ? parsedCp.packs : null;
+          } else if (Array.isArray(parsedCp) && parsedCp.length > 0) {
+            isBulkEnabled = true;
+            resolvedCustomPacks = parsedCp;
+          }
+
+          if (storedBulkMap[l.id] !== undefined) {
+            isBulkEnabled = Boolean(storedBulkMap[l.id]);
+          }
+          if (storedMmMap[l.id] !== undefined) {
+            isMmPricingEnabled = Boolean(storedMmMap[l.id]);
+          }
 
           const rawMrp = Number(l.mrp || l.masterProduct?.mrp || 0);
           const fallbackMrp = Number(storedMrpsMap[l.id] || 0);
@@ -772,6 +818,8 @@ export function AdminProvider({ children }) {
             unit: l.unit || l.masterProduct?.unit || "Unit",
             description: l.description || l.masterProduct?.description || null,
             customPacks: resolvedCustomPacks,
+            bulkEnabled: isBulkEnabled,
+            mmPricingEnabled: isMmPricingEnabled,
             vendorId: l.vendorId,
             vendorName: l.vendor?.shopName || matchedVendor?.shopName || l.vendorName || "District Vendor",
             regionId: resolvedRegionId,
@@ -2204,10 +2252,12 @@ export function AdminProvider({ children }) {
     // Vendor ke custom packs aur mrp ko local storage map me turant persist karte hai
     try {
       const storedPacks = JSON.parse(localStorage.getItem("buildcity_custom_packs") || "{}");
-      if (updates.customPacks && Array.isArray(updates.customPacks) && updates.customPacks.length > 0) {
-        storedPacks[id] = updates.customPacks;
-      } else if (updates.customPacks === null) {
-        delete storedPacks[id];
+      if (updates.customPacks !== undefined) {
+        if (updates.customPacks === null) {
+          delete storedPacks[id];
+        } else {
+          storedPacks[id] = updates.customPacks;
+        }
       }
       localStorage.setItem("buildcity_custom_packs", JSON.stringify(storedPacks));
     } catch {}

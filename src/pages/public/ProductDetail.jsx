@@ -244,27 +244,46 @@ export default function ProductDetail() {
           if (typeof cp === "string") {
             try { cp = JSON.parse(cp); } catch {}
           }
+          if (cp && typeof cp === "object" && !Array.isArray(cp) && Array.isArray(cp.packs)) {
+            return cp.packs;
+          }
           if (Array.isArray(cp) && cp.length > 0) return cp;
           try {
             const stored = JSON.parse(localStorage.getItem("buildcity_custom_packs") || "{}");
-            if (Array.isArray(stored[realProd.id]) && stored[realProd.id].length > 0) {
-              return stored[realProd.id];
+            if (stored[realProd.id]) {
+              const val = stored[realProd.id];
+              if (Array.isArray(val) && val.length > 0) return val;
+              if (val && typeof val === "object" && Array.isArray(val.packs)) return val.packs;
             }
           } catch {}
-          return realProd.masterProduct?.customPacks || null;
+          return null;
         })(),
         bulkEnabled: (() => {
-          if (realProd.bulkEnabled !== undefined) return realProd.bulkEnabled;
-          if (realProd.bulk_enabled !== undefined) return realProd.bulk_enabled;
+          if (realProd.bulkEnabled !== undefined) return Boolean(realProd.bulkEnabled);
+          if (realProd.bulk_enabled !== undefined) return Boolean(realProd.bulk_enabled);
+          let cp = realProd.customPacks || realProd.custom_packs;
+          if (typeof cp === "string") {
+            try { cp = JSON.parse(cp); } catch {}
+          }
+          if (cp && typeof cp === "object" && !Array.isArray(cp) && cp.bulkEnabled !== undefined) {
+            return Boolean(cp.bulkEnabled);
+          }
           try {
             const stored = JSON.parse(localStorage.getItem("buildcity_bulk_enabled") || "{}");
-            if (stored[realProd.id] !== undefined) return stored[realProd.id];
+            if (stored[realProd.id] !== undefined) return Boolean(stored[realProd.id]);
           } catch {}
-          return undefined;
+          return false;
         })(),
         mmPricingEnabled: (() => {
           if (realProd.mmPricingEnabled !== undefined) return Boolean(realProd.mmPricingEnabled);
           if (realProd.diameterPricingEnabled !== undefined) return Boolean(realProd.diameterPricingEnabled);
+          let cp = realProd.customPacks || realProd.custom_packs;
+          if (typeof cp === "string") {
+            try { cp = JSON.parse(cp); } catch {}
+          }
+          if (cp && typeof cp === "object" && !Array.isArray(cp) && cp.mmPricingEnabled !== undefined) {
+            return Boolean(cp.mmPricingEnabled);
+          }
           try {
             const stored = JSON.parse(localStorage.getItem("buildcity_mm_pricing") || "{}");
             if (stored[realProd.id] !== undefined) return Boolean(stored[realProd.id]);

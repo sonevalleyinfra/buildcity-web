@@ -3172,9 +3172,25 @@ app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "AD
         mrp: req.body.mrp ? Number(req.body.mrp) : (masterProd.mrp ? Number(masterProd.mrp) : Math.round(listingPrice * 1.2)),
         stockQty: listingStock,
         imageUrl: masterProd.imageUrl,
-        description: masterProd.description || null,
-        customPacks: req.body.customPacks || req.body.custom_packs || masterProd.customPacks || null,
-        approvalStatus: isAutoApproved ? "APPROVED" : "PENDING_REVIEW",
+        customPacks: (() => {
+          let cp = req.body.customPacks !== undefined ? req.body.customPacks : req.body.custom_packs;
+          if (cp && typeof cp === "object" && !Array.isArray(cp)) return cp;
+          if (Array.isArray(cp)) {
+            return {
+              bulkEnabled: req.body.bulkEnabled !== undefined ? Boolean(req.body.bulkEnabled) : true,
+              mmPricingEnabled: req.body.mmPricingEnabled !== undefined ? Boolean(req.body.mmPricingEnabled) : false,
+              packs: cp,
+            };
+          }
+          if (req.body.bulkEnabled !== undefined || req.body.mmPricingEnabled !== undefined) {
+            return {
+              bulkEnabled: Boolean(req.body.bulkEnabled),
+              mmPricingEnabled: Boolean(req.body.mmPricingEnabled),
+              packs: [],
+            };
+          }
+          return masterProd.customPacks || null;
+        })(),
         isActive: isAutoApproved ? true : false,
         addedBy: isAutoApproved ? (req.auth.role === "ADMIN" ? "Admin" : "DR") : "Vendor",
       },
@@ -3246,10 +3262,18 @@ app.patch("/api/v1/vendor/listings/:id", requireAuth, requireRole("VENDOR", "DR"
         const m = Number(req.body.mrp);
         if (m > 0) updateData.mrp = m;
       }
-      if (req.body.customPacks !== undefined) {
-        updateData.customPacks = req.body.customPacks;
-      } else if (req.body.custom_packs !== undefined) {
-        updateData.customPacks = req.body.custom_packs;
+      if (req.body.customPacks !== undefined || req.body.bulkEnabled !== undefined || req.body.mmPricingEnabled !== undefined) {
+        let cp = req.body.customPacks !== undefined ? req.body.customPacks : (req.body.custom_packs !== undefined ? req.body.custom_packs : listing.customPacks);
+        let cpObj = {};
+        if (cp && typeof cp === "object" && !Array.isArray(cp)) {
+          cpObj = { ...cp };
+        } else if (Array.isArray(cp)) {
+          cpObj = { packs: cp, bulkEnabled: true };
+        }
+        if (req.body.bulkEnabled !== undefined) cpObj.bulkEnabled = Boolean(req.body.bulkEnabled);
+        if (req.body.mmPricingEnabled !== undefined) cpObj.mmPricingEnabled = Boolean(req.body.mmPricingEnabled);
+        if (Array.isArray(req.body.customPacks)) cpObj.packs = req.body.customPacks;
+        updateData.customPacks = cpObj;
       }
 
       const updatedListing = await prisma.vendorProduct.update({

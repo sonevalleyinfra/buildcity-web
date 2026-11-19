@@ -269,7 +269,7 @@ export function getDiameterPrice(basePrice, targetDia = "12mm", baseDia = "10mm"
 export function generateProductPacks(product) {
   if (!product) return [];
 
-  let rawCustom = product.customPacks || product.custom_packs || product.masterProduct?.customPacks;
+  let rawCustom = product.customPacks || product.custom_packs;
   if (typeof rawCustom === "string") {
     try {
       rawCustom = JSON.parse(rawCustom);
@@ -298,6 +298,12 @@ export function generateProductPacks(product) {
   // ONLY show bulk packs if the vendor has explicitly turned it ON in their listing!
   let isBulkOnByVendor = Boolean(product.bulkEnabled === true || product.bulk_enabled === true);
 
+  if (!isBulkOnByVendor && rawCustom && typeof rawCustom === "object" && !Array.isArray(rawCustom)) {
+    if (rawCustom.bulkEnabled === true) {
+      isBulkOnByVendor = true;
+    }
+  }
+
   if (!isBulkOnByVendor && product.id && typeof window !== "undefined") {
     try {
       const storedBulk = JSON.parse(localStorage.getItem("buildcity_bulk_enabled") || "{}");
@@ -307,17 +313,24 @@ export function generateProductPacks(product) {
     } catch {}
   }
 
-  // Check if vendor has specifically configured and saved custom packs
-  const hasVendorCustomPacks = Array.isArray(rawCustom) && rawCustom.length > 0 && rawCustom.some((pk) => Number(pk.qty) > 1);
-
-  // If vendor did NOT turn it on AND has no custom packs saved -> ONLY single unit (NO bulk rates)
-  if (!isBulkOnByVendor && !hasVendorCustomPacks) {
+  // If vendor did NOT turn it on -> ONLY single unit (NO bulk rates)
+  if (!isBulkOnByVendor) {
     return [basePack];
   }
 
+  let packsList = [];
+  if (rawCustom && typeof rawCustom === "object" && !Array.isArray(rawCustom)) {
+    packsList = Array.isArray(rawCustom.packs) ? rawCustom.packs : [];
+  } else if (Array.isArray(rawCustom)) {
+    packsList = rawCustom;
+  }
+
+  // Check if vendor has specifically configured and saved custom packs
+  const hasVendorCustomPacks = Array.isArray(packsList) && packsList.length > 0 && packsList.some((pk) => Number(pk.qty) > 1);
+
   // If vendor enabled custom bulk packs:
   if (hasVendorCustomPacks) {
-    const bulkOptions = rawCustom
+    const bulkOptions = packsList
       .filter((pk) => Number(pk.qty) > 1)
       .map((pk) => {
         const qty = Number(pk.qty) || 5;
@@ -346,11 +359,9 @@ export function generateProductPacks(product) {
   }
 
   // If vendor turned bulk toggle ON but has not set custom packs, use standard category default packs:
-  if (isBulkOnByVendor) {
-    const defaultPacks = getDefaultPacksForProduct(product);
-    if (Array.isArray(defaultPacks) && defaultPacks.length > 0) {
-      return [basePack, ...defaultPacks];
-    }
+  const defaultPacks = getDefaultPacksForProduct(product);
+  if (Array.isArray(defaultPacks) && defaultPacks.length > 0) {
+    return [basePack, ...defaultPacks];
   }
 
   return [basePack];

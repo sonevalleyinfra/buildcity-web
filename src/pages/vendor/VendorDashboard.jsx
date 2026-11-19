@@ -216,6 +216,7 @@ export default function VendorDashboard() {
               onPriceChange={editor.onPriceChange}
               onStockChange={editor.onStockChange}
               onCustomPacksChange={editor.onCustomPacksChange}
+              onBulkChange={editor.onBulkChange}
               onMmPricingChange={editor.onMmPricingChange}
               isSaving={false}
             />

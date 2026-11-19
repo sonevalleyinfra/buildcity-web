@@ -20,6 +20,7 @@ function EditListingSheetInner({
   onPriceChange,
   onStockChange,
   onCustomPacksChange,
+  onBulkChange,
   onMmPricingChange,
   isSaving,
 }) {
@@ -49,6 +50,9 @@ function EditListingSheetInner({
   const [mmPricingEnabled, setMmPricingEnabled] = useState(() => {
     if (product.mmPricingEnabled !== undefined) return Boolean(product.mmPricingEnabled);
     if (product.diameterPricingEnabled !== undefined) return Boolean(product.diameterPricingEnabled);
+    if (product.customPacks && typeof product.customPacks === "object" && !Array.isArray(product.customPacks)) {
+      if (product.customPacks.mmPricingEnabled !== undefined) return Boolean(product.customPacks.mmPricingEnabled);
+    }
     try {
       const stored = JSON.parse(localStorage.getItem("buildcity_mm_pricing") || "{}");
       if (stored[product.id] !== undefined) return Boolean(stored[product.id]);
@@ -73,13 +77,26 @@ function EditListingSheetInner({
         raw = JSON.parse(raw);
       } catch {}
     }
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      raw = raw.packs;
+    }
     return Array.isArray(raw) && raw.length > 0 && raw.some((pk) => Number(pk.qty) > 1)
       ? raw.filter((pk) => Number(pk.qty) > 1)
       : null;
   }, [product.customPacks, product.custom_packs]);
 
-  // Bulk rates toggle: puraane products ke liye by default OFF rahega
-  const [bulkEnabled, setBulkEnabled] = useState(() => Boolean(parsedCustomPacks && parsedCustomPacks.length > 0));
+  // Bulk rates toggle:
+  const [bulkEnabled, setBulkEnabled] = useState(() => {
+    if (product.bulkEnabled !== undefined) return Boolean(product.bulkEnabled);
+    if (product.customPacks && typeof product.customPacks === "object" && !Array.isArray(product.customPacks)) {
+      if (product.customPacks.bulkEnabled !== undefined) return Boolean(product.customPacks.bulkEnabled);
+    }
+    try {
+      const stored = JSON.parse(localStorage.getItem("buildcity_bulk_enabled") || "{}");
+      if (stored[product.id] !== undefined) return Boolean(stored[product.id]);
+    } catch {}
+    return Boolean(parsedCustomPacks && parsedCustomPacks.length > 0);
+  });
 
   // Dynamic unit MRP: base unit MRP badalte hi turant update hoga
   const unitMrp = Number(product.mrp) || Math.round((Number(product.price) || 0) * 1.2);
@@ -112,6 +129,7 @@ function EditListingSheetInner({
     if (bulkEnabled) {
       setBulkEnabled(false);
       onCustomPacksChange?.(null);
+      onBulkChange?.(false);
     } else {
       setBulkEnabled(true);
       const initialBulk = defaultPacks.map((dp) => ({
@@ -122,6 +140,7 @@ function EditListingSheetInner({
         stock: product.stockQty !== undefined ? product.stockQty : 100,
       }));
       onCustomPacksChange?.(initialBulk);
+      onBulkChange?.(true);
     }
   };
 

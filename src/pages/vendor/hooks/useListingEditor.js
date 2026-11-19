@@ -15,15 +15,33 @@ export default function useListingEditor({ updateVendorProductListing, showAlert
         customPacks = JSON.parse(customPacks);
       } catch {}
     }
-    // Puraane products ke liye by default customPacks null rahega (Bulk rates OFF)
-    const validCustomPacks =
-      Array.isArray(customPacks) && customPacks.length > 0 && customPacks.some((pk) => Number(pk.qty) > 1)
-        ? customPacks.filter((pk) => Number(pk.qty) > 1)
-        : null;
-
-    const isMmOn = p.mmPricingEnabled !== undefined
+    let isBulkOn = p.bulkEnabled !== undefined ? Boolean(p.bulkEnabled) : false;
+    let isMmOn = p.mmPricingEnabled !== undefined
       ? Boolean(p.mmPricingEnabled)
       : (p.diameterPricingEnabled !== undefined ? Boolean(p.diameterPricingEnabled) : false);
+
+    let validCustomPacks = null;
+    if (customPacks && typeof customPacks === "object" && !Array.isArray(customPacks)) {
+      if (customPacks.bulkEnabled !== undefined) isBulkOn = Boolean(customPacks.bulkEnabled);
+      if (customPacks.mmPricingEnabled !== undefined) isMmOn = Boolean(customPacks.mmPricingEnabled);
+      if (Array.isArray(customPacks.packs)) {
+        validCustomPacks = customPacks.packs.filter((pk) => Number(pk.qty) > 1);
+      }
+    } else if (Array.isArray(customPacks) && customPacks.length > 0) {
+      validCustomPacks = customPacks.filter((pk) => Number(pk.qty) > 1);
+      if (p.bulkEnabled !== undefined) {
+        isBulkOn = Boolean(p.bulkEnabled);
+      } else {
+        isBulkOn = Boolean(validCustomPacks && validCustomPacks.length > 0);
+      }
+    }
+
+    try {
+      const storedMm = JSON.parse(localStorage.getItem("buildcity_mm_pricing") || "{}");
+      if (storedMm[p.id] !== undefined) isMmOn = Boolean(storedMm[p.id]);
+      const storedBulk = JSON.parse(localStorage.getItem("buildcity_bulk_enabled") || "{}");
+      if (storedBulk[p.id] !== undefined) isBulkOn = Boolean(storedBulk[p.id]);
+    } catch {}
 
     setEditingProduct({
       ...p,
@@ -32,6 +50,7 @@ export default function useListingEditor({ updateVendorProductListing, showAlert
       discountPct: mrp > price ? discountFor(mrp, price) : 0,
       stockQty: p.stockQty !== undefined ? p.stockQty : 100,
       customPacks: validCustomPacks,
+      bulkEnabled: isBulkOn,
       mmPricingEnabled: isMmOn,
     });
   };
@@ -68,13 +87,23 @@ export default function useListingEditor({ updateVendorProductListing, showAlert
             };
           });
       }
+
+      const isBulkActive = Boolean(prod.bulkEnabled && sanitizedPacks && sanitizedPacks.length > 0);
+      const isMmActive = Boolean(prod.mmPricingEnabled);
+
+      const customPacksPayload = {
+        bulkEnabled: isBulkActive,
+        mmPricingEnabled: isMmActive,
+        packs: isBulkActive ? sanitizedPacks : [],
+      };
+
       await updateVendorProductListing(prod.id, {
         price: Number(prod.price),
         mrp: Number(prod.mrp),
         stockQty: Number(prod.stockQty),
-        customPacks: sanitizedPacks,
-        bulkEnabled: Boolean(sanitizedPacks && sanitizedPacks.length > 0),
-        mmPricingEnabled: Boolean(prod.mmPricingEnabled),
+        customPacks: customPacksPayload,
+        bulkEnabled: isBulkActive,
+        mmPricingEnabled: isMmActive,
       });
     } catch (err) {
       console.warn("Background update listing note:", err.message);
@@ -125,6 +154,7 @@ export default function useListingEditor({ updateVendorProductListing, showAlert
       setEditingProduct((p) => ({ ...p, stockQty: cleaned }));
     },
     onCustomPacksChange: (packs) => setEditingProduct((p) => ({ ...p, customPacks: packs })),
+    onBulkChange: (val) => setEditingProduct((p) => ({ ...p, bulkEnabled: Boolean(val) })),
     onMmPricingChange: (val) => setEditingProduct((p) => ({ ...p, mmPricingEnabled: Boolean(val) })),
   };
 }

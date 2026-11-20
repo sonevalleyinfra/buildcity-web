@@ -84,9 +84,7 @@ function EditListingSheetInner({
     if (raw && typeof raw === "object" && !Array.isArray(raw)) {
       raw = raw.packs;
     }
-    return Array.isArray(raw) && raw.length > 0 && raw.some((pk) => Number(pk.qty) > 1)
-      ? raw.filter((pk) => Number(pk.qty) > 1)
-      : null;
+    return Array.isArray(raw) && raw.length > 0 ? raw : null;
   }, [product.customPacks, product.custom_packs]);
 
   // Bulk rates toggle:
@@ -109,13 +107,14 @@ function EditListingSheetInner({
   const activePacks = useMemo(() => {
     if (parsedCustomPacks && parsedCustomPacks.length > 0) {
       return parsedCustomPacks.map((cp) => {
-        const qty = Number(cp.qty) || 5;
-        const packMrp = Math.round(unitMrp * qty);
+        const qtyVal = cp.qty !== undefined ? cp.qty : 5;
+        const numericQty = Number(qtyVal) || 1;
+        const packMrp = Math.round(unitMrp * numericQty);
         return {
           ...cp,
-          qty,
+          qty: qtyVal,
           mrp: packMrp,
-          price: cp.price !== undefined ? cp.price : Math.round(price * qty),
+          price: cp.price !== undefined ? cp.price : Math.round(price * numericQty),
           stock: cp.stock !== undefined ? cp.stock : (product.stockQty !== undefined ? product.stockQty : 100),
         };
       });
@@ -162,12 +161,11 @@ function EditListingSheetInner({
       onPackFieldChange(index, "qty", val);
       return;
     }
-    const cleaned = typeof val === "string" ? val.replace(/^0+(?=\d)/, "") : val;
-    const numQty = Number(cleaned) || 1;
+    const numQty = Number(val) || 1;
     const next = activePacks.map((pk, idx) => {
       if (idx !== index) return pk;
       const packMrp = Math.round(unitMrp * numQty);
-      return { ...pk, qty: cleaned, mrp: packMrp };
+      return { ...pk, qty: val, mrp: packMrp };
     });
     onCustomPacksChange?.(next);
   };
@@ -518,16 +516,25 @@ function EditListingSheetInner({
                         <label className="block text-[11px] font-semibold text-slate-600 mb-1">
                           Base Multiplier (Units / Qty) *
                         </label>
-                        <div className="relative flex items-center">
+                        <div className="flex items-center">
                           <input
-                            type="number"
-                            min="2"
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
                             placeholder="e.g. 5"
                             value={pack.qty !== undefined ? pack.qty : ""}
-                            onChange={(e) => handlePackQtyChange(idx, e.target.value)}
-                            className="w-full pl-2.5 pr-14 py-1.5 bg-slate-50 text-xs border border-slate-200 rounded-lg outline-none font-bold text-slate-900 focus:border-brand-500 focus:bg-white transition-colors"
+                            onChange={(e) => {
+                              const v = e.target.value.replace(/[^\d]/g, "");
+                              handlePackQtyChange(idx, v);
+                            }}
+                            onBlur={() => {
+                              if (!pack.qty || Number(pack.qty) < 1) {
+                                handlePackQtyChange(idx, "2");
+                              }
+                            }}
+                            className="w-24 px-2.5 py-1.5 bg-slate-50 text-xs border border-slate-200 rounded-l-lg outline-none font-bold text-slate-900 focus:border-brand-500 focus:bg-white transition-colors"
                           />
-                          <span className="absolute right-2 text-[10px] text-slate-500 font-extrabold uppercase pointer-events-none">
+                          <span className="flex-1 px-2.5 py-1.5 bg-slate-100 border border-l-0 border-slate-200 rounded-r-lg text-[10px] text-slate-600 font-extrabold truncate select-none">
                             × {product.unit || "unit"}
                           </span>
                         </div>

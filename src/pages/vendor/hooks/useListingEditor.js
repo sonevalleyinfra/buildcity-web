@@ -249,7 +249,7 @@ export default function useListingEditor({ updateVendorProductListing, showAlert
           if (idx !== index) return pk;
           const updated = { ...pk };
           if (field === "qty") {
-            const cleaned = typeof val === "string" ? val.replace(/^0+(?=\d)/, "") : val;
+            const cleaned = typeof val === "string" ? val.replace(/[^\d]/g, "") : val;
             updated.qty = cleaned;
             const numeric = Number(cleaned) || 1;
             updated.mrp = Math.round(unitMrp * numeric);

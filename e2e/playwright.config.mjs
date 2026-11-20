@@ -17,7 +17,8 @@ export default defineConfig({
   reporter: [["list"], ["html", { open: "never", outputFolder: path.join(dir, "report") }]],
   use: {
     baseURL: process.env.E2E_BASE_URL,
-    trace: "retain-on-failure",
+    // e2e-staging sets E2E_TRACE=off: staging traces would hold real passwords and the bypass header.
+    trace: process.env.E2E_TRACE === "off" ? "off" : "retain-on-failure",
     screenshot: "off",
     video: "off",
   },

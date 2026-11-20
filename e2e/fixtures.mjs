@@ -1,5 +1,6 @@
 import { test as base, expect } from "@playwright/test";
 import { PROD_HOSTS } from "./guard.mjs";
+import { bypassHeadersFor } from "./bypass.mjs";
 
 // Defence in depth: whatever the app tries, the browser never reaches a production host.
 export const test = base.extend({
@@ -8,6 +9,14 @@ export const test = base.extend({
       (url) => PROD_HOSTS.includes(url.hostname.toLowerCase()),
       (route) => route.abort("blockedbyclient")
     );
+    // Deployment Protection bypass header, added to the origin under test only.
+    if (bypassHeadersFor(process.env.E2E_BASE_URL || "http://invalid.invalid")["x-vercel-protection-bypass"]) {
+      const origin = new URL(process.env.E2E_BASE_URL).origin;
+      await context.route(
+        (url) => url.origin === origin,
+        (route) => route.continue({ headers: { ...route.request().headers(), ...bypassHeadersFor(origin) } })
+      );
+    }
     await provide(context);
   },
 });

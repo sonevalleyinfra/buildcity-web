@@ -148,8 +148,36 @@ function EditListingSheetInner({
     }
   };
 
+  const handlePackLabelChange = (index, val) => {
+    if (onPackFieldChange) {
+      onPackFieldChange(index, "label", val);
+      return;
+    }
+    const next = activePacks.map((pk, idx) => (idx === index ? { ...pk, label: val } : pk));
+    onCustomPacksChange?.(next);
+  };
+
+  const handlePackQtyChange = (index, val) => {
+    if (onPackFieldChange) {
+      onPackFieldChange(index, "qty", val);
+      return;
+    }
+    const cleaned = typeof val === "string" ? val.replace(/^0+(?=\d)/, "") : val;
+    const numQty = Number(cleaned) || 1;
+    const next = activePacks.map((pk, idx) => {
+      if (idx !== index) return pk;
+      const packMrp = Math.round(unitMrp * numQty);
+      return { ...pk, qty: cleaned, mrp: packMrp };
+    });
+    onCustomPacksChange?.(next);
+  };
+
   const handlePackPriceChange = (index, val) => {
     const cleaned = typeof val === "string" ? val.replace(/^0+(?=\d)/, "") : val;
+    if (onPackFieldChange) {
+      onPackFieldChange(index, "price", cleaned);
+      return;
+    }
     const next = activePacks.map((pk, idx) => {
       const packQty = Number(pk.qty) || 5;
       const packMrp = Math.round(unitMrp * packQty);
@@ -161,6 +189,10 @@ function EditListingSheetInner({
 
   const handlePackStockChange = (index, val) => {
     const cleaned = typeof val === "string" ? val.replace(/^0+(?=\d)/, "") : val;
+    if (onPackFieldChange) {
+      onPackFieldChange(index, "stock", cleaned);
+      return;
+    }
     const next = activePacks.map((pk, idx) => {
       const packQty = Number(pk.qty) || 5;
       const packMrp = Math.round(unitMrp * packQty);
@@ -438,12 +470,12 @@ function EditListingSheetInner({
                   : 0;
 
                 return (
-                  <div key={idx} className="bg-white p-3 rounded-xl border border-slate-200/90 shadow-2xs space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-extrabold text-slate-900">{pack.label}</span>
-                        <span className="text-[10px] text-slate-400 font-mono">({pack.qty}x base)</span>
-                      </div>
+                  <div key={idx} className="bg-white p-3 rounded-xl border border-slate-200/90 shadow-2xs space-y-2.5">
+                    {/* Header Row: Tier number, discount badge, and delete button */}
+                    <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                        Pack Tier #{idx + 1}
+                      </span>
                       <div className="flex items-center gap-1.5">
                         {discountPct > 0 ? (
                           <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80">
@@ -456,7 +488,7 @@ function EditListingSheetInner({
                           <button
                             type="button"
                             onClick={() => onRemoveCustomPack(idx)}
-                            className="p-1 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors"
+                            className="p-1 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors cursor-pointer"
                             title="Remove pack"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -467,6 +499,42 @@ function EditListingSheetInner({
                       </div>
                     </div>
 
+                    {/* Row 1: Editable Pack Name/Label and Base Quantity (Multiplier) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          Pack Name / Label *
+                        </label>
+                        <input
+                          type="text"
+                          value={pack.label || ""}
+                          onChange={(e) => handlePackLabelChange(idx, e.target.value)}
+                          placeholder={`e.g. ${packQty} ${product.unit || "Units"} Bulk`}
+                          className="w-full px-2.5 py-1.5 bg-slate-50 text-xs border border-slate-200 rounded-lg outline-none font-bold text-slate-900 focus:border-brand-500 focus:bg-white transition-colors"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          Base Multiplier (Units / Qty) *
+                        </label>
+                        <div className="relative flex items-center">
+                          <input
+                            type="number"
+                            min="2"
+                            placeholder="e.g. 5"
+                            value={pack.qty !== undefined ? pack.qty : ""}
+                            onChange={(e) => handlePackQtyChange(idx, e.target.value)}
+                            className="w-full pl-2.5 pr-14 py-1.5 bg-slate-50 text-xs border border-slate-200 rounded-lg outline-none font-bold text-slate-900 focus:border-brand-500 focus:bg-white transition-colors"
+                          />
+                          <span className="absolute right-2 text-[10px] text-slate-500 font-extrabold uppercase pointer-events-none">
+                            × {product.unit || "unit"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Row 2: Selling Price & Stock Available */}
                     <div className="grid grid-cols-2 gap-2.5">
                       <div>
                         <label className="block text-[11px] font-semibold text-slate-600 mb-1">
@@ -502,8 +570,8 @@ function EditListingSheetInner({
 
                     <p className="text-[10px] text-slate-400 font-medium flex items-center justify-between pt-1 border-t border-slate-100">
                       <span>Cut-off MRP: <strong className="font-semibold text-slate-600">{inr(packMrp)}</strong></span>
-                      {packPrice > 0 && pack.qty > 1 && (
-                        <span>₹{Math.round(packPrice / pack.qty)} / unit</span>
+                      {packPrice > 0 && packQty > 1 && (
+                        <span>₹{Math.round(packPrice / packQty)} / {product.unit || "unit"}</span>
                       )}
                     </p>
                   </div>

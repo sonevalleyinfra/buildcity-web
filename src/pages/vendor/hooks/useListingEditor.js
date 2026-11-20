@@ -249,9 +249,10 @@ export default function useListingEditor({ updateVendorProductListing, showAlert
           if (idx !== index) return pk;
           const updated = { ...pk };
           if (field === "qty") {
-            const numQty = Math.max(1, Number(val) || 1);
-            updated.qty = numQty;
-            updated.mrp = Math.round(unitMrp * numQty);
+            const cleaned = typeof val === "string" ? val.replace(/^0+(?=\d)/, "") : val;
+            updated.qty = cleaned;
+            const numeric = Number(cleaned) || 1;
+            updated.mrp = Math.round(unitMrp * numeric);
           } else if (field === "price" || field === "stock") {
             updated[field] = typeof val === "string" ? val.replace(/^0+(?=\d)/, "") : val;
           } else {

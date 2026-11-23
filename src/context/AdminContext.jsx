@@ -2111,16 +2111,29 @@ export function AdminProvider({ children }) {
     setProducts((prev) => {
       const updated = prev.map((p) => {
         if (p.masterProductId === id || p.id === id) {
+          let mergedCp = updates.customPacks !== undefined ? updates.customPacks : p.customPacks;
+          if (
+            updates.customPacks !== undefined &&
+            p.customPacks &&
+            typeof p.customPacks === "object" &&
+            !Array.isArray(p.customPacks) &&
+            typeof updates.customPacks === "object" &&
+            !Array.isArray(updates.customPacks)
+          ) {
+            mergedCp = { ...p.customPacks, ...updates.customPacks };
+          }
           return {
             ...p,
             ...(updates.imageUrl ? { imageUrl: updates.imageUrl } : {}),
             ...(updates.images ? { images: updates.images } : updates.imageUrl ? { images: updates.imageUrl.split(",").map((s) => s.trim()).filter(Boolean) } : {}),
             ...(updates.name ? { name: updates.name } : {}),
             ...(updates.brand ? { brand: updates.brand } : {}),
+            ...(updates.categoryId ? { categoryId: updates.categoryId } : {}),
+            ...(updates.categoryName ? { categoryName: updates.categoryName } : {}),
             ...(updates.type ? { type: updates.type } : {}),
             ...(updates.grade ? { grade: updates.grade } : {}),
             ...(updates.unit ? { unit: updates.unit } : {}),
-            ...(updates.customPacks !== undefined ? { customPacks: updates.customPacks } : {}),
+            ...(updates.customPacks !== undefined ? { customPacks: mergedCp } : {}),
             ...(updates.description !== undefined ? { description: updates.description } : {}),
             // NOTE: Master product edit only updates suggestedPrice reference; vendors retain their individual selling prices (p.price)
             ...(!isNaN(targetPrice) && targetPrice > 0 ? { suggestedPrice: targetPrice } : {}),

@@ -2978,9 +2978,20 @@ app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN"), asyn
         include: { category: true },
       });
 
-      // Synchronize description and imageUrl (catalog metadata) to existing vendor listings for this master product in DB.
-      // NOTE: We NEVER overwrite vendors' individual selling prices (targetPrice only updates master suggestedPrice).
+      // Synchronize catalog metadata (name, brand, category, type, grade, unit, description, imageUrl, customPacks)
+      // to all existing vendor listings for this master product in DB.
+      // NOTE: We NEVER overwrite vendors' individual selling prices (targetPrice only updates master suggestedPrice),
+      // individual discounts, or store inventory stockQty.
       const vendorUpdateData = {};
+      if (name) vendorUpdateData.name = name;
+      if (categoryId) {
+        vendorUpdateData.categoryId = categoryId;
+        if (updatedMp.category?.name) vendorUpdateData.categoryName = updatedMp.category.name;
+      }
+      if (brand) vendorUpdateData.brand = brand;
+      if (type) vendorUpdateData.type = type;
+      if (grade) vendorUpdateData.grade = grade;
+      if (unit) vendorUpdateData.unit = unit;
       if (description !== undefined) vendorUpdateData.description = description;
       if (imageUrl) vendorUpdateData.imageUrl = imageUrl;
 
@@ -2988,7 +2999,34 @@ app.patch("/api/v1/master-products/:id", requireAuth, requireRole("ADMIN"), asyn
         await prisma.vendorProduct.updateMany({
           where: { masterProductId: mp.id },
           data: vendorUpdateData,
-        }).catch(() => null);
+        }).catch((err) => console.warn("Sync vendor listings error:", err.message));
+      }
+
+      // Synchronize customPacks (e.g., paint pack sizes, category attributes)
+      if (customPacks !== undefined) {
+        try {
+          const existingListings = await prisma.vendorProduct.findMany({
+            where: { masterProductId: mp.id },
+            select: { id: true, customPacks: true },
+          });
+
+          for (const listing of existingListings) {
+            let nextCp = customPacks;
+            if (listing.customPacks && typeof listing.customPacks === "object" && !Array.isArray(listing.customPacks)) {
+              // Preserve vendor's custom bulk packs, toggles, and mmRates if present
+              nextCp = {
+                ...listing.customPacks,
+                ...(customPacks && typeof customPacks === "object" && !Array.isArray(customPacks) ? customPacks : {}),
+              };
+            }
+            await prisma.vendorProduct.update({
+              where: { id: listing.id },
+              data: { customPacks: nextCp },
+            }).catch(() => null);
+          }
+        } catch (cpErr) {
+          console.warn("Sync vendor listing customPacks error:", cpErr.message);
+        }
       }
 
       invalidateCache();

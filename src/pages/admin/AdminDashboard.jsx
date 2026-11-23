@@ -809,9 +809,11 @@ export default function AdminDashboard() {
     try {
       const targetPrice = Number(prodToSave.suggestedPrice || prodToSave.price || 100);
       const prodId = prodToSave.id || prodToSave.masterProductId;
+      const catObj = categories?.find((c) => c.id === prodToSave.categoryId);
 
       await updateMasterProduct(prodId, {
         ...prodToSave,
+        categoryName: catObj?.name || prodToSave.categoryName,
         imageUrl: finalImageUrl,
         images: finalImgs,
         suggestedPrice: targetPrice,

@@ -174,16 +174,26 @@ export default function DrDashboard() {
 
   // Instant optimistic order status update for DR (zero delay, zero flicker)
   const handleDrUpdateOrderStatus = async (orderId, newStatus) => {
-    setDirectOrders((prev) => {
-      const updated = prev.map((o) => (String(o.id) === String(orderId) ? { ...o, status: newStatus } : o));
-      try {
-        localStorage.setItem("buildcity_dr_live_orders", JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
+    const previousStatus = directOrders.find((o) => String(o.id) === String(orderId))?.status;
+    const applyStatus = (status) =>
+      setDirectOrders((prev) => {
+        const updated = prev.map((o) => (String(o.id) === String(orderId) ? { ...o, status } : o));
+        try {
+          localStorage.setItem("buildcity_dr_live_orders", JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
 
-    if (updateOrderStatus) {
+    applyStatus(newStatus);
+
+    if (!updateOrderStatus) return;
+    try {
       await updateOrderStatus(orderId, newStatus);
+    } catch (err) {
+      // Server refused the change (or could not be reached): show the real status again and say why
+      if (previousStatus !== undefined) applyStatus(previousStatus);
+      showAlert({ title: "Couldn't update status", message: err?.message || "Please try again.", type: "warning" });
+      throw err;
     }
   };
 

@@ -486,8 +486,14 @@ export function OrderProvider({ children }) {
         body: JSON.stringify({ status: newStatus }),
       });
     } catch (err) {
+      // Server not reachable: the change did not happen, so put the old status back and let the screen say so
       console.warn("Update status note:", err.message);
-      return;
+      setOrders((prev) => {
+        const next = prev.map((o) => (o.id === orderId && previousStatus !== undefined ? { ...o, status: previousStatus } : o));
+        try { localStorage.setItem(currentStorageKey, JSON.stringify(next)); } catch {}
+        return next;
+      });
+      throw new Error(err.message || "Could not reach the server. Please try again.");
     }
 
     if (res.ok) {

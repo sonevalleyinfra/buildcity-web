@@ -233,6 +233,7 @@ export default function AdminDashboard() {
         await new Promise((res) => setTimeout(res, 300));
       } catch (err) {
         console.warn("Admin status update error:", err);
+        showAlert({ title: "Couldn't update status", message: err?.message || "Please try again.", type: "warning" });
       } finally {
         setUpdatingOrderStatusId(null);
       }

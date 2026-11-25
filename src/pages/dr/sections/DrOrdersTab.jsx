@@ -30,15 +30,6 @@ const ORDER_FILTERS = [
   { key: "CANCELLED", label: "Cancelled", dot: "bg-rose-400" },
 ];
 
-const STATUS_LABELS = {
-  PENDING: "Pending",
-  PROCESSING: "Processing",
-  OUT_FOR_DELIVERY: "Out for delivery",
-  DELIVERED: "Delivered",
-  COMPLETED: "Completed",
-  CANCELLED: "Cancelled",
-};
-
 export default function DrOrdersTab({
   districtName,
   districtOrders,
@@ -50,7 +41,6 @@ export default function DrOrdersTab({
   searchTerm,
   setSearchTerm,
   updateOrderStatus,
-  fetchLiveOrdersDirect,
   showConfirm,
   directHasMore,
   loadingMoreDirect,

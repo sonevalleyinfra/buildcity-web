@@ -1,51 +1,14 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useNavigate, useSearchParams, useNavigationType } from "react-router-dom";
 import { useCart } from "../../context/CartContext";
-import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useRegion } from "../../context/RegionContext";
 import Navbar from "../../components/Navbar";
-import RegionPicker from "../../components/RegionPicker";
 import NotificationPanel from "../../components/NotificationPanel";
 import ProductCard from "../../components/ProductCard";
 import Footer from "../../components/Footer";
 import { Capacitor } from "@capacitor/core";
 import { resolveCategoryBubbleImage } from "../vendor/utils/productImage";
-
-const bannerSlides = [
-  {
-    tag: "BUILD YOUR DREAM SPACE",
-    line1: "Quality Products.",
-    line2: "Best Prices.",
-    line3: "Reliable Service.",
-    targetCat: "All",
-    img: "https://res.cloudinary.com/pvzxcmsk/image/upload/v1791020539/banner_5.png.png",
-  },
-  {
-    tag: "DIRECT SITE DELIVERY",
-    line1: "Wholesale Rates.",
-    line2: "Zero Middlemen.",
-    line3: "Direct Delivery.",
-    targetCat: "Cement",
-    img: "https://res.cloudinary.com/pvzxcmsk/image/upload/v1791019964/banner_4.png.png",
-  },
-  {
-    tag: "100% CERTIFIED MATERIALS",
-    line1: "Lab Tested.",
-    line2: "Site Delivered.",
-    line3: "Pay On Delivery.",
-    targetCat: "Steel",
-    img: "https://res.cloudinary.com/pvzxcmsk/image/upload/v1791021553/banner_6.png.png",
-  },
-  {
-    tag: "LUXURY INTERIORS & PAINTS",
-    line1: "Royale Emulsions.",
-    line2: "Waterproof Coats.",
-    line3: "Modern Finishes.",
-    targetCat: "Paints",
-    img: "https://res.cloudinary.com/lbwxvqmg/image/upload/v1788938503/banner3.png",
-  },
-];
 
 const category8Grid = [
   { name: "Cement", countTag: "Cement", img: "/categories/cement.png" },
@@ -65,14 +28,11 @@ export default function Categories() {
   const navType = useNavigationType();
   const initialCat = searchParams.get("cat") || "All";
 
-  const { user } = useAuth();
-  const { count, addItem } = useCart();
-  const { products = [], productsLoading, categories = [] } = useAdmin();
+  const { count } = useCart();
+  const { products = [], productsLoading } = useAdmin();
   const { region } = useRegion();
   const [activePill, setActivePill] = useState(initialCat);
   const [searchQuery, setSearchQuery] = useState("");
-  const [justAddedId, setJustAddedId] = useState(null);
-  const [slide, setSlide] = useState(0);
   const productsSectionRef = useRef(null);
 
   const scrollToProducts = () => {
@@ -108,33 +68,9 @@ export default function Categories() {
     }
   }, [searchParams, navType]);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setSlide((s) => (s + 1) % 4);
-    }, 4000);
-    return () => clearInterval(timer);
-  }, []);
-
   const handleSearch = (e) => {
     e.preventDefault();
     navigate(searchQuery ? `/search?q=${encodeURIComponent(searchQuery)}` : "/search");
-  };
-
-  const handleAddToCart = (p) => {
-    addItem(
-      {
-        id: p.id,
-        name: p.name,
-        price: p.price !== undefined ? p.price : (p.suggestedPrice || 100),
-        brand: p.brand,
-        img: p.imageUrl || p.img,
-        vendorId: p.vendorId,
-        vendorName: p.vendorName || "District Vendor",
-      },
-      1
-    );
-    setJustAddedId(p.id);
-    setTimeout(() => setJustAddedId(null), 1500);
   };
 
   // Real Database products filtered by district
@@ -454,39 +390,11 @@ export default function Categories() {
   );
 }
 
-function PinIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-      <circle cx="12" cy="10" r="3" />
-    </svg>
-  );
-}
-
-function ChevronIcon() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
-
 function SearchIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <circle cx="11" cy="11" r="7" />
       <path d="m21 21-4.3-4.3" />
-    </svg>
-  );
-}
-
-function ScanIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M3 7V5a2 2 0 0 1 2-2h2" />
-      <path d="M17 3h2a2 2 0 0 1 2 2v2" />
-      <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
-      <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
     </svg>
   );
 }

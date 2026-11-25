@@ -7,7 +7,7 @@ import { useAlert } from "../../context/AlertContext";
 import { useNotifications } from "../../context/NotificationContext";
 import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
 import { cleanProductImage } from "../../utils/productImage";
-import { getCategorySpec, detectCategoryType } from "../../utils/categoryAttributes";
+import { getCategorySpec } from "../../utils/categoryAttributes";
 import LoadMoreButton from "../../components/LoadMoreButton";
 import WalletSettingsTab from "./WalletSettingsTab";
 
@@ -104,7 +104,6 @@ export default function AdminDashboard() {
     addMasterProduct,
     updateMasterProduct,
     removeMasterProduct,
-    updateVendorProductListing,
     updateListingApprovalStatus,
     updateOrderStatus,
     fetchCloudData,
@@ -234,6 +233,7 @@ export default function AdminDashboard() {
         await new Promise((res) => setTimeout(res, 300));
       } catch (err) {
         console.warn("Admin status update error:", err);
+        showAlert({ title: "Couldn't update status", message: err?.message || "Please try again.", type: "warning" });
       } finally {
         setUpdatingOrderStatusId(null);
       }
@@ -516,7 +516,6 @@ export default function AdminDashboard() {
   const [deletingRegionId, setDeletingRegionId] = useState(null);
   const [togglingDrId, setTogglingDrId] = useState(null);
   const [busyListingAction, setBusyListingAction] = useState(null); // { id, action: 'APPROVED' | 'REJECTED' }
-  const [busyListingId, setBusyListingId] = useState(null);
 
   // Vendor Delete Handler — Live spinner animation aur double-click protection ke sath vendor remove karein
   const handleDeleteVendor = async (v) => {
@@ -700,7 +699,7 @@ export default function AdminDashboard() {
   };
 
   const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
-  const [isSubmittingEditProduct, setIsSubmittingEditProduct] = useState(false);
+  const [isSubmittingEditProduct] = useState(false);
 
   const handleAddProduct = async (e) => {
     e.preventDefault();

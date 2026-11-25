@@ -52,7 +52,7 @@ const prisma = new PrismaClient();
 try {
   const { setPrismaClient } = require("./pushService");
   setPrismaClient(prisma);
-} catch (e) {}
+} catch {}
 const PORT = process.env.PORT || 5000;
 
 // High-Speed Gzip/Brotli Compression (Reduces network payload & egress by 85-90%)
@@ -458,7 +458,7 @@ if (process.env.KEEP_ALIVE_URL) {
   setInterval(async () => {
     try {
       await fetch(`${process.env.KEEP_ALIVE_URL}/health`);
-    } catch (err) {
+    } catch {
       // ignore ping errors
     }
   }, 8 * 60 * 1000);
@@ -469,6 +469,16 @@ let couponsList = [
   { id: "cp-2", code: "SUPER500", title: "Flat ₹500 OFF", minOrder: 5000, discountAmount: 500, expiryDate: "2026-12-31", isActive: true, desc: "Bulk order discount above ₹5,000" },
   { id: "cp-3", code: "WELCOME200", title: "Flat ₹200 OFF", minOrder: 1500, discountAmount: 200, expiryDate: "2026-12-31", isActive: true, desc: "Special welcome coupon for new site orders" },
 ];
+
+// Coupon for checkout, from the same source the storefront lists (public-catalog):
+// the coupons table, or the built-in list above only while that table is empty.
+async function findCheckoutCoupon(code) {
+  const dbCoupon = await prisma.coupon.findUnique({ where: { code } });
+  if (dbCoupon) return dbCoupon;
+  const couponCount = await prisma.coupon.count();
+  if (couponCount > 0) return null;
+  return couponsList.find((c) => c.code === code) || null;
+}
 
 let bannersList = [
   {
@@ -1182,7 +1192,7 @@ app.get("/api/v1/settings/wallet", async (req, res) => {
     const settings = await getActiveWalletSettings();
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.json(settings);
-  } catch (err) {
+  } catch {
     res.json(DEFAULT_WALLET_SETTINGS);
   }
 });
@@ -1193,11 +1203,9 @@ app.put("/api/v1/admin/wallet-settings", requireAuth, requireRole("ADMIN"), asyn
     const {
       referralEnabled,
       cashbackEnabled,
-      cashbackType,
       cashbackValue,
       minOrderForCashback,
       maxCashbackCap,
-      referralRewardType,
       referrerReward,
       maxReferralRewardCap,
       refereeRewardType,
@@ -1228,9 +1236,8 @@ app.put("/api/v1/admin/wallet-settings", requireAuth, requireRole("ADMIN"), asyn
       freeDeliveryMinAmount: !isNaN(Number(freeDeliveryMinAmount)) ? Math.max(0, Number(freeDeliveryMinAmount)) : cachedWalletSettings.freeDeliveryMinAmount,
     };
 
-    let result = null;
     try {
-      result = await prisma.appSetting.upsert({
+      await prisma.appSetting.upsert({
         where: { id: "wallet_config" },
         update: updatedData,
         create: { id: "wallet_config", ...updatedData },
@@ -3090,7 +3097,7 @@ app.get("/api/v1/vendor/listings", optionalAuth, async (req, res) => {
 
 app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
-    let { masterProductId, vendorId, vendorName, regionId, regionName, price, stockQty } = req.body;
+    let { masterProductId, vendorId, vendorName, regionId, price, stockQty } = req.body;
     const isVendorRole = req.auth.role === "VENDOR";
 
     const masterProd = masterProductId ? await prisma.productMaster.findUnique({ where: { id: masterProductId }, include: { category: true } }).catch(() => null) : null;
@@ -3853,6 +3860,23 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
 
 const ORDER_STATUSES = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED", "COMPLETED", "CANCELLED"];
 
+// Money and stock move at DELIVERED (cashback) and CANCELLED (stock goes back to the shop), so those are one-way:
+// DELIVERED may only become COMPLETED, and CANCELLED is final (COMPLETED is locked separately).
+// Before delivery the steps may move forward, skip or go back, so a wrong dropdown pick can be corrected.
+function orderStatusChangeError(fromStatus, toStatus) {
+  const from = String(fromStatus || "").toUpperCase();
+  if (from === toStatus) return null;
+  if (from === "CANCELLED") {
+    return "This order is cancelled and its stock is back with the shop, so it cannot be reopened. Please place a new order.";
+  }
+  if (from === "DELIVERED" && toStatus !== "COMPLETED") {
+    return toStatus === "CANCELLED"
+      ? "A delivered order cannot be cancelled. For material sent back, please use the DR Return Desk."
+      : "A delivered order cannot be moved back. After DELIVERED, only COMPLETED is allowed.";
+  }
+  return null;
+}
+
 // Update Order Status (Vendor, DR & Admin with Auto Stock Restore on Cancel + COMPLETED Lock)
 app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
@@ -3908,6 +3932,11 @@ app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", 
       if (!inDistrict) {
         return res.status(403).json({ error: "This order is outside your district." });
       }
+    }
+
+    const statusChangeError = orderStatusChangeError(previousOrder.status, status);
+    if (statusChangeError) {
+      return res.status(400).json({ error: statusChangeError, code: "INVALID_STATUS_CHANGE" });
     }
 
     const ops = [
@@ -4187,6 +4216,17 @@ app.get("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req, 
 });
 
 // Process an order return: record return, restore vendor stock, deduct wallet cashback, calculate net cash refund
+// Return quantity on a request line: whole units (fractions round down), or null when it is not a number
+function parseReturnQty(reqItem) {
+  const raw = reqItem?.returnQty ?? reqItem?.quantity ?? 0;
+  const num = typeof raw === "string" && raw.trim() === "" ? NaN : Number(raw);
+  if (!Number.isFinite(num)) return null;
+  return Math.floor(num);
+}
+
+// Money on returns is kept to paise (2 decimals)
+const roundPaise = (value) => Math.round((Number(value) || 0) * 100) / 100;
+
 app.post("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req, res) => {
   try {
     const { orderId, items, returnReason, districtName, customCashbackDeduct, deliveryFeeDeduct, deliveryDeductReason } = req.body;
@@ -4197,165 +4237,206 @@ app.post("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req,
       return res.status(400).json({ error: "Please select at least 1 item quantity to return." });
     }
 
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        ...STAFF_ORDER_INCLUDE,
-        returns: true,
-      },
-    });
-
-    if (!order) {
+    const orderExists = await prisma.order.findUnique({ where: { id: orderId }, select: { id: true } });
+    if (!orderExists) {
       return res.status(404).json({ error: "Order not found" });
-    }
-
-    const orderStatusUpper = String(order.status || "").toUpperCase();
-    if (orderStatusUpper !== "DELIVERED" && orderStatusUpper !== "COMPLETED") {
-      return res.status(400).json({ error: "Only DELIVERED or COMPLETED orders can be returned." });
     }
 
     // Check DR district access
     if (req.auth.role === "DR") {
       const drRegionIds = await resolveCallerDrRegionIds(req.auth);
       const inDistrict = drRegionIds.length > 0 && (await prisma.order.count({
-        where: { AND: [{ id: order.id }, ordersInRegionsWhere(drRegionIds)] },
+        where: { AND: [{ id: orderId }, ordersInRegionsWhere(drRegionIds)] },
       })) > 0;
       if (!inDistrict) {
         return res.status(403).json({ error: "This order belongs to another district." });
       }
     }
 
-    // Compute already returned quantities to prevent returning more than ordered
-    const alreadyReturnedMap = {};
-    let alreadyDeductedCashback = 0;
-    for (const prevRet of order.returns || []) {
-      alreadyDeductedCashback += Number(prevRet.cashbackDeducted || 0);
-      const rItems = Array.isArray(prevRet.returnItems) ? prevRet.returnItems : [];
-      for (const ri of rItems) {
-        const key = ri.itemId || ri.vendorProductId || ri.productName;
-        if (key) alreadyReturnedMap[key] = (alreadyReturnedMap[key] || 0) + Number(ri.quantity || 0);
-      }
-    }
+    // One return at a time per order: the order row is locked, then everything is read, checked and written together.
+    // A second return filed at the same moment waits here and then sees the first one.
+    const { createdReturn, summary } = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "orders" WHERE id = ${orderId} FOR UPDATE`;
 
-    const validatedReturnItems = [];
-    let totalReturnItemsValue = 0;
-    const stockRestoreOps = [];
-
-    for (const reqItem of items) {
-      const returnQty = Math.floor(Number(reqItem.returnQty || reqItem.quantity || 0));
-      if (returnQty <= 0) continue;
-
-      const orderItem = order.items.find(
-        (oi) => oi.id === reqItem.itemId || (reqItem.vendorProductId && oi.vendorProductId === reqItem.vendorProductId) || oi.productName === reqItem.productName
-      );
-
-      if (!orderItem) {
-        return res.status(400).json({ error: `Item "${reqItem.productName || reqItem.itemId}" not found in this order.` });
+      const order = await tx.order.findUnique({
+        where: { id: orderId },
+        include: {
+          ...STAFF_ORDER_INCLUDE,
+          returns: true,
+        },
+      });
+      if (!order) {
+        throw new ClientError("Order not found", 404);
       }
 
-      const key = orderItem.id || orderItem.vendorProductId || orderItem.productName;
-      const previouslyReturned = alreadyReturnedMap[key] || 0;
-      const maxReturnable = Math.max(0, Number(orderItem.quantity || 0) - previouslyReturned);
+      const orderStatusUpper = String(order.status || "").toUpperCase();
+      if (orderStatusUpper !== "DELIVERED" && orderStatusUpper !== "COMPLETED") {
+        throw new ClientError("Only DELIVERED or COMPLETED orders can be returned.");
+      }
 
-      if (returnQty > maxReturnable) {
-        return res.status(400).json({
-          error: `Cannot return ${returnQty} of "${orderItem.productName}". Max returnable quantity is ${maxReturnable}.`,
+      // What earlier returns on this order already took back
+      const alreadyReturnedMap = {};
+      let alreadyDeductedCashback = 0;
+      let previousDiscountShare = 0;
+      for (const prevRet of order.returns || []) {
+        alreadyDeductedCashback += Number(prevRet.cashbackDeducted || 0);
+        const rItems = Array.isArray(prevRet.returnItems) ? prevRet.returnItems : [];
+        let prevItemsValue = 0;
+        for (const ri of rItems) {
+          const key = ri.itemId || ri.vendorProductId || ri.productName;
+          if (key) alreadyReturnedMap[key] = (alreadyReturnedMap[key] || 0) + Number(ri.quantity || 0);
+          prevItemsValue += Number(ri.total || 0);
+        }
+        previousDiscountShare += Math.max(0, prevItemsValue - Number(prevRet.returnAmount || 0));
+      }
+
+      // Add up the quantity per order item first, so listing the same item on two lines cannot pass the limit twice
+      const requestedByItem = new Map();
+      for (const reqItem of items) {
+        const returnQty = parseReturnQty(reqItem);
+        if (returnQty === null) {
+          throw new ClientError(`Return quantity for "${reqItem?.productName || "this item"}" must be a number.`);
+        }
+        if (returnQty <= 0) continue;
+
+        const orderItem = order.items.find(
+          (oi) => oi.id === reqItem.itemId || (reqItem.vendorProductId && oi.vendorProductId === reqItem.vendorProductId) || oi.productName === reqItem.productName
+        );
+        if (!orderItem) {
+          throw new ClientError(`Item "${reqItem.productName || reqItem.itemId}" not found in this order.`);
+        }
+        const entry = requestedByItem.get(orderItem.id) || { orderItem, returnQty: 0 };
+        entry.returnQty += returnQty;
+        requestedByItem.set(orderItem.id, entry);
+      }
+
+      const validatedReturnItems = [];
+      let totalReturnItemsValue = 0;
+      const stockRestores = [];
+
+      for (const { orderItem, returnQty } of requestedByItem.values()) {
+        const key = orderItem.id || orderItem.vendorProductId || orderItem.productName;
+        const previouslyReturned = alreadyReturnedMap[key] || 0;
+        const maxReturnable = Math.max(0, Number(orderItem.quantity || 0) - previouslyReturned);
+
+        if (returnQty > maxReturnable) {
+          throw new ClientError(`Cannot return ${returnQty} of "${orderItem.productName}". Max returnable quantity is ${maxReturnable}.`);
+        }
+
+        const unitPrice = Number(orderItem.priceAtPurchase || 0);
+        const lineTotal = returnQty * unitPrice;
+        totalReturnItemsValue += lineTotal;
+
+        validatedReturnItems.push({
+          itemId: orderItem.id,
+          vendorProductId: orderItem.vendorProductId,
+          productName: orderItem.productName,
+          quantity: returnQty,
+          orderedQuantity: Number(orderItem.quantity || 0),
+          price: unitPrice,
+          total: lineTotal,
+          vendorId: orderItem.vendorId,
+          vendorName: orderItem.vendor?.shopName || "District Vendor",
         });
+
+        // Restore stock to VendorProduct
+        if (orderItem.vendorProductId) {
+          stockRestores.push({ where: { id: orderItem.vendorProductId }, qty: returnQty });
+        } else if (orderItem.vendorId && orderItem.productName) {
+          stockRestores.push({
+            where: { vendorId: orderItem.vendorId, name: { equals: orderItem.productName, mode: "insensitive" } },
+            qty: returnQty,
+          });
+        }
       }
 
-      const unitPrice = Number(orderItem.priceAtPurchase || 0);
-      const lineTotal = returnQty * unitPrice;
-      totalReturnItemsValue += lineTotal;
+      if (validatedReturnItems.length === 0) {
+        throw new ClientError("Please select at least 1 valid item quantity to return.");
+      }
 
-      validatedReturnItems.push({
-        itemId: orderItem.id,
-        vendorProductId: orderItem.vendorProductId,
-        productName: orderItem.productName,
-        quantity: returnQty,
-        orderedQuantity: Number(orderItem.quantity || 0),
-        price: unitPrice,
-        total: lineTotal,
-        vendorId: orderItem.vendorId,
-        vendorName: orderItem.vendor?.shopName || "District Vendor",
+      // After this return, is every unit of the order back? The last return takes whatever is left of each share,
+      // so the rounded amounts of all returns always add up to the order exactly.
+      const isFinalReturn = (order.items || []).every((oi) => {
+        const key = oi.id || oi.vendorProductId || oi.productName;
+        const thisTime = requestedByItem.get(oi.id)?.returnQty || 0;
+        return (alreadyReturnedMap[key] || 0) + thisTime >= Number(oi.quantity || 0);
       });
 
-      // Restore stock to VendorProduct
-      if (orderItem.vendorProductId) {
-        stockRestoreOps.push(
-          prisma.vendorProduct.updateMany({
-            where: { id: orderItem.vendorProductId },
-            data: { stockQty: { increment: returnQty } },
-          })
-        );
-      } else if (orderItem.vendorId && orderItem.productName) {
-        stockRestoreOps.push(
-          prisma.vendorProduct.updateMany({
-            where: {
-              vendorId: orderItem.vendorId,
-              name: { equals: orderItem.productName, mode: "insensitive" },
-            },
-            data: { stockQty: { increment: returnQty } },
-          })
-        );
+      // Calculate actual cash paid by customer for the returned materials:
+      // 1. Delivery charge (order.deliveryFee) is strictly NON-REFUNDABLE.
+      // 2. Wallet Paid at checkout (order.walletDiscount) and Coupon Discount (order.discountAmount) were not paid in cash.
+      const orderMaterialsSubtotal = (order.items || []).reduce(
+        (sum, it) => sum + Number(it.quantity || 0) * Number(it.priceAtPurchase || 0),
+        0
+      );
+      const orderWalletDiscount = Math.max(0, Number(order.walletDiscount || 0));
+      const orderCouponDiscount = Math.max(0, Number(order.discountAmount || 0));
+      const totalCheckoutDeductions = Math.min(orderMaterialsSubtotal, orderWalletDiscount + orderCouponDiscount);
+
+      const returnRatio = orderMaterialsSubtotal > 0 ? Math.min(1, totalReturnItemsValue / orderMaterialsSubtotal) : 0;
+      const checkoutDiscountOnReturn = roundPaise(Math.min(
+        totalReturnItemsValue,
+        Math.max(0, isFinalReturn ? totalCheckoutDeductions - previousDiscountShare : returnRatio * totalCheckoutDeductions)
+      ));
+
+      let previousWalletCredit = 0;
+      if (orderWalletDiscount > 0) {
+        const prevCredits = await tx.walletTransaction.findMany({
+          where: { orderId: order.id, type: "ADMIN_ADJUST", description: { startsWith: "Return Wallet Refund" } },
+          select: { amount: true },
+        });
+        previousWalletCredit = prevCredits.reduce((sum, t) => sum + Number(t.amount || 0), 0);
       }
-    }
+      const walletUsedOnReturn = roundPaise(Math.min(
+        checkoutDiscountOnReturn,
+        Math.max(0, isFinalReturn ? orderWalletDiscount - previousWalletCredit : returnRatio * orderWalletDiscount)
+      ));
 
-    if (validatedReturnItems.length === 0) {
-      return res.status(400).json({ error: "Please select at least 1 valid item quantity to return." });
-    }
+      const refundableMaterialCash = roundPaise(Math.max(0, totalReturnItemsValue - checkoutDiscountOnReturn));
 
-    // Calculate actual cash paid by customer for the returned materials:
-    // 1. Delivery charge (order.deliveryFee) is strictly NON-REFUNDABLE.
-    // 2. Wallet Paid at checkout (order.walletDiscount) and Coupon Discount (order.discountAmount) were not paid in cash.
-    const orderMaterialsSubtotal = (order.items || []).reduce(
-      (sum, it) => sum + Number(it.quantity || 0) * Number(it.priceAtPurchase || 0),
-      0
-    );
-    const orderDeliveryFee = Math.max(0, Number(order.deliveryFee || 0));
-    const orderWalletDiscount = Math.max(0, Number(order.walletDiscount || 0));
-    const orderCouponDiscount = Math.max(0, Number(order.discountAmount || 0));
-    const totalCheckoutDeductions = Math.min(orderMaterialsSubtotal, orderWalletDiscount + orderCouponDiscount);
+      // Check cashback earned on this order
+      let orderCashback = Number(order.cashbackEarned || 0);
+      if (!orderCashback) {
+        const cbTx = await tx.walletTransaction.findFirst({
+          where: { orderId: order.id, type: "ORDER_CASHBACK" },
+        });
+        if (cbTx) orderCashback = Math.abs(Number(cbTx.amount || 0));
+      }
 
-    const returnRatio = orderMaterialsSubtotal > 0 ? Math.min(1, totalReturnItemsValue / orderMaterialsSubtotal) : 0;
-    const checkoutDiscountOnReturn = returnRatio * totalCheckoutDeductions;
-    const walletUsedOnReturn = returnRatio * orderWalletDiscount;
+      // A DR may enter the cashback to deduct, but never more than the cashback still left on this order
+      const remainingCashback = roundPaise(Math.max(0, orderCashback - alreadyDeductedCashback));
+      let cashbackOnReturn;
+      if (customCashbackDeduct !== undefined && customCashbackDeduct !== null && customCashbackDeduct !== "") {
+        const customCashback = Number(customCashbackDeduct);
+        if (!Number.isFinite(customCashback) || customCashback < 0) {
+          throw new ClientError("Cashback deduction must be a number of 0 or more.");
+        }
+        if (customCashback > remainingCashback + 0.001) {
+          throw new ClientError(`Cashback deduction cannot be more than ₹${remainingCashback} (cashback left on this order).`);
+        }
+        cashbackOnReturn = roundPaise(customCashback);
+      } else {
+        cashbackOnReturn = isFinalReturn ? remainingCashback : roundPaise(Math.min(remainingCashback, returnRatio * orderCashback));
+      }
 
-    const refundableMaterialCash = Math.max(0, totalReturnItemsValue - checkoutDiscountOnReturn);
+      // Wallet & Cash Settlement Logic:
+      // 1. Wallet balance used at order (`walletUsedOnReturn`, e.g. ₹24) is added back to Customer's Wallet (+₹24).
+      // 2. Cashback earned on order (`cashbackOnReturn`, e.g. ₹23) is already in Customer's Wallet.
+      // 3. Return delivery / logistics fee (`returnDeliveryDeduct`) is deducted if DR enters delivery charge deduction.
+      // 4. Net Cash Refund = Returned Material Value - Wallet Added Back - Cashback in Wallet - Delivery Deduct.
+      const walletToCredit = walletUsedOnReturn;
+      const cashbackDeductedFromCash = roundPaise(Math.min(refundableMaterialCash, cashbackOnReturn));
+      const totalWalletSettled = roundPaise(cashbackDeductedFromCash + walletToCredit);
+      const returnDeliveryDeduct = roundPaise(Math.max(0, Number(deliveryFeeDeduct) || 0));
+      const netRefundCash = roundPaise(Math.max(0, refundableMaterialCash - cashbackDeductedFromCash - returnDeliveryDeduct));
 
-    // Check cashback earned on this order
-    let orderCashback = Number(order.cashbackEarned || 0);
-    if (!orderCashback) {
-      const cbTx = await prisma.walletTransaction.findFirst({
-        where: { orderId: order.id, type: "ORDER_CASHBACK" },
-      }).catch(() => null);
-      if (cbTx) orderCashback = Math.abs(Number(cbTx.amount || 0));
-    }
+      const custPhone = order.customer?.phone || order.address?.phone || "";
+      const custName = order.customer?.name || order.address?.fullName || "Customer";
+      const resolvedDistrict = districtName || order.address?.city || order.address?.region?.name || "District";
+      const deductLabel = String(deliveryDeductReason || "Delivery / Logistics Fee").trim();
+      const fullReturnReason = String(returnReason || "Excess / Returned Material").trim() + (returnDeliveryDeduct > 0 ? ` [${deductLabel} Deducted: ₹${returnDeliveryDeduct}]` : "");
 
-    const remainingCashback = Math.max(0, orderCashback - alreadyDeductedCashback);
-    const proportionalCashback = Math.min(remainingCashback, returnRatio * orderCashback);
-    const cashbackOnReturn = customCashbackDeduct !== undefined
-      ? Math.max(0, Number(customCashbackDeduct) || 0)
-      : proportionalCashback;
-
-    // Wallet & Cash Settlement Logic:
-    // 1. Wallet balance used at order (`walletUsedOnReturn`, e.g. ₹24) is added back to Customer's Wallet (+₹24).
-    // 2. Cashback earned on order (`cashbackOnReturn`, e.g. ₹23) is already in Customer's Wallet.
-    // 3. Return delivery / logistics fee (`returnDeliveryDeduct`) is deducted if DR enters delivery charge deduction.
-    // 4. Net Cash Refund = Returned Material Value - Wallet Added Back - Cashback in Wallet - Delivery Deduct.
-    const walletToCredit = walletUsedOnReturn;
-    const cashbackDeductedFromCash = Math.min(refundableMaterialCash, cashbackOnReturn);
-    const totalWalletSettled = cashbackDeductedFromCash + walletToCredit;
-    const returnDeliveryDeduct = Math.max(0, Number(deliveryFeeDeduct) || 0);
-    const netRefundCash = Math.max(0, refundableMaterialCash - cashbackDeductedFromCash - returnDeliveryDeduct);
-
-    const custPhone = order.customer?.phone || order.address?.phone || "";
-    const custName = order.customer?.name || order.address?.fullName || "Customer";
-    const resolvedDistrict = districtName || order.address?.city || order.address?.region?.name || "District";
-    const deductLabel = String(deliveryDeductReason || "Delivery / Logistics Fee").trim();
-    const fullReturnReason = String(returnReason || "Excess / Returned Material").trim() + (returnDeliveryDeduct > 0 ? ` [${deductLabel} Deducted: ₹${returnDeliveryDeduct}]` : "");
-
-    const txOps = [
-      prisma.orderReturn.create({
+      const created = await tx.orderReturn.create({
         data: {
           orderId: order.id,
           drId: req.auth.userId || null,
@@ -4370,18 +4451,19 @@ app.post("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req,
           returnItems: validatedReturnItems,
           status: "COMPLETED",
         },
-      }),
-      ...stockRestoreOps,
-    ];
+      });
 
-    // Credit the Wallet balance used at order (`walletToCredit`, e.g. +₹24) back to Customer's Wallet
-    if (walletToCredit > 0 && order.customerId) {
-      txOps.push(
-        prisma.user.update({
+      for (const restore of stockRestores) {
+        await tx.vendorProduct.updateMany({ where: restore.where, data: { stockQty: { increment: restore.qty } } });
+      }
+
+      // Credit the Wallet balance used at order (`walletToCredit`, e.g. +₹24) back to Customer's Wallet
+      if (walletToCredit > 0 && order.customerId) {
+        await tx.user.update({
           where: { id: order.customerId },
           data: { walletBalance: { increment: walletToCredit } },
-        }),
-        prisma.walletTransaction.create({
+        });
+        await tx.walletTransaction.create({
           data: {
             userId: order.customerId,
             amount: walletToCredit,
@@ -4389,29 +4471,33 @@ app.post("/api/v1/returns", requireAuth, requireRole("DR", "ADMIN"), async (req,
             orderId: order.id,
             description: `Return Wallet Refund for Order #${order.orderNumber || order.id.slice(0, 8)} (+₹${walletToCredit} Wallet Used Added Back; ₹${cashbackDeductedFromCash} Cashback Already in Wallet = ₹${totalWalletSettled} Total Wallet)`,
           },
-        })
-      );
-    }
+        });
+      }
 
-    const [createdReturn] = await prisma.$transaction(txOps);
+      return {
+        createdReturn: created,
+        summary: {
+          grossReturnItemsValue: totalReturnItemsValue,
+          checkoutDiscountDeducted: checkoutDiscountOnReturn,
+          walletUsedOnReturn,
+          cashbackOnReturn: cashbackDeductedFromCash,
+          deliveryFeeDeducted: returnDeliveryDeduct,
+          deliveryDeductReason: deductLabel,
+          walletToCredit,
+          totalWalletSettled,
+          returnAmount: refundableMaterialCash,
+          cashbackDeducted: cashbackDeductedFromCash,
+          netRefundCash,
+        },
+      };
+    }, { maxWait: 10000, timeout: 15000 });
+
     invalidateCache();
 
     res.status(201).json({
       success: true,
       returnRecord: createdReturn,
-      summary: {
-        grossReturnItemsValue: totalReturnItemsValue,
-        checkoutDiscountDeducted: checkoutDiscountOnReturn,
-        walletUsedOnReturn,
-        cashbackOnReturn: cashbackDeductedFromCash,
-        deliveryFeeDeducted: returnDeliveryDeduct,
-        deliveryDeductReason: deductLabel,
-        walletToCredit,
-        totalWalletSettled,
-        returnAmount: refundableMaterialCash,
-        cashbackDeducted: cashbackDeductedFromCash,
-        netRefundCash,
-      },
+      summary,
     });
   } catch (err) {
     sendServerError(res, err, "Process order return");
@@ -4468,7 +4554,7 @@ const handleGetAddresses = async (req, res) => {
     }
 
     res.json(sanitized);
-  } catch (err) {
+  } catch {
     res.json([]);
   }
 };
@@ -4651,7 +4737,8 @@ app.delete("/api/v1/addresses/:id", requireAuth, async (req, res) => {
 
 app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
   try {
-    const { items, idempotencyKey, couponCode, discountAmount } = req.body;
+    // Prices, coupon discount and delivery fee are always computed here; amounts sent by the client are ignored
+    const { items, idempotencyKey, couponCode } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "No items in order." });
@@ -4701,11 +4788,6 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       const dName = req.body.districtName.trim().toLowerCase();
       reg = cachedRegions.find((r) => r.name.toLowerCase() === dName || r.name.toLowerCase().includes(dName));
     }
-    if (!reg) {
-      reg = cachedRegions[0] || null;
-    }
-
-    const targetRegionName = reg?.name || (req.body.districtName || req.body.address?.city || req.body.address?.district || "Varanasi").trim();
 
     // 2. Batch query all cart products at once in 1 single fast database call!
     const itemIds = items.map((i) => i.id || i.productId).filter((v) => typeof v === "string");
@@ -4769,6 +4851,14 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       });
     }
 
+    // No district in the request: use the district of the shop the items come from
+    if (!reg) {
+      const vendorRegionId = validatedItems[0]?.vendor?.regionId;
+      reg = cachedRegions.find((r) => r.id === vendorRegionId) || cachedRegions[0] || null;
+    }
+    const targetRegionName = reg?.name || (req.body.districtName || req.body.address?.city || req.body.address?.district || "Varanasi").trim();
+    const materialsSubtotal = validatedItems.reduce((sum, vi) => sum + vi.totalPrice, 0);
+
     // 4. Address Save / Link Logic
     let addressId = null;
     if (req.body.address || req.body.districtName || req.body.regionId) {
@@ -4812,45 +4902,37 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       }
     }
 
-    const clientDeliveryFee = req.body.deliveryFee !== undefined && !isNaN(Number(req.body.deliveryFee))
-      ? Number(req.body.deliveryFee)
-      : null;
-    let calculatedDeliveryFee = clientDeliveryFee !== null && clientDeliveryFee >= 0
-      ? clientDeliveryFee
-      : (reg ? Number(reg.baseDeliveryCharge || 49) : 49);
+    // Delivery fee: the district's base charge, same rule as the checkout screen (req.body.deliveryFee is ignored)
+    let calculatedDeliveryFee = Number(reg?.baseDeliveryCharge) || 49;
 
-    // 4b. Coupon validation and discount verification
+    // 4b. Coupon: the discount comes only from the coupon record, never from the request.
+    // An invalid coupon rejects the order, so the customer never pays a total different from the one shown.
     const cleanCouponCode = couponCode ? String(couponCode).trim().toUpperCase() : null;
     let verifiedDiscount = 0;
     let verifiedCouponCode = null;
 
     if (cleanCouponCode) {
-      const dbCoupon = await prisma.coupon.findFirst({
-        where: {
-          code: cleanCouponCode,
-          isActive: true,
-        },
-      }).catch(() => null);
-
-      if (dbCoupon) {
-        const today = new Date().toISOString().split("T")[0];
-        const isExpired = dbCoupon.expiryDate && dbCoupon.expiryDate < today;
-        if (!isExpired) {
-          verifiedCouponCode = dbCoupon.code;
-          verifiedDiscount = Number(dbCoupon.discountAmount) || 0;
-        }
-      } else {
-        const clientDiscount = Number(discountAmount);
-        if (!isNaN(clientDiscount) && clientDiscount > 0) {
-          verifiedCouponCode = cleanCouponCode;
-          verifiedDiscount = clientDiscount;
-        }
+      const coupon = await findCheckoutCoupon(cleanCouponCode);
+      const today = new Date().toISOString().split("T")[0];
+      if (!coupon || coupon.isActive === false) {
+        throw new ClientError(`Coupon "${cleanCouponCode}" is not valid. Please remove it and try again.`);
       }
+      if (coupon.expiryDate && coupon.expiryDate < today) {
+        throw new ClientError(`Coupon "${coupon.code}" has expired. Please remove it and try again.`);
+      }
+      const couponMinOrder = Number(coupon.minOrder) || 0;
+      if (materialsSubtotal < couponMinOrder) {
+        throw new ClientError(
+          `Coupon "${coupon.code}" needs a minimum order of ₹${couponMinOrder.toLocaleString("en-IN")}. Please remove it and try again.`
+        );
+      }
+      verifiedCouponCode = coupon.code;
+      verifiedDiscount = Math.max(0, Number(coupon.discountAmount) || 0);
     }
 
     // 4c. Wallet Redemption validation & calculation
     const settings = await getActiveWalletSettings();
-    const cartTotalBeforeWallet = validatedItems.reduce((sum, vi) => sum + vi.totalPrice, 0);
+    const cartTotalBeforeWallet = materialsSubtotal;
 
     // Apply free delivery threshold if qualified
     if (settings.freeDeliveryEnabled !== false && cartTotalBeforeWallet >= (Number(settings.freeDeliveryMinAmount) || 2000)) {

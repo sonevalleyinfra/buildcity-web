@@ -148,7 +148,6 @@ export default function DrShell({
     approvedVendorsCount = 0,
     totalProductsCount = 0,
     pendingApprovalsCount = 0,
-    returnsCount = 0,
   } = stats || {};
 
   return (

@@ -266,8 +266,10 @@ export function OrderProvider({ children }) {
     return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
-  // Order place karna - alag alag vendors ke items ko group karke order banana
-  const placeOrder = async ({ items, address, total, customerId, districtName, regionId, deliveryFee = 49, couponCode = null, discountAmount = 0, useWallet = false, walletDiscount = 0 }) => {
+  // Order place karna - poore cart ki EK hi request jaati hai. Server saare items pehle check karta hai aur
+  // har vendor ka alag order ek hi transaction me banata hai, isliye ya to saare orders bante hain ya ek bhi nahi.
+  // idempotencyKey retry pe same rehni chahiye, taaki response kho jaane par dubara dabane se duplicate order na bane.
+  const placeOrder = async ({ items, address, total, customerId, districtName, regionId, deliveryFee = 49, couponCode = null, discountAmount = 0, useWallet = false, walletDiscount = 0, idempotencyKey = null }) => {
     // Items ko vendor details aur image data ke sath format karo
     const formattedItems = (items || []).map((it) => {
       const resolvedImg = it.imageUrl || it.image || it.img || (Array.isArray(it.images) && it.images.length > 0 ? it.images[0] : null) || it.vendorProduct?.imageUrl || null;
@@ -290,135 +292,85 @@ export function OrderProvider({ children }) {
       };
     });
 
-    // Ek vendor ke sabhi items ko ek order me group karo
-    const vendorMap = new Map();
-    formattedItems.forEach((it, idx) => {
-      const rawVendorId = it.vendorId ? String(it.vendorId).trim() : "";
-      const rawVendorName = it.vendorName ? String(it.vendorName).trim() : "";
+    const requestKey = idempotencyKey || "ord_idem_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
 
-      const isGenericId = !rawVendorId || rawVendorId === "v1" || rawVendorId === "default" || rawVendorId.startsWith("v-") || rawVendorId.startsWith("vendor_default");
-      const isGenericName = !rawVendorName || rawVendorName.toLowerCase() === "district vendor" || rawVendorName.toLowerCase() === "vendor" || rawVendorName.toLowerCase().includes("default");
-
-      let vKey = "";
-      if (!isGenericId) {
-        vKey = `vid:${rawVendorId}`;
-      } else if (!isGenericName) {
-        vKey = `vname:${rawVendorName.toLowerCase()}`;
-      } else {
-        // Default district catalog ke items ko ek sath group karo
-        vKey = "default_district_vendor";
-      }
-
-      if (!vendorMap.has(vKey)) {
-        vendorMap.set(vKey, []);
-      }
-      vendorMap.get(vKey).push(it);
-    });
-
-    const vendorGroups = Array.from(vendorMap.values());
-
-    // Sabhi vendor groups ke orders parallel me dispatch karo
-    const orderPromises = vendorGroups.map(async (groupItems, i) => {
-      const groupSubtotal = groupItems.reduce(
-        (sum, it) => sum + Number(it.price || 0) * (Number(it.quantity || 1)),
-        0
-      );
-      // Delivery fee direct checkout charge se respect karo
-      const groupDeliveryFee = deliveryFee !== undefined && deliveryFee !== null ? Number(deliveryFee) : 0;
-      const groupDiscount = i === 0 ? Number(discountAmount || 0) : 0;
-      const groupWalletDiscount = i === 0 ? Number(walletDiscount || 0) : 0;
-      const groupCouponCode = i === 0 && couponCode ? String(couponCode).toUpperCase() : null;
-      const groupTotal = Math.round(Math.max(0, groupSubtotal + groupDeliveryFee - groupDiscount - groupWalletDiscount) * 100) / 100;
-      const groupVendorName = groupItems[0]?.vendorName || "District Vendor";
-      const groupVendorId = groupItems[0]?.vendorId || "v1";
-
-      const idempotencyKey = "ord_idem_" + Date.now() + "_" + i + "_" + Math.random().toString(36).substring(2, 7);
-
-      let ordersSaved = [];
+    let resData = null;
+    try {
+      const response = await authFetch(`${API_BASE_URL}/api/v1/orders/checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId,
+          totalAmount: total,
+          deliveryFee,
+          discountAmount: Number(discountAmount || 0),
+          couponCode: couponCode ? String(couponCode).toUpperCase() : null,
+          useWallet: Boolean(useWallet),
+          walletDiscount: Number(walletDiscount || 0),
+          districtName: districtName || "Varanasi",
+          regionId: regionId || "varanasi",
+          address: address || { street: "Main Delivery Address", city: districtName || "Varanasi", state: "Uttar Pradesh", pincode: "221001" },
+          items: formattedItems,
+          idempotencyKey: requestKey,
+        }),
+      });
 
       try {
-        const response = await authFetch(`${API_BASE_URL}/api/v1/orders/checkout`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            customerId,
-            totalAmount: groupTotal,
-            deliveryFee: groupDeliveryFee,
-            discountAmount: groupDiscount,
-            couponCode: groupCouponCode,
-            useWallet: i === 0 ? Boolean(useWallet) : false,
-            walletDiscount: groupWalletDiscount,
-            districtName: districtName || "Varanasi",
-            regionId: regionId || "varanasi",
-            address: address || { street: "Main Delivery Address", city: districtName || "Varanasi", state: "Uttar Pradesh", pincode: "221001" },
-            items: groupItems,
-            vendorId: groupVendorId,
-            vendorName: groupVendorName,
-            idempotencyKey,
-          }),
-        });
-
-        let resData = null;
-        try {
-          resData = await response.json();
-        } catch {
-          resData = { error: "Network or server connection failed." };
-        }
-
-        if (response.ok && resData?.success && resData?.order) {
-          // Har vendor ka alag order id generate hota hai
-          const serverOrders = Array.isArray(resData.orders) && resData.orders.length > 0 ? resData.orders : [resData.order];
-          ordersSaved = serverOrders.map((so) => {
-            const rawItems = so.items && so.items.length > 0 ? so.items : groupItems;
-            const enrichedItems = rawItems.map((si, idx) => {
-              const matchedGroup = groupItems.find((gi) => gi.id === si.vendorProductId || gi.productId === si.vendorProductId || gi.id === si.id || gi.name === si.productName) || groupItems[idx];
-              const resolvedImg = si.imageUrl || si.vendorProduct?.imageUrl || si.vendorProduct?.masterProduct?.imageUrl || matchedGroup?.imageUrl || matchedGroup?.img || matchedGroup?.image || null;
-              return {
-                ...matchedGroup,
-                ...si,
-                imageUrl: resolvedImg,
-                image: resolvedImg,
-                img: resolvedImg,
-                images: si.vendorProduct?.images || matchedGroup?.images || (resolvedImg ? [resolvedImg] : []),
-                category: si.category || matchedGroup?.category || "",
-                categoryName: si.categoryName || matchedGroup?.categoryName || "",
-                vendorProduct: si.vendorProduct || matchedGroup?.vendorProduct || (resolvedImg ? { imageUrl: resolvedImg } : null),
-              };
-            });
-
-            return normalizeOrder({
-              id: so.id,
-              userId: customerId || so.userId || so.customerId,
-              userPhone: so.userPhone || address?.phone || so.customer?.phone,
-              date: so.createdAt || new Date().toISOString(),
-              status: so.status || "Pending",
-              districtName: districtName || so.districtName || so.address?.city || "Varanasi",
-              regionId: regionId || so.regionId || so.address?.regionId || "varanasi",
-              vendorId: so.items?.[0]?.vendorId || groupVendorId,
-              vendorName: so.items?.[0]?.vendorName || groupVendorName,
-              items: enrichedItems,
-              address: so.address || address,
-              customer: so.customer,
-              total: Number(so.totalAmount !== undefined ? so.totalAmount : groupTotal),
-              totalAmount: Number(so.totalAmount !== undefined ? so.totalAmount : groupTotal),
-              deliveryFee: Number(so.deliveryFee !== undefined ? so.deliveryFee : groupDeliveryFee),
-              discountAmount: Number(so.discountAmount !== undefined ? so.discountAmount : groupDiscount),
-              walletDiscount: Number(so.walletDiscount !== undefined ? so.walletDiscount : groupWalletDiscount),
-              couponCode: so.couponCode || groupCouponCode,
-            });
-          });
-        } else {
-          throw new Error(resData?.error || "Order not placed , please try again.");
-        }
-      } catch (err) {
-        console.error("Order placement error for vendor group:", err.message);
-        throw err;
+        resData = await response.json();
+      } catch {
+        resData = { error: "Network or server connection failed." };
       }
 
-      return ordersSaved;
-    });
+      if (!(response.ok && resData?.success && resData?.order)) {
+        throw new Error(resData?.error || "Order not placed , please try again.");
+      }
+    } catch (err) {
+      console.error("Order placement error:", err.message);
+      throw err;
+    }
 
-    const createdOrders = (await Promise.all(orderPromises)).flat();
+    // Server har vendor ka alag order lautata hai
+    const serverOrders = Array.isArray(resData.orders) && resData.orders.length > 0 ? resData.orders : [resData.order];
+    const createdOrders = serverOrders.map((so) => {
+      const rawItems = so.items && so.items.length > 0 ? so.items : formattedItems;
+      const enrichedItems = rawItems.map((si, idx) => {
+        const matchedItem = formattedItems.find((gi) => gi.id === si.vendorProductId || gi.productId === si.vendorProductId || gi.id === si.id || gi.name === si.productName) || formattedItems[idx];
+        const resolvedImg = si.imageUrl || si.vendorProduct?.imageUrl || si.vendorProduct?.masterProduct?.imageUrl || matchedItem?.imageUrl || matchedItem?.img || matchedItem?.image || null;
+        return {
+          ...matchedItem,
+          ...si,
+          imageUrl: resolvedImg,
+          image: resolvedImg,
+          img: resolvedImg,
+          images: si.vendorProduct?.images || matchedItem?.images || (resolvedImg ? [resolvedImg] : []),
+          category: si.category || matchedItem?.category || "",
+          categoryName: si.categoryName || matchedItem?.categoryName || "",
+          vendorProduct: si.vendorProduct || matchedItem?.vendorProduct || (resolvedImg ? { imageUrl: resolvedImg } : null),
+        };
+      });
+      const firstItem = enrichedItems[0];
+
+      return normalizeOrder({
+        id: so.id,
+        userId: customerId || so.userId || so.customerId,
+        userPhone: so.userPhone || address?.phone || so.customer?.phone,
+        date: so.createdAt || new Date().toISOString(),
+        status: so.status || "Pending",
+        districtName: districtName || so.districtName || so.address?.city || "Varanasi",
+        regionId: regionId || so.regionId || so.address?.regionId || "varanasi",
+        vendorId: firstItem?.vendorId,
+        vendorName: firstItem?.vendor?.shopName || firstItem?.vendorName || "District Vendor",
+        items: enrichedItems,
+        address: so.address || address,
+        customer: so.customer,
+        total: Number(so.totalAmount || 0),
+        totalAmount: Number(so.totalAmount || 0),
+        deliveryFee: Number(so.deliveryFee || 0),
+        discountAmount: Number(so.discountAmount || 0),
+        walletDiscount: Number(so.walletDiscount || 0),
+        couponCode: so.couponCode || null,
+      });
+    });
 
     // Orders state update karo aur event trigger karo
     setOrders((prev) => {
@@ -486,8 +438,14 @@ export function OrderProvider({ children }) {
         body: JSON.stringify({ status: newStatus }),
       });
     } catch (err) {
+      // Server not reachable: the change did not happen, so put the old status back and let the screen say so
       console.warn("Update status note:", err.message);
-      return;
+      setOrders((prev) => {
+        const next = prev.map((o) => (o.id === orderId && previousStatus !== undefined ? { ...o, status: previousStatus } : o));
+        try { localStorage.setItem(currentStorageKey, JSON.stringify(next)); } catch {}
+        return next;
+      });
+      throw new Error(err.message || "Could not reach the server. Please try again.");
     }
 
     if (res.ok) {

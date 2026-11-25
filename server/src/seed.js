@@ -16,7 +16,7 @@ async function main() {
     },
   });
 
-  const regionMZP = await prisma.region.upsert({
+  await prisma.region.upsert({
     where: { name: "Mirzapur" },
     update: {},
     create: {
@@ -28,20 +28,20 @@ async function main() {
   });
 
   // 2. Seed Categories
-  const catCement = await prisma.category.upsert({
+  await prisma.category.upsert({
     where: { name: "Cement" },
     update: {},
     create: { name: "Cement", productCount: 120 },
   });
 
-  const catPaints = await prisma.category.upsert({
+  await prisma.category.upsert({
     where: { name: "Paints" },
     update: {},
     create: { name: "Paints", productCount: 150 },
   });
 
   // 3. Seed Core Users
-  const adminUser = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { phone: "9999999999" },
     update: {},
     create: {

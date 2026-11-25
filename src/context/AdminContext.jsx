@@ -54,9 +54,6 @@ const areDrsEqual = (listA, listB) => {
 
 const AdminContext = createContext(null);
 
-const seedDrs = [];
-const seedVendors = [];
-
 const seedCategories = [
   { id: "c1", name: "Cement", productCount: 120, isActive: true },
   { id: "c2", name: "Paints", productCount: 150, isActive: true },
@@ -65,10 +62,6 @@ const seedCategories = [
   { id: "c5", name: "Electrical", productCount: 120, isActive: true },
 ];
 
-const seedRegions = [];
-
-const seedMasterProducts = [];
-const seedProducts = [];
 const seedUsers = [];
 
 const CATS_STORAGE_KEY = "buildcity_admin_categories";
@@ -2426,22 +2419,34 @@ export function AdminProvider({ children }) {
   };
 
   const updateOrderStatus = async (orderId, newStatus) => {
-    // 1. Instant optimistic update (zero flicker, immediate UI update)
-    setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)));
+    const previousStatus = orders.find((o) => o.id === orderId)?.status;
+    const applyStatus = (status) => setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status } : o)));
 
+    // 1. Instant optimistic update (zero flicker, immediate UI update)
+    applyStatus(newStatus);
+
+    let res;
     try {
-      const res = await authFetch(`${API_BASE_URL}/api/v1/orders/${orderId}/status`, {
+      res = await authFetch(`${API_BASE_URL}/api/v1/orders/${orderId}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-      if (res.ok) {
-        window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
-        return;
-      }
     } catch (err) {
       console.warn("Admin update status note:", err.message);
+      if (previousStatus !== undefined) applyStatus(previousStatus);
+      throw new Error(err.message || "Could not reach the server. Please try again.");
     }
+
+    if (res.ok) {
+      window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
+      return;
+    }
+
+    // 2. Server refused: show the real status again and pass its reason to the screen
+    const errData = await res.json().catch(() => ({}));
+    if (previousStatus !== undefined) applyStatus(previousStatus);
+    throw new Error(errData.error || "Failed to update order status.");
   };
 
   return (
@@ -2457,7 +2462,6 @@ export function AdminProvider({ children }) {
         orders,
         categories,
         regions,
-        users,
         coupons,
         masterProducts,
         products,

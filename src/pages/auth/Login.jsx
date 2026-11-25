@@ -25,7 +25,7 @@ export default function Login({ forceVendorMode = false }) {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
-  const [role, setRole] = useState("customer");
+  const [role] = useState("customer");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
@@ -222,7 +222,7 @@ export default function Login({ forceVendorMode = false }) {
         if (!fcmToken && Capacitor.isNativePlatform()) {
           fcmToken = await getDeviceFcmToken(1500);
         }
-      } catch (_) {}
+      } catch {}
 
       const userObj = await vendorLogin({
         phone: phone.trim(),

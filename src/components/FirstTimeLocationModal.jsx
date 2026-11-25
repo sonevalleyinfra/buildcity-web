@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useRegion } from "../context/RegionContext";
 import { useCart } from "../context/CartContext";
-import { useAuth } from "../context/AuthContext";
 import { useAlert } from "../context/AlertContext";
 
 export default function FirstTimeLocationModal() {
   const { region, setRegion, regions, hasExplicitlySelectedLocation, isLocationModalOpen, setIsLocationModalOpen } = useRegion();
   const { items, updateCartToCurrentRegion } = useCart();
-  const { user } = useAuth();
   const { showAlert } = useAlert();
 
   const [isOpen, setIsOpen] = useState(false);

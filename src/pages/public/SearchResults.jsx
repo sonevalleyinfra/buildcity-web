@@ -9,7 +9,7 @@ import { cleanProductImage } from "../../utils/productImage";
 export default function SearchResults() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { region } = useRegion();
-  const { products = [], masterProducts = [] } = useAdmin();
+  const { products = [] } = useAdmin();
   const initialQuery = searchParams.get("q") || "";
   const [query, setQuery] = useState(initialQuery);
 

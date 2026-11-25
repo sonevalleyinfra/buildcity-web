@@ -64,7 +64,6 @@ async function walk(p, token, limit) {
   const admin = await login("9999999999", CREDS.admin);
   const vA = await login("9000000001", CREDS.vendorA);
   const dbCount = await prisma.order.count();
-  const dbSum = Number((await prisma.order.aggregate({ _sum: { totalAmount: true } }))._sum.totalAmount);
 
   // Legacy (no params): plain array, backwards compatible
   const legacy = await get("/orders", admin);

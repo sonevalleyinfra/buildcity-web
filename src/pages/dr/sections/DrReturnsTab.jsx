@@ -118,9 +118,12 @@ export default function DrReturnsTab({
   );
   const proportionalCashback = toExact(returnRatio * totalOrderCashback);
 
+  // A typed cashback deduction can never be more than the cashback left on this order (the server refuses it too)
+  const customCashbackValue = customCashbackDeduct !== "" ? Math.max(0, Number(customCashbackDeduct || 0)) : null;
+  const isCashbackOverLimit = customCashbackValue !== null && customCashbackValue > totalOrderCashback + 0.001;
   const cashbackOnReturn =
-    customCashbackDeduct !== ""
-      ? toExact(Math.max(0, Number(customCashbackDeduct || 0)))
+    customCashbackValue !== null
+      ? toExact(Math.min(customCashbackValue, totalOrderCashback))
       : proportionalCashback;
 
   // Wallet Settlement:
@@ -520,12 +523,18 @@ export default function DrReturnsTab({
                   <input
                     type="number"
                     min="0"
+                    max={totalOrderCashback}
                     step="any"
                     value={customCashbackDeduct}
                     onChange={(e) => setCustomCashbackDeduct(e.target.value)}
-                    className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold tabular-nums text-rose-700 outline-none focus:border-emerald-500"
+                    className={`h-10 w-full rounded-xl border bg-slate-50 px-3 text-xs font-bold tabular-nums text-rose-700 outline-none focus:border-emerald-500 ${isCashbackOverLimit ? "border-rose-500" : "border-slate-200"}`}
                     placeholder="0.00"
                   />
+                  {isCashbackOverLimit && (
+                    <p className="mt-1 text-[11px] font-semibold text-rose-600">
+                      Cashback deduction cannot be more than {inr(totalOrderCashback)} (cashback left on this order).
+                    </p>
+                  )}
                   <p className="mt-1 text-[11px] text-slate-400">
                     Customer earned {inr(totalOrderCashback)} cashback on this order. It is automatically adjusted against the wallet used at checkout ({inr(walletUsedOnReturn)}).
                   </p>
@@ -683,7 +692,7 @@ export default function DrReturnsTab({
 
                 <button
                   type="button"
-                  disabled={isSubmittingReturn || totalReturnItemsVal <= 0}
+                  disabled={isSubmittingReturn || totalReturnItemsVal <= 0 || isCashbackOverLimit}
                   onClick={handleProcessReturn}
                   className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-xs font-semibold text-white shadow-xs transition-all hover:bg-emerald-700 active:scale-[0.99] cursor-pointer disabled:opacity-40"
                 >

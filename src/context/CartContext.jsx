@@ -2,7 +2,6 @@ import { authFetch } from "../config/authFetch";
 import { createContext, useContext, useEffect, useState, useRef } from "react";
 import { useRegion } from "./RegionContext";
 import { useAuth } from "./AuthContext";
-import { useAlert } from "./AlertContext";
 import { API_BASE_URL } from "../config/api";
 import { cleanProductImage } from "../utils/productImage";
 
@@ -12,7 +11,6 @@ const CartContext = createContext(null);
 export function CartProvider({ children }) {
   const { user } = useAuth();
   const { region } = useRegion();
-  const { showAlert } = useAlert();
   const [items, setItems] = useState([]);
   const [lastAddedAt, setLastAddedAt] = useState(0);
   const isInitialCloudSyncDone = useRef(false);
@@ -245,6 +243,10 @@ export function CartProvider({ children }) {
 
   const removeItem = (id) => {
     setItems((prev) => prev.filter((i) => i.id !== id));
+    // Aakhri item hatne par cart khali ho jata hai, toh laga hua coupon bhi reset karo
+    if (items.every((i) => i.id === id)) {
+      removeCoupon();
+    }
   };
 
   const updateQty = (id, qty) => {

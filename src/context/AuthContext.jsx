@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { API_BASE_URL } from "../config/api";
 import { authFetch, saveToken, getToken, clearToken } from "../config/authFetch";
 import { unregisterVendorPushNotifications, unregisterCustomerPushNotifications } from "../utils/pushNotifications";
 
@@ -418,7 +417,7 @@ export function AuthProvider({ children }) {
           localStorage.removeItem(k);
         }
       }
-    } catch (_) {}
+    } catch {}
     window.dispatchEvent(new CustomEvent("buildcity_notifications_updated"));
     window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
   };

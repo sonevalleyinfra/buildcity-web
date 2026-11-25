@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { Capacitor } from "@capacitor/core";
 import { isVendorApp } from "../config/appMode";
 
 export default function SplashScreen({ minDuration = 1400, onFinished }) {

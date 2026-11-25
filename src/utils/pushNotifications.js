@@ -85,7 +85,7 @@ export async function preRegisterDeviceTokenOnBoot() {
           visibility: 1,
           vibration: true,
         });
-      } catch (_) {}
+      } catch {}
 
       try {
         await LocalNotifications.createChannel({
@@ -96,7 +96,7 @@ export async function preRegisterDeviceTokenOnBoot() {
           visibility: 1,
           vibration: true,
         });
-      } catch (_) {}
+      } catch {}
 
       await PushNotifications.addListener("registration", (token) => {
         if (!token?.value) return;
@@ -104,7 +104,7 @@ export async function preRegisterDeviceTokenOnBoot() {
         try {
           localStorage.setItem("vendor_fcm_token", token.value);
           localStorage.setItem("buildcity_permanent_device_token", token.value);
-        } catch (_) {}
+        } catch {}
       });
 
       await PushNotifications.register();
@@ -121,7 +121,7 @@ export async function getDeviceFcmToken(maxWaitMs = 2000) {
   try {
     const cached = localStorage.getItem("buildcity_permanent_device_token") || localStorage.getItem("vendor_fcm_token");
     if (cached) return cached;
-  } catch (_) {}
+  } catch {}
 
   if (!Capacitor.isNativePlatform()) return null;
 
@@ -141,7 +141,7 @@ export async function getDeviceFcmToken(maxWaitMs = 2000) {
         try {
           localStorage.setItem("vendor_fcm_token", token.value);
           localStorage.setItem("buildcity_permanent_device_token", token.value);
-        } catch (_) {}
+        } catch {}
         resolve(token.value);
       }
     }).catch(() => {});
@@ -164,7 +164,7 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
     if (cachedToken) {
       syncTokenWithBackend(vendorId, cachedToken, phone).catch(() => {});
     }
-  } catch (e) {}
+  } catch {}
 
   if (isRegistered && currentRegisteredVendorId === vendorId) return;
   currentRegisteredVendorId = vendorId;
@@ -200,7 +200,7 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
           visibility: 1,
           vibration: true,
         });
-      } catch (_) {}
+      } catch {}
 
       // 2. Attach listeners FIRST before calling register()
       await PushNotifications.addListener("registration", async (token) => {
@@ -209,7 +209,7 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
         try {
           localStorage.setItem("vendor_fcm_token", token.value);
           localStorage.setItem("buildcity_permanent_device_token", token.value);
-        } catch (e) {}
+        } catch {}
         try {
           await syncTokenWithBackend(vendorId, token.value, phone);
           console.log(`✅ FCM token synced with backend for vendor: ${vendorId}`);
@@ -264,7 +264,7 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
               amount: data.amount || 0,
               itemCount: data.itemCount || 1,
             }));
-          } catch (_) {}
+          } catch {}
           window.dispatchEvent(new CustomEvent("buildcity_order_highlight", { detail: { orderId: String(orderId) } }));
         }
         window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
@@ -286,7 +286,7 @@ export async function initVendorPushNotifications(vendorId, meta = {}) {
               amount: data.amount || 0,
               itemCount: data.itemCount || 1,
             }));
-          } catch (_) {}
+          } catch {}
           window.dispatchEvent(new CustomEvent("buildcity_order_highlight", { detail: { orderId: String(orderId) } }));
         }
         window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
@@ -315,13 +315,13 @@ export async function unregisterVendorPushNotifications(vendorId) {
         body: JSON.stringify({ vendorId, token: cachedToken }),
       }).catch(() => {});
     }
-  } catch (e) {}
+  } catch {}
 
   try {
     localStorage.removeItem("vendor_fcm_token");
     // Note: We deliberately KEEP buildcity_permanent_device_token so that
     // the next vendor logging into this physical phone gets instant 0ms token sync!
-  } catch (e) {}
+  } catch {}
 
   isRegistered = false;
   currentRegisteredVendorId = null;
@@ -350,7 +350,7 @@ export async function initCustomerPushNotifications(userId, meta = {}) {
     if (cachedToken) {
       syncCustomerTokenWithBackend(userId, cachedToken, phone).catch(() => {});
     }
-  } catch (e) {}
+  } catch {}
 
   if (!Capacitor.isNativePlatform()) return;
   if (isCustomerRegistered && currentRegisteredCustomerId === userId) return;
@@ -372,7 +372,7 @@ export async function initCustomerPushNotifications(userId, meta = {}) {
           visibility: 1,
           vibration: true,
         });
-      } catch (_) {}
+      } catch {}
 
       try {
         await LocalNotifications.createChannel({
@@ -383,7 +383,7 @@ export async function initCustomerPushNotifications(userId, meta = {}) {
           visibility: 1,
           vibration: true,
         });
-      } catch (_) {}
+      } catch {}
 
       await PushNotifications.addListener("registration", async (token) => {
         if (!token?.value) return;
@@ -391,10 +391,10 @@ export async function initCustomerPushNotifications(userId, meta = {}) {
         try {
           localStorage.setItem("customer_fcm_token", token.value);
           localStorage.setItem("buildcity_permanent_device_token", token.value);
-        } catch (_) {}
+        } catch {}
         try {
           await syncCustomerTokenWithBackend(userId, token.value, phone);
-        } catch (_) {}
+        } catch {}
       });
 
       await PushNotifications.addListener("pushNotificationReceived", async (notification) => {
@@ -419,7 +419,7 @@ export async function initCustomerPushNotifications(userId, meta = {}) {
               },
             ],
           });
-        } catch (localErr) {}
+        } catch {}
 
         window.dispatchEvent(new CustomEvent("buildcity_notifications_updated"));
         window.dispatchEvent(new CustomEvent("buildcity_orders_updated"));
@@ -454,11 +454,11 @@ export async function unregisterCustomerPushNotifications(userId) {
         body: JSON.stringify({ userId, token: cachedToken }),
       }).catch(() => {});
     }
-  } catch (e) {}
+  } catch {}
 
   try {
     localStorage.removeItem("customer_fcm_token");
-  } catch (e) {}
+  } catch {}
 
   isCustomerRegistered = false;
   currentRegisteredCustomerId = null;

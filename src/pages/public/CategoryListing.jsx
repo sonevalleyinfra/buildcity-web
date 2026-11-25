@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import Navbar from "../../components/Navbar";
-import BottomNav from "../../components/BottomNav";
 import ProductCard from "../../components/ProductCard";
 import FilterSidebar from "../../components/FilterSidebar";
 import Footer from "../../components/Footer";
@@ -46,7 +45,7 @@ const PAGE_SIZE = 9;
 export default function CategoryListing() {
   const { slug } = useParams();
   const { region } = useRegion();
-  const { products = [], masterProducts = [] } = useAdmin();
+  const { products = [] } = useAdmin();
   const label = CATEGORY_LABELS[slug] || slug || "Products";
 
   const allProducts = useMemo(() => {

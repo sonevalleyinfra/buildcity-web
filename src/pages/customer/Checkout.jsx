@@ -1,5 +1,5 @@
 import { authFetch, getToken } from "../../config/authFetch";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate, Navigate, useLocation } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import { useCart } from "../../context/CartContext";
@@ -13,8 +13,10 @@ import { useNotifications } from "../../context/NotificationContext";
 import { API_BASE_URL } from "../../config/api";
 import { formatShortId } from "../../utils/formatId";
 
+const CHECKOUT_KEY_STORAGE = "buildcity_checkout_order_key";
+
 export default function Checkout() {
-  const { items, subtotal, mrpTotal = subtotal, clearCart, hasRegionMismatch, appliedCoupon, applyCoupon, removeCoupon } = useCart();
+  const { items, subtotal, mrpTotal = subtotal, clearCart, appliedCoupon, applyCoupon, removeCoupon } = useCart();
   const { placeOrder } = useOrders();
   const { showAlert } = useAlert();
   const { addNotification } = useNotifications();
@@ -63,8 +65,31 @@ export default function Checkout() {
 
   const [dbAddresses, setDbAddresses] = useState([]);
   const [selectedAddrId, setSelectedAddrId] = useState("");
-  const [payment, setPayment] = useState("cod");
   const [placing, setPlacing] = useState(false);
+  const placingRef = useRef(false);
+
+  // Ek hi order ke har retry pe same idempotency key bhejo, taaki response kho jaane par dubara dabane se
+  // duplicate order na bane. Items, address, coupon ya wallet badle toh nayi key banti hai.
+  // sessionStorage me rakhte hain taaki page reload ke baad ka retry bhi wahi key bheje.
+  const orderKeyRef = useRef(null);
+  if (orderKeyRef.current === null) {
+    try {
+      orderKeyRef.current = JSON.parse(sessionStorage.getItem(CHECKOUT_KEY_STORAGE) || "null") || { signature: "", key: "" };
+    } catch {
+      orderKeyRef.current = { signature: "", key: "" };
+    }
+  }
+  const getOrderKey = (signature) => {
+    if (orderKeyRef.current.signature !== signature || !orderKeyRef.current.key) {
+      orderKeyRef.current = { signature, key: "ord_idem_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9) };
+      try { sessionStorage.setItem(CHECKOUT_KEY_STORAGE, JSON.stringify(orderKeyRef.current)); } catch {}
+    }
+    return orderKeyRef.current.key;
+  };
+  const clearOrderKey = () => {
+    orderKeyRef.current = { signature: "", key: "" };
+    try { sessionStorage.removeItem(CHECKOUT_KEY_STORAGE); } catch {}
+  };
 
   // Wallet redemption state (with instant local cache)
   const [walletData, setWalletData] = useState(() => {
@@ -419,6 +444,9 @@ export default function Checkout() {
       return;
     }
 
+    // Tez double-tap: button disable hone (re-render) se pehle doosra tap yahin ruk jaye
+    if (placingRef.current) return;
+    placingRef.current = true;
     setPlacing(true);
 
     const orderItems = checkoutItems.map((i) => {
@@ -463,9 +491,20 @@ export default function Checkout() {
     // Natural loading delay taaki customer ko smooth confirmation lage
     const minDelayPromise = new Promise((resolve) => setTimeout(resolve, 1500));
 
+    const couponForOrder = appliedCoupon && couponDiscount > 0 ? appliedCoupon.code : null;
+    const walletForOrder = useWallet && appliedWalletDiscount > 0 ? appliedWalletDiscount : 0;
+    const idempotencyKey = getOrderKey(JSON.stringify({
+      items: orderItems.map((i) => [i.id, i.quantity]),
+      address: targetAddr?.id || targetAddr?.street || "",
+      region: activeRegionId,
+      coupon: couponForOrder,
+      wallet: walletForOrder,
+    }));
+
     try {
       const [realOrder] = await Promise.all([
         placeOrder({
+          idempotencyKey,
           customerId: user?.id,
           items: orderItems,
           address: targetAddr,
@@ -484,6 +523,9 @@ export default function Checkout() {
       if (!realOrder || (!realOrder.id && (!Array.isArray(realOrder.orders) || realOrder.orders.length === 0))) {
         throw new Error("Order not placed , please try again.");
       }
+
+      // Order ban gaya: agla order nayi key se jayega
+      clearOrderKey();
 
       // Real database order confirm hone par hi cart clear karo (sirf agar regular cart se checkout kiya ho)
       if (!directItem) {
@@ -532,6 +574,7 @@ export default function Checkout() {
         buttonText: "OK",
       });
     } finally {
+      placingRef.current = false;
       setPlacing(false);
     }
   };

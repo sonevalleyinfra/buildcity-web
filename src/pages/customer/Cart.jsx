@@ -52,12 +52,31 @@ export default function Cart() {
   const [couponCode, setCouponCode] = useState(appliedCoupon?.code || "");
   const [couponError, setCouponError] = useState("");
   const [showCouponsModal, setShowCouponsModal] = useState(false);
+  // Minimum order se neeche aane par jo coupon apne aap hataya gaya, uski jankari
+  const [couponNotice, setCouponNotice] = useState(null);
 
   useEffect(() => {
     if (appliedCoupon?.code) {
       setCouponCode(appliedCoupon.code);
     }
   }, [appliedCoupon]);
+
+  // Quantity kam karne ya item hatane se cart coupon ke minimum order se neeche aa jaye toh coupon hata do.
+  // Khali cart (abhi load ho raha ho) par kuch mat karo, warna refresh pe coupon galti se hat jayega.
+  useEffect(() => {
+    if (!appliedCoupon || items.length === 0) return;
+    const minOrderVal = Number(appliedCoupon.minOrder) || 0;
+    if (subtotal >= minOrderVal) return;
+    removeCoupon();
+    setCouponCode("");
+    setCouponError("");
+    setCouponNotice({ code: appliedCoupon.code, minOrder: minOrderVal });
+  }, [appliedCoupon, items.length, subtotal, removeCoupon]);
+
+  // Cart ki value badalne ke baad purana coupon error (jaise "minimum ₹1,000 chahiye") galat ho sakta hai, use hata do
+  useEffect(() => {
+    setCouponError("");
+  }, [subtotal]);
 
   // Check kar rahe hain ki cart me koi suspended vendor ya out-of-stock item toh nahi hai
   const unavailableItemIds = useMemo(() => {
@@ -106,7 +125,7 @@ export default function Cart() {
   const handleUpdateRegionPrices = async () => {
     setIsUpdatingPrices(true);
     try {
-      const { updatedCount, removedItems } = await updateCartToCurrentRegion(products);
+      const { removedItems } = await updateCartToCurrentRegion(products);
       if (removedItems && removedItems.length > 0) {
         showAlert({
           title: "📍 Region Availability Notice",
@@ -245,6 +264,7 @@ export default function Cart() {
       minOrder: Number(matched.minOrder) || 0,
     });
     setCouponCode(matched.code);
+    setCouponNotice(null);
     setShowCouponsModal(false);
   };
 
@@ -252,6 +272,7 @@ export default function Cart() {
     removeCoupon();
     setCouponCode("");
     setCouponError("");
+    setCouponNotice(null);
   };
 
   const baseDeliveryFee = Number(region?.baseDeliveryCharge) || 49;
@@ -578,6 +599,26 @@ export default function Cart() {
               )}
 
               {couponError && <p className="text-[11px] font-bold text-rose-600">{couponError}</p>}
+
+              {/* Coupon apne aap hata tab batao kyun, aur wapas eligible hone par dubara lagane ka button */}
+              {couponNotice && !appliedCoupon && !couponError && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 flex items-center justify-between gap-2 w-full min-w-0">
+                  <p className="text-[11px] font-bold text-amber-800 min-w-0">
+                    {subtotal < couponNotice.minOrder
+                      ? `${couponNotice.code} removed: it needs a minimum order of ₹${couponNotice.minOrder.toLocaleString("en-IN")}. Add ₹${Math.ceil(couponNotice.minOrder - subtotal).toLocaleString("en-IN")} more to use it.`
+                      : `${couponNotice.code} can be used again on this cart.`}
+                  </p>
+                  {subtotal >= couponNotice.minOrder && (
+                    <button
+                      type="button"
+                      onClick={() => handleApplyCoupon(couponNotice.code)}
+                      className="text-xs font-black text-brand-600 hover:text-brand-700 bg-white border border-brand-200 px-3 py-1.5 rounded-lg active:scale-95 transition-all cursor-pointer shrink-0"
+                    >
+                      Apply
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Free Delivery Threshold Goal Tracker */}

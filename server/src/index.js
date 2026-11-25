@@ -470,6 +470,16 @@ let couponsList = [
   { id: "cp-3", code: "WELCOME200", title: "Flat ₹200 OFF", minOrder: 1500, discountAmount: 200, expiryDate: "2026-12-31", isActive: true, desc: "Special welcome coupon for new site orders" },
 ];
 
+// Coupon for checkout, from the same source the storefront lists (public-catalog):
+// the coupons table, or the built-in list above only while that table is empty.
+async function findCheckoutCoupon(code) {
+  const dbCoupon = await prisma.coupon.findUnique({ where: { code } });
+  if (dbCoupon) return dbCoupon;
+  const couponCount = await prisma.coupon.count();
+  if (couponCount > 0) return null;
+  return couponsList.find((c) => c.code === code) || null;
+}
+
 let bannersList = [
   {
     id: "b-1",
@@ -4648,7 +4658,8 @@ app.delete("/api/v1/addresses/:id", requireAuth, async (req, res) => {
 
 app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
   try {
-    const { items, idempotencyKey, couponCode, discountAmount } = req.body;
+    // Prices, coupon discount and delivery fee are always computed here; amounts sent by the client are ignored
+    const { items, idempotencyKey, couponCode } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "No items in order." });
@@ -4698,11 +4709,6 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       const dName = req.body.districtName.trim().toLowerCase();
       reg = cachedRegions.find((r) => r.name.toLowerCase() === dName || r.name.toLowerCase().includes(dName));
     }
-    if (!reg) {
-      reg = cachedRegions[0] || null;
-    }
-
-    const targetRegionName = reg?.name || (req.body.districtName || req.body.address?.city || req.body.address?.district || "Varanasi").trim();
 
     // 2. Batch query all cart products at once in 1 single fast database call!
     const itemIds = items.map((i) => i.id || i.productId).filter((v) => typeof v === "string");
@@ -4766,6 +4772,14 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       });
     }
 
+    // No district in the request: use the district of the shop the items come from
+    if (!reg) {
+      const vendorRegionId = validatedItems[0]?.vendor?.regionId;
+      reg = cachedRegions.find((r) => r.id === vendorRegionId) || cachedRegions[0] || null;
+    }
+    const targetRegionName = reg?.name || (req.body.districtName || req.body.address?.city || req.body.address?.district || "Varanasi").trim();
+    const materialsSubtotal = validatedItems.reduce((sum, vi) => sum + vi.totalPrice, 0);
+
     // 4. Address Save / Link Logic
     let addressId = null;
     if (req.body.address || req.body.districtName || req.body.regionId) {
@@ -4809,45 +4823,37 @@ app.post("/api/v1/orders/checkout", requireAuth, async (req, res) => {
       }
     }
 
-    const clientDeliveryFee = req.body.deliveryFee !== undefined && !isNaN(Number(req.body.deliveryFee))
-      ? Number(req.body.deliveryFee)
-      : null;
-    let calculatedDeliveryFee = clientDeliveryFee !== null && clientDeliveryFee >= 0
-      ? clientDeliveryFee
-      : (reg ? Number(reg.baseDeliveryCharge || 49) : 49);
+    // Delivery fee: the district's base charge, same rule as the checkout screen (req.body.deliveryFee is ignored)
+    let calculatedDeliveryFee = Number(reg?.baseDeliveryCharge) || 49;
 
-    // 4b. Coupon validation and discount verification
+    // 4b. Coupon: the discount comes only from the coupon record, never from the request.
+    // An invalid coupon rejects the order, so the customer never pays a total different from the one shown.
     const cleanCouponCode = couponCode ? String(couponCode).trim().toUpperCase() : null;
     let verifiedDiscount = 0;
     let verifiedCouponCode = null;
 
     if (cleanCouponCode) {
-      const dbCoupon = await prisma.coupon.findFirst({
-        where: {
-          code: cleanCouponCode,
-          isActive: true,
-        },
-      }).catch(() => null);
-
-      if (dbCoupon) {
-        const today = new Date().toISOString().split("T")[0];
-        const isExpired = dbCoupon.expiryDate && dbCoupon.expiryDate < today;
-        if (!isExpired) {
-          verifiedCouponCode = dbCoupon.code;
-          verifiedDiscount = Number(dbCoupon.discountAmount) || 0;
-        }
-      } else {
-        const clientDiscount = Number(discountAmount);
-        if (!isNaN(clientDiscount) && clientDiscount > 0) {
-          verifiedCouponCode = cleanCouponCode;
-          verifiedDiscount = clientDiscount;
-        }
+      const coupon = await findCheckoutCoupon(cleanCouponCode);
+      const today = new Date().toISOString().split("T")[0];
+      if (!coupon || coupon.isActive === false) {
+        throw new ClientError(`Coupon "${cleanCouponCode}" is not valid. Please remove it and try again.`);
       }
+      if (coupon.expiryDate && coupon.expiryDate < today) {
+        throw new ClientError(`Coupon "${coupon.code}" has expired. Please remove it and try again.`);
+      }
+      const couponMinOrder = Number(coupon.minOrder) || 0;
+      if (materialsSubtotal < couponMinOrder) {
+        throw new ClientError(
+          `Coupon "${coupon.code}" needs a minimum order of ₹${couponMinOrder.toLocaleString("en-IN")}. Please remove it and try again.`
+        );
+      }
+      verifiedCouponCode = coupon.code;
+      verifiedDiscount = Math.max(0, Number(coupon.discountAmount) || 0);
     }
 
     // 4c. Wallet Redemption validation & calculation
     const settings = await getActiveWalletSettings();
-    const cartTotalBeforeWallet = validatedItems.reduce((sum, vi) => sum + vi.totalPrice, 0);
+    const cartTotalBeforeWallet = materialsSubtotal;
 
     // Apply free delivery threshold if qualified
     if (settings.freeDeliveryEnabled !== false && cartTotalBeforeWallet >= (Number(settings.freeDeliveryMinAmount) || 2000)) {

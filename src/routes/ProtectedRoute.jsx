@@ -1,6 +1,5 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import BottomNav from "../components/BottomNav";
 
 // Wrap any route: <ProtectedRoute role="vendor"><VendorDashboard /></ProtectedRoute>
 // role omitted = just needs to be logged in (any role)

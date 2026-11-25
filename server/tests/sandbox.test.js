@@ -83,8 +83,7 @@ async function unit() {
   ok(calls.includes("http") && calls.includes("fetch") && calls.includes("https"), "isProduction() true: gateway, relay and https fallback are all attempted", calls);
   ok(sr.success === false && !sr.sandbox && outbox.list().length === before, "isProduction() true: no sandbox, no outbox entry", sr);
   calls.length = 0;
-  let threw = false;
-  try { await push.dispatchFcm("vendor_order", msg, "v3"); } catch { threw = true; }
+  try { await push.dispatchFcm("vendor_order", msg, "v3"); } catch { /* a real send may throw here; only the outbox matters */ }
   ok(outbox.list().length === before, "isProduction() true: push is not sandboxed", outbox.list().length);
   appEnv.isProduction = realIsProd;
 
@@ -100,7 +99,6 @@ async function unit() {
 
 // ---- integration: real API, APP_ENV=test, outbound network stubbed to throw ----
 async function integration() {
-  const dbUrl = process.env.DATABASE_URL;
   const env = {
     ...process.env, PORT, TEST_PORT: PORT, APP_ENV: "test", NODE_ENV: "production",
     SMS_USERNAME: "u", SMS_APIKEY: "k", STUB_LOG,

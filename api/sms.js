@@ -75,7 +75,7 @@ export default async function handler(req, res) {
     let result;
     try {
       result = await makeRequest(false);
-    } catch (e) {
+    } catch {
       result = await makeRequest(true);
     }
 

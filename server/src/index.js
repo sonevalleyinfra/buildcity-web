@@ -52,7 +52,7 @@ const prisma = new PrismaClient();
 try {
   const { setPrismaClient } = require("./pushService");
   setPrismaClient(prisma);
-} catch (e) {}
+} catch {}
 const PORT = process.env.PORT || 5000;
 
 // High-Speed Gzip/Brotli Compression (Reduces network payload & egress by 85-90%)
@@ -458,7 +458,7 @@ if (process.env.KEEP_ALIVE_URL) {
   setInterval(async () => {
     try {
       await fetch(`${process.env.KEEP_ALIVE_URL}/health`);
-    } catch (err) {
+    } catch {
       // ignore ping errors
     }
   }, 8 * 60 * 1000);
@@ -1182,7 +1182,7 @@ app.get("/api/v1/settings/wallet", async (req, res) => {
     const settings = await getActiveWalletSettings();
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.json(settings);
-  } catch (err) {
+  } catch {
     res.json(DEFAULT_WALLET_SETTINGS);
   }
 });
@@ -1193,11 +1193,9 @@ app.put("/api/v1/admin/wallet-settings", requireAuth, requireRole("ADMIN"), asyn
     const {
       referralEnabled,
       cashbackEnabled,
-      cashbackType,
       cashbackValue,
       minOrderForCashback,
       maxCashbackCap,
-      referralRewardType,
       referrerReward,
       maxReferralRewardCap,
       refereeRewardType,
@@ -1228,9 +1226,8 @@ app.put("/api/v1/admin/wallet-settings", requireAuth, requireRole("ADMIN"), asyn
       freeDeliveryMinAmount: !isNaN(Number(freeDeliveryMinAmount)) ? Math.max(0, Number(freeDeliveryMinAmount)) : cachedWalletSettings.freeDeliveryMinAmount,
     };
 
-    let result = null;
     try {
-      result = await prisma.appSetting.upsert({
+      await prisma.appSetting.upsert({
         where: { id: "wallet_config" },
         update: updatedData,
         create: { id: "wallet_config", ...updatedData },
@@ -3090,7 +3087,7 @@ app.get("/api/v1/vendor/listings", optionalAuth, async (req, res) => {
 
 app.post("/api/v1/vendor/listings", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
-    let { masterProductId, vendorId, vendorName, regionId, regionName, price, stockQty } = req.body;
+    let { masterProductId, vendorId, vendorName, regionId, price, stockQty } = req.body;
     const isVendorRole = req.auth.role === "VENDOR";
 
     const masterProd = masterProductId ? await prisma.productMaster.findUnique({ where: { id: masterProductId }, include: { category: true } }).catch(() => null) : null;
@@ -4468,7 +4465,7 @@ const handleGetAddresses = async (req, res) => {
     }
 
     res.json(sanitized);
-  } catch (err) {
+  } catch {
     res.json([]);
   }
 };

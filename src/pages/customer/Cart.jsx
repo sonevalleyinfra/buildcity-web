@@ -106,7 +106,7 @@ export default function Cart() {
   const handleUpdateRegionPrices = async () => {
     setIsUpdatingPrices(true);
     try {
-      const { updatedCount, removedItems } = await updateCartToCurrentRegion(products);
+      const { removedItems } = await updateCartToCurrentRegion(products);
       if (removedItems && removedItems.length > 0) {
         showAlert({
           title: "📍 Region Availability Notice",

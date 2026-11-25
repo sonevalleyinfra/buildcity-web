@@ -45,7 +45,7 @@ export default function ProductDetail() {
   const userRole = String(user?.role || "").toLowerCase();
   const isPartner = ["admin", "dr", "district_rep", "vendor"].includes(userRole) || Boolean(user?.drInfo) || Boolean(user?.vendorInfo);
   const isCustomer = Boolean(user && !isPartner);
-  const { addItem, buyNow } = useCart();
+  const { addItem } = useCart();
   const { region } = useRegion();
   const { products = [], masterProducts = [], vendors = [], productsLoading } = useAdmin();
   const { orders = [] } = useOrders();
@@ -185,7 +185,6 @@ export default function ProductDetail() {
     }
 
     if (realProd) {
-      const price = Number(realProd.price) || 100;
       let resolvedMrp = Number(realProd.mrp || 0);
       if (resolvedMrp <= 0) {
         try {
@@ -580,7 +579,7 @@ export default function ProductDetail() {
         const clean = filterOutDemoReviews(parsed);
         return clean;
       }
-    } catch (err) {}
+    } catch {}
     return [];
   });
 
@@ -604,7 +603,7 @@ export default function ProductDetail() {
         setReviewsList(clean);
         return;
       }
-    } catch (e) {}
+    } catch {}
     setReviewsList([]);
   }, [targetProductId]);
 
@@ -629,7 +628,7 @@ export default function ProductDetail() {
           setReviewsList(cleanData);
           try {
             localStorage.setItem(`buildcity_reviews_${targetProductId}`, JSON.stringify(cleanData));
-          } catch (e) {}
+          } catch {}
         }
       })
       .catch((err) => {
@@ -836,13 +835,13 @@ export default function ProductDetail() {
       const userKey = `buildcity_reviewed_${user.id || user.phone || 'me'}_${targetProductId}`;
       try {
         localStorage.setItem(userKey, "true");
-      } catch (err) {}
+      } catch {}
 
       setReviewsList((prev) => {
         const updated = [data, ...prev.filter((r) => r.id !== data.id && r.comment !== data.comment)];
         try {
           localStorage.setItem(`buildcity_reviews_${targetProductId}`, JSON.stringify(updated));
-        } catch (err) {}
+        } catch {}
         return updated;
       });
 

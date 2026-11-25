@@ -95,7 +95,7 @@ export const authFetch = async (path, options = {}) => {
       ...options,
       headers,
     });
-  } catch (primaryErr) {
+  } catch {
     // If primary URL failed (e.g. Failed to fetch due to DNS/network drop),
     // attempt automatic failover to the secondary gateway!
     let fallbackUrl = null;
@@ -113,7 +113,7 @@ export const authFetch = async (path, options = {}) => {
           ...options,
           headers,
         });
-      } catch (fallbackErr) {
+      } catch {
         throw new Error("Unable to connect to BuildCity servers. Please check your internet connection or try again.");
       }
     } else {

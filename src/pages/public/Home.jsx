@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { useCart } from "../../context/CartContext";
 import { useAdmin } from "../../context/AdminContext";
 import { useRegion } from "../../context/RegionContext";
 import Navbar from "../../components/Navbar";
@@ -158,7 +157,6 @@ const DEFAULT_BANNER_SLIDES = [
 
 export default function Home() {
   const { user } = useAuth();
-  const { addItem } = useCart();
   const { region } = useRegion();
   const { products = [], productsLoading, banners = [] } = useAdmin();
   const navigate = useNavigate();
@@ -179,7 +177,6 @@ export default function Home() {
       setSlide(0);
     }
   }, [activeSlides.length, slide]);
-  const [justAddedId, setJustAddedId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedService, setSelectedService] = useState(null);
   const [selectedSubCategory, setSelectedSubCategory] = useState("");
@@ -309,23 +306,6 @@ export default function Home() {
   const handleSearch = (e) => {
     e.preventDefault();
     navigate(searchQuery ? `/search?q=${encodeURIComponent(searchQuery)}` : "/search");
-  };
-
-  const handleAddToCart = (p) => {
-    addItem(
-      {
-        id: p.id,
-        name: p.name,
-        price: p.price || p.suggestedPrice,
-        brand: p.brand,
-        img: p.imageUrl,
-        vendorId: p.vendorId,
-        vendorName: p.vendorName || "District Vendor",
-      },
-      1
-    );
-    setJustAddedId(p.id);
-    setTimeout(() => setJustAddedId(null), 1500);
   };
 
   return (

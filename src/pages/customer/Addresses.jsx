@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import Navbar from "../../components/Navbar";
-import BottomNav from "../../components/BottomNav";
 import { useAddresses } from "../../context/AddressContext";
 import { useAuth } from "../../context/AuthContext";
 import { useRegion } from "../../context/RegionContext";

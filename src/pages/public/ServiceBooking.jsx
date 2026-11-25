@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useSearchParams, useNavigate, Link } from "react-router-dom";
+import { useSearchParams, Link } from "react-router-dom";
 import { useRegion } from "../../context/RegionContext";
 import { useAuth } from "../../context/AuthContext";
 import Navbar from "../../components/Navbar";
@@ -8,7 +8,6 @@ import { constructionServices, getServiceById } from "../../data/servicesData";
 
 export default function ServiceBooking() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const { region } = useRegion();
   const { user } = useAuth();
 
@@ -27,7 +26,7 @@ export default function ServiceBooking() {
   const [customerName, setCustomerName] = useState(user?.name || "");
   const [customerPhone, setCustomerPhone] = useState(user?.phone || "");
   const [siteAddress, setSiteAddress] = useState(user?.address || "");
-  const [sitePincode, setSitePincode] = useState(region?.pincode || "");
+  const [sitePincode] = useState(region?.pincode || "");
   const [preferredDate, setPreferredDate] = useState(() => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);

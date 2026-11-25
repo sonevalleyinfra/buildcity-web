@@ -219,7 +219,7 @@ async function saveToken(vendorId, token, phone = null) {
         if (changed) {
           fs.writeFileSync(tokensFilePath, JSON.stringify(tokens, null, 2), "utf8");
         }
-      } catch (_) {}
+      } catch {}
 
       console.log(`✅ Saved FCM push token to Supabase DB for vendor: ${[...idsToSave].join(", ")}`);
     }
@@ -609,7 +609,7 @@ async function getTokenForCustomer(userId, phone = null) {
         if (phoneRows && phoneRows.length > 0 && phoneRows[0].token) {
           return phoneRows[0].token;
         }
-      } catch (e) {}
+      } catch {}
     }
   }
 

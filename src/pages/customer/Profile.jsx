@@ -7,11 +7,9 @@ import { Capacitor } from "@capacitor/core";
 import { useAuth } from "../../context/AuthContext";
 import { useCart } from "../../context/CartContext";
 import { useOrders } from "../../context/OrderContext";
-import { useAddresses } from "../../context/AddressContext";
 import { useAdmin } from "../../context/AdminContext";
 import { API_BASE_URL } from "../../config/api";
 import { authFetch } from "../../config/authFetch";
-import { formatShortId } from "../../utils/formatId";
 
 const accountLinks = [
   { label: "Delivery Addresses", icon: "📍", to: "/addresses", sub: "Manage delivery locations" },
@@ -26,7 +24,6 @@ export default function Profile() {
   const { user, logout, updateProfile } = useAuth();
   const { count } = useCart();
   const { orders, ordersSummary } = useOrders();
-  const { addresses } = useAddresses();
   const { coupons = [] } = useAdmin();
   const [dbCoupons, setDbCoupons] = useState(coupons);
   const navigate = useNavigate();

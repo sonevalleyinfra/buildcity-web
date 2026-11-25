@@ -54,9 +54,6 @@ const areDrsEqual = (listA, listB) => {
 
 const AdminContext = createContext(null);
 
-const seedDrs = [];
-const seedVendors = [];
-
 const seedCategories = [
   { id: "c1", name: "Cement", productCount: 120, isActive: true },
   { id: "c2", name: "Paints", productCount: 150, isActive: true },
@@ -65,10 +62,6 @@ const seedCategories = [
   { id: "c5", name: "Electrical", productCount: 120, isActive: true },
 ];
 
-const seedRegions = [];
-
-const seedMasterProducts = [];
-const seedProducts = [];
 const seedUsers = [];
 
 const CATS_STORAGE_KEY = "buildcity_admin_categories";
@@ -2457,7 +2450,6 @@ export function AdminProvider({ children }) {
         orders,
         categories,
         regions,
-        users,
         coupons,
         masterProducts,
         products,

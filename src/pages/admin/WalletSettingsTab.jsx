@@ -4,7 +4,6 @@ import { useAdmin } from "../../context/AdminContext";
 export default function WalletSettingsTab() {
   const {
     walletSettings,
-    loadingWalletSettings,
     fetchWalletSettings,
     updateWalletSettings,
     walletUsers,

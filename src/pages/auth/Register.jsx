@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import AuthLayout from "../../layouts/AuthLayout";
-import FormInput from "../../components/FormInput";
 import Button from "../../components/Button";
 import { useAuth } from "../../context/AuthContext";
 

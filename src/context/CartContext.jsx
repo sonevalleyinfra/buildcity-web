@@ -243,6 +243,10 @@ export function CartProvider({ children }) {
 
   const removeItem = (id) => {
     setItems((prev) => prev.filter((i) => i.id !== id));
+    // Aakhri item hatne par cart khali ho jata hai, toh laga hua coupon bhi reset karo
+    if (items.every((i) => i.id === id)) {
+      removeCoupon();
+    }
   };
 
   const updateQty = (id, qty) => {

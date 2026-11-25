@@ -3860,6 +3860,23 @@ app.get("/api/v1/orders/vendor/:vendorId", requireAuth, requireRole("VENDOR", "D
 
 const ORDER_STATUSES = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED", "COMPLETED", "CANCELLED"];
 
+// Money and stock move at DELIVERED (cashback) and CANCELLED (stock goes back to the shop), so those are one-way:
+// DELIVERED may only become COMPLETED, and CANCELLED is final (COMPLETED is locked separately).
+// Before delivery the steps may move forward, skip or go back, so a wrong dropdown pick can be corrected.
+function orderStatusChangeError(fromStatus, toStatus) {
+  const from = String(fromStatus || "").toUpperCase();
+  if (from === toStatus) return null;
+  if (from === "CANCELLED") {
+    return "This order is cancelled and its stock is back with the shop, so it cannot be reopened. Please place a new order.";
+  }
+  if (from === "DELIVERED" && toStatus !== "COMPLETED") {
+    return toStatus === "CANCELLED"
+      ? "A delivered order cannot be cancelled. For material sent back, please use the DR Return Desk."
+      : "A delivered order cannot be moved back. After DELIVERED, only COMPLETED is allowed.";
+  }
+  return null;
+}
+
 // Update Order Status (Vendor, DR & Admin with Auto Stock Restore on Cancel + COMPLETED Lock)
 app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", "ADMIN"), async (req, res) => {
   try {
@@ -3915,6 +3932,11 @@ app.patch("/api/v1/orders/:id/status", requireAuth, requireRole("VENDOR", "DR", 
       if (!inDistrict) {
         return res.status(403).json({ error: "This order is outside your district." });
       }
+    }
+
+    const statusChangeError = orderStatusChangeError(previousOrder.status, status);
+    if (statusChangeError) {
+      return res.status(400).json({ error: statusChangeError, code: "INVALID_STATUS_CHANGE" });
     }
 
     const ops = [

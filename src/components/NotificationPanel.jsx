@@ -2,14 +2,15 @@ import { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useNotifications } from "../context/NotificationContext";
+import { BellIcon as BellOutline, CloseIcon, GiftIcon, InfoIcon, PackageIcon, PinIcon, TagIcon, UserIcon } from "./ui/Icons";
 
-const TYPE_ICON = {
-  offer: "🎁",
-  price: "🏷️",
-  order: "📦",
-  address: "📍",
-  auth: "👤",
-  info: "ℹ️",
+const TYPE_META = {
+  offer: { icon: GiftIcon, label: "Offer", tone: "bg-emerald-50 text-emerald-700" },
+  price: { icon: TagIcon, label: "Price", tone: "bg-amber-50 text-amber-700" },
+  order: { icon: PackageIcon, label: "Order", tone: "bg-sky-50 text-sky-700" },
+  address: { icon: PinIcon, label: "Address", tone: "bg-slate-100 text-slate-600" },
+  auth: { icon: UserIcon, label: "Account", tone: "bg-slate-100 text-slate-600" },
+  info: { icon: InfoIcon, label: "Info", tone: "bg-slate-100 text-slate-600" },
 };
 
 function formatTime(timestamp) {
@@ -83,55 +84,46 @@ export default function NotificationPanel({ className }) {
         onClick={handleOpen}
         className={className || "relative text-slate-600 hover:text-navy-900 active:scale-[0.95] transition-all duration-200 p-1.5 rounded-xl hover:bg-slate-100/80 cursor-pointer"}
         title="Notifications"
+        aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
       >
         <BellIcon />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500 shadow-xs"></span>
-          </span>
+          <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" aria-hidden="true" />
         )}
       </button>
 
       {open &&
         createPortal(
-          <div className="fixed inset-0 z-[999]">
-            {/* Backdrop */}
+          <div className="fixed inset-0 z-[999]" data-storefront>
             <div
-              className={`absolute inset-0 bg-navy-950/40 backdrop-blur-xs transition-opacity duration-200 ${
-                visible ? "opacity-100" : "opacity-0"
-              }`}
+              className={`absolute inset-0 bg-slate-950/40 transition-opacity duration-200 ${visible ? "opacity-100" : "opacity-0"}`}
               onClick={handleClose}
             />
 
-            {/* Panel */}
             <div
-              className={`fixed top-14 right-3 left-3 sm:left-auto w-auto sm:w-96 max-w-md bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl shadow-2xl overflow-hidden transition-all duration-200 ease-out ${
-                visible
-                  ? "translate-y-0 opacity-100 scale-100"
-                  : "-translate-y-6 opacity-0 scale-95"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Notifications"
+              className={`fixed top-16 right-3 left-3 sm:left-auto sm:w-[400px] bg-white rounded-2xl shadow-[0_24px_60px_-20px_rgba(15,23,42,0.45)] ring-1 ring-slate-200 overflow-hidden origin-top-right transition-[opacity,transform] duration-200 ease-out ${
+                visible ? "translate-y-0 opacity-100 scale-100" : "-translate-y-2 opacity-0 scale-[0.98]"
               }`}
             >
-              {/* Header */}
-              <div className="px-4 py-3 border-b border-slate-100 bg-white">
-                <div className="flex items-center justify-between">
+              <div className="px-4 pt-3.5 pb-3 border-b border-slate-100">
+                <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="h-8 w-8 rounded-full bg-brand-50 flex items-center justify-center text-brand-600 text-sm shadow-2xs">
-                      <BellIcon />
-                    </span>
-                    <h3 className="font-extrabold text-navy-900 text-sm">Notifications</h3>
+                    <h3 className="font-semibold text-navy-950 text-[15px]">Notifications</h3>
                     {unreadCount > 0 && (
-                      <span className="text-[10px] font-black bg-brand-500 text-white rounded-full h-4.5 min-w-4.5 px-1.5 flex items-center justify-center">
+                      <span className="text-[11px] font-semibold bg-brand-600 text-white rounded-full h-5 min-w-5 px-1.5 flex items-center justify-center tabular-nums">
                         {unreadCount}
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
                     {unreadCount > 0 && (
                       <button
                         type="button"
                         onClick={markAllAsRead}
-                        className="text-[11px] font-bold text-brand-600 hover:underline cursor-pointer"
+                        className="h-8 px-2 rounded-lg text-xs font-medium text-brand-700 hover:bg-brand-50 cursor-pointer"
                       >
                         Mark all read
                       </button>
@@ -139,24 +131,24 @@ export default function NotificationPanel({ className }) {
                     <button
                       type="button"
                       onClick={handleClose}
-                      className="text-slate-400 hover:text-slate-700 text-xl leading-none px-1 cursor-pointer"
+                      title="Close"
+                      aria-label="Close notifications"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-navy-950 cursor-pointer"
                     >
-                      ✕
+                      <CloseIcon className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
 
-                {/* Filter Tabs */}
-                <div className="flex gap-1.5 mt-2.5 pt-2 border-t border-slate-100">
+                <div className="flex items-center gap-1.5 mt-3">
                   {["All", "Orders", "Offers"].map((t) => (
                     <button
                       key={t}
                       type="button"
                       onClick={() => setActiveTab(t)}
-                      className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                        activeTab === t
-                          ? "bg-navy-900 text-white"
-                          : "text-slate-600 bg-slate-100 hover:bg-slate-200"
+                      aria-pressed={activeTab === t}
+                      className={`h-8 text-xs font-medium px-3 rounded-full transition-colors cursor-pointer ${
+                        activeTab === t ? "bg-navy-950 text-white" : "text-slate-600 bg-slate-100 hover:bg-slate-200"
                       }`}
                     >
                       {t}
@@ -166,7 +158,7 @@ export default function NotificationPanel({ className }) {
                     <button
                       type="button"
                       onClick={clearAllNotifications}
-                      className="text-[11px] font-bold text-slate-400 hover:text-rose-600 ml-auto transition-colors cursor-pointer"
+                      className="h-8 px-2 rounded-lg text-xs font-medium text-slate-500 hover:text-rose-600 ml-auto transition-colors cursor-pointer"
                     >
                       Clear all
                     </button>
@@ -174,83 +166,68 @@ export default function NotificationPanel({ className }) {
                 </div>
               </div>
 
-              {/* Notification List */}
-              <div className="max-h-96 overflow-y-auto divide-y divide-slate-100">
+              <div className="max-h-[min(28rem,70vh)] overflow-y-auto overscroll-contain divide-y divide-slate-100">
                 {filtered.length === 0 ? (
-                  <div className="p-10 text-center text-xs text-slate-500">
-                    <p className="text-3xl mb-2">🔔</p>
-                    <p className="font-extrabold text-navy-900 text-sm">No notifications here</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">You're all caught up with your site updates!</p>
+                  <div className="px-6 py-12 text-center">
+                    <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                      <BellOutline className="h-6 w-6" />
+                    </span>
+                    <p className="font-semibold text-navy-950 text-sm">You're all caught up</p>
+                    <p className="text-sm text-slate-500 mt-0.5">Order updates and offers will show here.</p>
                   </div>
                 ) : (
-                  filtered.map((n) => (
-                    <div
-                      key={n.id}
-                      onClick={() => handleClickNotification(n)}
-                      className={`w-full text-left flex gap-3.5 px-4 py-3.5 transition-all cursor-pointer group relative active:scale-[0.99] ${
-                        n.read ? "bg-white hover:bg-slate-50/90" : "bg-gradient-to-r from-brand-50/60 to-white hover:bg-brand-50/90"
-                      }`}
-                    >
-                      <span className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center text-lg shadow-2xs group-hover:scale-105 transition-transform border ${
-                        n.type === "offer"
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                          : n.type === "price"
-                          ? "bg-amber-50 text-amber-700 border-amber-200"
-                          : n.type === "order"
-                          ? "bg-blue-50 text-blue-700 border-blue-200"
-                          : "bg-purple-50 text-purple-700 border-purple-200"
-                      }`}>
-                        {TYPE_ICON[n.type] || "📢"}
-                      </span>
-
-                      <div className="min-w-0 flex-1 pr-4">
-                        <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
-                          <span className={`text-[9px] font-extrabold uppercase px-2 py-0.2 rounded-full border ${
-                            n.type === "offer"
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : n.type === "price"
-                              ? "bg-amber-50 text-amber-700 border-amber-200"
-                              : n.type === "order"
-                              ? "bg-blue-50 text-blue-700 border-blue-200"
-                              : "bg-purple-50 text-purple-700 border-purple-200"
-                          }`}>
-                            {n.type === "offer" ? "Offer" : n.type === "price" ? "Price" : n.type === "order" ? "Order" : "Info"}
-                          </span>
-                          <span className="text-xs font-black text-navy-900 truncate">
-                            {n.title}
-                          </span>
-                          {!n.read && (
-                            <span className="h-1.5 w-1.5 rounded-full bg-brand-500 shrink-0 animate-pulse" />
-                          )}
-                        </div>
-
-                        <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed font-medium">
-                          {n.message}
-                        </p>
-
-                        <div className="flex items-center gap-2.5 mt-1.5">
-                          <span className="text-[10px] text-slate-400 font-bold">{formatTime(n.timestamp)}</span>
-                          {n.link && (
-                            <span className="text-[10px] text-brand-600 font-black group-hover:underline flex items-center gap-0.5">
-                              View details →
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeNotification(n.id);
+                  filtered.map((n) => {
+                    const meta = TYPE_META[n.type] || TYPE_META.info;
+                    const Icon = meta.icon;
+                    return (
+                      <div
+                        key={n.id}
+                        role={n.link ? "button" : undefined}
+                        tabIndex={n.link ? 0 : undefined}
+                        onClick={() => handleClickNotification(n)}
+                        onKeyDown={(e) => {
+                          if (n.link && (e.key === "Enter" || e.key === " ")) {
+                            e.preventDefault();
+                            handleClickNotification(n);
+                          }
                         }}
-                        className="text-slate-300 hover:text-rose-500 text-xs absolute right-3 top-3 p-1 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
-                        title="Dismiss"
+                        className={`group relative flex w-full gap-3 px-4 py-3.5 text-left transition-colors ${n.link ? "cursor-pointer" : ""} ${
+                          n.read ? "bg-white hover:bg-slate-50" : "bg-brand-50/40 hover:bg-brand-50/70"
+                        }`}
                       >
-                        ✕
-                      </button>
-                    </div>
-                  ))
+                        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${meta.tone}`}>
+                          <Icon className="h-[18px] w-[18px]" />
+                        </span>
+
+                        <div className="min-w-0 flex-1 pr-6">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate text-sm font-semibold text-navy-950">{n.title}</span>
+                            {!n.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" aria-label="Unread" />}
+                          </div>
+                          <p className="mt-0.5 text-[13px] leading-snug text-slate-600 break-words">{n.message}</p>
+                          <div className="mt-1.5 flex items-center gap-2 text-xs text-slate-400">
+                            <span>{meta.label}</span>
+                            <span aria-hidden="true">·</span>
+                            <span>{formatTime(n.timestamp)}</span>
+                            {n.link && <span className="ml-auto font-medium text-brand-700 group-hover:underline">View</span>}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeNotification(n.id);
+                          }}
+                          className="absolute right-2.5 top-2.5 flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 opacity-100 transition-colors hover:bg-slate-100 hover:text-rose-500 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 cursor-pointer"
+                          title="Dismiss"
+                          aria-label="Dismiss notification"
+                        >
+                          <CloseIcon className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -262,10 +239,5 @@ export default function NotificationPanel({ className }) {
 }
 
 function BellIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9Z" />
-      <path d="M13.7 21a2 2 0 0 1-3.4 0" />
-    </svg>
-  );
+  return <BellOutline className="h-[22px] w-[22px]" />;
 }

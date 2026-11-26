@@ -2,6 +2,12 @@ import { useMemo, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import ProductCard from "../../components/ProductCard";
+import MobileHeader from "../../components/ui/MobileHeader";
+import { realMrp } from "../../utils/priceDisplay";
+import SearchField from "../../components/ui/SearchField";
+import EmptyState from "../../components/ui/EmptyState";
+import ProductGridSkeleton from "../../components/ui/ProductGridSkeleton";
+import { SearchIcon } from "../../components/ui/Icons";
 import { useRegion } from "../../context/RegionContext";
 import { useAdmin } from "../../context/AdminContext";
 import { cleanProductImage } from "../../utils/productImage";
@@ -9,7 +15,7 @@ import { cleanProductImage } from "../../utils/productImage";
 export default function SearchResults() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { region } = useRegion();
-  const { products = [] } = useAdmin();
+  const { products = [], productsLoading } = useAdmin();
   const initialQuery = searchParams.get("q") || "";
   const [query, setQuery] = useState(initialQuery);
 
@@ -55,18 +61,16 @@ export default function SearchResults() {
     // 3. Map each vendor's listing with their seller shop name and price
     return matchedListings.map((p) => {
       const itemPrice = Math.round(Number(p.price) || 100);
-      const calculatedMrp = p.mrp || Math.round(itemPrice * 1.15);
 
       return {
+        ...p,
         id: p.id,
         name: p.name,
         brand: p.brand || "BuildCity Certified",
         vendorName: p.vendorName || p.vendor?.shopName || "District Vendor",
         img: cleanProductImage(p, p.categoryName || p.category, p.name),
-        mrp: calculatedMrp,
+        mrp: realMrp(itemPrice, p.mrp),
         price: itemPrice,
-        rating: p.rating || "4.9",
-        reviews: p.reviews || 36,
       };
     });
   }, [products, activeQuery, region]);
@@ -76,51 +80,52 @@ export default function SearchResults() {
     setSearchParams(query ? { q: query } : {});
   };
 
+  const shownQuery = (searchParams.get("q") || "").trim();
+
   return (
-    <div className="min-h-screen bg-surface pb-20">
-      <Navbar />
+    <div data-storefront className="min-h-screen bg-surface pb-24 lg:pb-12">
+      <div className="hidden lg:block">
+        <Navbar />
+      </div>
+      <MobileHeader title="Search">
+        <SearchField value={query} onChange={setQuery} onSubmit={handleSubmit} autoFocus={!shownQuery} />
+      </MobileHeader>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-        <form onSubmit={handleSubmit} className="mb-5 sm:hidden">
-          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-3">
-            <SearchIcon />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search for products, brands, services..."
-              className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
-            />
-          </div>
-        </form>
-
+      <main className="bc-fade-in max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-6">
         <div className="mb-5">
-          <div className="text-xs text-slate-400 mb-1">
-            <Link to="/" className="hover:text-brand-500">Home</Link>
-            <span className="mx-1.5">/</span>
-            Search
-          </div>
-          <h1 className="text-xl font-bold text-navy-900">
-            {searchParams.get("q")
-              ? `Results for "${searchParams.get("q")}"`
-              : "Search products"}
+          <nav aria-label="Breadcrumb" className="hidden lg:block text-sm text-slate-500 mb-1.5">
+            <Link to="/" className="hover:text-navy-950">Home</Link>
+            <span className="mx-1.5 text-slate-300">/</span>
+            <span className="text-navy-950">Search</span>
+          </nav>
+          <h1 className="text-lg sm:text-2xl font-semibold tracking-tight text-navy-950 break-words">
+            {shownQuery ? <>Results for “{shownQuery}”</> : "Search products"}
           </h1>
-          <p className="text-sm text-slate-500">
-            {results.length} products found in {region.name}
-          </p>
+          {shownQuery && !productsLoading && (
+            <p className="mt-0.5 text-sm text-slate-500 tabular-nums">
+              {results.length} {results.length === 1 ? "product" : "products"} in {region.name}
+            </p>
+          )}
         </div>
 
-        {results.length === 0 ? (
-          <div className="bg-white rounded-xl border border-dashed border-slate-300 p-14 text-center">
-            <span className="text-4xl mb-3 inline-block">🔍</span>
-            <h3 className="font-bold text-navy-900 mb-1">
-              {searchParams.get("q") ? "No products found" : "Search for something"}
-            </h3>
-            <p className="text-sm text-slate-500">
-              Try "cement", "paint", "steel" ya koi aur product/brand naam.
-            </p>
+        {productsLoading && shownQuery ? (
+          <ProductGridSkeleton className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4" />
+        ) : results.length === 0 ? (
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200/80">
+            <EmptyState
+              icon={SearchIcon}
+              title={shownQuery ? `No results for “${shownQuery}”` : "What are you looking for?"}
+              description={
+                shownQuery
+                  ? `Check the spelling or try a broader word like “cement”, “TMT” or “paint”. Results are for ${region.name}.`
+                  : "Search by product, brand or shop — for example “UltraTech” or “12mm TMT”."
+              }
+              actionLabel={shownQuery ? "Browse categories" : undefined}
+              actionTo={shownQuery ? "/categories" : undefined}
+            />
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4">
             {results.map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}
@@ -128,14 +133,5 @@ export default function SearchResults() {
         )}
       </main>
     </div>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="11" cy="11" r="7" />
-      <path d="m21 21-4.3-4.3" />
-    </svg>
   );
 }

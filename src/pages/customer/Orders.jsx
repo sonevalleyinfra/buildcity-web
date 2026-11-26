@@ -1,11 +1,12 @@
 import { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useCart } from "../../context/CartContext";
 import { useOrders } from "../../context/OrderContext";
 import { useAuth } from "../../context/AuthContext";
 import { useAdmin } from "../../context/AdminContext";
 import Navbar from "../../components/Navbar";
-import NotificationPanel from "../../components/NotificationPanel";
+import MobileHeader from "../../components/ui/MobileHeader";
+import EmptyState from "../../components/ui/EmptyState";
+import { ChevronRightIcon, PackageIcon, ReceiptIcon } from "../../components/ui/Icons";
 import { formatShortId, formatDateTimeIST } from "../../utils/formatId";
 import { cleanProductImage } from "../../utils/productImage";
 import LoadMoreButton from "../../components/LoadMoreButton";
@@ -13,96 +14,22 @@ import LoadMoreButton from "../../components/LoadMoreButton";
 const TABS = ["All", "Pending", "Processing", "Out for Delivery", "Delivered", "Cancelled"];
 
 const STATUS_MAP = {
-  PENDING: {
-    label: "Pending",
-    color: "bg-amber-50 text-amber-800 border-amber-300/80",
-    tile: "bg-gradient-to-b from-amber-50/70 via-white to-white border-amber-300/70 shadow-[0_2px_10px_-4px_rgba(245,158,11,0.15)]",
-    accent: "bg-amber-500",
-    halo: "ring-amber-500/25",
-    dot: "bg-amber-500",
-    pulse: true,
-  },
-  PROCESSING: {
-    label: "Processing",
-    color: "bg-sky-50 text-sky-800 border-sky-300/80",
-    tile: "bg-gradient-to-b from-sky-50/70 via-white to-white border-sky-300/70 shadow-[0_2px_10px_-4px_rgba(14,165,233,0.15)]",
-    accent: "bg-sky-500",
-    halo: "ring-sky-500/25",
-    dot: "bg-sky-500",
-    pulse: true,
-  },
-  CONFIRMED: {
-    label: "Confirmed",
-    color: "bg-sky-50 text-sky-800 border-sky-300/80",
-    tile: "bg-gradient-to-b from-sky-50/70 via-white to-white border-sky-300/70 shadow-[0_2px_10px_-4px_rgba(14,165,233,0.15)]",
-    accent: "bg-sky-500",
-    halo: "ring-sky-500/25",
-    dot: "bg-sky-500",
-    pulse: false,
-  },
-  SHIPPED: {
-    label: "Shipped",
-    color: "bg-indigo-50 text-indigo-800 border-indigo-300/80",
-    tile: "bg-gradient-to-b from-indigo-50/70 via-white to-white border-indigo-300/70 shadow-[0_2px_10px_-4px_rgba(99,102,241,0.15)]",
-    accent: "bg-indigo-500",
-    halo: "ring-indigo-500/25",
-    dot: "bg-indigo-500",
-    pulse: true,
-  },
-  OUT_FOR_DELIVERY: {
-    label: "Out for Delivery",
-    color: "bg-indigo-50 text-indigo-800 border-indigo-300/80",
-    tile: "bg-gradient-to-b from-indigo-50/70 via-white to-white border-indigo-300/70 shadow-[0_2px_10px_-4px_rgba(99,102,241,0.15)]",
-    accent: "bg-indigo-500",
-    halo: "ring-indigo-500/25",
-    dot: "bg-indigo-500",
-    pulse: true,
-  },
-  DELIVERED: {
-    label: "Delivered",
-    color: "bg-emerald-50 text-emerald-800 border-emerald-300/80",
-    tile: "bg-gradient-to-b from-emerald-50/70 via-white to-white border-emerald-300/70 shadow-[0_2px_10px_-4px_rgba(16,185,129,0.15)]",
-    accent: "bg-emerald-500",
-    halo: "ring-emerald-500/25",
-    dot: "bg-emerald-500",
-    pulse: false,
-  },
-  COMPLETED: {
-    label: "Delivered",
-    color: "bg-emerald-50 text-emerald-800 border-emerald-300/80",
-    tile: "bg-gradient-to-b from-emerald-50/70 via-white to-white border-emerald-300/70 shadow-[0_2px_10px_-4px_rgba(16,185,129,0.15)]",
-    accent: "bg-emerald-500",
-    halo: "ring-emerald-500/25",
-    dot: "bg-emerald-500",
-    pulse: false,
-  },
-  CANCELLED: {
-    label: "Cancelled",
-    color: "bg-rose-50 text-rose-700 border-rose-300/70",
-    tile: "bg-gradient-to-b from-slate-50 via-white to-white border-slate-300/80",
-    accent: "bg-rose-400",
-    halo: "ring-rose-400/25",
-    dot: "bg-rose-400",
-    pulse: false,
-  },
+  PENDING: { label: "Pending", color: "bg-amber-50 text-amber-800 ring-amber-600/20", dot: "bg-amber-500" },
+  PROCESSING: { label: "Processing", color: "bg-sky-50 text-sky-800 ring-sky-600/20", dot: "bg-sky-500" },
+  CONFIRMED: { label: "Confirmed", color: "bg-sky-50 text-sky-800 ring-sky-600/20", dot: "bg-sky-500" },
+  SHIPPED: { label: "Shipped", color: "bg-indigo-50 text-indigo-800 ring-indigo-600/20", dot: "bg-indigo-500" },
+  OUT_FOR_DELIVERY: { label: "Out for Delivery", color: "bg-indigo-50 text-indigo-800 ring-indigo-600/20", dot: "bg-indigo-500" },
+  DELIVERED: { label: "Delivered", color: "bg-emerald-50 text-emerald-800 ring-emerald-600/20", dot: "bg-emerald-500" },
+  COMPLETED: { label: "Delivered", color: "bg-emerald-50 text-emerald-800 ring-emerald-600/20", dot: "bg-emerald-500" },
+  CANCELLED: { label: "Cancelled", color: "bg-slate-100 text-slate-600 ring-slate-500/20", dot: "bg-slate-400" },
 };
 
 const ORDER_STEPS = ["PENDING", "PROCESSING", "OUT_FOR_DELIVERY", "DELIVERED"];
 
 
-function CartIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="8" cy="21" r="1" />
-      <circle cx="19" cy="21" r="1" />
-      <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
-    </svg>
-  );
-}
 
 export default function Orders() {
   const navigate = useNavigate();
-  const { count } = useCart();
   const { orders, hasMoreOrders, loadingMoreOrders, loadMoreOrders } = useOrders();
   const { user } = useAuth();
   const { productsLoading } = useAdmin();
@@ -130,6 +57,13 @@ export default function Orders() {
     });
   }, [orders, customerPhone, customerId]);
 
+  const tabMatches = (o, t) => {
+    const rawSt = (o.status || "PENDING").toUpperCase();
+    const info = STATUS_MAP[rawSt] || STATUS_MAP.PENDING;
+    return info.label.toLowerCase() === t.toLowerCase() || rawSt === t.toUpperCase();
+  };
+  const tabCount = (t) => (t === "All" ? customerOrders.length : customerOrders.filter((o) => tabMatches(o, t)).length);
+
   const filtered = tab === "All" ? customerOrders : customerOrders.filter((o) => {
     const rawSt = (o.status || "PENDING").toUpperCase();
     const info = STATUS_MAP[rawSt] || STATUS_MAP.PENDING;
@@ -137,108 +71,67 @@ export default function Orders() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-50 text-navy-900 pb-24 sm:pb-12 font-sans w-full max-w-full overflow-x-clip">
-      {/* Desktop header navigation */}
+    <div data-storefront className="min-h-screen bg-slate-50 text-navy-900 pb-24 lg:pb-12 font-sans w-full max-w-full overflow-x-clip">
       <div className="hidden lg:block">
         <Navbar />
       </div>
+      <MobileHeader title="My orders" />
 
-      {/* Mobile header back navigation ke saath */}
-      <div className="lg:hidden bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <Link
-              to="/"
-              className="p-1.5 -ml-1.5 rounded-xl hover:bg-slate-100 text-navy-900 active:scale-95 transition-all flex items-center justify-center"
-              title="Back to Home"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m15 18-6-6 6-6" />
-              </svg>
-            </Link>
-            <h1 className="font-extrabold text-navy-900 text-base tracking-tight">My Orders</h1>
-          </div>
+      <main className="bc-fade-in max-w-4xl mx-auto px-4 pt-4 sm:pt-6 space-y-4">
+        <h1 className="hidden lg:block text-2xl font-semibold tracking-tight text-navy-950">My orders</h1>
 
-          <div className="flex items-center gap-3">
-            <NotificationPanel className="relative text-navy-900 hover:text-brand-600 transition-colors cursor-pointer" />
-            <Link to="/cart" className="relative text-navy-900 hover:text-brand-600 transition-colors p-1" title="Cart">
-              <CartIcon />
-              {count > 0 && (
-                <span className="absolute -top-1 -right-1.5 h-4.5 w-4.5 rounded-full bg-brand-500 text-white text-[10px] font-black flex items-center justify-center shadow-xs">
-                  {count}
-                </span>
-              )}
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      <main className="max-w-4xl mx-auto px-4 pt-6 space-y-6">
-        {/* Orders page ka title */}
-        <div>
-          <h1 className="text-xl sm:text-2xl font-black text-navy-900 tracking-tight">
-            My Orders
-          </h1>
-        </div>
-
-        {/* Order status ke hisab se filter karne ke tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1.5 border-b border-slate-200/90 no-scrollbar">
-          {TABS.map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-3.5 py-2 text-xs font-bold rounded-xl active:scale-[0.98] transition-all whitespace-nowrap cursor-pointer ${
-                tab === t
-                  ? "bg-navy-900 text-white shadow-xs"
-                  : "text-slate-600 bg-white border border-slate-200/90 hover:bg-slate-100"
-              }`}
-            >
-              {t}
-            </button>
-          ))}
+        <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 no-scrollbar" role="tablist" aria-label="Filter orders by status">
+          {TABS.map((t) => {
+            const n = tabCount(t);
+            const active = tab === t;
+            return (
+              <button
+                key={t}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTab(t)}
+                className={`h-9 shrink-0 whitespace-nowrap rounded-full px-3.5 text-sm font-medium transition-colors cursor-pointer ${
+                  active ? "bg-navy-950 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                {t}
+                {n > 0 && <span className={`ml-1.5 tabular-nums ${active ? "text-slate-300" : "text-slate-400"}`}>{n}</span>}
+              </button>
+            );
+          })}
         </div>
 
         {/* Customer ke orders ki list */}
         {productsLoading ? (
-          <div className="space-y-3.5 animate-pulse">
+          <div className="space-y-2.5" aria-busy="true" aria-label="Loading orders">
             {[1, 2, 3].map((n) => (
-              <div
-                key={n}
-                className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs"
-              >
-                <div className="flex gap-4 items-center">
-                  <div className="h-12 w-12 rounded-xl bg-slate-200 shrink-0" />
-                  <div className="space-y-2">
-                    <div className="h-4 bg-slate-200 rounded w-48" />
-                    <div className="h-3 bg-slate-200 rounded w-32" />
-                    <div className="h-3 bg-slate-200 rounded w-24" />
-                  </div>
+              <div key={n} className="bg-white rounded-2xl ring-1 ring-slate-200/80 p-4 flex items-center gap-4">
+                <div className="bc-skeleton h-14 w-14 rounded-xl shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="bc-skeleton h-3.5 rounded w-24" />
+                  <div className="bc-skeleton h-4 rounded w-3/5" />
+                  <div className="bc-skeleton h-3 rounded w-2/5" />
                 </div>
-                <div className="flex items-center justify-between sm:flex-col sm:items-end gap-2">
-                  <div className="h-4 bg-slate-200 rounded w-20" />
-                  <div className="h-6 bg-slate-200 rounded w-24" />
-                </div>
+                <div className="bc-skeleton h-5 rounded w-16" />
               </div>
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
-            <p className="text-4xl mb-3">📦</p>
-            <h3 className="text-sm font-extrabold text-navy-900">No Orders Found</h3>
-            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              {tab === "All"
-                ? "You haven't placed any building material orders yet. Browse our certified catalog to order cement, steel, paints & more."
-                : `No orders matching status "${tab}".`}
-            </p>
-            <button
-              onClick={() => navigate("/categories")}
-              className="mt-4 inline-block bg-brand-500 hover:bg-brand-600 active:scale-[0.98] text-white text-xs font-bold px-4.5 py-2.5 rounded-xl transition-all cursor-pointer shadow-2xs"
-            >
-              Browse Catalog & Order Now
-            </button>
+          <div className="bg-white rounded-2xl ring-1 ring-slate-200/80">
+            <EmptyState
+              icon={ReceiptIcon}
+              title={tab === "All" ? "No orders yet" : `No ${tab.toLowerCase()} orders`}
+              description={
+                tab === "All"
+                  ? "Your cement, steel and other material orders will show up here."
+                  : "Orders with this status will show up here."
+              }
+              actionLabel={tab === "All" ? "Browse materials" : "Show all orders"}
+              onAction={() => (tab === "All" ? navigate("/categories") : setTab("All"))}
+            />
           </div>
         ) : (
-          <div className="space-y-3.5">
+          <div className="space-y-2.5">
             {filtered.map((order) => {
               const rawSt = (order.status || "PENDING").toUpperCase();
               const statusInfo = STATUS_MAP[rawSt] || STATUS_MAP.PENDING;
@@ -252,85 +145,52 @@ export default function Orders() {
                   else stepIndex = 0;
                 }
 
+                const itemCount = order.items?.length || 0;
                 return (
                   <Link
                     key={order.id}
                     to={`/orders/${order.id}`}
-                    className={`relative overflow-hidden rounded-2xl border p-4 sm:p-5 hover:shadow-lg active:scale-[0.99] transition-all flex flex-col justify-between gap-3.5 group block ${statusInfo.tile}`}
+                    data-step={stepIndex}
+                    className="group flex items-center gap-3 sm:gap-4 rounded-2xl bg-white p-3.5 sm:p-4 ring-1 ring-slate-200/80 transition-[box-shadow] duration-200 hover:ring-slate-300 hover:shadow-[0_12px_28px_-18px_rgba(15,23,42,0.4)]"
                   >
-                    {/* Status ki vertical color line */}
-                    <span className={`absolute inset-y-0 left-0 w-1.5 transition-colors duration-500 ${statusInfo.accent}`} aria-hidden="true" />
+                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-white ring-1 ring-slate-100 flex items-center justify-center">
+                      {firstItem ? (
+                        <img
+                          src={cleanProductImage(firstItem)}
+                          alt=""
+                          className="h-full w-full object-contain p-1"
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = cleanProductImage(null, firstItem?.categoryName || firstItem?.category, firstItem?.name || firstItem?.productName);
+                          }}
+                        />
+                      ) : (
+                        <PackageIcon className="h-6 w-6 text-slate-400" />
+                      )}
+                    </div>
 
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
-                      <div className="flex gap-3.5 sm:gap-4 items-center min-w-0 pl-1">
-                        {/* Product package icon or product image */}
-                        <div className="h-13 w-13 sm:h-14 sm:w-14 rounded-xl bg-white border border-slate-200/90 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 overflow-hidden transition-all select-none">
-                          {firstItem ? (
-                            <img
-                              src={cleanProductImage(firstItem)}
-                              alt={firstItem.name || "Item"}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                e.currentTarget.onerror = null;
-                                e.currentTarget.src = cleanProductImage(null, firstItem?.categoryName || firstItem?.category, firstItem?.name || firstItem?.productName);
-                              }}
-                            />
-                          ) : (
-                            <span className="text-2xl">📦</span>
-                          )}
-                        </div>
-
-                        <div className="space-y-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-black border shadow-2xs ${statusInfo.color}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${statusInfo.dot} ${statusInfo.pulse ? "animate-pulse" : ""}`} />
-                              {statusInfo.label}
-                            </span>
-                            <span className="text-[11px] text-slate-400 font-medium">
-                              {formatDateTimeIST(order.date || order.createdAt)}
-                            </span>
-                          </div>
-
-                          <h3 className="text-xs sm:text-sm font-black text-navy-950 leading-snug group-hover:text-brand-600 transition-colors tracking-tight line-clamp-1">
-                            {firstItem?.name || firstItem?.productName || "Building Materials"}
-                          </h3>
-
-                          <div className="flex items-center gap-2 flex-wrap pt-0.5">
-                            <p className="text-[11px] text-slate-500 font-medium">
-                              Order: <strong className="font-mono text-brand-700 font-black">{formatShortId(order.id || order.orderNumber, "ORD")}</strong>
-                            </p>
-                            {order.items && order.items.length > 1 && (
-                              <span className="text-[10px] font-black text-slate-700 bg-slate-100/90 px-2 py-0.5 rounded-md border border-slate-200/80">
-                                +{order.items.length - 1} more items
-                              </span>
-                            )}
-                            <span className="text-[10px] font-bold text-slate-500 bg-white/90 px-2 py-0.5 rounded-md border border-slate-200/80">
-                              Delivery: ₹{Number(order.deliveryFee !== undefined ? order.deliveryFee : 49)}
-                            </span>
-                            {order.couponCode && (
-                              <span className="text-[10px] font-extrabold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
-                                Coupon: {order.couponCode} {Number(order.discountAmount) > 0 ? `(-₹${Number(order.discountAmount).toLocaleString("en-IN")})` : ""}
-                              </span>
-                            )}
-                            {Number(order.walletDiscount) > 0 && (
-                              <span className="text-[10px] font-extrabold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                                Wallet (-₹{Number(order.walletDiscount).toLocaleString("en-IN")})
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-                        <div className="text-left sm:text-right">
-                          <p className="text-[9.5px] text-slate-400 font-black uppercase tracking-wider">Total Amount</p>
-                          <p className="text-base sm:text-lg font-black text-navy-950 tabular-nums">₹{displayTotal.toLocaleString("en-IN")}</p>
-                        </div>
-                        <span className="text-xs font-black text-white bg-navy-950 group-hover:bg-brand-600 px-4 py-2 rounded-xl group-hover:shadow-md transition-all shrink-0 active:scale-95 flex items-center gap-1 shadow-2xs">
-                          <span>Track Order</span>
-                          <span className="transition-transform group-hover:translate-x-0.5">→</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${statusInfo.color}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${statusInfo.dot}`} aria-hidden="true" />
+                          {statusInfo.label}
                         </span>
+                        <span className="text-xs text-slate-500">{formatDateTimeIST(order.date || order.createdAt)}</span>
                       </div>
+                      <h3 className="mt-1 truncate text-sm font-medium text-navy-950 sm:text-[15px]">
+                        {firstItem?.name || firstItem?.productName || "Building materials"}
+                        {itemCount > 1 && <span className="font-normal text-slate-500"> +{itemCount - 1} more</span>}
+                      </h3>
+                      <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
+                        <span className="font-mono">{formatShortId(order.id || order.orderNumber, "ORD")}</span>
+                        {order.couponCode && <span>· Coupon {order.couponCode}</span>}
+                        {Number(order.walletDiscount) > 0 && <span className="tabular-nums">· Wallet −₹{Number(order.walletDiscount).toLocaleString("en-IN")}</span>}
+                      </p>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+                      <span className="text-[15px] font-semibold text-navy-950 tabular-nums sm:text-base">₹{displayTotal.toLocaleString("en-IN")}</span>
+                      <ChevronRightIcon className="h-5 w-5 text-slate-400 transition-transform duration-200 group-hover:translate-x-0.5" />
                     </div>
                   </Link>
                 );

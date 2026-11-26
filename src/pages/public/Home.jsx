@@ -13,6 +13,23 @@ import SiteReviewsSection from "../../components/SiteReviewsSection";
 import { Capacitor } from "@capacitor/core";
 import { constructionServices } from "../../data/servicesData";
 import { renderServiceLogo } from "../../data/serviceIcons";
+import ContactFab from "../../components/ContactFab";
+import SectionHeader from "../../components/ui/SectionHeader";
+import EmptyState from "../../components/ui/EmptyState";
+import {
+  ArrowRightIcon,
+  ChevronDownIcon,
+  CloseIcon,
+  HardHatIcon,
+  MonitorIcon,
+  PackageIcon,
+  PinIcon,
+  SearchIcon,
+  ShieldCheckIcon,
+  StarIcon,
+  StoreIcon,
+  TagIcon,
+} from "../../components/ui/Icons";
 
 
 const brandItems = [
@@ -309,34 +326,33 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] font-sans w-full max-w-full overflow-x-clip">
+    <div data-storefront className="min-h-screen bg-[#F8FAFC] font-sans w-full max-w-full overflow-x-clip">
       {/* Desktop screen ke liye navbar */}
       <div className="hidden lg:block">
         <Navbar />
       </div>
 
       {/* Mobile screen ke liye sticky top header */}
-      <div className="lg:hidden sticky top-0 z-30 w-full max-w-full bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-2xs">
+      <div className="lg:hidden sticky top-0 z-30 w-full max-w-full bg-white/95 backdrop-blur-md border-b border-slate-200/80">
         {/* Header row jisme logo, location picker aur login button hai */}
-        <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between gap-1.5 w-full max-w-full">
+        <div className="px-3 pt-2 pb-1.5 flex items-center justify-between gap-2 w-full max-w-full">
           {/* Logo aur live district selector */}
-          <div className="flex items-center gap-1.5 min-w-0 shrink">
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
             <Link to="/" className="active:scale-95 transition-transform shrink-0 flex items-center">
               <Logo size="sm" hideSubtitle={true} />
             </Link>
 
-            <div className="h-3.5 w-px bg-slate-200 mx-0.5 shrink-0" />
+            <div className="h-4 w-px bg-slate-200 shrink-0" />
 
             <RegionPicker
+              className="flex min-w-0 cursor-pointer"
               trigger={(r) => (
-                <div className="flex items-center gap-0.5 cursor-pointer group min-w-0">
-                  <span className="text-slate-600 text-[10px] sm:text-[11px] leading-none shrink-0">📍</span>
-                  <span className="font-bold text-slate-700 text-[11px] sm:text-xs leading-none tracking-tight truncate max-w-[70px] sm:max-w-[110px] group-hover:text-brand-600 transition-colors">
+                <div className="flex h-9 items-center gap-1 rounded-lg px-1.5 cursor-pointer group min-w-0 hover:bg-slate-100 transition-colors">
+                  <PinIcon className="h-4 w-4 shrink-0 text-brand-600" />
+                  <span className="font-semibold text-navy-950 text-[13px] leading-none truncate min-w-0 max-w-[140px]">
                     {r?.name || "Varanasi"}
                   </span>
-                  <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="text-slate-500 group-hover:text-black transition-transform shrink-0">
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
+                  <ChevronDownIcon className="h-3.5 w-3.5 shrink-0 text-slate-400" strokeWidth={2.2} />
                 </div>
               )}
             />
@@ -347,47 +363,43 @@ export default function Home() {
             {!user && (
               <Link
                 to="/login"
-                className="bg-[#0A192F] hover:bg-brand-600 text-white font-extrabold text-[10.5px] px-2 py-1 rounded-xl shadow-2xs active:scale-95 transition-all flex items-center gap-1 shrink-0"
-                title="Login / Register"
+                className="inline-flex h-9 items-center rounded-xl bg-navy-950 px-3.5 text-[13px] font-semibold text-white active:scale-[0.97] transition-transform shrink-0"
               >
-                <span className="text-[11px]">🔑</span>
-                <span>Login</span>
+                Log in
               </Link>
             )}
 
-            <NotificationPanel className="relative text-navy-900 hover:text-brand-600 transition-colors cursor-pointer shrink-0" />
+            <NotificationPanel className="relative flex h-10 w-10 items-center justify-center rounded-xl text-navy-900 hover:bg-slate-100 transition-colors cursor-pointer shrink-0" />
           </div>
         </div>
 
         {/* Search bar input box */}
         <form onSubmit={handleSearch} className="px-3 pb-2.5">
-          <div className="w-full flex items-center gap-2.5 bg-slate-100/90 rounded-xl px-3.5 py-2 border border-slate-200/80 focus-within:border-brand-500 focus-within:bg-white focus-within:shadow-xs transition-colors shadow-2xs h-10">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.2" className="shrink-0">
-              <circle cx="11" cy="11" r="8" />
-              <path d="m21 21-4.3-4.3" />
-            </svg>
+          <div className="w-full flex items-center gap-2.5 bg-slate-100 rounded-xl px-3.5 border border-transparent focus-within:border-brand-500 focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(234,88,12,0.10)] transition-[border-color,background-color,box-shadow] duration-150 h-11">
+            <SearchIcon className="h-[18px] w-[18px] shrink-0 text-slate-500" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search cement, steel, paints, pipes..."
-              className="w-full bg-transparent text-xs text-navy-900 font-medium outline-none placeholder:text-slate-400 min-w-0"
+              placeholder="Search cement, steel, paints, pipes…"
+              aria-label="Search materials"
+              className="w-full bg-transparent text-sm text-navy-950 outline-none placeholder:text-slate-500 min-w-0"
             />
             {searchQuery && (
-              <button type="button" onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600 text-xs p-0.5 shrink-0">
-                ✕
+              <button type="button" onClick={() => setSearchQuery("")} aria-label="Clear search" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:text-slate-600 shrink-0">
+                <CloseIcon className="h-4 w-4" />
               </button>
             )}
           </div>
         </form>
       </div>
 
-      <main className={`max-w-6xl mx-auto px-4 pt-3.5 sm:pt-6 space-y-3.5 sm:space-y-5 ${
-        Capacitor.isNativePlatform() ? "pb-20 sm:pb-24" : "pb-4 sm:pb-6"
+      <main className={`bc-fade-in max-w-6xl mx-auto px-4 pt-4 sm:pt-6 space-y-7 sm:space-y-9 ${
+        Capacitor.isNativePlatform() ? "pb-24" : "pb-10"
       }`}>
         {/* 1. Hero banner slider (touch aur drag support ke saath) */}
         <div
-          className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-slate-900 border border-slate-200/80 shadow-[0_6px_24px_-4px_rgba(15,23,42,0.10)] select-none group touch-pan-y flex flex-col ring-1 ring-black/5"
+          className="relative overflow-hidden rounded-2xl bg-slate-200 select-none group touch-pan-y flex flex-col"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -495,24 +507,18 @@ export default function Home() {
         </div>
 
         {/* 2. Top Brands (Original Circular Bubbles) */}
-        <section className="space-y-1.5 sm:space-y-2.5">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base sm:text-lg font-black text-navy-950 tracking-tight">Top Brands</h3>
-            <Link to="/categories" className="text-xs font-bold text-[#c2410c] hover:text-[#9a3412] hover:underline flex items-center gap-1 active:scale-95 transition-transform">
-              <span>See all</span>
-              <span className="text-sm">→</span>
-            </Link>
-          </div>
+        <section className="space-y-3">
+          <SectionHeader title="Top brands" linkTo="/categories" />
 
           <div className="flex lg:grid lg:grid-cols-7 gap-3.5 sm:gap-5 lg:gap-6 overflow-x-auto lg:overflow-visible pb-1 pt-0.5 no-scrollbar scroll-smooth px-1">
             {brandItems.map((b) => (
               <Link
                 key={b.name}
                 to={`/categories?cat=${encodeURIComponent(b.category)}`}
-                className="w-[74px] sm:w-[84px] lg:w-auto shrink-0 lg:shrink flex flex-col items-center text-center group active:scale-95 transition-all"
+                className="w-[74px] sm:w-[84px] lg:w-auto shrink-0 lg:shrink flex flex-col items-center text-center group active:scale-[0.97] transition-transform"
               >
                 <div
-                  className="w-16 h-16 sm:w-18 sm:h-18 lg:w-20 lg:h-20 rounded-full flex items-center justify-center p-2 shadow-[0_2px_8px_-2px_rgba(15,23,42,0.08)] border border-slate-200/90 group-hover:border-brand-500 group-hover:shadow-[0_6px_20px_-4px_rgba(234,88,12,0.2)] group-hover:scale-105 transition-all duration-300 select-none overflow-hidden"
+                  className="w-16 h-16 sm:w-18 sm:h-18 lg:w-20 lg:h-20 rounded-full flex items-center justify-center p-2 shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-slate-200 group-hover:ring-slate-300 group-hover:-translate-y-0.5 group-hover:shadow-[0_8px_18px_-8px_rgba(15,23,42,0.25)] transition-[transform,box-shadow] duration-200 select-none overflow-hidden"
                   style={{ backgroundColor: b.bgColor }}
                 >
                   <div className="w-full h-full max-w-[82%] max-h-[82%] flex items-center justify-center">
@@ -520,7 +526,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="w-full min-h-[22px] flex items-center justify-center text-center mt-1 px-0.5">
-                  <span className="text-[11px] sm:text-xs font-black text-navy-950 group-hover:text-brand-600 transition-colors leading-tight tracking-tight line-clamp-2">
+                  <span className="text-xs font-medium text-slate-700 group-hover:text-navy-950 transition-colors leading-tight line-clamp-2">
                     {b.name}
                   </span>
                 </div>
@@ -530,14 +536,8 @@ export default function Home() {
         </section>
 
         {/* 2.5 Construction Services section (Rich Card Style with Service Badges & Details) */}
-        <section className="space-y-1.5 sm:space-y-2.5">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base sm:text-lg font-black text-navy-950 tracking-tight">Construction Services</h3>
-            <Link to="/categories" className="text-xs font-bold text-[#c2410c] hover:text-[#9a3412] hover:underline flex items-center gap-1 active:scale-95 transition-transform">
-              <span>See all</span>
-              <span className="text-sm">→</span>
-            </Link>
-          </div>
+        <section className="space-y-3">
+          <SectionHeader title="Construction services" linkTo="/categories" />
 
           <div className="flex overflow-x-auto lg:grid lg:grid-cols-8 gap-2.5 sm:gap-3.5 pb-1 no-scrollbar scroll-smooth">
             {constructionServices.map((s) => (
@@ -548,23 +548,31 @@ export default function Home() {
                   setSelectedSubCategory(s.subServices && s.subServices.length > 0 ? s.subServices[0] : "");
                   setServicePackageType("with_material");
                 }}
-                className="w-[92px] sm:w-28 lg:w-auto shrink-0 lg:shrink rounded-2xl p-2.5 flex flex-col items-center justify-between shadow-[0_2px_8px_-2px_rgba(15,23,42,0.06)] hover:shadow-[0_8px_20px_-6px_rgba(15,23,42,0.12)] border border-slate-200/80 hover:border-brand-500/50 active:scale-[0.94] transition-all duration-300 group min-h-[115px] sm:min-h-[135px] cursor-pointer select-none text-center"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    e.currentTarget.click();
+                  }
+                }}
+                className="w-[96px] sm:w-28 lg:w-auto shrink-0 lg:shrink rounded-2xl p-2.5 flex flex-col items-center justify-between ring-1 ring-slate-200/80 hover:ring-slate-300 hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-14px_rgba(15,23,42,0.35)] active:scale-[0.97] transition-[transform,box-shadow] duration-200 group min-h-[118px] sm:min-h-[135px] cursor-pointer select-none text-center"
                 style={{ backgroundColor: s.cardBg || s.bg || "#F8FAFC" }}
               >
                 <div className="w-full flex-1 flex items-center justify-center py-1">
-                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white shadow-xs border border-white/90 flex items-center justify-center p-1.5 overflow-hidden group-hover:scale-110 group-hover:shadow-md transition-all duration-300">
-                    {renderServiceLogo(s.id, "w-8 h-8 sm:w-9 sm:h-9 group-hover:scale-110 transition-transform duration-300 drop-shadow-xs") || (
-                      <span className="text-2xl sm:text-3xl select-none group-hover:scale-110 transition-transform duration-300 drop-shadow-xs">
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06)] flex items-center justify-center p-1.5 overflow-hidden">
+                    {renderServiceLogo(s.id, "w-8 h-8 sm:w-9 sm:h-9 group-hover:scale-105 transition-transform duration-200") || (
+                      <span className="text-2xl sm:text-3xl select-none">
                         {s.icon}
                       </span>
                     )}
                   </div>
                 </div>
                 <div className="text-center w-full pt-1">
-                  <span className="text-xs sm:text-[13px] font-black text-navy-950 group-hover:text-brand-600 transition-colors block truncate max-w-full leading-tight">
+                  <span className="text-xs sm:text-[13px] font-semibold text-navy-950 block truncate max-w-full leading-tight">
                     {s.shortName || s.name}
                   </span>
-                  <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 block truncate leading-none mt-0.5 opacity-80">
+                  <span className="text-[11px] text-slate-500 block truncate leading-tight mt-0.5">
                     {s.subtitle}
                   </span>
                 </div>
@@ -576,36 +584,39 @@ export default function Home() {
         {/* Interactive Service Detail & With / Without Material Choice Modal */}
         {selectedService && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn"
+            className="bc-fade-in fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/55 backdrop-blur-xs"
+            role="dialog"
+            aria-modal="true"
+            aria-label={selectedService.name}
             onClick={() => setSelectedService(null)}
           >
             <div
-              className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200/90 relative space-y-4 max-h-[90vh] overflow-y-auto no-scrollbar"
+              className="bc-sheet-up bg-white rounded-t-3xl sm:rounded-2xl max-w-md w-full p-5 sm:p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl relative space-y-4 max-h-[90vh] overflow-y-auto no-scrollbar"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Close Button */}
               <button
                 onClick={() => setSelectedService(null)}
-                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-sm transition-colors cursor-pointer"
+                className="absolute top-4 right-4 w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
                 aria-label="Close"
               >
-                ✕
+                <CloseIcon className="h-4 w-4" strokeWidth={2.2} />
               </button>
 
               {/* Header */}
               <div className="flex items-center gap-3 pr-8">
                 <div
-                  className="w-13 h-13 rounded-2xl flex items-center justify-center text-3xl shadow-xs border border-slate-200/80 shrink-0"
+                  className="w-13 h-13 rounded-2xl flex items-center justify-center text-3xl ring-1 ring-slate-200/80 shrink-0"
                   style={{ backgroundColor: selectedService.bg }}
                 >
                   {renderServiceLogo(selectedService.id, "w-8 h-8 sm:w-9 sm:h-9") || selectedService.icon}
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-navy-950 leading-tight">
+                  <h3 className="text-lg font-semibold text-navy-950 leading-tight">
                     {selectedService.name}
                   </h3>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5">
-                    {selectedService.subtitle} • {region?.name || "Varanasi"} Region
+                  <p className="text-sm text-slate-500 mt-0.5">
+                    {selectedService.subtitle} · {region?.name || "Varanasi"}
                   </p>
                 </div>
               </div>
@@ -613,9 +624,9 @@ export default function Home() {
               {/* 1. Sub-Category Selection */}
               {selectedService.subServices && selectedService.subServices.length > 0 && (
                 <div className="space-y-1.5 pt-1">
-                  <label className="text-[11px] font-black uppercase tracking-wider text-slate-600 block">
-                    Choose Sub-Category / Specific Work:
-                  </label>
+                  <p className="text-sm font-medium text-slate-700">
+                    Type of work
+                  </p>
                   <div className="grid grid-cols-2 gap-2">
                     {selectedService.subServices.map((sub) => {
                       const isChosen = selectedSubCategory === sub;
@@ -624,10 +635,10 @@ export default function Home() {
                           key={sub}
                           type="button"
                           onClick={() => setSelectedSubCategory(sub)}
-                          className={`p-2.5 rounded-xl text-xs font-bold transition-all border text-left flex items-center justify-between cursor-pointer active:scale-95 ${
+                          className={`p-2.5 min-h-11 rounded-xl text-[13px] font-medium transition-colors border text-left flex items-center justify-between cursor-pointer active:scale-[0.98] ${
                             isChosen
-                              ? "border-brand-500 bg-orange-50/70 text-navy-950 font-black ring-1 ring-brand-500/30 shadow-2xs"
-                              : "border-slate-200 hover:border-slate-300 text-slate-700 bg-slate-50/50 hover:bg-white"
+                              ? "border-brand-500 bg-brand-50/60 text-navy-950 ring-1 ring-brand-500/30"
+                              : "border-slate-200 hover:border-slate-300 text-slate-700 bg-white"
                           }`}
                         >
                           <span className="truncate">{sub}</span>
@@ -647,23 +658,32 @@ export default function Home() {
 
               {/* 2. With / Without Material Selection */}
               <div className="space-y-2 pt-1">
-                <label className="text-[11px] font-black uppercase tracking-wider text-slate-600 block">
-                  Choose Execution Type:
-                </label>
+                <p className="text-sm font-medium text-slate-700">
+                  How should we do it?
+                </p>
 
                 {/* Option 1: With Product (Turnkey) */}
                 <div
                   onClick={() => setServicePackageType("with_material")}
-                  className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                  role="radio"
+                  aria-checked={servicePackageType === "with_material"}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setServicePackageType("with_material");
+                    }
+                  }}
+                  className={`p-3.5 rounded-2xl border cursor-pointer transition-colors ${
                     servicePackageType === "with_material"
-                      ? "border-brand-500 bg-orange-50/40 shadow-xs ring-1 ring-brand-500/20"
+                      ? "border-brand-500 bg-brand-50/40 ring-1 ring-brand-500/20"
                       : "border-slate-200 hover:border-slate-300 bg-white"
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-base">📦</span>
-                      <span className="text-xs font-black text-navy-950">
+                      <PackageIcon className="h-4 w-4 text-slate-500" />
+                      <span className="text-sm font-semibold text-navy-950">
                         {selectedService.withMaterialTitle}
                       </span>
                     </div>
@@ -673,28 +693,37 @@ export default function Home() {
                       {servicePackageType === "with_material" && <span className="w-1.5 h-1.5 rounded-full bg-white"></span>}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-600 mt-1.5 pl-6 leading-relaxed font-medium">
+                  <p className="text-[13px] text-slate-600 mt-1.5 pl-6 leading-relaxed">
                     {selectedService.withMaterialDesc}
                   </p>
-                  <div className="mt-2 pl-6 flex items-center justify-between text-[11px]">
-                    <span className="font-bold text-slate-400">Estimated Rate:</span>
-                    <span className="font-black text-brand-600">₹{selectedService.withMaterialRate} / {selectedService.unit || "sq.ft"}</span>
+                  <div className="mt-2 pl-6 flex items-center justify-between text-[13px]">
+                    <span className="text-slate-500">Estimated rate</span>
+                    <span className="font-semibold text-navy-950 tabular-nums">₹{selectedService.withMaterialRate} / {selectedService.unit || "sq.ft"}</span>
                   </div>
                 </div>
 
                 {/* Option 2: Without Product (Labour Rate Only) */}
                 <div
                   onClick={() => setServicePackageType("without_material")}
-                  className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                  role="radio"
+                  aria-checked={servicePackageType === "without_material"}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setServicePackageType("without_material");
+                    }
+                  }}
+                  className={`p-3.5 rounded-2xl border cursor-pointer transition-colors ${
                     servicePackageType === "without_material"
-                      ? "border-brand-500 bg-orange-50/40 shadow-xs ring-1 ring-brand-500/20"
+                      ? "border-brand-500 bg-brand-50/40 ring-1 ring-brand-500/20"
                       : "border-slate-200 hover:border-slate-300 bg-white"
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-base">👷</span>
-                      <span className="text-xs font-black text-navy-950">
+                      <HardHatIcon className="h-4 w-4 text-slate-500" />
+                      <span className="text-sm font-semibold text-navy-950">
                         {selectedService.withoutMaterialTitle}
                       </span>
                     </div>
@@ -704,12 +733,12 @@ export default function Home() {
                       {servicePackageType === "without_material" && <span className="w-1.5 h-1.5 rounded-full bg-white"></span>}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-600 mt-1.5 pl-6 leading-relaxed font-medium">
+                  <p className="text-[13px] text-slate-600 mt-1.5 pl-6 leading-relaxed">
                     {selectedService.withoutMaterialDesc}
                   </p>
-                  <div className="mt-2 pl-6 flex items-center justify-between text-[11px]">
-                    <span className="font-bold text-slate-400">Labour Rate:</span>
-                    <span className="font-black text-navy-950">₹{selectedService.withoutMaterialRate} / {selectedService.unit || "sq.ft"}</span>
+                  <div className="mt-2 pl-6 flex items-center justify-between text-[13px]">
+                    <span className="text-slate-500">Labour rate</span>
+                    <span className="font-semibold text-navy-950 tabular-nums">₹{selectedService.withoutMaterialRate} / {selectedService.unit || "sq.ft"}</span>
                   </div>
                 </div>
               </div>
@@ -720,7 +749,7 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => setSelectedService(null)}
-                    className="flex-1 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
+                    className="flex-1 h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold transition-colors cursor-pointer"
                   >
                     Cancel
                   </button>
@@ -733,14 +762,15 @@ export default function Home() {
                       setSelectedService(null);
                       navigate(`/services/book?service=${sId}&sub=${encodeURIComponent(sub)}&mode=${mode}`);
                     }}
-                    className="flex-[2] py-3 rounded-2xl bg-[#0A192F] hover:bg-brand-600 text-white text-xs font-black transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="flex-[2] h-12 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold transition-colors active:scale-[0.98] flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <span>Proceed to Booking</span>
-                    <span>→</span>
+                    <span>Continue to booking</span>
+                    <ArrowRightIcon className="h-4 w-4" />
                   </button>
                 </div>
-                <p className="text-[10px] text-slate-400 text-center">
-                  ⚡ 100% Free Site Inspection • Zero Advance Payment • BuildCity Verified
+                <p className="flex items-center justify-center gap-1.5 text-xs text-slate-500 text-center">
+                  <ShieldCheckIcon className="h-4 w-4 text-emerald-600" />
+                  Free site inspection · No advance payment
                 </p>
               </div>
             </div>
@@ -749,31 +779,41 @@ export default function Home() {
 
 
         {/* 4. Best offers product list (mobile me 2 column grid) */}
-        <section className="space-y-2 sm:space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h3 className="text-base font-extrabold text-navy-900 tracking-tight">Best Offers in {region?.name || "Varanasi"}</h3>
-              <span className="bg-emerald-50 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-200">
-                {liveDisplayProducts.length} Live
-              </span>
-            </div>
-            <Link to="/categories" className="text-xs font-bold text-[#c2410c] hover:text-[#9a3412] hover:underline">
-              See all
-            </Link>
-          </div>
+        <section className="space-y-3">
+          <SectionHeader
+            title={`Best offers in ${region?.name || "Varanasi"}`}
+            linkTo="/categories"
+            badge={
+              liveDisplayProducts.length > 0 ? (
+                <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/15 tabular-nums">
+                  {liveDisplayProducts.length} live
+                </span>
+              ) : null
+            }
+          />
 
           {productsLoading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 animate-pulse">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-2.5 sm:gap-3 lg:gap-4" aria-busy="true" aria-label="Loading products">
               {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-                <div key={n} className="bg-white rounded-2xl p-3 border border-slate-200 h-48" />
+                <div key={n} className="rounded-2xl bg-white p-2.5 ring-1 ring-slate-200/80">
+                  <div className="bc-skeleton aspect-square w-full rounded-xl" />
+                  <div className="bc-skeleton mt-3 h-3 w-1/3 rounded" />
+                  <div className="bc-skeleton mt-2 h-3.5 w-4/5 rounded" />
+                  <div className="bc-skeleton mt-4 h-4 w-1/2 rounded" />
+                  <div className="bc-skeleton mt-3 h-9 w-full rounded-xl" />
+                </div>
               ))}
             </div>
           ) : liveDisplayProducts.length === 0 ? (
-            <div className="bg-white rounded-2xl p-6 text-center text-xs font-bold text-slate-500 border border-slate-200">
-              No products listed in {region?.name || "Varanasi"} right now.
+            <div className="rounded-2xl bg-white ring-1 ring-slate-200/80">
+              <EmptyState
+                icon={StoreIcon}
+                title={`No products in ${region?.name || "Varanasi"} yet`}
+                description="Local shops are being added. Try another district or check back soon."
+              />
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 lg:gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-2.5 sm:gap-3 lg:gap-4">
               {liveDisplayProducts.slice(0, 12).map((p) => (
                 <ProductCard key={p.id} product={p} />
               ))}
@@ -784,21 +824,22 @@ export default function Home() {
 
         {/* 5. Deal of the week (horizontal scroll cards) */}
         {dealOfTheWeekProducts.length > 0 && (
-          <section className="space-y-3 bg-slate-50/90 p-3.5 sm:p-4.5 rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-2xs">
-            <div className="flex items-center gap-2">
-              <h3 className="text-base sm:text-lg font-black text-navy-950 tracking-tight">
-                Deal of the Week
-              </h3>
-              <span className="bg-brand-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-2xs uppercase tracking-wider">
-                Daily Special
-              </span>
-            </div>
+          <section className="space-y-3">
+            <SectionHeader
+              title="Deals of the week"
+              badge={
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 ring-1 ring-inset ring-brand-600/15">
+                  <TagIcon className="h-3 w-3" />
+                  Changes daily
+                </span>
+              }
+            />
 
             {/* Horizontal scroll product cards */}
-            <div className="flex gap-3 sm:gap-4 overflow-x-auto no-scrollbar scroll-smooth snap-x pb-1 pt-0.5 px-0.5">
+            <div className="-mx-4 flex gap-2.5 sm:gap-4 overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory scroll-px-4 px-4 pb-1">
               {dealOfTheWeekProducts.map((p) => (
                 <div key={p.id} className="w-[160px] sm:w-[195px] shrink-0 snap-start">
-                  <ProductCard product={p} className="h-full border-slate-200/90 shadow-2xs hover:border-brand-500" />
+                  <ProductCard product={p} className="h-full" />
                 </div>
               ))}
             </div>
@@ -807,33 +848,26 @@ export default function Home() {
 
         {/* 5.5 Verified Site Reviews / Builders Feedback Demo */}
         <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h3 className="text-base sm:text-lg font-extrabold text-navy-900 tracking-tight">
-                Customers Reviews
-              </h3>
-             
-            </div>
-            <span className="text-[11px] font-bold text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-md border border-amber-200/80">
-              ⭐ 4.7 / 5.0
-            </span>
-          </div>
+          <SectionHeader
+            title="What builders say"
+            badge={
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-600/15 tabular-nums">
+                <StarIcon className="h-3 w-3 text-amber-500" />
+                4.7 / 5
+              </span>
+            }
+          />
 
           <SiteReviewsSection />
         </section>
 
         {/* 6. Popular services section */}
         <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base sm:text-lg font-extrabold text-navy-900 tracking-tight">Popular Services</h3>
-            <Link to="/categories" className="text-xs font-bold text-[#c2410c] hover:text-[#9a3412] hover:underline">
-              See all
-            </Link>
-          </div>
+          <SectionHeader title="Popular services" linkTo="/categories" />
 
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
             {/* Site visit service card */}
-            <div className="bg-[#EFF6FF] border border-[#DBEAFE] rounded-2xl p-3.5 sm:p-4 flex items-center justify-between shadow-2xs hover:shadow-md transition-all relative overflow-hidden group">
+            <div className="bg-[#EFF6FF] ring-1 ring-[#DBEAFE] rounded-2xl p-3.5 sm:p-4 flex items-center justify-between gap-2 transition-shadow hover:shadow-[0_10px_24px_-14px_rgba(15,23,42,0.35)] relative overflow-hidden group">
               <div className="flex flex-col justify-between h-full z-10">
                 <div>
                   <div className="w-8 h-8 rounded-xl bg-[#2563EB] text-white flex items-center justify-center mb-2 shadow-xs">
@@ -842,26 +876,26 @@ export default function Home() {
                       <circle cx="12" cy="10" r="3" />
                     </svg>
                   </div>
-                  <h4 className="text-xs sm:text-sm font-black text-navy-900 leading-tight">Site Visit</h4>
-                  <p className="text-[10px] sm:text-xs text-slate-500 font-medium mt-0.5">Professional Inspection</p>
+                  <h4 className="text-sm font-semibold text-navy-950 leading-tight">Site visit</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">Professional inspection</p>
                 </div>
                 <Link
                   to="/categories"
-                  className="mt-3 w-7 h-7 rounded-full bg-[#2563EB] text-white flex items-center justify-center text-xs active:scale-90 transition-transform shadow-xs"
+                  aria-label="Book a site visit"
+                  className="mt-3 w-9 h-9 rounded-full bg-[#2563EB] text-white flex items-center justify-center active:scale-95 transition-transform group-hover:translate-x-0.5"
                 >
-                  →
+                  <ArrowRightIcon className="h-4 w-4" />
                 </Link>
               </div>
 
               {/* Inspection icon badge */}
-              <div className="w-16 h-18 sm:w-20 sm:h-22 rounded-2xl bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8] text-white flex flex-col items-center justify-center shadow-md p-2 shrink-0 group-hover:scale-105 transition-transform select-none">
-                <span className="text-2xl sm:text-3xl mb-0.5">👷‍♂️</span>
-                <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-blue-100 text-center leading-none">Inspection</span>
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#2563EB] text-white flex items-center justify-center shrink-0 select-none">
+                <HardHatIcon className="h-7 w-7 sm:h-8 sm:w-8" />
               </div>
             </div>
 
             {/* Web development service card */}
-            <div className="bg-[#F8FAFC] border border-slate-200 rounded-2xl p-3.5 sm:p-4 flex items-center justify-between shadow-2xs hover:shadow-md transition-all relative overflow-hidden group">
+            <div className="bg-white ring-1 ring-slate-200 rounded-2xl p-3.5 sm:p-4 flex items-center justify-between gap-2 transition-shadow hover:shadow-[0_10px_24px_-14px_rgba(15,23,42,0.35)] relative overflow-hidden group">
               <div className="flex flex-col justify-between h-full z-10">
                 <div>
                   <div className="w-8 h-8 rounded-xl bg-[#0F172A] text-[#38BDF8] flex items-center justify-center mb-2 shadow-xs">
@@ -871,38 +905,39 @@ export default function Home() {
                       <line x1="12" y1="17" x2="12" y2="21" />
                     </svg>
                   </div>
-                  <h4 className="text-xs sm:text-sm font-black text-navy-900 leading-tight">Web Development</h4>
-                  <p className="text-[10px] sm:text-xs text-slate-500 font-medium mt-0.5">Get your business online</p>
+                  <h4 className="text-sm font-semibold text-navy-950 leading-tight">Web development</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">Get your business online</p>
                 </div>
                 <Link
                   to="/categories"
-                  className="mt-3 w-7 h-7 rounded-full bg-[#0F172A] text-white flex items-center justify-center text-xs active:scale-90 transition-transform shadow-xs"
+                  aria-label="Web development services"
+                  className="mt-3 w-9 h-9 rounded-full bg-[#0F172A] text-white flex items-center justify-center active:scale-95 transition-transform group-hover:translate-x-0.5"
                 >
-                  →
+                  <ArrowRightIcon className="h-4 w-4" />
                 </Link>
               </div>
 
               {/* Tech solutions icon badge */}
-              <div className="w-16 h-18 sm:w-20 sm:h-22 rounded-2xl bg-gradient-to-br from-[#0F172A] to-[#1E293B] text-white flex flex-col items-center justify-center shadow-md p-2 shrink-0 group-hover:scale-105 transition-transform select-none border border-slate-700/50">
-                <span className="text-2xl sm:text-3xl mb-0.5">💻</span>
-                <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-[#38BDF8] text-center leading-none">Solutions</span>
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#0F172A] text-[#38BDF8] flex items-center justify-center shrink-0 select-none">
+                <MonitorIcon className="h-7 w-7 sm:h-8 sm:w-8" />
               </div>
             </div>
           </div>
         </section>
 
         {/* 7. Exclusive offers banner */}
-        <section className="bg-gradient-to-r from-[#07132B] via-[#0A1A3A] to-[#0D224D] rounded-2xl p-4 text-white shadow-lg relative overflow-hidden flex items-center justify-between">
-          <div className="max-w-[55%] z-10">
-            <h3 className="text-sm sm:text-base font-black leading-tight">Exclusive Deals</h3>
-            <p className="text-[10px] sm:text-xs text-slate-300 font-medium mt-1 mb-3">
-              Up to 20% OFF on selected products
+        <section className="bg-navy-950 rounded-2xl p-4 sm:p-6 text-white relative overflow-hidden flex items-center justify-between gap-4">
+          <div className="min-w-0 z-10">
+            <h3 className="text-base sm:text-lg font-semibold leading-tight">Exclusive deals</h3>
+            <p className="text-sm text-slate-300 mt-1 mb-3.5">
+              Up to 20% off on selected products
             </p>
             <Link
               to="/categories"
-              className="bg-white hover:bg-slate-100 text-navy-950 font-extrabold text-[10px] sm:text-xs px-3.5 py-1.5 rounded-full shadow-md active:scale-95 transition-all inline-flex items-center gap-1"
+              className="bg-white hover:bg-slate-100 text-navy-950 font-semibold text-sm h-10 px-4 rounded-xl active:scale-[0.98] transition-colors inline-flex items-center gap-1.5"
             >
-              Explore Offers →
+              Explore offers
+              <ArrowRightIcon className="h-4 w-4" />
             </Link>
           </div>
 
@@ -911,13 +946,12 @@ export default function Home() {
             <img
               src="/categories/cement.png"
               alt="Deals"
-              className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-xl shadow-md border border-white/20"
+              className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-xl ring-1 ring-white/15"
             />
             {/* Discount stamp badge */}
-            <div className="w-12 h-12 rounded-full bg-brand-600 text-white flex flex-col items-center justify-center font-black text-[8px] leading-tight shadow-lg border border-brand-500 shrink-0">
-              <span>UP TO</span>
-              <span className="text-[11px] leading-none">20%</span>
-              <span>OFF</span>
+            <div className="hidden min-[360px]:flex w-14 h-14 rounded-full bg-brand-600 text-white flex-col items-center justify-center leading-none shrink-0">
+              <span className="text-[10px] font-medium">up to</span>
+              <span className="text-base font-bold tabular-nums">20%</span>
             </div>
           </div>
         </section>
@@ -926,32 +960,8 @@ export default function Home() {
       {/* Footer section (web pe dikhega, mobile app me hidden rahega) */}
       {!Capacitor.isNativePlatform() && <Footer />}
 
-      {/* Floating whatsapp aur direct calling buttons */}
-      <div className="fixed bottom-32 sm:bottom-24 right-3.5 sm:right-5 z-40 flex flex-col gap-2">
-        {/* WhatsApp chat button */}
-        <a
-          href="https://wa.me/919956886527?text=Hello%20BuildCity%20Team,%20I%20have%20an%20inquiry%20regarding%20construction%20materials"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-10.5 h-10.5 sm:w-11.5 sm:h-11.5 rounded-full bg-[#25D366] hover:bg-[#20bd5a] text-white flex items-center justify-center shadow-lg hover:shadow-xl ring-2 ring-white/90 active:scale-90 transition-all"
-          title="Chat on WhatsApp"
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.312.045-.634.055-.992-.061-.59-.191-1.353-.615-2.227-1.488-.874-.873-1.297-1.637-1.488-2.227-.116-.358-.106-.68-.061-.992.05-.333.419-1.026.824-1.17.135-.048.281-.03.394.045.114.075.764 1.846.764 1.846.06.146.028.314-.077.419l-.382.382c.285.503.744.962 1.247 1.247l.382-.382c.105-.105.273-.137.419-.077 0 0 1.771.65 1.846.764.075.113.093.259.046.394z" />
-          </svg>
-        </a>
-
-        {/* Direct phone call button */}
-        <a
-          href="tel:+919956886527"
-          className="w-10.5 h-10.5 sm:w-11.5 sm:h-11.5 rounded-full bg-[#0284C7] hover:bg-[#0369A1] text-white flex items-center justify-center shadow-lg hover:shadow-xl ring-2 ring-white/90 active:scale-90 transition-all"
-          title="Call BuildCity Support"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-          </svg>
-        </a>
-      </div>
+      {/* Help button: WhatsApp / call */}
+      <ContactFab />
     </div>
   );
 }

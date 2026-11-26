@@ -1,6 +1,6 @@
 import { useRegion } from "../context/RegionContext";
 
-export default function RegionPicker({ trigger }) {
+export default function RegionPicker({ trigger, className = "inline-flex cursor-pointer" }) {
   const { region, setIsLocationModalOpen } = useRegion();
 
   const handleOpen = (e) => {
@@ -23,7 +23,9 @@ export default function RegionPicker({ trigger }) {
           handleOpen(e);
         }
       }}
-      className="inline-flex cursor-pointer"
+      aria-haspopup="dialog"
+      aria-label={`Delivery location: ${region?.name || "Varanasi"}. Change`}
+      className={className}
     >
       {trigger ? trigger(region || { name: "Varanasi" }) : <span>{region?.name || "Varanasi"}</span>}
     </div>

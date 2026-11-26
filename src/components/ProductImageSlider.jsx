@@ -259,7 +259,7 @@ export default function ProductImageSlider({ images = [], name = "Product Image"
           <svg className="w-3.5 h-3.5 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
           </svg>
-          <span className="text-[11px] sm:text-xs">Tap to Zoom</span>
+          <span className="text-xs">Tap to zoom</span>
         </button>
 
         {/* Counter Badge */}
@@ -344,7 +344,7 @@ export default function ProductImageSlider({ images = [], name = "Product Image"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 hover:bg-white/25 active:bg-white/35 text-white text-xs font-bold transition-all cursor-pointer border border-white/20 shrink-0"
               aria-label="Close"
             >
-              <span className="text-sm font-black leading-none">✕</span>
+              <span aria-hidden="true" className="text-sm font-semibold leading-none">×</span>
               <span>Close</span>
             </button>
 

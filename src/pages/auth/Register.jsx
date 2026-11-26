@@ -159,7 +159,7 @@ export default function Register() {
 
         {error && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-bold text-red-700 flex items-start gap-2">
-            <span>⚠️</span>
+            <span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
             <div className="flex-1">{error}</div>
           </div>
         )}
@@ -230,8 +230,8 @@ export default function Register() {
           <form onSubmit={handleVerifyAndRegister} className="space-y-4">
             <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-xs flex items-center justify-between">
               <div>
-                <p className="font-bold text-navy-900">👤 {name}</p>
-                <p className="text-[11px] text-slate-500 font-semibold">📱 +91 {phone.replace(/\D/g, "").slice(-10)}</p>
+                <p className="font-semibold text-navy-950">{name}</p>
+                <p className="text-xs text-slate-500 tabular-nums">+91 {phone.replace(/\D/g, "").slice(-10)}</p>
               </div>
               <button
                 type="button"
@@ -262,7 +262,7 @@ export default function Register() {
               disabled={loading || otp.length < 4}
               className="w-full py-3.5 text-xs font-black rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-md active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
             >
-              {loading ? "Creating Account..." : "✓ Verify OTP & Create Account"}
+              {loading ? "Creating Account..." : "Verify OTP & Create Account"}
             </Button>
 
             <div className="flex items-center justify-between text-xs pt-1">

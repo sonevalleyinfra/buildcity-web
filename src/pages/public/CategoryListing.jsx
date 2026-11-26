@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import Navbar from "../../components/Navbar";
+import MobileHeader from "../../components/ui/MobileHeader";
+import EmptyState from "../../components/ui/EmptyState";
+import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, SearchIcon } from "../../components/ui/Icons";
 import ProductCard from "../../components/ProductCard";
 import FilterSidebar from "../../components/FilterSidebar";
 import Footer from "../../components/Footer";
@@ -135,29 +138,34 @@ export default function CategoryListing() {
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
-    <div className="min-h-screen bg-surface flex flex-col justify-between">
-      <Navbar />
+    <div data-storefront className="min-h-screen bg-surface flex flex-col justify-between">
+      <div className="hidden lg:block">
+        <Navbar />
+      </div>
+      <MobileHeader title={label} subtitle={region?.name} fallback="/categories" />
 
-      <main className="max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 pb-20 sm:pb-8 flex-1">
+      <main className="bc-fade-in max-w-6xl w-full mx-auto px-4 sm:px-6 py-5 sm:py-6 pb-24 lg:pb-10 flex-1">
 
         {/* Breadcrumb navigation aur category heading */}
         <div className="mb-5">
-          <div className="text-xs text-slate-400 mb-1">
-            <Link to="/" className="hover:text-brand-500">Home</Link>
-            <span className="mx-1.5">/</span>
-            {label}
-          </div>
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-navy-900">{label}</h1>
-           <span className="text-sm text-slate-500">
-  {filtered.length} products in {region.name}
-</span>
+          <nav aria-label="Breadcrumb" className="hidden lg:block text-sm text-slate-500 mb-1.5">
+            <Link to="/" className="hover:text-navy-950">Home</Link>
+            <span className="mx-1.5 text-slate-300">/</span>
+            <Link to="/categories" className="hover:text-navy-950">Categories</Link>
+            <span className="mx-1.5 text-slate-300">/</span>
+            <span className="text-navy-950">{label}</span>
+          </nav>
+          <div className="flex items-baseline justify-between gap-3">
+            <h1 className="hidden lg:block text-2xl font-semibold tracking-tight text-navy-950">{label}</h1>
+            <span className="text-sm text-slate-500 tabular-nums">
+              {filtered.length} {filtered.length === 1 ? "product" : "products"} in {region.name}
+            </span>
           </div>
         </div>
 
         <div className="flex gap-6">
           {/* Filters desktop sidebar */}
-          <div className="hidden sm:block">
+          <div className="hidden md:block">
             <FilterSidebar
               brands={brands}
               selectedBrands={selectedBrands}
@@ -176,7 +184,7 @@ export default function CategoryListing() {
             <div className="flex items-center justify-between mb-4 gap-3">
               <button
                 onClick={() => setShowFilters(true)}
-                className="sm:hidden flex items-center gap-1.5 text-sm font-medium text-navy-900 border border-slate-200 bg-white rounded-lg px-3 py-2"
+                className="md:hidden flex h-10 items-center gap-1.5 text-sm font-medium text-navy-950 ring-1 ring-slate-200 bg-white rounded-xl px-3.5"
               >
                 <FilterIcon />
                 Filters
@@ -188,7 +196,8 @@ export default function CategoryListing() {
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="ml-auto text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white text-navy-900 outline-none"
+                aria-label="Sort products"
+                className="ml-auto h-10 text-sm ring-1 ring-slate-200 border-0 rounded-xl px-3 bg-white text-navy-950 outline-none focus:ring-2 focus:ring-brand-500"
               >
                 <option value="popularity">Sort: Popularity</option>
                 <option value="price_low">Price: Low to High</option>
@@ -204,7 +213,7 @@ export default function CategoryListing() {
                   <button
                     key={b}
                     onClick={() => toggleBrand(b)}
-                    className="flex items-center gap-1.5 text-xs bg-brand-50 text-brand-600 font-medium rounded-full px-3 py-1.5"
+                    className="flex h-8 items-center gap-1.5 text-xs bg-white ring-1 ring-slate-200 text-slate-700 font-medium rounded-full px-3 hover:bg-slate-50"
                   >
                     {b} <span>×</span>
                   </button>
@@ -212,7 +221,7 @@ export default function CategoryListing() {
                 {selectedPrice && (
                   <button
                     onClick={() => setSelectedPrice(null)}
-                    className="flex items-center gap-1.5 text-xs bg-brand-50 text-brand-600 font-medium rounded-full px-3 py-1.5"
+                    className="flex h-8 items-center gap-1.5 text-xs bg-white ring-1 ring-slate-200 text-slate-700 font-medium rounded-full px-3 hover:bg-slate-50"
                   >
                     {selectedPrice.label} <span>×</span>
                   </button>
@@ -222,14 +231,20 @@ export default function CategoryListing() {
 
             {/* Products ka grid */}
             {pageItems.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-4">
                 {pageItems.map((p) => (
                   <ProductCard key={p.id} product={p} />
                 ))}
               </div>
             ) : (
-              <div className="bg-white rounded-xl border border-dashed border-slate-300 p-12 text-center text-slate-500 text-sm">
-                Is filter ke sath koi product nahi mila. Filters clear karke dekho.
+              <div className="rounded-2xl bg-white ring-1 ring-slate-200/80">
+                <EmptyState
+                  icon={SearchIcon}
+                  title="No products match these filters"
+                  description="Try removing a brand or price filter."
+                  actionLabel="Clear filters"
+                  onAction={clearFilters}
+                />
               </div>
             )}
 
@@ -239,18 +254,20 @@ export default function CategoryListing() {
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page === 1}
-                  className="h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-40 flex items-center justify-center"
+                  aria-label="Previous page"
+                  className="h-10 w-10 rounded-xl ring-1 ring-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center"
                 >
-                  ‹
+                  <ChevronLeftIcon className="h-4 w-4" />
                 </button>
                 {Array.from({ length: totalPages }).map((_, i) => (
                   <button
                     key={i}
                     onClick={() => setPage(i + 1)}
-                    className={`h-9 w-9 rounded-lg text-sm font-medium ${
+                    aria-current={page === i + 1 ? "page" : undefined}
+                    className={`h-10 w-10 rounded-xl text-sm font-medium tabular-nums transition-colors ${
                       page === i + 1
-                        ? "bg-brand-500 text-white"
-                        : "bg-white border border-slate-200 text-slate-600"
+                        ? "bg-navy-950 text-white"
+                        : "bg-white ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50"
                     }`}
                   >
                     {i + 1}
@@ -259,9 +276,10 @@ export default function CategoryListing() {
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page === totalPages}
-                  className="h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-40 flex items-center justify-center"
+                  aria-label="Next page"
+                  className="h-10 w-10 rounded-xl ring-1 ring-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center"
                 >
-                  ›
+                  <ChevronRightIcon className="h-4 w-4" />
                 </button>
               </div>
             )}
@@ -271,19 +289,21 @@ export default function CategoryListing() {
 
       {/* Mobile screen ke liye bottom sheet filter */}
       {showFilters && (
-        <div className="fixed inset-0 z-50 sm:hidden">
+        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="Filters">
           <div
-            className="absolute inset-0 bg-black/40"
+            className="bc-fade-in absolute inset-0 bg-slate-950/50"
             onClick={() => setShowFilters(false)}
           />
-          <div className="absolute bottom-0 left-0 right-0 bg-surface rounded-t-2xl max-h-[80vh] overflow-y-auto p-4 pb-8">
+          <div className="bc-sheet-up absolute bottom-0 left-0 right-0 bg-surface rounded-t-3xl max-h-[85vh] overflow-y-auto p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-300" aria-hidden="true" />
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-navy-900">Filters</h3>
+              <h3 className="text-base font-semibold text-navy-950">Filters</h3>
               <button
                 onClick={() => setShowFilters(false)}
-                className="text-slate-400 text-xl leading-none"
+                aria-label="Close filters"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200"
               >
-                ×
+                <CloseIcon className="h-4 w-4" />
               </button>
             </div>
             <FilterSidebar
@@ -299,7 +319,7 @@ export default function CategoryListing() {
             />
             <button
               onClick={() => setShowFilters(false)}
-              className="w-full mt-4 bg-brand-500 text-white text-sm font-semibold rounded-xl py-3"
+              className="w-full mt-4 h-12 bg-navy-950 hover:bg-navy-900 text-white text-sm font-semibold rounded-xl transition-colors"
             >
               Show {filtered.length} results
             </button>

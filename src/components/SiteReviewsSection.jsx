@@ -1,4 +1,4 @@
-import React from "react";
+import { ClockIcon, PackageIcon, StarIcon } from "./ui/Icons";
 
 const DEMO_REVIEWS = [
   {
@@ -8,7 +8,6 @@ const DEMO_REVIEWS = [
     initials: "RV",
     rating: 5,
     materialTag: "50 Bags UltraTech Cement",
-    materialIcon: "🧱",
     quote:
       "Subah 8 baje order place kiya tha, 11:30 baje site par gaadi khadi thi. Market se rate bhi sasta mila aur material 100% genuine tha.",
     speedBadge: "Delivered in 3.5 Hours",
@@ -22,7 +21,6 @@ const DEMO_REVIEWS = [
     initials: "AS",
     rating: 5,
     materialTag: "2.5 Tons Tata Tiscon 550D",
-    materialIcon: "🏗️",
     quote:
       "Foundation casting ke liye emergency steel chahiye tha. Test certificate ke saath exact weight par site delivery mili. Full transparency!",
     speedBadge: "Delivered in 6 Hours",
@@ -36,7 +34,6 @@ const DEMO_REVIEWS = [
     initials: "MY",
     rating: 5,
     materialTag: "120 Bags Birla A1 Cement",
-    materialIcon: "🧱",
     quote:
       "Direct site par unloading ke saath hassle-free delivery. Cash on Delivery (COD) milne se builder community ka trust 100% rehta hai.",
     speedBadge: "Same-Day Dispatch",
@@ -50,7 +47,6 @@ const DEMO_REVIEWS = [
     initials: "SG",
     rating: 5,
     materialTag: "Asian Paints Apex Ultima & Putty",
-    materialIcon: "🎨",
     quote:
       "Original sealed buckets aur proper GST invoice mila. Market ghoomne ka time bach gaya, ab saara maal BuildCity se hi mangwate hain.",
     speedBadge: "Delivered in 9.5 Hours",
@@ -61,83 +57,44 @@ const DEMO_REVIEWS = [
 
 export default function SiteReviewsSection() {
   return (
-    <div className="space-y-3 bg-gradient-to-b from-slate-50 via-white to-slate-50/80 p-3.5 sm:p-4.5 rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-2xs overflow-hidden">
-      {/* Top Header */}
-      <div className="flex items-center justify-between gap-2 border-b border-slate-200/70 pb-2.5">
-  
-        <div className="flex items-center  gap-1.5 text-[10px] sm:text-[11px] font-bold text-slate-600">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span>100+ Sites Supplied</span>
-        </div>
-      </div>
-
-      {/* Horizontal Scrollable Review Cards */}
-      <div className="flex gap-3 sm:gap-4 overflow-x-auto no-scrollbar scroll-smooth snap-x pb-2 pt-1 px-0.5">
-        {DEMO_REVIEWS.map((rev) => (
-          <div
-            key={rev.id}
-            className="w-[280px] sm:w-[320px] shrink-0 snap-start bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col justify-between relative group"
-          >
-            {/* Top Row: User Avatar, Name, Role & Verified Badge */}
-            <div>
-              <div className="flex items-start justify-between gap-2 mb-2.5">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-navy-900 to-slate-800 text-white font-black text-xs flex items-center justify-center shadow-xs shrink-0 ring-2 ring-slate-100">
-                    {rev.initials}
-                  </div>
-                  <div>
-                    <h4 className="text-xs sm:text-sm font-black text-navy-950 leading-tight">
-                      {rev.name}
-                    </h4>
-                    <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium">
-                      {rev.role}
-                    </p>
-                  </div>
-                </div>
-
-               
-              </div>
-
-              {/* 5 Shiny Stars */}
-              <div className="flex items-center gap-1 mb-2">
-                {[...Array(rev.rating)].map((_, i) => (
-                  <svg
-                    key={i}
-                    className="w-3.5 h-3.5 fill-amber-400 text-amber-400 drop-shadow-xs"
-                    viewBox="0 0 20 20"
-                  >
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                ))}
-                <span className="text-[10px] font-bold text-slate-400 ml-1">5.0</span>
-              </div>
-
-              {/* Material Chip */}
-              <div className="mb-2.5">
-                <span className="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200/80 text-navy-900 text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-lg border border-slate-200/60 transition-colors">
-                  <span>{rev.materialIcon}</span>
-                  <span className="truncate max-w-[210px]">{rev.materialTag}</span>
-                </span>
-              </div>
-
-              {/* Real Feedback Quote */}
-              <p className="text-xs text-slate-700 leading-relaxed font-normal italic">
-                "{rev.quote}"
-              </p>
+    <div className="-mx-4 flex gap-3 overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory scroll-px-4 px-4 pb-1 sm:gap-4">
+      {DEMO_REVIEWS.map((rev) => (
+        <figure
+          key={rev.id}
+          className="flex w-[280px] shrink-0 snap-start flex-col justify-between rounded-2xl bg-white p-4 ring-1 ring-slate-200/80 sm:w-[320px]"
+        >
+          <div>
+            <div className="mb-3 flex items-center gap-1" aria-label={`Rated ${rev.rating} out of 5`}>
+              {Array.from({ length: 5 }, (_, i) => (
+                <StarIcon key={i} filled={i < rev.rating} className={`h-4 w-4 ${i < rev.rating ? "text-amber-400" : "text-slate-300"}`} />
+              ))}
             </div>
-
-            {/* Bottom: Delivery Speed Pill */}
-            <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between text-[10px] sm:text-[11px]">
-              <span className="inline-flex items-center gap-1 font-bold text-amber-700 bg-amber-50/80 border border-amber-200/60 px-2 py-0.5 rounded-full">
-                <span>⚡</span>
-                <span>{rev.speedBadge}</span>
-              </span>
-
-           
-            </div>
+            <blockquote className="text-sm leading-relaxed text-slate-700">“{rev.quote}”</blockquote>
+            <p className="mt-3 inline-flex max-w-full items-center gap-1.5 rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-700">
+              <PackageIcon className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+              <span className="truncate">{rev.materialTag}</span>
+            </p>
           </div>
-        ))}
-      </div>
+
+          <figcaption className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
+            <span className="flex min-w-0 items-center gap-2.5">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy-950 text-xs font-semibold text-white">
+                {rev.initials}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold text-navy-950">{rev.name}</span>
+                <span className="block truncate text-xs text-slate-500">{rev.role}</span>
+              </span>
+            </span>
+            {rev.speedBadge && (
+              <span className="inline-flex shrink-0 items-center gap-1 text-xs text-slate-500">
+                <ClockIcon className="h-3.5 w-3.5" />
+                {rev.speedBadge}
+              </span>
+            )}
+          </figcaption>
+        </figure>
+      ))}
     </div>
   );
 }

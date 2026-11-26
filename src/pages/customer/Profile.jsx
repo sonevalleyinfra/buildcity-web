@@ -1,28 +1,43 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../../components/Navbar";
-import NotificationPanel from "../../components/NotificationPanel";
 import Footer from "../../components/Footer";
 import { Capacitor } from "@capacitor/core";
 import { useAuth } from "../../context/AuthContext";
-import { useCart } from "../../context/CartContext";
 import { useOrders } from "../../context/OrderContext";
 import { useAdmin } from "../../context/AdminContext";
 import { API_BASE_URL } from "../../config/api";
 import { authFetch } from "../../config/authFetch";
+import MobileHeader from "../../components/ui/MobileHeader";
+import {
+  ChevronRightIcon,
+  CloseIcon,
+  CopyIcon,
+  EditIcon,
+  GiftIcon,
+  HeadsetIcon,
+  InfoIcon,
+  LogOutIcon,
+  MapIcon,
+  ReceiptIcon,
+  TagIcon,
+  WalletIcon,
+  WhatsAppIcon,
+} from "../../components/ui/Icons";
 
 const accountLinks = [
-  { label: "Delivery Addresses", icon: "📍", to: "/addresses", sub: "Manage delivery locations" },
+  { label: "Delivery addresses", icon: MapIcon, to: "/addresses", sub: "Manage your site addresses" },
+  { label: "My orders", icon: ReceiptIcon, to: "/orders", sub: "Track and view past orders" },
 ];
 
+// These used to be inert rows; they now open the support line and the terms page.
 const supportLinks = [
-  { label: "24/7 District Support", icon: "🎧", sub: "Call or WhatsApp support team" },
-  { label: "About Build City", icon: "ℹ️", sub: "Platform terms & company details" },
+  { label: "Help & support", icon: HeadsetIcon, href: "tel:+919956886527", sub: "Call the BuildCity support team" },
+  { label: "About BuildCity", icon: InfoIcon, to: "/terms", sub: "Terms, policies and company details" },
 ];
 
 export default function Profile() {
   const { user, logout, updateProfile } = useAuth();
-  const { count } = useCart();
   const { orders, ordersSummary } = useOrders();
   const { coupons = [] } = useAdmin();
   const [dbCoupons, setDbCoupons] = useState(coupons);
@@ -145,77 +160,44 @@ export default function Profile() {
     e.preventDefault();
     updateProfile({ name: form.name.trim(), email: form.email.trim() });
     setEditing(false);
-    setSuccessMsg("✓ Profile changes saved successfully!");
+    setSuccessMsg("Profile saved");
     setTimeout(() => setSuccessMsg(""), 4000);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-navy-900 font-sans w-full max-w-full overflow-x-clip flex flex-col justify-between">
-      {/* Desktop Navbar */}
+    <div data-storefront className="min-h-screen bg-slate-50 text-navy-900 font-sans w-full max-w-full overflow-x-clip flex flex-col justify-between">
       <div className="hidden lg:block">
         <Navbar />
       </div>
+      <MobileHeader title="Profile" />
 
-      {/* Mobile Header (Clean Back Navigation without Logo/Region) */}
-      <div className="lg:hidden bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <Link
-              to="/"
-              className="p-1.5 -ml-1.5 rounded-xl hover:bg-slate-100 text-navy-900 active:scale-95 transition-all flex items-center justify-center"
-              title="Back to Home"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m15 18-6-6 6-6" />
-              </svg>
-            </Link>
-            <h1 className="font-extrabold text-navy-900 text-base tracking-tight">
-              My Profile
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <NotificationPanel className="relative text-navy-900 hover:text-brand-600 transition-colors cursor-pointer" />
-            <Link to="/cart" className="relative text-navy-900 hover:text-brand-600 transition-colors p-1" title="Cart">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="8" cy="21" r="1" />
-                <circle cx="19" cy="21" r="1" />
-                <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
-              </svg>
-              {count > 0 && (
-                <span className="absolute -top-1 -right-1.5 h-4.5 w-4.5 rounded-full bg-brand-500 text-white text-[10px] font-black flex items-center justify-center shadow-xs">
-                  {count}
-                </span>
-              )}
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      <main className="max-w-2xl w-full mx-auto px-4 py-6 pb-24 sm:pb-12 space-y-5 flex-1">
+      <main className="bc-fade-in max-w-2xl w-full mx-auto px-4 py-4 sm:py-6 pb-24 lg:pb-12 space-y-4 flex-1">
         {successMsg && (
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold px-4 py-3 rounded-xl shadow-2xs flex items-center justify-between">
-            <span>{successMsg}</span>
-            <span className="text-emerald-500 font-extrabold">✓</span>
+          <div role="status" className="bc-rise-in bg-emerald-50 ring-1 ring-inset ring-emerald-600/20 text-emerald-800 text-sm px-4 py-3 rounded-xl">
+            {successMsg}
           </div>
         )}
 
         {/* Clean Minimalist Profile Header Card */}
-        <div className="bg-gradient-to-r from-sky-50/80 via-white to-blue-50/60 rounded-2xl sm:rounded-3xl border border-slate-200/90 p-4 sm:p-5 shadow-2xs flex items-center justify-between gap-4">
+        <div className="bg-white rounded-2xl ring-1 ring-slate-200/80 p-4 sm:p-5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
-            <div className="h-14 w-14 sm:h-15 sm:w-15 rounded-full bg-gradient-to-br from-[#0284C7] to-[#0369A1] text-white font-black text-xl sm:text-2xl flex items-center justify-center shadow-xs border-2 border-white ring-2 ring-sky-200/80 shrink-0 select-none">
+            <div className="h-14 w-14 rounded-full bg-navy-950 text-white font-semibold text-xl flex items-center justify-center shrink-0 select-none">
               {user?.name?.[0]?.toUpperCase() || "U"}
             </div>
-            <h1 className="text-navy-950 text-base sm:text-lg font-black tracking-tight leading-snug capitalize truncate min-w-0">
-              {user?.name || "Customer Account"}
-            </h1>
+            <div className="min-w-0">
+              <h1 className="text-navy-950 text-base sm:text-lg font-semibold leading-snug capitalize truncate">
+                {user?.name || "Customer Account"}
+              </h1>
+              {user?.phone && <p className="text-sm text-slate-500 tabular-nums">+91 {user.phone}</p>}
+            </div>
           </div>
 
           <button
             onClick={() => setEditing((v) => !v)}
-            className="text-xs font-bold text-navy-950 bg-white hover:bg-slate-50 border border-slate-200/90 px-3.5 py-2 rounded-xl shrink-0 transition-all cursor-pointer active:scale-95 shadow-2xs flex items-center gap-1.5"
+            className="h-10 text-sm font-medium text-navy-950 bg-white hover:bg-slate-50 ring-1 ring-slate-200 px-3.5 rounded-xl shrink-0 transition-colors cursor-pointer active:scale-[0.98] flex items-center gap-1.5"
           >
-            <span>{editing ? "Cancel" : "✏️ Edit"}</span>
+            {!editing && <EditIcon className="h-4 w-4 text-slate-500" />}
+            <span>{editing ? "Cancel" : "Edit"}</span>
           </button>
         </div>
 
@@ -223,67 +205,66 @@ export default function Profile() {
         {editing && (
           <form
             onSubmit={handleSave}
-            className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 space-y-4"
+            className="bc-rise-in bg-white rounded-2xl ring-1 ring-slate-200/80 p-4 sm:p-5 space-y-4"
           >
-            <h3 className="font-extrabold text-navy-900 text-sm border-b border-slate-100 pb-2">
-              Edit Account Information
+            <h3 className="font-semibold text-navy-950 text-[15px]">
+              Edit profile
             </h3>
             <div>
-              <label className="block text-xs font-bold text-navy-900 mb-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
                 Full Name *
               </label>
               <input
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                className="w-full text-xs font-medium border border-slate-200 rounded-xl px-3.5 py-2.5 outline-none focus:border-brand-500 bg-slate-50"
+                className="w-full h-11 text-sm border border-slate-200 rounded-xl px-3.5 outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 bg-white"
                 placeholder="Enter your name"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-navy-900 mb-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
                 Email Address
               </label>
               <input
                 type="email"
                 value={form.email}
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                className="w-full text-xs font-medium border border-slate-200 rounded-xl px-3.5 py-2.5 outline-none focus:border-brand-500 bg-slate-50"
+                className="w-full h-11 text-sm border border-slate-200 rounded-xl px-3.5 outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 bg-white"
                 placeholder="Enter your email"
               />
             </div>
             <button
               type="submit"
-              className="w-full bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl py-3 shadow-xs transition-colors cursor-pointer active:scale-[0.98]"
+              className="w-full h-12 bg-navy-950 hover:bg-navy-900 text-white text-sm font-semibold rounded-xl transition-colors cursor-pointer active:scale-[0.98]"
             >
-              Save Profile Changes
+              Save changes
             </button>
           </form>
         )}
 
         {/* 3 Matching Stat Cards: Wallet, Active Coupons, Total Orders */}
         {!editing && (
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
             {/* 1. BuildCity Wallet (Click to open Passbook) */}
             <button
               type="button"
               onClick={() => setShowPassbookModal(true)}
-              className="bg-white rounded-xl border border-slate-200/90 py-2.5 px-2 sm:py-3.5 sm:px-3 text-center shadow-xs hover:shadow-md hover:border-brand-400 active:scale-[0.98] transition-all cursor-pointer group block"
+              className="bg-white rounded-2xl ring-1 ring-slate-200/80 p-3 sm:p-4 text-left hover:ring-slate-300 hover:shadow-[0_10px_24px_-16px_rgba(15,23,42,0.35)] active:scale-[0.98] transition-[box-shadow,transform] cursor-pointer group block"
             >
-              <div className="flex items-center justify-center mb-1">
-                <span className="text-[9.5px] font-black text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full border border-brand-200/70">
-                  Wallet
-                </span>
-              </div>
+              <span className="flex items-center gap-1.5 text-xs text-slate-500 mb-1.5">
+                <WalletIcon className="h-4 w-4 text-brand-600" />
+                Wallet
+              </span>
               {loadingWallet && !walletData ? (
-                <div className="h-6 w-16 mx-auto bg-slate-200 animate-pulse rounded-md my-0.5" />
+                <div className="bc-skeleton h-7 w-16 rounded-md" />
               ) : (
-                <p className="text-base sm:text-xl font-black text-brand-600 group-hover:text-brand-700 transition-colors tabular-nums">
+                <p className="text-lg sm:text-xl font-semibold text-navy-950 tabular-nums truncate">
                   ₹{displayedWalletBalance.toLocaleString("en-IN")}
                 </p>
               )}
-              <p className="text-[10px] font-bold text-slate-500 mt-0.5 flex items-center justify-center gap-1">
+              <p className="text-xs text-brand-700 mt-0.5 flex items-center gap-0.5">
                 <span>Passbook</span>
-                <span className="text-brand-600 font-bold group-hover:translate-x-0.5 transition-transform">→</span>
+                <ChevronRightIcon className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
               </p>
             </button>
 
@@ -291,19 +272,18 @@ export default function Profile() {
             <button
               type="button"
               onClick={() => setShowCouponsModal(true)}
-              className="bg-white rounded-xl border border-slate-200/90 py-2.5 px-2 sm:py-3.5 sm:px-3 text-center shadow-xs hover:shadow-md hover:border-emerald-400 active:scale-[0.98] transition-all cursor-pointer group block"
+              className="bg-white rounded-2xl ring-1 ring-slate-200/80 p-3 sm:p-4 text-left hover:ring-slate-300 hover:shadow-[0_10px_24px_-16px_rgba(15,23,42,0.35)] active:scale-[0.98] transition-[box-shadow,transform] cursor-pointer group block"
             >
-              <div className="flex items-center justify-center mb-1">
-                <span className="text-[9.5px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80">
-                  Active
-                </span>
-              </div>
-              <p className="text-base sm:text-xl font-black text-emerald-600 group-hover:text-emerald-700 transition-colors tabular-nums">
-                {activeCouponsCount} Active
+              <span className="flex items-center gap-1.5 text-xs text-slate-500 mb-1.5">
+                <TagIcon className="h-4 w-4 text-emerald-600" />
+                Coupons
+              </span>
+              <p className="text-lg sm:text-xl font-semibold text-navy-950 tabular-nums">
+                {activeCouponsCount}
               </p>
-              <p className="text-[10px] font-bold text-slate-500 mt-0.5 flex items-center justify-center gap-1">
-                <span>Coupons</span>
-                <span className="text-emerald-600 font-bold group-hover:translate-x-0.5 transition-transform">→</span>
+              <p className="text-xs text-brand-700 mt-0.5 flex items-center gap-0.5">
+                <span>View all</span>
+                <ChevronRightIcon className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
               </p>
             </button>
 
@@ -311,19 +291,18 @@ export default function Profile() {
             <button
               type="button"
               onClick={() => navigate("/orders")}
-              className="bg-white rounded-xl border border-slate-200/90 py-2.5 px-2 sm:py-3.5 sm:px-3 text-center shadow-xs hover:shadow-md hover:border-navy-400 active:scale-[0.98] transition-all cursor-pointer group block"
+              className="bg-white rounded-2xl ring-1 ring-slate-200/80 p-3 sm:p-4 text-left hover:ring-slate-300 hover:shadow-[0_10px_24px_-16px_rgba(15,23,42,0.35)] active:scale-[0.98] transition-[box-shadow,transform] cursor-pointer group block"
             >
-              <div className="flex items-center justify-center mb-1">
-                <span className="text-[9.5px] font-black text-navy-800 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
-                  History
-                </span>
-              </div>
-              <p className="text-base sm:text-xl font-black text-navy-950 group-hover:text-brand-600 transition-colors tabular-nums">
+              <span className="flex items-center gap-1.5 text-xs text-slate-500 mb-1.5">
+                <ReceiptIcon className="h-4 w-4 text-sky-600" />
+                Orders
+              </span>
+              <p className="text-lg sm:text-xl font-semibold text-navy-950 tabular-nums">
                 {(ordersSummary?.totalOrders ?? myOrders.length) || 0}
               </p>
-              <p className="text-[10px] font-bold text-slate-500 mt-0.5 flex items-center justify-center gap-1">
-                <span>Orders</span>
-                <span className="text-navy-950 font-bold group-hover:translate-x-0.5 transition-transform">→</span>
+              <p className="text-xs text-brand-700 mt-0.5 flex items-center gap-0.5">
+                <span>History</span>
+                <ChevronRightIcon className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
               </p>
             </button>
           </div>
@@ -331,31 +310,32 @@ export default function Profile() {
 
         {/* Refer & Earn Card (Referral Code Only, Strictly No Dynamic Links) */}
         {!editing && (
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-xs space-y-3.5">
-            <div className="flex items-center justify-between">
+          <div className="bg-white rounded-2xl ring-1 ring-slate-200/80 p-4 sm:p-5 space-y-4">
+            <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-extrabold text-navy-950">
-                  Refer & Earn Rewards
+                <GiftIcon className="h-[18px] w-[18px] text-brand-600" />
+                <h3 className="text-[15px] font-semibold text-navy-950">
+                  Refer & earn
                 </h3>
               </div>
               {walletData?.settings ? (
-                <span className="text-[10px] font-black text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/80">
+                <span className="text-xs font-medium text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full ring-1 ring-inset ring-emerald-600/15">
                   {walletData.settings.referralRewardType === "PERCENTAGE"
-                    ? `Bonus ${walletData.settings.referrerReward}% Lifetime`
-                    : `Bonus ₹${walletData.settings.referrerReward}`}
+                    ? `${walletData.settings.referrerReward}% lifetime bonus`
+                    : `₹${walletData.settings.referrerReward} bonus`}
                 </span>
               ) : (
-                <span className="inline-block w-28 h-5 bg-emerald-100/70 animate-pulse rounded-full" />
+                <span className="bc-skeleton inline-block w-28 h-5 rounded-full" />
               )}
             </div>
 
             {/* Referral Code Box */}
-            <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="bg-slate-50 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  Your Referral Code
+                <span className="text-xs text-slate-500 block">
+                  Your referral code
                 </span>
-                <span className="font-mono text-xl font-black text-navy-950 tracking-widest select-all">
+                <span className="selectable-text font-mono text-xl font-semibold text-navy-950 tracking-[0.2em] select-all">
                   {walletData?.referralCode || user?.referralCode || "BC----"}
                 </span>
               </div>
@@ -364,13 +344,14 @@ export default function Profile() {
                 <button
                   type="button"
                   onClick={() => handleCopyReferral(walletData?.referralCode || user?.referralCode)}
-                  className={`flex-1 sm:flex-none text-xs font-black px-4 py-2.5 rounded-xl active:scale-95 transition-all cursor-pointer shadow-xs flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 sm:flex-none h-10 text-sm font-semibold px-4 rounded-xl active:scale-[0.98] transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                     copiedReferral
                       ? "bg-emerald-600 text-white"
-                      : "bg-slate-900 hover:bg-slate-800 text-white"
+                      : "bg-navy-950 hover:bg-navy-900 text-white"
                   }`}
                 >
-                  <span>{copiedReferral ? "✓ Copied" : "Copy Code"}</span>
+                  <CopyIcon className="h-4 w-4" />
+                  <span aria-live="polite">{copiedReferral ? "Copied" : "Copy code"}</span>
                 </button>
 
                 <a
@@ -379,68 +360,61 @@ export default function Profile() {
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-1 sm:flex-none bg-[#128C7E] hover:bg-[#075E54] text-white active:scale-95 text-xs font-black px-4 py-2.5 rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="flex-1 sm:flex-none h-10 bg-[#128C7E] hover:bg-[#075E54] text-white active:scale-[0.98] text-sm font-semibold px-4 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <span>WhatsApp</span>
+                  <WhatsAppIcon className="h-4 w-4" />
+                  <span>Share</span>
                 </a>
               </div>
             </div>
 
             {/* How It Works - Step by Step Guide (Clean Monochrome & Minimalist) */}
-            <div className="grid grid-cols-3 gap-2 sm:gap-2.5 pt-1 text-center">
-              <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-2.5 sm:p-3 shadow-2xs hover:border-slate-300 transition-colors">
-                <span className="inline-block text-[9.5px] font-extrabold text-slate-600 bg-white border border-slate-200/90 px-2.5 py-0.5 rounded-full shadow-2xs">
-                  Step 1
-                </span>
-                <p className="text-[11px] sm:text-xs font-black text-navy-950 mt-1.5">Share Code</p>
-                <p className="text-[9.5px] sm:text-[10px] font-medium text-slate-500 mt-0.5">Send code to friends</p>
-              </div>
-              <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-2.5 sm:p-3 shadow-2xs hover:border-slate-300 transition-colors">
-                <span className="inline-block text-[9.5px] font-extrabold text-slate-600 bg-white border border-slate-200/90 px-2.5 py-0.5 rounded-full shadow-2xs">
-                  Step 2
-                </span>
-                <p className="text-[11px] sm:text-xs font-black text-navy-950 mt-1.5">Friend Registers</p>
-                <p className="text-[9.5px] sm:text-[10px] font-medium text-slate-500 mt-0.5">Enter code on signup</p>
-              </div>
-              <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-2.5 sm:p-3 shadow-2xs hover:border-slate-300 transition-colors">
-                <span className="inline-block text-[9.5px] font-extrabold text-slate-600 bg-white border border-slate-200/90 px-2.5 py-0.5 rounded-full shadow-2xs">
-                  Step 3
-                </span>
-                <p className="text-[11px] sm:text-xs font-black text-navy-950 mt-1.5">Earn on Delivery</p>
-                <p className="text-[9.5px] sm:text-[10px] font-medium text-slate-500 mt-0.5">
+            <ol className="grid grid-cols-3 gap-2 sm:gap-3">
+              <li className="rounded-xl p-2.5 sm:p-3 ring-1 ring-slate-200/80">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">1</span>
+                <p className="text-[13px] font-medium text-navy-950 mt-2">Share code</p>
+                <p className="text-xs text-slate-500 mt-0.5 leading-snug">Send it to a friend</p>
+              </li>
+              <li className="rounded-xl p-2.5 sm:p-3 ring-1 ring-slate-200/80">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">2</span>
+                <p className="text-[13px] font-medium text-navy-950 mt-2">They sign up</p>
+                <p className="text-xs text-slate-500 mt-0.5 leading-snug">Using your code</p>
+              </li>
+              <li className="rounded-xl p-2.5 sm:p-3 ring-1 ring-slate-200/80">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">3</span>
+                <p className="text-[13px] font-medium text-navy-950 mt-2">You earn</p>
+                <p className="text-xs text-slate-500 mt-0.5 leading-snug">
                   {walletData?.settings?.referralRewardType === "PERCENTAGE"
                     ? `${walletData?.settings?.referrerReward || 2}% on every qualifying order`
                     : "Reward on qualifying orders"}
                 </p>
-              </div>
-            </div>
+              </li>
+            </ol>
           </div>
         )}
 
         {/* My Account Links */}
-        <section className="space-y-2">
-          <h2 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider px-1">
-            My Account & Activity
+        <section className="space-y-2 pt-1">
+          <h2 className="text-sm font-medium text-slate-500 px-1">
+            Account
           </h2>
-          <div className="bg-white rounded-2xl border border-slate-200/90 divide-y divide-slate-100 shadow-xs overflow-hidden">
+          <div className="bg-white rounded-2xl ring-1 ring-slate-200/80 divide-y divide-slate-100 overflow-hidden">
             {accountLinks.map((l) => (
               <Link
                 key={l.label}
                 to={l.to}
-                className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-slate-50/80 active:bg-slate-100 transition-colors group"
+                className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 active:bg-slate-100 transition-colors group"
               >
-                <span className="text-xl bg-slate-100 p-2 rounded-xl group-hover:bg-brand-50 transition-colors">
-                  {l.icon}
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+                  <l.icon className="h-[18px] w-[18px]" />
                 </span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-navy-950 group-hover:text-brand-600 transition-colors">
+                  <p className="text-sm font-medium text-navy-950">
                     {l.label}
                   </p>
-                  <p className="text-[11px] text-slate-400 truncate">{l.sub}</p>
+                  <p className="text-xs text-slate-500 truncate">{l.sub}</p>
                 </div>
-                <svg className="w-4 h-4 text-slate-400 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M9 5l7 7-7 7" />
-                </svg>
+                <ChevronRightIcon className="h-4 w-4 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
               </Link>
             ))}
           </div>
@@ -448,43 +422,47 @@ export default function Profile() {
 
         {/* Support & Account Actions */}
         <section className="space-y-2">
-          <h2 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider px-1">
-            Support & Account
+          <h2 className="text-sm font-medium text-slate-500 px-1">
+            Support
           </h2>
-          <div className="bg-white rounded-2xl border border-slate-200/90 divide-y divide-slate-100 shadow-xs overflow-hidden">
-            {supportLinks.map((l) => (
-              <div
-                key={l.label}
-                className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-slate-50/80 active:bg-slate-100 transition-colors cursor-pointer group"
-              >
-                <span className="text-xl bg-slate-100 p-2 rounded-xl group-hover:bg-brand-50 transition-colors">
-                  {l.icon}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-navy-950 group-hover:text-brand-600 transition-colors">
-                    {l.label}
-                  </p>
-                  <p className="text-[11px] text-slate-400 truncate">{l.sub}</p>
-                </div>
-                <svg className="w-4 h-4 text-slate-400 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M9 5l7 7-7 7" />
-                </svg>
-              </div>
-            ))}
+          <div className="bg-white rounded-2xl ring-1 ring-slate-200/80 divide-y divide-slate-100 overflow-hidden">
+            {supportLinks.map((l) => {
+              const inner = (
+                <>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+                    <l.icon className="h-[18px] w-[18px]" />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-navy-950">{l.label}</p>
+                    <p className="text-xs text-slate-500 truncate">{l.sub}</p>
+                  </div>
+                  <ChevronRightIcon className="h-4 w-4 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                </>
+              );
+              const rowClass = "flex items-center gap-3 px-4 py-3 hover:bg-slate-50 active:bg-slate-100 transition-colors group";
+              return l.href ? (
+                <a key={l.label} href={l.href} className={rowClass}>
+                  {inner}
+                </a>
+              ) : (
+                <Link key={l.label} to={l.to} className={rowClass}>
+                  {inner}
+                </Link>
+              );
+            })}
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-3.5 px-4 py-3.5 hover:bg-rose-50/80 active:bg-rose-100 transition-colors text-left cursor-pointer group"
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-rose-50 active:bg-rose-100 transition-colors text-left cursor-pointer group"
             >
-              <span className="text-xl bg-rose-50 p-2 rounded-xl text-rose-600">🚪</span>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
+                <LogOutIcon className="h-[18px] w-[18px]" />
+              </span>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-extrabold text-rose-600">
-                  Logout Account
+                <p className="text-sm font-medium text-rose-600">
+                  Log out
                 </p>
-                <p className="text-[11px] text-rose-400">Sign out from this device</p>
+                <p className="text-xs text-slate-500">Sign out from this device</p>
               </div>
-              <svg className="w-4 h-4 text-rose-400 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M9 5l7 7-7 7" />
-              </svg>
             </button>
           </div>
         </section>
@@ -497,76 +475,79 @@ export default function Profile() {
       {showCouponsModal && (
         <div
           onClick={() => setShowCouponsModal(false)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
+          className="bc-fade-in fixed inset-0 z-50 bg-slate-950/55 flex items-end sm:items-center justify-center sm:p-4"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-3xl max-w-sm sm:max-w-md w-full p-4.5 sm:p-5 shadow-2xl border border-slate-100 flex flex-col max-h-[80vh] space-y-3 animate-modal-pop"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Coupons"
+            className="bc-sheet-up bg-white rounded-t-3xl sm:rounded-2xl sm:max-w-md w-full p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl flex flex-col max-h-[85vh] space-y-3"
           >
             {/* Clean top-right close button (Header text removed) */}
-            <div className="flex justify-end shrink-0 -mt-1 -mr-1">
+            <div className="flex items-center justify-between shrink-0">
+              <h3 className="text-base font-semibold text-navy-950">Your coupons</h3>
               <button
                 onClick={() => setShowCouponsModal(false)}
-                className="text-slate-400 hover:text-navy-950 p-1.5 rounded-full hover:bg-slate-100 transition-colors text-sm cursor-pointer"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
                 title="Close"
+                aria-label="Close"
               >
-                ✕
+                <CloseIcon className="h-4 w-4" />
               </button>
             </div>
 
             <div className="space-y-2.5 overflow-y-auto flex-1 pr-0.5">
               {activeCoupons.length === 0 ? (
-                <div className="text-center py-6 text-slate-400">
-                  <p className="text-2xl mb-1">🏷️</p>
-                  <p className="text-xs font-bold text-slate-600">No active coupons available</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Check back later for seasonal festival discounts!</p>
+                <div className="text-center py-8">
+                  <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400"><TagIcon className="h-6 w-6" /></span>
+                  <p className="text-sm font-semibold text-navy-950">No coupons right now</p>
+                  <p className="text-sm text-slate-500 mt-0.5">New offers will show up here.</p>
                 </div>
               ) : (
                 activeCoupons.map((c) => (
                   <div
                     key={c.code}
-                    className="border border-slate-200/80 rounded-2xl p-3 sm:p-3.5 flex flex-col justify-between gap-2.5 bg-white shadow-2xs hover:border-brand-400 hover:shadow-xs transition-all"
+                    className="rounded-2xl p-3.5 flex flex-col justify-between gap-2.5 bg-white ring-1 ring-slate-200"
                   >
                     {/* Top: Title & Active badge */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <h4 className="text-xs sm:text-[13px] font-black text-navy-950 leading-tight">
+                        <h4 className="text-sm font-semibold text-navy-950 leading-tight">
                           {c.title || `Save ₹${c.discountAmount || 50} on your order`}
                         </h4>
-                        <p className="text-[10px] text-slate-500 font-medium mt-0.5 line-clamp-1">
+                        <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">
                           {c.desc || `Valid on orders above ₹${Number(c.minOrder || 0).toLocaleString("en-IN")}`}
                         </p>
                       </div>
-                      <span className="text-[9.5px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80 shrink-0">
-                        Active
-                      </span>
+                      
                     </div>
 
                     {/* Middle: Clean & Simple Code Row (No Dashes) */}
-                    <div className="flex items-center justify-between gap-2.5 bg-slate-50 border border-slate-200/90 rounded-xl px-3 py-2">
-                      <span className="font-mono text-xs sm:text-[13px] font-black tracking-wider text-brand-600 select-all">
+                    <div className="flex items-center justify-between gap-2.5 bg-slate-50 rounded-xl pl-3 pr-1.5 py-1.5">
+                      <span className="selectable-text font-mono text-sm font-semibold tracking-wider text-navy-950 select-all">
                         {c.code}
                       </span>
 
                       <button
                         onClick={() => handleCopyCode(c.code)}
-                        className={`text-[11px] font-black px-3.5 py-1.5 rounded-lg active:scale-95 transition-all cursor-pointer shrink-0 ${
+                        className={`h-9 text-sm font-semibold px-3.5 rounded-lg active:scale-[0.97] transition-colors cursor-pointer shrink-0 ${
                           copiedCode === c.code
                             ? "bg-emerald-600 text-white"
-                            : "bg-brand-500 hover:bg-brand-600 text-white shadow-2xs"
+                            : "bg-navy-950 hover:bg-navy-900 text-white"
                         }`}
                       >
-                        {copiedCode === c.code ? "✓ Copied!" : "Copy Code"}
+                        {copiedCode === c.code ? "Copied" : "Copy"}
                       </button>
                     </div>
 
                     {/* Bottom: Validity & Min Order Details */}
-                    <div className="flex items-center justify-between text-[9px] text-slate-400 font-medium pt-1 border-t border-slate-100 flex-wrap gap-1.5">
+                    <div className="flex items-center justify-between text-xs text-slate-500 flex-wrap gap-1.5">
                       <span>
                         {c.minOrder ? `Min order: ₹${Number(c.minOrder).toLocaleString("en-IN")}` : "No min order"}
                       </span>
                       {c.expiryDate && (
-                        <span>🕒 Valid: {c.expiryDate}</span>
+                        <span>Valid till {c.expiryDate}</span>
                       )}
                     </div>
                   </div>
@@ -580,9 +561,9 @@ export default function Profile() {
                   setShowCouponsModal(false);
                   navigate("/categories");
                 }}
-                className="w-full bg-brand-500 hover:bg-brand-600 active:scale-[0.98] text-white text-xs font-black py-2.5 rounded-xl transition-all cursor-pointer shadow-xs text-center"
+                className="w-full h-12 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white text-sm font-semibold rounded-xl transition-colors cursor-pointer text-center"
               >
-                Shop Materials with Coupon →
+                Shop materials
               </button>
             </div>
           </div>
@@ -593,70 +574,71 @@ export default function Profile() {
       {showPassbookModal && (
         <div
           onClick={() => setShowPassbookModal(false)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
+          className="bc-fade-in fixed inset-0 z-50 bg-slate-950/55 flex items-end sm:items-center justify-center sm:p-4"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-3xl max-w-sm sm:max-w-md w-full p-4.5 sm:p-5 shadow-2xl border border-slate-100 flex flex-col max-h-[85vh] space-y-3 animate-modal-pop"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Wallet Passbook"
+            className="bc-sheet-up bg-white rounded-t-3xl sm:rounded-2xl sm:max-w-md w-full p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl flex flex-col max-h-[88vh] space-y-3"
           >
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-xl">📜</span>
-                <h3 className="font-extrabold text-navy-950 text-sm sm:text-base">
+                <h3 className="font-semibold text-navy-950 text-base">
                   Wallet Passbook
                 </h3>
               </div>
               <button
                 onClick={() => setShowPassbookModal(false)}
-                className="text-slate-400 hover:text-navy-950 p-1.5 rounded-full hover:bg-slate-100 transition-colors text-sm cursor-pointer"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
                 title="Close"
+                aria-label="Close"
               >
-                ✕
+                <CloseIcon className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3.5 flex items-center justify-between">
+            <div className="bg-navy-950 text-white rounded-2xl p-4 flex items-center justify-between">
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  Available Wallet Balance
+                <span className="text-xs text-slate-300 block">
+                  Available balance
                 </span>
                 {loadingWallet && !walletData ? (
-                  <div className="h-7 w-24 bg-slate-200 animate-pulse rounded-md mt-1" />
+                  <div className="h-8 w-24 bg-white/10 rounded-md mt-1" />
                 ) : (
-                  <span className="text-2xl font-black text-navy-950 tabular-nums">
+                  <span className="text-2xl font-semibold tabular-nums">
                     ₹{displayedWalletBalance.toLocaleString("en-IN")}
                   </span>
                 )}
               </div>
-              <span className="text-[11px] font-black text-brand-700 bg-brand-50 px-3 py-1 rounded-xl shadow-2xs border border-brand-200/80">
-                BuildCity Wallet
-              </span>
+              <WalletIcon className="h-7 w-7 text-brand-400" />
             </div>
 
-            <div className="space-y-2 overflow-y-auto flex-1 pr-0.5 max-h-[50vh]">
+            <div className="overflow-y-auto overscroll-contain flex-1 pr-0.5 max-h-[50vh]">
               {loadingWallet && (!walletData || !walletData.transactions) ? (
                 <div className="space-y-2 py-1">
                   {[1, 2, 3].map((idx) => (
                     <div
                       key={idx}
-                      className="bg-slate-50 border border-slate-200/70 rounded-xl p-3 flex items-center justify-between gap-3 animate-pulse"
+                      className="rounded-xl p-3 flex items-center justify-between gap-3"
                     >
                       <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-slate-200" />
+                        <div className="bc-skeleton w-8 h-8 rounded-full" />
                         <div className="space-y-1.5">
-                          <div className="h-3 w-28 bg-slate-200 rounded" />
-                          <div className="h-2 w-16 bg-slate-200 rounded" />
+                          <div className="bc-skeleton h-3 w-28 rounded" />
+                          <div className="bc-skeleton h-2.5 w-16 rounded" />
                         </div>
                       </div>
-                      <div className="h-4 w-12 bg-slate-200 rounded" />
+                      <div className="bc-skeleton h-4 w-12 rounded" />
                     </div>
                   ))}
                 </div>
               ) : !walletData?.transactions || walletData.transactions.length === 0 ? (
-                <div className="text-center py-8 text-slate-400">
-                  <p className="text-3xl mb-1.5">💳</p>
-                  <p className="text-xs font-bold text-slate-600">No transactions yet</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">
+                <div className="text-center py-8">
+                  <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400"><WalletIcon className="h-6 w-6" /></span>
+                  <p className="text-sm font-semibold text-navy-950">No transactions yet</p>
+                  <p className="text-sm text-slate-500 mt-0.5 max-w-xs mx-auto">
                     Cashback and referral bonuses will appear here once your orders are delivered!
                   </p>
                 </div>
@@ -666,7 +648,7 @@ export default function Profile() {
                   return (
                     <div
                       key={t.id}
-                      className="bg-slate-50/70 border border-slate-200/80 rounded-xl p-3 flex items-center justify-between gap-3 hover:border-slate-300 transition-colors"
+                      className="rounded-xl px-1 py-2.5 flex items-center justify-between gap-3 border-b border-slate-100 last:border-b-0"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div
@@ -679,10 +661,10 @@ export default function Profile() {
                           {isPositive ? "↓" : "↑"}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-navy-950 truncate">
+                          <p className="text-sm font-medium text-navy-950 truncate">
                             {t.description || t.type}
                           </p>
-                          <p className="text-[10px] text-slate-400 font-medium">
+                          <p className="text-xs text-slate-500">
                             {t.createdAt
                               ? new Date(t.createdAt).toLocaleString("en-IN", {
                                   day: "numeric",
@@ -698,13 +680,13 @@ export default function Profile() {
 
                       <div className="text-right shrink-0">
                         <span
-                          className={`text-xs sm:text-sm font-black tabular-nums ${
+                          className={`text-sm font-semibold tabular-nums ${
                             isPositive ? "text-emerald-600" : "text-rose-600"
                           }`}
                         >
                           {isPositive ? `+ ₹${Number(t.amount).toLocaleString("en-IN")}` : `− ₹${Math.abs(Number(t.amount)).toLocaleString("en-IN")}`}
                         </span>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                        <p className="font-mono text-[11px] text-slate-400">
                           {t.type}
                         </p>
                       </div>
@@ -717,9 +699,9 @@ export default function Profile() {
             <div className="pt-2 border-t border-slate-100 shrink-0">
               <button
                 onClick={() => setShowPassbookModal(false)}
-                className="w-full bg-slate-100 hover:bg-slate-200 text-navy-950 text-xs font-bold py-2.5 rounded-xl transition-all cursor-pointer text-center"
+                className="w-full h-11 bg-slate-100 hover:bg-slate-200 text-navy-950 text-sm font-semibold rounded-xl transition-colors cursor-pointer text-center"
               >
-                Close Passbook
+                Close
               </button>
             </div>
           </div>

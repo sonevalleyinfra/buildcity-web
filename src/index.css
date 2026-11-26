@@ -217,3 +217,83 @@ textarea:focus-visible {
     animation: none;
   }
 }
+
+/* Storefront motion (customer + public pages). Short, ease-out, and off for reduced-motion users. */
+@keyframes bc-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes bc-rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bc-pop-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes bc-sheet-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bc-drop-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.bc-fade-in {
+  animation: bc-fade-in 200ms ease-out both;
+}
+
+.bc-rise-in {
+  animation: bc-rise-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.bc-pop-in {
+  animation: bc-pop-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.bc-sheet-up {
+  animation: bc-sheet-up 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.bc-drop-in {
+  animation: bc-drop-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: top right;
+}
+
+/* Skeleton shimmer for loading placeholders */
+@keyframes bc-shimmer {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+
+.bc-skeleton {
+  background: linear-gradient(90deg, #eef2f6 0%, #f6f8fa 50%, #eef2f6 100%);
+  background-size: 200% 100%;
+  animation: bc-shimmer 1.4s linear infinite;
+}
+
+/* Keyboard focus ring for storefront controls (mouse/touch clicks stay clean) */
+[data-storefront] a:focus-visible,
+[data-storefront] button:focus-visible,
+[data-storefront] [role="button"]:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bc-fade-in,
+  .bc-rise-in,
+  .bc-pop-in,
+  .bc-sheet-up,
+  .bc-drop-in {
+    animation: none;
+  }
+  .bc-skeleton {
+    animation: none;
+  }
+}

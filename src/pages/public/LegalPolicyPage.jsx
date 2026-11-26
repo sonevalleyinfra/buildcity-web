@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import Logo from "../../components/Logo";
+import { ChevronLeftIcon, MailIcon, PhoneIcon, WhatsAppIcon } from "../../components/ui/Icons";
 import { POLICIES, COMPANY_CONTACT } from "../../data/legalPolicies";
 
 export default function LegalPolicyPage({ defaultPolicyId }) {
@@ -33,53 +34,53 @@ export default function LegalPolicyPage({ defaultPolicyId }) {
   const currentPolicy = POLICIES[activeKey] || POLICIES.privacy;
 
   const policyTabs = [
-    { key: "terms", label: "Terms & Conditions", icon: "📜", path: "/terms" },
-    { key: "privacy", label: "Privacy Policy", icon: "🔒", path: "/privacy" },
-    { key: "refund", label: "Return & Refund", icon: "🔄", path: "/refund" },
-    { key: "shipping", label: "Shipping Policy", icon: "🚚", path: "/shipping" },
+    { key: "terms", label: "Terms & Conditions", path: "/terms" },
+    { key: "privacy", label: "Privacy Policy", path: "/privacy" },
+    { key: "refund", label: "Return & Refund", path: "/refund" },
+    { key: "shipping", label: "Shipping Policy", path: "/shipping" },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-between">
-      {/* 🧭 Top Navigation Bar */}
-      <header className="sticky top-0 z-30 bg-[#07132B] text-white border-b border-slate-800 shadow-md">
+    <div data-storefront className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-between">
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link to="/" className="active:scale-95 transition-transform flex items-center">
-              <Logo variant="light" size="sm" />
+              <Logo size="sm" />
             </Link>
-            <span className="hidden sm:inline-block text-slate-500 font-light">|</span>
-            <span className="hidden sm:inline-block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-              Legal & Compliance Center
+            <span className="hidden sm:inline-block h-5 w-px bg-slate-200" aria-hidden="true" />
+            <span className="hidden sm:inline-block text-sm text-slate-500">
+              Policies
             </span>
           </div>
 
           <div className="flex items-center gap-2">
             <Link
               to="/"
-              className="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs shadow-sm transition-all active:scale-95 flex items-center gap-1"
+              className="h-10 px-3 rounded-xl text-navy-950 hover:bg-slate-100 font-medium text-sm transition-colors flex items-center gap-1"
             >
-              <span>← Back to Store</span>
+              <ChevronLeftIcon className="h-4 w-4" />
+              <span>Back to store</span>
             </Link>
           </div>
         </div>
       </header>
 
-      {/* 📜 Main Content Container */}
+      {/* Main content */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 w-full grow">
         {/* Breadcrumb */}
-        <nav className="text-xs text-slate-500 mb-4 flex items-center gap-2">
+        <nav aria-label="Breadcrumb" className="hidden sm:flex text-sm text-slate-500 mb-4 items-center gap-1.5">
           <Link to="/" className="hover:text-slate-900 transition-colors">
             Home
           </Link>
           <span>/</span>
-          <span className="text-slate-700 font-medium">Compliance & Policies</span>
+          <span>Policies</span>
           <span>/</span>
-          <span className="text-navy-950 font-bold">{currentPolicy.title}</span>
+          <span className="text-navy-950">{currentPolicy.title}</span>
         </nav>
 
         {/* Policy Tab Switcher */}
-        <div className="bg-white rounded-2xl p-1.5 border border-slate-200 shadow-xs mb-6 overflow-x-auto flex gap-1 scrollbar-none">
+        <div className="-mx-4 sm:mx-0 px-4 sm:px-0 mb-6 overflow-x-auto flex gap-2 no-scrollbar" role="tablist" aria-label="Policies">
           {policyTabs.map((tab) => {
             const isActive = activeKey === tab.key;
             return (
@@ -90,13 +91,12 @@ export default function LegalPolicyPage({ defaultPolicyId }) {
                   setActiveKey(tab.key);
                   navigate(tab.path);
                 }}
-                className={`px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
-                  isActive
-                    ? "bg-[#07132B] text-white shadow-md shadow-slate-900/20 scale-[1.01]"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70"
+                role="tab"
+                aria-selected={isActive}
+                className={`h-9 px-3.5 rounded-full font-medium text-sm whitespace-nowrap transition-colors shrink-0 cursor-pointer ${
+                  isActive ? "bg-navy-950 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
                 }`}
               >
-                <span>{tab.icon}</span>
                 <span>{tab.label}</span>
               </button>
             );
@@ -106,18 +106,16 @@ export default function LegalPolicyPage({ defaultPolicyId }) {
         {/* Policy Body Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Left Column: Full Policy Content */}
-          <article className="lg:col-span-8 bg-white rounded-3xl p-6 sm:p-10 border border-slate-200/90 shadow-sm space-y-6">
+          <article className="bc-fade-in lg:col-span-8 bg-white rounded-2xl p-5 sm:p-10 ring-1 ring-slate-200/80 space-y-6">
             {/* Header */}
             <div className="border-b border-slate-100 pb-5">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold mb-2">
-                <span>Official Documentation</span>
-                <span>•</span>
-                <span>Updated: {currentPolicy.lastUpdated}</span>
-              </div>
-              <h1 className="text-2xl sm:text-3xl font-black text-navy-950 tracking-tight leading-snug">
+              <p className="text-xs text-slate-500 mb-2">
+                Last updated {currentPolicy.lastUpdated}
+              </p>
+              <h1 className="text-2xl sm:text-3xl font-semibold text-navy-950 tracking-tight leading-snug">
                 {currentPolicy.title}
               </h1>
-              <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+              <p className="text-sm text-slate-500 mt-1">
                 {currentPolicy.subtitle}
               </p>
             </div>
@@ -126,11 +124,10 @@ export default function LegalPolicyPage({ defaultPolicyId }) {
             <div className="space-y-6">
               {currentPolicy.sections.map((sec, idx) => (
                 <section key={idx} className="space-y-2">
-                  <h2 className="text-base sm:text-lg font-bold text-navy-900 flex items-center gap-2">
-                    <span className="w-1.5 h-4.5 bg-brand-500 rounded-full shrink-0" />
-                    <span>{sec.heading}</span>
+                  <h2 className="text-base sm:text-lg font-semibold text-navy-950">
+                    {sec.heading}
                   </h2>
-                  <div className="text-slate-600 text-xs sm:text-sm leading-relaxed whitespace-pre-line pl-3.5 border-l-2 border-slate-100 font-normal">
+                  <div className="selectable-text text-slate-600 text-sm sm:text-[15px] leading-relaxed whitespace-pre-line">
                     {sec.content}
                   </div>
                 </section>
@@ -140,14 +137,14 @@ export default function LegalPolicyPage({ defaultPolicyId }) {
             {/* Document Signature Footnote */}
             <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-slate-500">
               <div>
-                <p className="font-bold text-navy-900">BuildCity Compliance Division</p>
+                <p className="font-medium text-navy-950">BuildCity</p>
                 <p>Governed in accordance with the Laws of India.</p>
               </div>
               <a
                 href={COMPANY_CONTACT.website}
                 target="_blank"
                 rel="noreferrer"
-                className="text-brand-600 hover:text-brand-700 font-bold hover:underline"
+                className="text-brand-700 hover:text-brand-600 font-medium"
               >
                 {COMPANY_CONTACT.website}
               </a>
@@ -156,70 +153,60 @@ export default function LegalPolicyPage({ defaultPolicyId }) {
 
           {/* Right Column: Grievance Officer & Quick Support Cards */}
           <aside className="lg:col-span-4 space-y-5">
-            {/* 👮 Grievance Officer Card */}
-            <div className="bg-gradient-to-br from-[#07132B] via-[#0B1E40] to-[#07132B] text-white rounded-3xl p-6 shadow-md border border-slate-800 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
-              
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-lg">⚖️</span>
-                <span className="text-xs font-black uppercase tracking-wider text-sky-400">
-                  Statutory Redressal
-                </span>
-              </div>
-
-              <h3 className="text-base font-black tracking-tight text-white mb-1">
+            {/* Grievance officer */}
+            <div className="bg-navy-950 text-white rounded-2xl p-5 sm:p-6">
+              <h3 className="text-base font-semibold tracking-tight text-white mb-1">
                 Grievance Officer
               </h3>
-              <p className="text-[11px] text-slate-300 font-medium mb-4">
+              <p className="text-sm text-slate-300 mb-4">
                 As per the Information Technology Act & Consumer Protection (E-Commerce) Rules:
               </p>
 
-              <div className="space-y-3 bg-white/5 rounded-2xl p-4 border border-white/10 text-xs">
+              <div className="space-y-3 bg-white/5 rounded-xl p-4 ring-1 ring-white/10 text-sm">
                 <div>
-                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Officer Name</span>
-                  <span className="font-bold text-white text-sm">
+                  <span className="text-slate-400 text-xs block">Officer Name</span>
+                  <span className="font-medium text-white">
                     {COMPANY_CONTACT.grievanceOfficer.name}
                   </span>
                 </div>
 
                 <div>
-                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Direct Contact</span>
+                  <span className="text-slate-400 text-xs block">Direct Contact</span>
                   <a
                     href={`tel:${COMPANY_CONTACT.grievanceOfficer.contact}`}
-                    className="font-bold text-sky-400 hover:text-sky-300 flex items-center gap-1"
+                    className="font-medium text-sky-300 hover:text-sky-200 flex items-center gap-1.5 tabular-nums"
                   >
-                    <span>📞</span>
+                    <PhoneIcon className="h-3.5 w-3.5" />
                     <span>+91 {COMPANY_CONTACT.grievanceOfficer.contact}</span>
                   </a>
                 </div>
 
                 <div>
-                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Official Email</span>
+                  <span className="text-slate-400 text-xs block">Official Email</span>
                   <a
                     href={`mailto:${COMPANY_CONTACT.grievanceOfficer.email}`}
-                    className="font-bold text-sky-400 hover:text-sky-300 flex items-center gap-1"
+                    className="font-medium text-sky-300 hover:text-sky-200 flex items-center gap-1.5 break-all"
                   >
-                    <span>✉️</span>
+                    <MailIcon className="h-3.5 w-3.5 shrink-0" />
                     <span>{COMPANY_CONTACT.grievanceOfficer.email}</span>
                   </a>
                 </div>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-white/10 text-[11px] text-slate-300">
-                <span className="font-bold text-white block mb-0.5">Corporate Address:</span>
+              <div className="mt-4 pt-3 border-t border-white/10 text-sm text-slate-300">
+                <span className="text-xs text-slate-400 block mb-0.5">Registered address</span>
                 <p className="leading-tight text-slate-300">
                   {COMPANY_CONTACT.address}, {COMPANY_CONTACT.city}, {COMPANY_CONTACT.state}
                 </p>
               </div>
             </div>
 
-            {/* 💬 Quick Help & Inquiries */}
-            <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-3">
-              <h4 className="text-sm font-black text-navy-900 flex items-center gap-1.5">
-                <span>💬</span>
-                <span>Need Site Assistance?</span>
+            {/* Quick help */}
+            <div className="bg-white rounded-2xl p-5 sm:p-6 ring-1 ring-slate-200/80 space-y-3">
+              <h4 className="text-[15px] font-semibold text-navy-950">
+                Need help with an order?
               </h4>
-              <p className="text-xs text-slate-500">
+              <p className="text-sm text-slate-500">
                 Have questions regarding building material orders, wholesale supply, or dispatch?
               </p>
 
@@ -228,15 +215,17 @@ export default function LegalPolicyPage({ defaultPolicyId }) {
                   href={`https://wa.me/${COMPANY_CONTACT.supportWhatsApp}?text=Hello%20BuildCity%20Compliance%20Support`}
                   target="_blank"
                   rel="noreferrer"
-                  className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors active:scale-95"
+                  className="w-full h-11 px-4 rounded-xl bg-[#128C7E] hover:bg-[#075E54] text-white font-semibold text-sm flex items-center justify-center gap-2 transition-colors active:scale-[0.98]"
                 >
-                  <span>🟢 Chat on WhatsApp</span>
+                  <WhatsAppIcon className="h-4 w-4" />
+                  <span>Chat on WhatsApp</span>
                 </a>
                 <a
                   href={`tel:${COMPANY_CONTACT.supportPhone}`}
-                  className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-navy-950 font-bold text-xs flex items-center justify-center gap-2 transition-colors active:scale-95"
+                  className="w-full h-11 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-navy-950 font-semibold text-sm flex items-center justify-center gap-2 transition-colors active:scale-[0.98]"
                 >
-                  <span>📞 Call Support</span>
+                  <PhoneIcon className="h-4 w-4" />
+                  <span>Call support</span>
                 </a>
               </div>
             </div>

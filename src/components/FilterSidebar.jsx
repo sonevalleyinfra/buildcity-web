@@ -14,13 +14,13 @@ export default function FilterSidebar({
   onClear,
 }) {
   return (
-    <aside className="w-full sm:w-60 shrink-0">
-      <div className="bg-white rounded-xl border border-slate-200 p-4 sm:sticky sm:top-20">
+    <aside className="w-full md:w-60 shrink-0">
+      <div className="bg-white rounded-2xl ring-1 ring-slate-200/80 p-4 md:sticky md:top-24">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-bold text-navy-900">Filters</h3>
+          <h3 className="text-sm font-semibold text-navy-950">Filters</h3>
           <button
             onClick={onClear}
-            className="text-xs font-medium text-brand-500 hover:underline"
+            className="text-sm font-medium text-brand-700 hover:text-brand-600"
           >
             Clear all
           </button>
@@ -28,20 +28,20 @@ export default function FilterSidebar({
 
         {/* Brand filter yaha se hota hai  */}
         <div className="mb-6">
-          <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
+          <h4 className="text-sm font-medium text-slate-700 mb-2">
             Brand
           </h4>
-          <div className="space-y-2.5">
+          <div className="space-y-0.5">
             {brands.map((b) => (
               <label
                 key={b}
-                className="flex items-center gap-2.5 text-sm text-slate-700 cursor-pointer select-none"
+                className="flex min-h-9 items-center gap-2.5 text-sm text-slate-700 cursor-pointer select-none"
               >
                 <input
                   type="checkbox"
                   checked={selectedBrands.includes(b)}
                   onChange={() => onToggleBrand(b)}
-                  className="h-4 w-4 rounded border-slate-300 accent-[#1E5FD9]"
+                  className="h-4 w-4 rounded border-slate-300 accent-brand-600"
                 />
                 {b}
               </label>
@@ -51,21 +51,21 @@ export default function FilterSidebar({
 
         {/* Price filter yaha se hota hai  */}
         <div>
-          <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
+          <h4 className="text-sm font-medium text-slate-700 mb-2">
             Price
           </h4>
-          <div className="space-y-2.5">
+          <div className="space-y-0.5">
             {priceRanges.map((r) => (
               <label
                 key={r.label}
-                className="flex items-center gap-2.5 text-sm text-slate-700 cursor-pointer select-none"
+                className="flex min-h-9 items-center gap-2.5 text-sm text-slate-700 cursor-pointer select-none"
               >
                 <input
                   type="radio"
                   name="price"
                   checked={selectedPrice?.label === r.label}
                   onChange={() => onSelectPrice(r)}
-                  className="h-4 w-4 border-slate-300 accent-[#1E5FD9]"
+                  className="h-4 w-4 border-slate-300 accent-brand-600"
                 />
                 {r.label}
               </label>

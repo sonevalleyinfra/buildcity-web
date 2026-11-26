@@ -3,13 +3,18 @@ import { useSearchParams, Link } from "react-router-dom";
 import { useRegion } from "../../context/RegionContext";
 import { useAuth } from "../../context/AuthContext";
 import Navbar from "../../components/Navbar";
+import MobileHeader from "../../components/ui/MobileHeader";
+import { useAlert } from "../../context/AlertContext";
+import { CheckIcon, FileTextIcon, HardHatIcon, PackageIcon, PinIcon, PlusIcon, ShieldCheckIcon, StoreIcon, HomeIcon, MapIcon } from "../../components/ui/Icons";
 import Footer from "../../components/Footer";
 import { constructionServices, getServiceById } from "../../data/servicesData";
+import { renderServiceLogo } from "../../data/serviceIcons";
 
 export default function ServiceBooking() {
   const [searchParams] = useSearchParams();
   const { region } = useRegion();
   const { user } = useAuth();
+  const { showAlert } = useAlert();
 
   const serviceIdParam = searchParams.get("service") || "construction";
   const subParam = searchParams.get("sub") || "";
@@ -77,15 +82,15 @@ export default function ServiceBooking() {
   const handleBookNow = (e) => {
     e.preventDefault();
     if (!customerName.trim()) {
-      alert("Please enter your Full Name");
+      showAlert({ title: "Name required", message: "Please enter your full name.", type: "warning" });
       return;
     }
     if (!customerPhone.trim() || customerPhone.replace(/\D/g, "").length !== 10) {
-      alert("Please enter a valid 10-digit Mobile Number");
+      showAlert({ title: "Check mobile number", message: "Please enter a valid 10-digit mobile number.", type: "warning" });
       return;
     }
     if (!siteAddress.trim()) {
-      alert("Please enter the Site Address or Landmark");
+      showAlert({ title: "Site address required", message: "Please enter the site address or a nearby landmark.", type: "warning" });
       return;
     }
 
@@ -133,32 +138,34 @@ export default function ServiceBooking() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col selection:bg-brand-500 selection:text-white">
-      <Navbar />
+    <div data-storefront className="min-h-screen bg-slate-50 flex flex-col selection:bg-brand-500 selection:text-white">
+      <div className="hidden lg:block">
+        <Navbar />
+      </div>
+      <MobileHeader title={`Book ${service.name.toLowerCase()}`} subtitle={region?.name} />
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 py-5 sm:py-8">
-        {/* Navigation Breadcrumb */}
-        <div className="flex items-center gap-2 text-xs font-bold text-slate-500 mb-4 sm:mb-6">
-          <Link to="/" className="hover:text-brand-600 transition-colors">Home</Link>
-          <span>/</span>
-          <span className="text-slate-400">Services</span>
-          <span>/</span>
-          <span className="text-navy-950 font-black">{service.name} Booking</span>
-        </div>
+      <main className="bc-fade-in flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 pb-24 lg:pb-10">
+        <nav aria-label="Breadcrumb" className="hidden lg:flex items-center gap-1.5 text-sm text-slate-500 mb-6">
+          <Link to="/" className="hover:text-navy-950 transition-colors">Home</Link>
+          <span className="text-slate-300">/</span>
+          <span>Services</span>
+          <span className="text-slate-300">/</span>
+          <span className="text-navy-950">{service.name}</span>
+        </nav>
 
         {bookingSuccess ? (
           /* Confirmation Success Screen */
-          <div className="max-w-2xl mx-auto bg-white rounded-3xl p-6 sm:p-10 shadow-xl border border-slate-200/90 text-center animate-fadeIn space-y-6">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-3xl sm:text-4xl shadow-inner">
-              ✓
+          <div className="bc-pop-in max-w-2xl mx-auto bg-white rounded-2xl p-6 sm:p-10 ring-1 ring-slate-200/80 text-center space-y-6">
+            <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-600 text-white"><CheckIcon className="h-6 w-6" strokeWidth={2.6} /></span>
             </div>
 
             <div>
-              <span className="inline-block px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-black uppercase tracking-wider border border-emerald-200 mb-2">
-                Booking Confirmed
+              <span className="inline-block px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium mb-2">
+                Booking confirmed
               </span>
-              <h1 className="text-2xl sm:text-3xl font-black text-navy-950 tracking-tight">
-                Your Service Visit is Scheduled!
+              <h1 className="text-xl sm:text-2xl font-semibold text-navy-950 tracking-tight">
+                Your site visit is scheduled
               </h1>
               <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto">
                 Our certified site engineer will visit your location for technical measurement and final quotation.
@@ -169,18 +176,18 @@ export default function ServiceBooking() {
             <div className="bg-slate-50 rounded-2xl p-4 sm:p-6 text-left border border-slate-200/80 space-y-3.5 text-xs sm:text-sm">
               <div className="flex justify-between items-center pb-3 border-b border-slate-200">
                 <span className="font-bold text-slate-500">Booking Reference</span>
-                <span className="font-mono font-black text-navy-950 text-sm sm:text-base">{bookingSuccess.id}</span>
+                <span className="font-mono font-semibold text-navy-950 text-sm sm:text-base">{bookingSuccess.id}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-medium">Service Selected</span>
-                <span className="font-black text-navy-950 flex items-center gap-1.5">
-                  <span>{service.icon}</span> {bookingSuccess.serviceName}
+                <span className="font-semibold text-navy-950 flex items-center gap-1.5">
+                  {bookingSuccess.serviceName}
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-medium">Package Mode</span>
-                <span className="font-black text-brand-600">
-                  {bookingSuccess.packageMode === "with_material" ? "📦 With Material (Turnkey)" : "👷 Without Material (Labour Only)"}
+                <span className="font-semibold text-brand-600">
+                  {bookingSuccess.packageMode === "with_material" ? "With material (turnkey)" : "Labour only"}
                 </span>
               </div>
               {bookingSuccess.subServicesSelected?.length > 0 && (
@@ -188,7 +195,7 @@ export default function ServiceBooking() {
                   <span className="text-slate-500 font-medium shrink-0">Scope of Work</span>
                   <div className="flex flex-wrap gap-1 justify-end max-w-xs">
                     {bookingSuccess.subServicesSelected.map((s, idx) => (
-                      <span key={idx} className="bg-slate-200/80 text-navy-950 font-bold text-[10px] px-2 py-0.5 rounded-md">
+                      <span key={idx} className="bg-slate-200/80 text-navy-950 font-bold text-[11px] px-2 py-0.5 rounded-md">
                         {s}
                       </span>
                     ))}
@@ -201,7 +208,7 @@ export default function ServiceBooking() {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-medium">Estimated Project Budget</span>
-                <span className="font-black text-navy-950 text-base">₹{bookingSuccess.estimatedCost.toLocaleString("en-IN")}</span>
+                <span className="font-semibold text-navy-950 text-base">₹{bookingSuccess.estimatedCost.toLocaleString("en-IN")}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-medium">Visit Date & Slot</span>
@@ -213,21 +220,21 @@ export default function ServiceBooking() {
               </div>
               <div className="flex justify-between items-center pt-2 border-t border-slate-200">
                 <span className="text-emerald-700 font-bold">Advance Payment Due</span>
-                <span className="font-black text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full text-xs">₹0 (Free Inspection)</span>
+                <span className="font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full text-xs">₹0 (Free Inspection)</span>
               </div>
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
               <Link
                 to="/"
-                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-navy-950 hover:bg-brand-600 text-white font-black text-xs sm:text-sm transition-all shadow-md active:scale-95 text-center"
+                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-navy-950 hover:bg-brand-600 text-white font-semibold text-xs sm:text-sm transition-all shadow-md active:scale-95 text-center"
               >
                 Back to Home
               </Link>
               <button
                 type="button"
                 onClick={() => setBookingSuccess(null)}
-                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs sm:text-sm transition-all active:scale-95"
+                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs sm:text-sm transition-all active:scale-95"
               >
                 Book Another Service
               </button>
@@ -241,18 +248,18 @@ export default function ServiceBooking() {
             <div className="lg:col-span-7 space-y-6">
               
               {/* 1. Service Header & Mode Selector */}
-              <div className="bg-white rounded-3xl p-5 sm:p-7 shadow-sm border border-slate-200/90 space-y-5">
+              <div className="bg-white rounded-2xl p-5 sm:p-7 ring-1 ring-slate-200/80 space-y-5">
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div className="flex items-center gap-3">
                     <div
                       className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-xs border border-slate-200/80 shrink-0"
                       style={{ backgroundColor: service.bg }}
                     >
-                      {service.icon}
+                      {renderServiceLogo(service.id, "w-8 h-8") || service.icon}
                     </div>
                     <div>
-                      <h1 className="text-xl sm:text-2xl font-black text-navy-950 tracking-tight leading-tight">
-                        {service.name} Service
+                      <h1 className="text-xl sm:text-2xl font-semibold text-navy-950 tracking-tight leading-tight">
+                        {service.name}
                       </h1>
                       <p className="text-xs text-slate-500 font-medium">
                         {service.subtitle} • Available in {region?.name || "Varanasi"}
@@ -278,7 +285,7 @@ export default function ServiceBooking() {
 
                 {/* Mode Selector (With Material vs Without Material) */}
                 <div className="space-y-2 pt-2 border-t border-slate-100">
-                  <label className="text-xs font-black uppercase tracking-wider text-slate-500 block">
+                  <label className="text-sm font-medium text-slate-700 block">
                     Choose Execution Package:
                   </label>
 
@@ -294,8 +301,8 @@ export default function ServiceBooking() {
                     >
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-xs font-black text-navy-950 flex items-center gap-1.5">
-                            <span>📦</span> With Material
+                          <span className="text-xs font-semibold text-navy-950 flex items-center gap-1.5">
+                            <PackageIcon className="h-4 w-4 text-slate-500" /> With material
                           </span>
                           <span
                             className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
@@ -314,8 +321,8 @@ export default function ServiceBooking() {
                         </p>
                       </div>
                       <div className="mt-3 pt-2 border-t border-orange-200/40 flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Rate</span>
-                        <span className="text-xs font-black text-brand-600">
+                        <span className="text-xs text-slate-500">Rate</span>
+                        <span className="text-xs font-semibold text-brand-600">
                           ₹{service.withMaterialRate} / {service.unit}
                         </span>
                       </div>
@@ -332,8 +339,8 @@ export default function ServiceBooking() {
                     >
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-xs font-black text-navy-950 flex items-center gap-1.5">
-                            <span>👷</span> Without Material
+                          <span className="text-xs font-semibold text-navy-950 flex items-center gap-1.5">
+                            <HardHatIcon className="h-4 w-4 text-slate-500" /> Labour only
                           </span>
                           <span
                             className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
@@ -352,8 +359,8 @@ export default function ServiceBooking() {
                         </p>
                       </div>
                       <div className="mt-3 pt-2 border-t border-orange-200/40 flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Rate</span>
-                        <span className="text-xs font-black text-navy-950">
+                        <span className="text-xs text-slate-500">Rate</span>
+                        <span className="text-xs font-semibold text-navy-950">
                           ₹{service.withoutMaterialRate} / {service.unit}
                         </span>
                       </div>
@@ -363,13 +370,13 @@ export default function ServiceBooking() {
 
                 {/* Highlights List for the selected mode */}
                 <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200/70">
-                  <span className="text-[11px] font-black uppercase text-slate-500 tracking-wider block mb-2">
+                  <span className="text-xs font-medium text-slate-500 block mb-2">
                     Package Highlights ({packageMode === "with_material" ? "Turnkey Material Included" : "Labour Only"}):
                   </span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {(packageMode === "with_material" ? service.highlightsWith : service.highlightsWithout)?.map((item, idx) => (
                       <div key={idx} className="flex items-start gap-2 text-xs font-semibold text-slate-700">
-                        <span className="text-emerald-600 shrink-0 mt-0.5">✓</span>
+                        <CheckIcon className="h-4 w-4 text-emerald-600 shrink-0" strokeWidth={2.4} />
                         <span className="leading-snug">{item}</span>
                       </div>
                     ))}
@@ -378,20 +385,20 @@ export default function ServiceBooking() {
               </div>
 
               {/* 2. Project Details Form */}
-              <div className="bg-white rounded-3xl p-5 sm:p-7 shadow-sm border border-slate-200/90 space-y-5">
-                <h2 className="text-base sm:text-lg font-black text-navy-950 tracking-tight flex items-center gap-2">
-                  <span>📐</span> Project Details
+              <div className="bg-white rounded-2xl p-5 sm:p-7 ring-1 ring-slate-200/80 space-y-5">
+                <h2 className="text-base sm:text-lg font-semibold text-navy-950 tracking-tight flex items-center gap-2">
+                  Project details
                 </h2>
 
                 {/* Sub-Services Required / Scope of Work (Step 1) */}
                 {service.subServices && service.subServices.length > 0 && (
                   <div className="space-y-2.5 pb-2 border-b border-slate-100">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                        <span className="w-5 h-5 rounded-full bg-brand-600 text-white flex items-center justify-center text-[10px] font-black">1</span>
+                      <label className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
+                        <span className="w-5 h-5 rounded-full bg-brand-600 text-white flex items-center justify-center text-[11px] font-semibold">1</span>
                         <span>Choose Sub-Category / Work Type:</span>
                       </label>
-                      <span className="text-[10px] font-bold text-brand-600 bg-orange-50 px-2 py-0.5 rounded-full">
+                      <span className="text-[11px] font-bold text-brand-600 bg-orange-50 px-2 py-0.5 rounded-full">
                         Tap to select / deselect
                       </span>
                     </div>
@@ -409,8 +416,8 @@ export default function ServiceBooking() {
                                 : "bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-white"
                             }`}
                           >
-                            <span className={isSelected ? "text-emerald-400 font-black text-sm" : "text-slate-400"}>
-                              {isSelected ? "✓" : "+"}
+                            <span className={isSelected ? "text-emerald-400 font-semibold text-sm" : "text-slate-400"}>
+                              {isSelected ? <CheckIcon className="h-3.5 w-3.5" strokeWidth={2.6} /> : <PlusIcon className="h-3.5 w-3.5" />}
                             </span>
                             <span>{sub}</span>
                           </button>
@@ -422,15 +429,15 @@ export default function ServiceBooking() {
 
                 {/* Property Type */}
                 <div className="space-y-2">
-                  <label className="text-xs font-black uppercase tracking-wider text-slate-500 block">
+                  <label className="text-sm font-medium text-slate-700 block">
                     Property Type
                   </label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     {[
-                      { id: "house", label: "Independent House / Villa", icon: "🏠" },
-                      { id: "flat", label: "Apartment / Flat", icon: "🏢" },
-                      { id: "commercial", label: "Shop / Office", icon: "🏬" },
-                      { id: "plot", label: "Plot / Raw Site", icon: "🏗️" }
+                      { id: "house", label: "Independent House / Villa", icon: HomeIcon },
+                      { id: "flat", label: "Apartment / Flat", icon: FileTextIcon },
+                      { id: "commercial", label: "Shop / Office", icon: StoreIcon },
+                      { id: "plot", label: "Plot / Raw Site", icon: MapIcon }
                     ].map((t) => (
                       <button
                         key={t.id}
@@ -438,11 +445,11 @@ export default function ServiceBooking() {
                         onClick={() => setPropertyType(t.id)}
                         className={`p-3 rounded-2xl border text-center transition-all flex flex-col items-center gap-1 active:scale-95 ${
                           propertyType === t.id
-                            ? "border-brand-500 bg-orange-50/50 text-navy-950 font-black shadow-2xs"
+                            ? "border-brand-500 bg-orange-50/50 text-navy-950 font-semibold shadow-2xs"
                             : "border-slate-200 hover:border-slate-300 text-slate-600 font-bold bg-white"
                         }`}
                       >
-                        <span className="text-xl">{t.icon}</span>
+                        <t.icon className="h-5 w-5" />
                         <span className="text-[11px] leading-tight">{t.label}</span>
                       </button>
                     ))}
@@ -452,7 +459,7 @@ export default function ServiceBooking() {
                 {/* Area Input (Sq. Ft.) */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-black uppercase tracking-wider text-slate-500">
+                    <label className="text-sm font-medium text-slate-700">
                       Approximate Area (in Sq. Ft.)
                     </label>
                     <span className="text-xs font-bold text-brand-600">
@@ -468,15 +475,15 @@ export default function ServiceBooking() {
                       step={50}
                       value={areaSqFt}
                       onChange={(e) => setAreaSqFt(Math.max(1, Number(e.target.value)))}
-                      className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-sm font-black text-navy-950 focus:outline-none focus:border-brand-500 bg-slate-50 focus:bg-white transition-colors"
+                      className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-navy-950 focus:outline-none focus:border-brand-500 bg-slate-50 focus:bg-white transition-colors"
                       placeholder="Enter sq.ft"
                     />
-                    <span className="font-black text-slate-400 text-sm shrink-0">Sq. Ft.</span>
+                    <span className="font-semibold text-slate-400 text-sm shrink-0">Sq. Ft.</span>
                   </div>
 
                   {/* Area Quick Chips */}
                   <div className="flex items-center gap-2 flex-wrap pt-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">
+                    <span className="text-xs text-slate-500 mr-1">
                       Quick Pick:
                     </span>
                     {presetAreas.map((preset) => (
@@ -498,7 +505,7 @@ export default function ServiceBooking() {
 
                 {/* Project Notes */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-black uppercase tracking-wider text-slate-500 block">
+                  <label className="text-sm font-medium text-slate-700 block">
                     Special Requirements or Description (Optional)
                   </label>
                   <textarea
@@ -512,14 +519,14 @@ export default function ServiceBooking() {
               </div>
 
               {/* 3. Site & Contact Info */}
-              <div className="bg-white rounded-3xl p-5 sm:p-7 shadow-sm border border-slate-200/90 space-y-4">
-                <h2 className="text-base sm:text-lg font-black text-navy-950 tracking-tight flex items-center gap-2">
-                  <span>📍</span> Contact & Site Visit Address
+              <div className="bg-white rounded-2xl p-5 sm:p-7 ring-1 ring-slate-200/80 space-y-4">
+                <h2 className="text-base sm:text-lg font-semibold text-navy-950 tracking-tight flex items-center gap-2">
+                  <PinIcon className="h-[18px] w-[18px] text-slate-500" /> Contact & site address
                 </h2>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-black uppercase tracking-wider text-slate-500 block">
+                    <label className="text-sm font-medium text-slate-700 block">
                       Full Name *
                     </label>
                     <input
@@ -533,7 +540,7 @@ export default function ServiceBooking() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-black uppercase tracking-wider text-slate-500 block">
+                    <label className="text-sm font-medium text-slate-700 block">
                       Mobile Number *
                     </label>
                     <input
@@ -549,7 +556,7 @@ export default function ServiceBooking() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-black uppercase tracking-wider text-slate-500 block">
+                  <label className="text-sm font-medium text-slate-700 block">
                     Site Address / Plot Landmark *
                   </label>
                   <input
@@ -564,7 +571,7 @@ export default function ServiceBooking() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-black uppercase tracking-wider text-slate-500 block">
+                    <label className="text-sm font-medium text-slate-700 block">
                       Preferred Date of Inspection
                     </label>
                     <input
@@ -577,7 +584,7 @@ export default function ServiceBooking() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-black uppercase tracking-wider text-slate-500 block">
+                    <label className="text-sm font-medium text-slate-700 block">
                       Time Slot
                     </label>
                     <select
@@ -600,10 +607,10 @@ export default function ServiceBooking() {
               
               <div className="bg-white rounded-3xl p-5 sm:p-7 shadow-lg border border-slate-200/90 space-y-5">
                 <div className="border-b border-slate-100 pb-3">
-                  <span className="text-[11px] font-black uppercase text-brand-600 tracking-wider block">
+                  <span className="text-xs font-medium text-brand-700 block">
                     Transparent Price Estimate
                   </span>
-                  <h3 className="text-lg font-black text-navy-950">
+                  <h3 className="text-lg font-semibold text-navy-950">
                     Payment & Budget Summary
                   </h3>
                 </div>
@@ -618,7 +625,7 @@ export default function ServiceBooking() {
                   <div className="flex justify-between items-center text-slate-600">
                     <span>Mode</span>
                     <span className="font-bold text-navy-950">
-                      {packageMode === "with_material" ? "📦 With Material" : "👷 Labour Only"}
+                      {packageMode === "with_material" ? "With material" : "Labour only"}
                     </span>
                   </div>
 
@@ -639,9 +646,9 @@ export default function ServiceBooking() {
                   <div className="pt-3 border-t border-slate-200/80 flex justify-between items-baseline">
                     <div>
                       <span className="text-xs font-bold text-slate-500 block">Total Estimated Cost</span>
-                      <span className="text-[10px] text-slate-400 font-medium">Subject to physical site survey</span>
+                      <span className="text-[11px] text-slate-400 font-medium">Subject to physical site survey</span>
                     </div>
-                    <span className="text-2xl font-black text-navy-950 tracking-tight">
+                    <span className="text-2xl font-semibold text-navy-950 tracking-tight">
                       ₹{estimatedCost.toLocaleString("en-IN")}
                     </span>
                   </div>
@@ -649,14 +656,14 @@ export default function ServiceBooking() {
                   {/* Payment Due Today */}
                   <div className="p-3.5 rounded-2xl bg-emerald-50/80 border border-emerald-200/80 flex items-center justify-between">
                     <div>
-                      <span className="text-xs font-black text-emerald-900 block">
+                      <span className="text-xs font-semibold text-emerald-900 block">
                         Advance Due Today
                       </span>
-                      <span className="text-[10px] font-bold text-emerald-700">
+                      <span className="text-[11px] font-bold text-emerald-700">
                         Zero token fee • Free site visit
                       </span>
                     </div>
-                    <span className="text-base font-black text-emerald-700">
+                    <span className="text-base font-semibold text-emerald-700">
                       ₹0
                     </span>
                   </div>
@@ -665,15 +672,15 @@ export default function ServiceBooking() {
                 {/* Trust Badges */}
                 <div className="space-y-2 pt-2 border-t border-slate-100 text-[11px] font-medium text-slate-500">
                   <div className="flex items-center gap-2">
-                    <span className="text-brand-600 font-bold">🛡️</span>
+                    <ShieldCheckIcon className="h-4 w-4 text-emerald-600 shrink-0" />
                     <span>100% Escrow & Milestone-Based Payment Protection</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-brand-600 font-bold">👷</span>
+                    <HardHatIcon className="h-4 w-4 text-slate-500 shrink-0" />
                     <span>Background-verified & skilled local professionals</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-brand-600 font-bold">📝</span>
+                    <FileTextIcon className="h-4 w-4 text-slate-500 shrink-0" />
                     <span>Detailed technical BOQ & quotation after visit</span>
                   </div>
                 </div>
@@ -683,7 +690,7 @@ export default function ServiceBooking() {
                   type="button"
                   onClick={handleBookNow}
                   disabled={isSubmitting}
-                  className="w-full py-4 px-6 rounded-2xl bg-[#0A192F] hover:bg-brand-600 text-white font-black text-sm tracking-wide shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                  className="w-full py-4 px-6 rounded-2xl bg-[#0A192F] hover:bg-brand-600 text-white font-semibold text-sm tracking-wide shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
                 >
                   {isSubmitting ? (
                     <span>Scheduling Visit...</span>
@@ -695,7 +702,7 @@ export default function ServiceBooking() {
                   )}
                 </button>
 
-                <p className="text-[10px] text-slate-400 text-center font-medium">
+                <p className="text-[11px] text-slate-400 text-center font-medium">
                   By clicking Book Now, you agree to BuildCity terms & verified pro site consultation.
                 </p>
               </div>

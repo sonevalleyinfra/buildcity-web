@@ -1,31 +1,31 @@
-import { useState, useEffect } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import Logo from "./Logo";
 import RegionPicker from "./RegionPicker";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import NotificationPanel from "./NotificationPanel";
 import { Capacitor } from "@capacitor/core";
+import {
+  CartIcon,
+  ChevronDownIcon,
+  LogOutIcon,
+  PinIcon,
+  SearchIcon,
+  CloseIcon,
+} from "./ui/Icons";
 
-const navLinks = [
-  { label: "Home", to: "/" },
-  { label: "Categories", to: "/categories" },
-  { label: "Orders", to: "/orders" },
-  { label: "Profile", to: "/profile" },
-];
-
+// Desktop storefront header. Phones/tablets use the page's own header (MobileHeader or the Home header).
 export default function Navbar() {
   const { user, logout } = useAuth();
   const { count } = useCart();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const navigate = useNavigate();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => (pathname === "/search" ? new URLSearchParams(search).get("q") || "" : ""));
   const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20);
-    };
+    const handleScroll = () => setIsScrolled(window.scrollY > 8);
     handleScroll();
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
@@ -38,105 +38,106 @@ export default function Navbar() {
 
   const handleSearch = (e) => {
     e.preventDefault();
-    navigate(query ? `/search?q=${encodeURIComponent(query)}` : "/search");
+    const q = query.trim();
+    navigate(q ? `/search?q=${encodeURIComponent(q)}` : "/search");
   };
+
+  const navLinkClass = ({ isActive }) =>
+    `relative py-2 text-sm font-medium transition-colors ${
+      isActive ? "text-navy-950 after:absolute after:inset-x-0 after:-bottom-[13px] after:h-0.5 after:rounded-full after:bg-brand-500" : "text-slate-600 hover:text-navy-950"
+    }`;
 
   return (
     <header
-      className={`sticky top-0 z-30 transition-all duration-300 ${
-        isScrolled
-          ? "bg-white/80 backdrop-blur-xl border-b border-slate-200/60 shadow-[0_4px_20px_-4px_rgba(15,23,42,0.06)]"
-          : "bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs"
+      data-storefront
+      className={`sticky top-0 z-30 bg-white/95 backdrop-blur-md transition-shadow duration-200 ${
+        isScrolled ? "shadow-[0_1px_0_rgba(15,23,42,0.06),0_8px_24px_-12px_rgba(15,23,42,0.12)]" : "shadow-[0_1px_0_rgba(15,23,42,0.08)]"
       }`}
     >
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-4">
-        <Link to="/" className="active:scale-[0.98] transition-all duration-200 shrink-0">
+      <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4 sm:px-6 xl:gap-5">
+        <Link to="/" aria-label="BuildCity home" className="shrink-0 rounded-lg">
           <Logo size="sm" />
         </Link>
 
-        <nav className="hidden lg:flex items-center gap-6 ml-2">
-          {navLinks.map((link) => (
-            <Link
-              key={link.label}
-              to={link.to}
-              className={`text-sm font-semibold tracking-tight transition-colors duration-150 py-1 ${
-                pathname === link.to
-                  ? "text-brand-600 font-black"
-                  : "text-slate-600 hover:text-navy-900"
-              }`}
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
-
         <RegionPicker
           trigger={(region) => (
-            <span className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-navy-900 shrink-0 px-3 py-1.5 rounded-xl bg-slate-100/70 hover:bg-slate-100 border border-slate-200/80 active:scale-[0.98] transition-all duration-200 cursor-pointer shadow-2xs">
-              <PinIcon />
-              {region.name}
-              <ChevronIcon />
+            <span className="hidden h-10 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-left transition-colors hover:bg-slate-100 sm:flex">
+              <PinIcon className="h-4 w-4 text-brand-600" />
+              <span className="flex flex-col leading-tight">
+                <span className="text-[11px] text-slate-500">Deliver to</span>
+                <span className="max-w-[120px] truncate text-sm font-semibold text-navy-950">{region.name}</span>
+              </span>
+              <ChevronDownIcon className="h-4 w-4 text-slate-400" />
             </span>
           )}
         />
 
-        <form onSubmit={handleSearch} className="flex-1 max-w-xl mx-auto">
-          <div className="flex items-center gap-2.5 rounded-xl border border-slate-200/90 bg-slate-50/80 hover:bg-white focus-within:bg-white focus-within:ring-4 focus-within:ring-brand-500/10 focus-within:border-brand-500 px-3.5 py-2 transition-all duration-200 shadow-2xs">
-            <SearchIcon />
+        <form onSubmit={handleSearch} className="min-w-0 flex-1" role="search">
+          <label className="group flex h-10 items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 transition-[border-color,background-color,box-shadow] duration-150 focus-within:border-brand-500 focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(234,88,12,0.10)] hover:border-slate-300">
+            <SearchIcon className="h-[18px] w-[18px] shrink-0 text-slate-400 group-focus-within:text-brand-600" />
+            <span className="sr-only">Search</span>
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              type="text"
-              placeholder="Search for products, brands, services..."
-              className="w-full bg-transparent text-xs font-medium text-navy-900 outline-none placeholder:text-slate-400"
+              type="search"
+              placeholder="Search cement, TMT, bricks, paints…"
+              className="h-full w-full min-w-0 bg-transparent text-sm text-navy-950 outline-none placeholder:text-slate-400 [&::-webkit-search-cancel-button]:hidden"
             />
-          </div>
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Clear search"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-slate-200/70 hover:text-slate-600"
+              >
+                <CloseIcon className="h-3.5 w-3.5" strokeWidth={2.2} />
+              </button>
+            )}
+          </label>
         </form>
 
-        <div className="flex items-center gap-4 shrink-0">
-          <NotificationPanel />
+        <nav className="hidden shrink-0 items-center gap-5 lg:flex" aria-label="Main">
+          <NavLink to="/categories" className={navLinkClass}>
+            Categories
+          </NavLink>
+          {user && (
+            <NavLink to="/orders" className={navLinkClass}>
+              Orders
+            </NavLink>
+          )}
+        </nav>
+
+        <div className="flex shrink-0 items-center gap-1">
+          <NotificationPanel className="relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-slate-100 hover:text-navy-950" />
           <Link
             to="/cart"
-            className="relative text-slate-600 hover:text-navy-900 active:scale-[0.95] transition-all duration-200 p-1.5 rounded-xl hover:bg-slate-100/80"
+            aria-label={count > 0 ? `Cart, ${count} items` : "Cart"}
+            className="relative flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-slate-100 hover:text-navy-950"
           >
-            <CartIcon />
+            <CartIcon className="h-[22px] w-[22px]" />
             {count > 0 && (
-              <span className="absolute -top-1 -right-1 h-4.5 min-w-[18px] px-1 rounded-full bg-brand-600 text-white text-[10px] font-black flex items-center justify-center shadow-xs ring-2 ring-white animate-pulse">
-                {count}
+              <span className="absolute right-1 top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-brand-600 px-1 text-[11px] font-semibold leading-none text-white ring-2 ring-white tabular-nums">
+                {count > 99 ? "99+" : count}
               </span>
             )}
           </Link>
+
           {user ? (
-            <div className="hidden lg:flex items-center gap-3 pl-3 border-l border-slate-200">
-              <span className="text-xs font-semibold text-slate-700 tracking-tight flex items-center gap-1.5">
-                <span className="w-6 h-6 rounded-full bg-brand-100 text-brand-700 font-bold flex items-center justify-center text-[10px]">
-                  {(user.name || "U")[0].toUpperCase()}
-                </span>
-                <span className="max-w-[120px] truncate font-bold text-navy-900">{user.name || "Customer"}</span>
-              </span>
-              <button
-                onClick={handleLogout}
-                className="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200/80 px-3 py-1.5 rounded-lg active:scale-[0.98] transition-all duration-200 cursor-pointer shadow-2xs"
-              >
-                Logout
-              </button>
-            </div>
+            <AccountMenu user={user} onLogout={handleLogout} />
           ) : (
-            <div className="hidden lg:flex items-center gap-2 pl-3 border-l border-slate-200">
+            <div className="ml-2 hidden items-center gap-1 lg:flex">
               <Link
                 to="/login"
-                className="text-xs font-extrabold bg-brand-500 hover:bg-brand-600 text-white px-3.5 py-2 rounded-xl shadow-xs active:scale-[0.98] transition-all flex items-center gap-1.5"
+                className="inline-flex h-10 items-center rounded-xl bg-brand-600 px-4 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(154,52,18,0.3)] transition-colors hover:bg-brand-700 active:scale-[0.98]"
               >
-                <span>🔑</span>
-                <span>Login / Register</span>
+                Log in
               </Link>
               {!Capacitor.isNativePlatform() && (
                 <Link
                   to="/vendor/login"
-                  className="text-xs font-bold text-slate-600 hover:text-navy-900 bg-slate-100 hover:bg-slate-200/80 px-3 py-2 rounded-xl transition-all"
-                  title="Partner / Vendor Portal"
+                  className="hidden h-10 items-center rounded-xl px-3 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-navy-950 xl:inline-flex"
                 >
-                  Partner Login
+                  For partners
                 </Link>
               )}
             </div>
@@ -147,35 +148,29 @@ export default function Navbar() {
   );
 }
 
-function PinIcon() {
+function AccountMenu({ user, onLogout }) {
+  const name = user.name || "Customer";
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-      <circle cx="12" cy="10" r="3" />
-    </svg>
-  );
-}
-function ChevronIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
-function SearchIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="11" cy="11" r="7" />
-      <path d="m21 21-4.3-4.3" />
-    </svg>
-  );
-}
-function CartIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="9" cy="21" r="1" />
-      <circle cx="20" cy="21" r="1" />
-      <path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" />
-    </svg>
+    <div className="ml-1 hidden items-center gap-0.5 lg:flex">
+      <Link
+        to="/profile"
+        title="Profile & wallet"
+        className="flex h-10 items-center gap-2 rounded-xl pl-1 pr-2.5 transition-colors hover:bg-slate-100"
+      >
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-700 ring-1 ring-brand-100">
+          {name.trim()[0]?.toUpperCase() || "U"}
+        </span>
+        <span className="max-w-[140px] truncate text-sm font-medium text-navy-950">{name}</span>
+      </Link>
+      <button
+        type="button"
+        onClick={onLogout}
+        aria-label="Logout"
+        title="Log out"
+        className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-rose-50 hover:text-rose-600"
+      >
+        <LogOutIcon className="h-[18px] w-[18px]" />
+      </button>
+    </div>
   );
 }

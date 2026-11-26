@@ -1,5 +1,9 @@
 import { useState, useMemo } from "react";
 import Navbar from "../../components/Navbar";
+import MobileHeader from "../../components/ui/MobileHeader";
+import EmptyState from "../../components/ui/EmptyState";
+import { useAlert } from "../../context/AlertContext";
+import { CheckIcon, CloseIcon, EditIcon, MapIcon, PhoneIcon, PinIcon, PlusIcon, StarIcon, TrashIcon, UserIcon } from "../../components/ui/Icons";
 import { useAddresses } from "../../context/AddressContext";
 import { useAuth } from "../../context/AuthContext";
 import { useRegion } from "../../context/RegionContext";
@@ -15,6 +19,7 @@ const emptyForm = {
 };
 
 export default function Addresses() {
+  const { showConfirm } = useAlert();
   const { addresses, addAddress, updateAddress, removeAddress, setDefault, isSavingAddress } =
     useAddresses();
   const { user, updateProfile } = useAuth();
@@ -120,10 +125,10 @@ export default function Addresses() {
     try {
       if (editingId) {
         await updateAddress(editingId, payload);
-        showStatus("✓ Address updated successfully!");
+        showStatus("Address updated");
       } else {
         await addAddress(payload);
-        showStatus("✓ New address added successfully!");
+        showStatus("Address added");
       }
     } catch {}
 
@@ -131,59 +136,93 @@ export default function Addresses() {
     setShowForm(false);
   };
 
-  return (
-    <div className="min-h-screen bg-surface pb-20">
-      <Navbar />
+  const confirmRemove = (a) =>
+    showConfirm({
+      title: "Delete this address?",
+      message: `${a.line || a.street || "This address"}, ${a.city || ""} will be removed from your saved addresses.`,
+      type: "warning",
+      confirmText: "Delete",
+      cancelText: "Keep",
+      onConfirm: () => removeAddress(a.id),
+    });
 
-      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
+  return (
+    <div data-storefront className="min-h-screen bg-surface pb-24 lg:pb-12">
+      <div className="hidden lg:block">
+        <Navbar />
+      </div>
+      <MobileHeader
+        title="Saved addresses"
+        fallback="/profile"
+        actions={
+          <button
+            type="button"
+            onClick={openAdd}
+            aria-label="Add new address"
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-navy-900 hover:bg-slate-100"
+          >
+            <PlusIcon className="h-5 w-5" />
+          </button>
+        }
+      />
+
+      <main className="bc-fade-in max-w-2xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
         {statusMsg && (
-          <div className="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold px-4 py-3 rounded-xl shadow-2xs flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
-            <span>✓</span>
+          <div role="status" className="bc-rise-in mb-4 bg-emerald-50 ring-1 ring-inset ring-emerald-600/20 text-emerald-800 text-sm px-4 py-3 rounded-xl flex items-center gap-2">
+            <CheckIcon className="h-4 w-4 shrink-0" strokeWidth={2.4} />
             <span>{statusMsg}</span>
           </div>
         )}
 
-        <div className="flex items-center justify-between mb-5">
-          <h1 className="text-xl font-bold text-navy-900">My Addresses</h1>
+        <div className="hidden lg:flex items-center justify-between mb-5">
+          <h1 className="text-2xl font-semibold tracking-tight text-navy-950">Saved addresses</h1>
           <button
             onClick={openAdd}
-            className="text-xs font-black bg-brand-500 hover:bg-brand-600 text-white px-3.5 py-2 rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
+            className="inline-flex h-10 items-center gap-1.5 text-sm font-semibold bg-navy-950 hover:bg-navy-900 text-white px-4 rounded-xl transition-colors active:scale-[0.98] cursor-pointer"
           >
-            + Add New Address
+            <PlusIcon className="h-4 w-4" />
+            Add address
           </button>
         </div>
 
         {/* Modal Dialog for Edit / Add Address */}
         {showForm && (
-          <div className="fixed inset-0 z-50 bg-navy-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200">
-              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
-                <h3 className="text-base font-black text-navy-900 flex items-center gap-2">
-                  <span>{editingId ? "✏️" : "📍"}</span>
-                  <span>{editingId ? "Edit Delivery Address" : "Add New Delivery Address"}</span>
+          <div className="bc-fade-in fixed inset-0 z-50 bg-slate-950/55 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setShowForm(false)}>
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="address-form-title"
+              onClick={(e) => e.stopPropagation()}
+              className="bc-sheet-up bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden"
+            >
+              <div className="px-5 pt-4 pb-3 flex items-center justify-between">
+                <h3 id="address-form-title" className="text-base font-semibold text-navy-950">
+                  {editingId ? "Edit address" : "New delivery address"}
                 </h3>
                 <button
                   type="button"
                   onClick={() => setShowForm(false)}
-                  className="h-8 w-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 font-bold transition-colors cursor-pointer"
+                  aria-label="Close"
+                  className="h-9 w-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-colors cursor-pointer"
                 >
-                  ✕
+                  <CloseIcon className="h-4 w-4" />
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="p-5 space-y-3.5 max-h-[80vh] overflow-y-auto">
+              <form onSubmit={handleSubmit} className="px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-1 space-y-4 max-h-[78vh] overflow-y-auto">
                 <div>
-                  <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 block">Address Type</label>
+                  <p className="text-sm font-medium text-slate-700 mb-1.5">Label</p>
                   <div className="flex gap-2">
                     {["Home", "Work", "Other"].map((l) => (
                       <button
                         type="button"
                         key={l}
                         onClick={() => setForm((f) => ({ ...f, label: l }))}
-                        className={`text-xs font-bold px-3.5 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                        aria-pressed={form.label === l}
+                        className={`h-9 text-sm font-medium px-4 rounded-full transition-colors cursor-pointer ${
                           form.label === l
-                            ? "bg-navy-900 text-white border-navy-900 shadow-2xs"
-                            : "border-slate-200 text-slate-600 hover:bg-slate-100"
+                            ? "bg-navy-950 text-white"
+                            : "ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50"
                         }`}
                       >
                         {l}
@@ -193,65 +232,66 @@ export default function Addresses() {
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1 block">Receiver Name</label>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">Receiver name</label>
                   <input
                     name="fullName"
                     value={form.fullName || ""}
                     onChange={handleChange}
                     placeholder="Full Name (e.g. Dhirendra Kumar)"
-                    className="w-full text-sm border border-slate-200 rounded-xl px-3.5 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 font-semibold"
+                    className="w-full h-11 text-sm border border-slate-200 rounded-xl px-3.5 outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1 block">Street / Delivery Address</label>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">Site address</label>
                   <input
                     name="line"
                     value={form.line || ""}
                     onChange={handleChange}
                     placeholder="House / Plot no, street, landmark, area"
-                    className="w-full text-sm border border-slate-200 rounded-xl px-3.5 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 font-medium"
+                    className="w-full h-11 text-sm border border-slate-200 rounded-xl px-3.5 outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1 block">
-                      City / District {editingId ? <span className="text-[10px] text-brand-600 font-semibold">(Fixed Address City)</span> : <span className="text-[10px] text-brand-600 font-semibold lowercase">({region?.name || "selected region"})</span>}
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">
+                      District
                     </label>
                     <input
                       name="city"
                       readOnly
                       value={form.city || region?.name || "Varanasi"}
-                      className="w-full text-sm border border-slate-200 bg-slate-50 text-slate-700 font-bold rounded-xl px-3.5 py-2.5 outline-none cursor-not-allowed"
+                      className="w-full h-11 text-sm border border-slate-200 bg-slate-50 text-slate-600 rounded-xl px-3.5 outline-none cursor-not-allowed"
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1 block">State</label>
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">State</label>
                     <input
                       name="state"
                       value={form.state || ""}
                       onChange={handleChange}
                       placeholder="State (e.g. Uttar Pradesh)"
-                      className="w-full text-sm border border-slate-200 rounded-xl px-3.5 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 font-medium"
+                      className="w-full h-11 text-sm border border-slate-200 rounded-xl px-3.5 outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1 block">Pincode</label>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">Pincode</label>
                   <input
                     name="pincode"
                     value={form.pincode || ""}
                     onChange={handleChange}
                     placeholder="6-Digit Pincode (e.g. 221001)"
                     maxLength={6}
-                    className="w-full text-sm border border-slate-200 rounded-xl px-3.5 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 font-mono font-bold"
+                    inputMode="numeric"
+                    className="w-full h-11 text-sm border border-slate-200 rounded-xl px-3.5 outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 tabular-nums"
                   />
                 </div>
 
                 <div className="pt-2 pb-1">
-                  <label className="flex items-center gap-2.5 text-sm font-bold text-navy-900 cursor-pointer select-none bg-slate-50 border border-slate-200/80 p-3 rounded-xl">
+                  <label className="flex items-center gap-2.5 text-sm text-navy-950 cursor-pointer select-none bg-slate-50 p-3 rounded-xl">
                     <input
                       type="checkbox"
                       name="isDefault"
@@ -259,15 +299,15 @@ export default function Addresses() {
                       onChange={handleChange}
                       className="h-4.5 w-4.5 accent-brand-600 rounded cursor-pointer"
                     />
-                    <span>Set as default primary delivery address</span>
+                    <span>Use as my default address</span>
                   </label>
                 </div>
 
-                <div className="flex gap-3 pt-2 border-t border-slate-100">
+                <div className="flex gap-3 pt-1">
                   <button
                     type="submit"
                     disabled={submitting || isSavingAddress}
-                    className="flex-1 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] transition-all duration-200 text-white text-sm font-bold rounded-xl py-3 shadow-xs disabled:opacity-60 cursor-pointer flex items-center justify-center gap-2"
+                    className="flex-1 h-12 bg-navy-950 hover:bg-navy-900 active:scale-[0.98] transition-colors text-white text-sm font-semibold rounded-xl disabled:opacity-60 cursor-pointer flex items-center justify-center gap-2"
                   >
                     {submitting || isSavingAddress ? (
                       <>
@@ -278,15 +318,15 @@ export default function Addresses() {
                         <span>Saving...</span>
                       </>
                     ) : editingId ? (
-                      "✓ Save Address Changes"
+                      "Save changes"
                     ) : (
-                      "✓ Add Address"
+                      "Save address"
                     )}
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowForm(false)}
-                    className="px-5 border border-slate-200 hover:bg-slate-100 text-slate-700 text-sm font-bold rounded-xl py-3 transition-colors cursor-pointer"
+                    className="px-5 h-12 ring-1 ring-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-xl transition-colors cursor-pointer"
                   >
                     Cancel
                   </button>
@@ -297,70 +337,68 @@ export default function Addresses() {
         )}
 
         {uniqueAddresses.length === 0 && !showForm ? (
-          <div className="bg-white rounded-xl border border-dashed border-slate-300 p-12 text-center">
-            <span className="text-4xl mb-3 inline-block">📍</span>
-            <h3 className="font-bold text-navy-900 mb-1">No addresses saved</h3>
-            <p className="text-sm text-slate-500 mb-5">
-              Delivery ke liye ek address add karo.
-            </p>
-            <button
-              onClick={openAdd}
-              className="bg-brand-500 text-white text-sm font-semibold rounded-xl px-6 py-2.5"
-            >
-              Add Address
-            </button>
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200/80">
+            <EmptyState
+              icon={MapIcon}
+              title="No saved addresses"
+              description="Add your site address once and pick it at checkout."
+              actionLabel="Add address"
+              onAction={openAdd}
+            />
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {uniqueAddresses.map((a) => (
               <div
                 key={a.id}
-                className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs hover:shadow-xs transition-shadow"
+                className="bg-white rounded-2xl ring-1 ring-slate-200/80 p-4"
               >
-                <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-100">
+                <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-black uppercase tracking-wider text-brand-700 bg-brand-50 border border-brand-200/60 px-2.5 py-0.5 rounded-md">
+                    <span className="text-xs font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
                       {a.label || "Home"}
                     </span>
                     {a.isDefault && (
-                      <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                        Default Address ✓
+                      <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                        Default
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-3 text-xs">
+                  <div className="flex items-center -mr-2">
                     <button
                       type="button"
                       onClick={() => openEdit(a)}
-                      className="text-brand-600 font-bold hover:text-brand-700 active:scale-95 transition-all cursor-pointer flex items-center gap-1"
+                      aria-label="Edit address"
+                      className="h-9 px-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer flex items-center gap-1.5"
                     >
-                      ✏️ Edit
+                      <EditIcon className="h-4 w-4" /> Edit
                     </button>
                     <button
                       type="button"
-                      onClick={() => removeAddress(a.id)}
-                      className="text-rose-600 font-bold hover:text-rose-700 active:scale-95 transition-all cursor-pointer flex items-center gap-1"
+                      onClick={() => confirmRemove(a)}
+                      aria-label="Delete address"
+                      className="h-9 px-2.5 rounded-lg text-sm font-medium text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer flex items-center gap-1.5"
                     >
-                      🗑️ Delete
+                      <TrashIcon className="h-4 w-4" /> Delete
                     </button>
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <p className="text-sm font-black text-navy-900 flex items-center gap-1.5">
-                    <span>👤</span> {a.fullName || user?.name || "Customer"}
+                  <p className="text-sm font-semibold text-navy-950 flex items-center gap-2">
+                    <UserIcon className="h-4 w-4 text-slate-400" /> {a.fullName || user?.name || "Customer"}
                   </p>
                   {(a.phone || user?.phone) && (
-                    <p className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
-                      <span>📞</span> {a.phone || user?.phone}
+                    <p className="text-sm text-slate-600 flex items-center gap-2 tabular-nums">
+                      <PhoneIcon className="h-4 w-4 text-slate-400" /> {a.phone || user?.phone}
                     </p>
                   )}
-                  <p className="text-xs text-slate-700 font-semibold mt-1 flex items-start gap-1.5">
-                    <span className="shrink-0">📍</span>
-                    <span>{a.line || a.street}</span>
+                  <p className="text-sm text-slate-700 flex items-start gap-2">
+                    <PinIcon className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                    <span className="break-words min-w-0">{a.line || a.street}</span>
                   </p>
-                  <p className="text-xs font-medium text-slate-500 pl-5">
-                    {a.city}, {a.state || "Uttar Pradesh"} — <span className="font-bold text-navy-900">{a.pincode || "221001"}</span>
+                  <p className="text-sm text-slate-500 pl-6">
+                    {a.city}, {a.state || "Uttar Pradesh"} · <span className="tabular-nums">{a.pincode || "221001"}</span>
                   </p>
                 </div>
 
@@ -369,11 +407,11 @@ export default function Addresses() {
                     type="button"
                     onClick={async () => {
                       await setDefault(a.id, a);
-                      showStatus("✓ Set as default delivery address!");
+                      showStatus("Default address updated");
                     }}
-                    className="text-xs font-extrabold text-brand-600 hover:text-brand-700 active:scale-95 transition-all mt-3 inline-flex items-center gap-1 cursor-pointer"
+                    className="h-9 -ml-2 px-2 rounded-lg text-sm font-medium text-brand-700 hover:bg-brand-50 transition-colors mt-2 inline-flex items-center gap-1.5 cursor-pointer"
                   >
-                    ★ Set as default address
+                    <StarIcon filled={false} className="h-4 w-4" /> Make default
                   </button>
                 )}
               </div>

@@ -237,7 +237,7 @@ function EditListingSheetInner({
 
         {/* 1 Unit Base Rates */}
         <div>
-          <p className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">Base Unit Pricing ({product.unit || "1 Unit"})</p>
+          <p className="text-sm font-semibold text-slate-800 mb-2">Base Unit Pricing ({product.unit || "1 Unit"})</p>
           <div className="grid grid-cols-2 gap-3">
             <Field
               label="MRP"
@@ -305,8 +305,8 @@ function EditListingSheetInner({
           <div className="pt-3 border-t border-slate-200">
             <div className="flex items-center justify-between mb-1.5">
               <div>
-                <h4 className="text-xs font-extrabold text-navy-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <span>🔩</span> MM-Wise Rebar Sizes (8mm – 20mm)
+                <h4 className="text-sm font-semibold text-navy-900 flex items-center gap-1.5">
+                  Rebar sizes (8mm – 20mm)
                 </h4>
                 <p className="text-[11px] text-slate-500 mt-0.5">
                   Allow customers to choose 8mm, 10mm, 12mm, 16mm, and 20mm thickness.
@@ -334,10 +334,10 @@ function EditListingSheetInner({
             {mmPricingEnabled && (
               <div className="mt-3 space-y-2.5 bg-blue-50/70 p-3 rounded-xl border border-blue-200/90">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-extrabold text-blue-950 uppercase tracking-wide flex items-center gap-1.5">
-                    <span>⚡</span> Set Diameter Rates & Stock
+                  <span className="text-xs font-semibold text-blue-950 flex items-center gap-1.5">
+                    Rate and stock for each size
                   </span>
-                  <span className="text-[10px] text-blue-700 font-medium">
+                  <span className="text-[11px] text-blue-700 font-medium">
                     Uncheck to disable unavailable sizes
                   </span>
                 </div>
@@ -373,15 +373,15 @@ function EditListingSheetInner({
                               onChange={(e) => onMmRateChange?.(dia, "active", e.target.checked)}
                               className="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 border-slate-300"
                             />
-                            <span className="text-xs font-black text-navy-900">{dia} Rebar</span>
+                            <span className="text-xs font-semibold text-navy-900">{dia} Rebar</span>
                             {!isActive && (
-                              <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.2 rounded border border-red-200">
+                              <span className="text-[11px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">
                                 Disabled / Out of Stock
                               </span>
                             )}
                           </label>
                           {isActive && diaDiscount > 0 && (
-                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
                               {diaDiscount}% OFF
                             </span>
                           )}
@@ -390,7 +390,7 @@ function EditListingSheetInner({
                         {isActive && (
                           <div className="grid grid-cols-2 gap-2">
                             <div>
-                              <label className="block text-[10px] font-bold text-slate-600 mb-0.5">
+                              <label className="block text-[11px] font-bold text-slate-600 mb-0.5">
                                 Selling Price (₹)
                               </label>
                               <div className="relative flex items-center">
@@ -406,7 +406,7 @@ function EditListingSheetInner({
                               </div>
                             </div>
                             <div>
-                              <label className="block text-[10px] font-bold text-slate-600 mb-0.5">
+                              <label className="block text-[11px] font-bold text-slate-600 mb-0.5">
                                 Cut-off MRP (₹)
                               </label>
                               <div className="relative flex items-center">
@@ -436,7 +436,7 @@ function EditListingSheetInner({
         <div className="pt-3 border-t border-slate-200">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h4 className="text-xs font-extrabold text-navy-900 uppercase tracking-wider">Bulk Rates / Pack Sizes</h4>
+              <h4 className="text-sm font-semibold text-navy-900">Bulk rates / pack sizes</h4>
             </div>
 
             {/* Toggle Switch */}
@@ -471,16 +471,16 @@ function EditListingSheetInner({
                   <div key={idx} className="bg-white p-3 rounded-xl border border-slate-200/90 shadow-2xs space-y-2.5">
                     {/* Header Row: Tier number, discount badge, and delete button */}
                     <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                      <span className="text-[11px] font-medium text-slate-500">
                         Pack Tier #{idx + 1}
                       </span>
                       <div className="flex items-center gap-1.5">
                         {discountPct > 0 ? (
-                          <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80">
+                          <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80">
                             {discountPct}% OFF
                           </span>
                         ) : (
-                          <span className="text-[10px] text-slate-400 font-medium">No discount</span>
+                          <span className="text-[11px] text-slate-400 font-medium">No discount</span>
                         )}
                         {onRemoveCustomPack && (
                           <button
@@ -534,7 +534,7 @@ function EditListingSheetInner({
                             }}
                             className="w-24 px-2.5 py-1.5 bg-slate-50 text-xs border border-slate-200 rounded-l-lg outline-none font-bold text-slate-900 focus:border-brand-500 focus:bg-white transition-colors"
                           />
-                          <span className="flex-1 px-2.5 py-1.5 bg-slate-100 border border-l-0 border-slate-200 rounded-r-lg text-[10px] text-slate-600 font-extrabold truncate select-none">
+                          <span className="flex-1 px-2.5 py-1.5 bg-slate-100 border border-l-0 border-slate-200 rounded-r-lg text-[11px] text-slate-600 font-semibold truncate select-none">
                             × {product.unit || "unit"}
                           </span>
                         </div>
@@ -575,7 +575,7 @@ function EditListingSheetInner({
                       </div>
                     </div>
 
-                    <p className="text-[10px] text-slate-400 font-medium flex items-center justify-between pt-1 border-t border-slate-100">
+                    <p className="text-[11px] text-slate-400 font-medium flex items-center justify-between pt-1 border-t border-slate-100">
                       <span>Cut-off MRP: <strong className="font-semibold text-slate-600">{inr(packMrp)}</strong></span>
                       {packPrice > 0 && packQty > 1 && (
                         <span>₹{Math.round(packPrice / packQty)} / {product.unit || "unit"}</span>

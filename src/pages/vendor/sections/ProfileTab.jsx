@@ -49,7 +49,7 @@ export default function ProfileTab({ ownerName, shopName, vendorPhone, email, di
       </div>
 
       <section>
-        <h2 className="mb-2 px-1 text-xs font-medium uppercase tracking-wide text-slate-500">Business details</h2>
+        <h2 className="mb-2 px-1 text-sm font-medium text-slate-500">Business details</h2>
         <Card className="divide-y divide-slate-100">
           <DetailRow icon={StoreIcon} tone="bg-brand-50 text-brand-600" label="Shop" value={shopName} />
           <DetailRow icon={UserIcon} tone="bg-indigo-50 text-indigo-600" label="Owner" value={ownerName} />
@@ -60,7 +60,7 @@ export default function ProfileTab({ ownerName, shopName, vendorPhone, email, di
       </section>
 
       <section>
-        <h2 className="mb-2 px-1 text-xs font-medium uppercase tracking-wide text-slate-500">Support</h2>
+        <h2 className="mb-2 px-1 text-sm font-medium text-slate-500">Support</h2>
         <Card className="divide-y divide-slate-100 overflow-hidden">
           <ActionRow icon={PhoneIcon} label="Call district team" detail={<span className="hidden sm:inline">{SUPPORT_PHONE_DISPLAY}</span>} href={`tel:${SUPPORT_PHONE}`} />
           <ActionRow icon={ChatIcon} label="Chat on WhatsApp" href={SUPPORT_WHATSAPP} target="_blank" rel="noopener noreferrer" />

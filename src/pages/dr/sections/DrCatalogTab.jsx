@@ -12,7 +12,6 @@ import {
   SearchField,
   Chip,
   ChipRow,
-  Segmented,
   Button,
   EmptyState,
   Spinner,
@@ -66,15 +65,30 @@ export default function DrCatalogTab({
       {/* Header + Segmented Switch (District Listings vs Master Catalog) + Search */}
       <Card className="p-4 sm:p-5 space-y-3.5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          <Segmented
-            label="Catalog View"
-            value={isMasterMode ? "masterCatalog" : "products"}
-            onChange={(val) => setActiveTab(val)}
-            options={[
-              { value: "products", label: "District Products", count: districtProducts.length },
-              { value: "masterCatalog", label: "Master Catalog", count: masterProducts.length },
-            ]}
-          />
+          <div role="tablist" aria-label="Catalog view" className="inline-flex w-full rounded-xl bg-slate-100 p-1 sm:w-auto">
+            {[
+              { value: "products", label: `${districtName} listings`, count: districtProducts.length },
+              { value: "masterCatalog", label: "Master catalog", count: masterProducts.length },
+            ].map((o) => {
+              const active = (isMasterMode ? "masterCatalog" : "products") === o.value;
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setActiveTab(o.value)}
+                  className={cx(
+                    "flex h-9 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition-colors cursor-pointer sm:flex-none",
+                    active ? "bg-white text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.08)] ring-1 ring-slate-200/70" : "text-slate-600 hover:text-slate-900"
+                  )}
+                >
+                  <span className="truncate">{o.label}</span>
+                  <span className={cx("tabular-nums text-xs", active ? "text-slate-500" : "text-slate-400")}>{o.count}</span>
+                </button>
+              );
+            })}
+          </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
             <div className="w-full sm:w-64">
@@ -112,8 +126,8 @@ export default function DrCatalogTab({
       {!isMasterMode && (
         <>
           {productsLoading && filteredProducts.length === 0 ? (
-            <Card className="p-6 text-center text-xs font-medium text-slate-400">
-              Loading products in {districtName}...
+            <Card className="p-6 text-center text-sm text-slate-500">
+              Loading products in {districtName}…
             </Card>
           ) : filteredProducts.length === 0 ? (
             <Card>
@@ -132,7 +146,7 @@ export default function DrCatalogTab({
           ) : (
             <>
               {/* Mobile Product Cards */}
-              <div className="vd-stagger space-y-3 md:hidden">
+              <div className="vd-stagger grid gap-3 sm:grid-cols-2 lg:hidden">
                 {filteredProducts.map((p, idx) => {
                   const st = p.approvalStatus || (p.isActive ? "APPROVED" : "PENDING_REVIEW");
                   const isApproving = busyListingAction?.id === p.id && busyListingAction?.action === "APPROVED";
@@ -152,9 +166,6 @@ export default function DrCatalogTab({
                         />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <span className="rounded bg-navy-950 px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">
-                              {formatShortId(p.id, "PRD")}
-                            </span>
                             <p className="truncate text-sm font-semibold text-slate-900">{p.name}</p>
                           </div>
                           <p className="mt-0.5 flex items-center gap-1 truncate text-xs font-medium text-brand-700">
@@ -162,7 +173,7 @@ export default function DrCatalogTab({
                             {p.vendorName}
                           </p>
                           <p className="mt-0.5 truncate text-xs text-slate-500">
-                            {p.categoryName || "General"} · {p.brand || "Generic"} · Grade: {p.grade || "N/A"}
+                            {p.categoryName || "General"} · {p.brand || "Generic"} · {p.grade || "Standard"}
                           </p>
                         </div>
                       </div>
@@ -237,18 +248,18 @@ export default function DrCatalogTab({
               </div>
 
               {/* Desktop Table */}
-              <Card className="hidden overflow-hidden md:block">
+              <Card className="hidden overflow-hidden lg:block">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
+                  <table className="w-full min-w-[860px] text-left border-collapse text-xs">
                     <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                        <th className="py-3.5 px-4">Product Details</th>
-                        <th className="py-3.5 px-4">Category / Brand</th>
-                        <th className="py-3.5 px-4">Type & Grade</th>
-                        <th className="py-3.5 px-4">Vendor</th>
-                        <th className="py-3.5 px-4">Price / Unit</th>
-                        <th className="py-3.5 px-4">Stock</th>
-                        <th className="py-3.5 px-4 text-right">Actions</th>
+                      <tr className="border-b border-slate-200 bg-slate-50/80 text-xs font-medium text-slate-500">
+                        <th className="whitespace-nowrap py-3.5 px-4">Product Details</th>
+                        <th className="whitespace-nowrap py-3.5 px-4">Category / Brand</th>
+                        <th className="whitespace-nowrap py-3.5 px-4">Type & Grade</th>
+                        <th className="whitespace-nowrap py-3.5 px-4">Vendor</th>
+                        <th className="whitespace-nowrap py-3.5 px-4">Price / Unit</th>
+                        <th className="whitespace-nowrap py-3.5 px-4">Stock</th>
+                        <th className="whitespace-nowrap py-3.5 px-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -272,12 +283,9 @@ export default function DrCatalogTab({
                                 />
                                 <div>
                                   <div className="flex items-center gap-1.5">
-                                    <span className="rounded bg-navy-950 px-1.5 py-0.5 font-mono text-[9px] font-bold text-white">
-                                      {formatShortId(p.id, "PRD")}
-                                    </span>
                                     <p className="font-semibold text-slate-900">{p.name}</p>
                                   </div>
-                                  <p className="mt-0.5 text-[11px] text-slate-400">Added by: {p.addedBy || "DR"}</p>
+                                  <p className="mt-0.5 font-mono text-[11px] text-slate-400">{formatShortId(p.id, "PRD")}</p>
                                 </div>
                               </div>
                             </td>
@@ -289,11 +297,11 @@ export default function DrCatalogTab({
                             </td>
                             <td className="py-3.5 px-4">
                               <p className="font-semibold text-slate-800">{p.type || "Standard"}</p>
-                              <span className="mt-0.5 inline-block rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
-                                Grade: {p.grade || "N/A"}
+                              <span className="mt-0.5 inline-block whitespace-nowrap rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-700">
+                                {p.grade || "Standard"}
                               </span>
                             </td>
-                            <td className="py-3.5 px-4 font-semibold text-slate-900">{p.vendorName}</td>
+                            <td className="py-3.5 px-4 font-medium text-slate-900 whitespace-nowrap">{p.vendorName}</td>
                             <td className="py-3.5 px-4 tabular-nums">
                               <p className="text-sm font-bold text-slate-900">{inr(p.price)}</p>
                               <p className="text-[11px] text-slate-500">per {p.unit || "Unit"}</p>
@@ -301,11 +309,11 @@ export default function DrCatalogTab({
                             <td className="py-3.5 px-4">
                               <span
                                 className={cx(
-                                  "rounded-md px-2 py-1 text-xs font-semibold tabular-nums",
-                                  Number(p.stockQty) > 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-600"
+                                  "whitespace-nowrap text-xs font-medium tabular-nums",
+                                  Number(p.stockQty) > 0 ? "text-emerald-700" : "text-rose-600"
                                 )}
                               >
-                                {p.stockQty} in stock
+                                {Number(p.stockQty) > 0 ? `${Number(p.stockQty).toLocaleString("en-IN")} in stock` : "Out of stock"}
                               </span>
                             </td>
                             <td className="py-3.5 px-4 text-right">
@@ -385,7 +393,7 @@ export default function DrCatalogTab({
           ) : (
             <>
               {/* Mobile Master Catalog Cards */}
-              <div className="vd-stagger space-y-3 md:hidden">
+              <div className="vd-stagger grid gap-3 sm:grid-cols-2 lg:hidden">
                 {filteredMasterProducts.map((p, idx) => (
                   <Card key={p.id} style={{ "--i": idx }} className="p-4 space-y-3">
                     <div className="flex items-start gap-3">
@@ -400,16 +408,13 @@ export default function DrCatalogTab({
                       />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                          <span className="rounded bg-navy-950 px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">
-                            {formatShortId(p.id, "PRD")}
-                          </span>
                           <p className="truncate text-sm font-semibold text-slate-900">{p.name}</p>
                         </div>
                         <p className="mt-0.5 text-xs text-slate-500">
                           {p.categoryName || "General"} · {p.brand || "Generic"}
                         </p>
-                        <p className="mt-0.5 text-xs text-amber-700 font-medium">
-                          {p.type || "Standard"} · Grade: {p.grade || "Standard"}
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {p.type || "Standard"} · {p.grade || "Standard"}
                         </p>
                       </div>
                     </div>
@@ -436,16 +441,16 @@ export default function DrCatalogTab({
               </div>
 
               {/* Desktop Master Catalog Table */}
-              <Card className="hidden overflow-hidden md:block">
+              <Card className="hidden overflow-hidden lg:block">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
+                  <table className="w-full min-w-[860px] text-left border-collapse text-xs">
                     <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                        <th className="py-3.5 px-4">Product Details</th>
-                        <th className="py-3.5 px-4">Category / Brand</th>
-                        <th className="py-3.5 px-4">Type & Grade</th>
-                        <th className="py-3.5 px-4">Suggested Price</th>
-                        <th className="py-3.5 px-4 text-right">Actions</th>
+                      <tr className="border-b border-slate-200 bg-slate-50/80 text-xs font-medium text-slate-500">
+                        <th className="whitespace-nowrap py-3.5 px-4">Product Details</th>
+                        <th className="whitespace-nowrap py-3.5 px-4">Category / Brand</th>
+                        <th className="whitespace-nowrap py-3.5 px-4">Type & Grade</th>
+                        <th className="whitespace-nowrap py-3.5 px-4">Suggested Price</th>
+                        <th className="whitespace-nowrap py-3.5 px-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -464,12 +469,9 @@ export default function DrCatalogTab({
                               />
                               <div>
                                 <div className="flex items-center gap-1.5">
-                                  <span className="rounded bg-navy-950 px-1.5 py-0.5 font-mono text-[9px] font-bold text-white">
-                                    {formatShortId(p.id, "PRD")}
-                                  </span>
                                   <p className="font-semibold text-slate-900">{p.name}</p>
                                 </div>
-                                <p className="mt-0.5 text-[10px] text-slate-400">Packaging: {p.unit}</p>
+                                <p className="mt-0.5 font-mono text-[11px] text-slate-400">{formatShortId(p.id, "PRD")}</p>
                               </div>
                             </div>
                           </td>
@@ -481,8 +483,8 @@ export default function DrCatalogTab({
                           </td>
                           <td className="py-3.5 px-4">
                             <p className="font-semibold text-slate-800">{p.type}</p>
-                            <span className="mt-0.5 inline-block rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
-                              Grade: {p.grade}
+                            <span className="mt-0.5 inline-block whitespace-nowrap rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-700">
+                              {p.grade}
                             </span>
                           </td>
                           <td className="py-3.5 px-4 tabular-nums">

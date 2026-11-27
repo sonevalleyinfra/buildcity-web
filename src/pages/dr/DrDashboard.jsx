@@ -1256,6 +1256,10 @@ export default function DrDashboard() {
 
       {activeTab === "vendors" && (
         <DrVendorsTab
+          listingCounts={districtProducts.reduce((m, p) => {
+            if (p.vendorId) m[p.vendorId] = (m[p.vendorId] || 0) + 1;
+            return m;
+          }, {})}
           districtName={districtName}
           filteredVendors={filteredVendors}
           searchTerm={searchTerm}

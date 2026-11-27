@@ -101,7 +101,7 @@ function OfferForm({ form, onSubmit, onCancel, isSubmitting }) {
       <div className="pt-2 border-t border-brand-200/60">
         <div className="flex items-center justify-between mb-2">
           <div>
-            <p className="text-xs font-bold text-navy-900 uppercase tracking-wider">Bulk Rates / Pack Sizes</p>
+            <p className="text-sm font-semibold text-navy-900">Bulk rates / pack sizes</p>
           </div>
           <button
             type="button"
@@ -132,20 +132,20 @@ function OfferForm({ form, onSubmit, onCancel, isSubmitting }) {
                 <div key={idx} className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-extrabold text-slate-900">{pack.label}</span>
-                      <span className="text-[10px] text-slate-400 font-mono">({pack.qty}x base)</span>
+                      <span className="text-xs font-semibold text-slate-900">{pack.label}</span>
+                      <span className="text-[11px] text-slate-400 font-mono">({pack.qty}x base)</span>
                     </div>
                     {discountPctVal > 0 ? (
-                      <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200">
+                      <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200">
                         {discountPctVal}% OFF
                       </span>
                     ) : (
-                      <span className="text-[10px] text-slate-400">No discount</span>
+                      <span className="text-[11px] text-slate-400">No discount</span>
                     )}
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Selling Price (₹)</label>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Selling Price (₹)</label>
                       <input
                         type="number"
                         min="1"
@@ -156,7 +156,7 @@ function OfferForm({ form, onSubmit, onCancel, isSubmitting }) {
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Stock</label>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Stock</label>
                       <input
                         type="number"
                         min="0"
@@ -167,7 +167,7 @@ function OfferForm({ form, onSubmit, onCancel, isSubmitting }) {
                       />
                     </div>
                   </div>
-                  <p className="text-[10px] text-slate-400">
+                  <p className="text-[11px] text-slate-400">
                     Cut-off MRP: <strong className="text-slate-600">{inr(packMrp)}</strong>
                   </p>
                 </div>

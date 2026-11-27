@@ -1,11 +1,16 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Link, useNavigate, useSearchParams, useNavigationType } from "react-router-dom";
-import { useCart } from "../../context/CartContext";
+import { useNavigate, useSearchParams, useNavigationType } from "react-router-dom";
 import { useAdmin } from "../../context/AdminContext";
 import { useRegion } from "../../context/RegionContext";
 import Navbar from "../../components/Navbar";
-import NotificationPanel from "../../components/NotificationPanel";
 import ProductCard from "../../components/ProductCard";
+import MobileHeader from "../../components/ui/MobileHeader";
+import { countLabel } from "../../utils/priceDisplay";
+import SearchField from "../../components/ui/SearchField";
+import SectionHeader from "../../components/ui/SectionHeader";
+import EmptyState from "../../components/ui/EmptyState";
+import ProductGridSkeleton from "../../components/ui/ProductGridSkeleton";
+import { GridIcon, PackageIcon } from "../../components/ui/Icons";
 import Footer from "../../components/Footer";
 import { Capacitor } from "@capacitor/core";
 import { resolveCategoryBubbleImage } from "../vendor/utils/productImage";
@@ -28,7 +33,6 @@ export default function Categories() {
   const navType = useNavigationType();
   const initialCat = searchParams.get("cat") || "All";
 
-  const { count } = useCart();
   const { products = [], productsLoading } = useAdmin();
   const { region } = useRegion();
   const [activePill, setActivePill] = useState(initialCat);
@@ -151,7 +155,7 @@ export default function Categories() {
       name: "All",
       isAll: true,
       count: (districtProducts || []).length,
-      countLabel: `${(districtProducts || []).length} Products`,
+      countLabel: countLabel((districtProducts || []).length, "product"),
       isComingSoon: false,
     };
 
@@ -175,7 +179,7 @@ export default function Categories() {
       return {
         ...c,
         count,
-        countLabel: count > 0 ? `${count} Products` : "Coming soon",
+        countLabel: count > 0 ? countLabel(count, "product") : "Coming soon",
         isComingSoon: count === 0,
       };
     });
@@ -184,77 +188,20 @@ export default function Categories() {
   }, [districtProducts]);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] font-sans w-full max-w-full overflow-x-clip flex flex-col justify-between">
-      {/* Desktop navbar */}
+    <div data-storefront className="min-h-screen bg-[#F8FAFC] font-sans w-full max-w-full overflow-x-clip flex flex-col justify-between">
       <div className="hidden lg:block">
         <Navbar />
       </div>
 
-      {/* Mobile screen ke liye categories header */}
-      <div className="lg:hidden bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <Link
-              to="/"
-              className="p-1.5 -ml-1.5 rounded-xl hover:bg-slate-100 text-navy-900 active:scale-95 transition-all flex items-center justify-center"
-              title="Back to Home"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m15 18-6-6 6-6" />
-              </svg>
-            </Link>
-            <h1 className="font-extrabold text-navy-900 text-base tracking-tight">Categories</h1>
-          </div>
+      <MobileHeader title="Categories">
+        <SearchField value={searchQuery} onChange={setSearchQuery} onSubmit={handleSearch} />
+      </MobileHeader>
 
-          <div className="flex items-center gap-3">
-            <NotificationPanel className="relative text-navy-900 hover:text-brand-600 transition-colors cursor-pointer" />
-            <Link to="/cart" className="relative text-navy-900 hover:text-brand-600 transition-colors p-1" title="Cart">
-              <CartIcon />
-              {count > 0 && (
-                <span className="absolute -top-1 -right-1.5 h-4.5 w-4.5 rounded-full bg-brand-500 text-white text-[10px] font-black flex items-center justify-center shadow-xs">
-                  {count}
-                </span>
-              )}
-            </Link>
-          </div>
-        </div>
+      <main className="bc-fade-in max-w-6xl w-full mx-auto px-4 pt-4 sm:pt-6 pb-24 lg:pb-12 space-y-7 flex-1">
+        <section className="space-y-3">
+          <SectionHeader title="Shop by category" />
 
-        {/* Search bar input box */}
-        <form onSubmit={handleSearch} className="max-w-6xl mx-auto px-4 pb-3">
-          <div className="w-full flex items-center gap-2 bg-slate-100 rounded-xl px-3 py-2 border border-slate-200 focus-within:border-brand-500 focus-within:bg-white transition-all shadow-2xs">
-            <SearchIcon />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search cement, steel, paints, pipes..."
-              className="w-full bg-transparent text-xs text-navy-900 font-medium outline-none placeholder:text-slate-400"
-            />
-            {searchQuery && (
-              <button type="button" onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600 text-xs">
-                ✕
-              </button>
-            )}
-          </div>
-        </form>
-      </div>
-
-      <main className="max-w-6xl w-full mx-auto px-4 pt-4 sm:pt-6 pb-24 sm:pb-12 space-y-6 flex-1">
-
-        {/* 2. Shop by category cards grid */}
-        <section className="space-y-2.5">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm sm:text-base font-extrabold text-navy-900 tracking-tight">Shop by Category</h3>
-            <button
-              type="button"
-              onClick={() => handleSelectCategory("All")}
-              className="text-xs font-bold text-[#c2410c] hover:text-[#9a3412] hover:underline cursor-pointer"
-            >
-              View all
-            </button>
-          </div>
-
-          <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 sm:gap-3">
+          <div className="grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-10 gap-2 sm:gap-3" role="listbox" aria-label="Categories">
             {dynamic8Cards.map((c) => {
               const isSelected = activePill.toLowerCase() === c.name.toLowerCase();
               const isComingSoon = c.isComingSoon;
@@ -263,121 +210,90 @@ export default function Categories() {
                 <button
                   key={c.name}
                   type="button"
+                  role="option"
+                  aria-selected={isSelected}
                   onClick={() => handleSelectCategory(c.name)}
-                  className={`rounded-xl sm:rounded-2xl p-2 sm:p-2.5 flex flex-col items-center justify-between text-center transition-all duration-200 group active:scale-95 shadow-2xs hover:shadow-xs cursor-pointer min-h-[105px] sm:min-h-[125px] ${
+                  className={`group flex min-h-[108px] cursor-pointer flex-col items-center rounded-2xl p-2 pt-2.5 text-center transition-[box-shadow,background-color] duration-200 active:scale-[0.97] ${
                     isSelected
-                      ? "bg-blue-50/90 border-2 border-[#0284C7] ring-2 ring-blue-200 shadow-xs"
+                      ? "bg-brand-50 ring-2 ring-brand-500"
                       : isComingSoon
-                      ? "bg-slate-50/80 border border-slate-200/60 opacity-85 hover:opacity-100"
-                      : "bg-white border border-slate-200/70 hover:border-slate-300"
+                      ? "bg-slate-50 ring-1 ring-slate-200/70"
+                      : "bg-white ring-1 ring-slate-200/80 hover:ring-slate-300 hover:shadow-[0_10px_24px_-16px_rgba(15,23,42,0.35)]"
                   }`}
                 >
-                  <div className="w-full flex-1 flex items-center justify-center p-0.5 mb-1.5">
-                    <div
-                      className={`w-12 h-12 sm:w-15 sm:h-15 rounded-full flex items-center justify-center p-1 overflow-hidden transition-all duration-300 ${
-                        c.isAll
-                          ? isSelected
-                            ? "bg-[#0284C7] text-white shadow-xs"
-                            : "bg-sky-50 text-[#0284C7] border border-sky-200/80 group-hover:scale-110"
-                          : isComingSoon
-                          ? "bg-slate-100 grayscale-[40%] border border-slate-200/60"
-                          : "bg-slate-50 shadow-2xs border border-slate-100 group-hover:scale-110 group-hover:shadow-xs"
-                      }`}
-                    >
-                      {c.isAll ? (
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-                          <rect x="3" y="3" width="7" height="7" rx="1.5" />
-                          <rect x="14" y="3" width="7" height="7" rx="1.5" />
-                          <rect x="14" y="14" width="7" height="7" rx="1.5" />
-                          <rect x="3" y="14" width="7" height="7" rx="1.5" />
-                        </svg>
-                      ) : (
-                        <img
-                          src={c.img}
-                          alt={c.name}
-                          className="w-full h-full object-cover rounded-full group-hover:scale-105 transition-transform duration-300"
-                          onError={(e) => {
-                            e.target.src = resolveCategoryBubbleImage(c.name);
-                          }}
-                        />
-                      )}
-                    </div>
-                  </div>
-                  <div className="w-full">
-                    <h4
-                      className={`text-[11px] sm:text-xs font-black leading-tight truncate max-w-full ${
-                        isSelected
-                          ? "text-[#0284C7]"
-                          : isComingSoon
-                          ? "text-slate-400 group-hover:text-slate-600"
-                          : "text-navy-950 group-hover:text-[#0284C7]"
-                      }`}
-                    >
-                      {c.name}
-                    </h4>
-                    {isComingSoon ? (
-                     <span className="inline-block mt-0.5 text-[11px] sm:text-[12px] font-semibold text-slate-900 px-1 rounded-sm leading-tight tracking-tight"> 
-  Coming soon 
-</span>
-
+                  <span
+                    className={`mb-2 flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full sm:h-14 sm:w-14 ${
+                      c.isAll ? (isSelected ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-600") : isComingSoon ? "bg-slate-100 opacity-60 grayscale" : "bg-slate-50"
+                    }`}
+                  >
+                    {c.isAll ? (
+                      <GridIcon className="h-6 w-6" />
                     ) : (
-                      <p className="text-[8.5px] sm:text-[9.5px] text-slate-400 font-medium mt-0.5 truncate">
-                        {c.countLabel}
-                      </p>
+                      <img
+                        src={c.img}
+                        alt=""
+                        className="h-full w-full rounded-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        onError={(e) => {
+                          e.target.src = resolveCategoryBubbleImage(c.name);
+                        }}
+                      />
                     )}
-                  </div>
+                  </span>
+                  <span
+                    className={`line-clamp-2 text-xs font-medium leading-tight ${
+                      isSelected ? "text-brand-800" : isComingSoon ? "text-slate-500" : "text-navy-950"
+                    }`}
+                  >
+                    {c.name}
+                  </span>
+                  <span className={`mt-0.5 text-[11px] leading-tight ${isComingSoon ? "text-slate-400" : "text-slate-500"} tabular-nums`}>
+                    {isComingSoon ? "Soon" : c.countLabel}
+                  </span>
                 </button>
               );
             })}
           </div>
         </section>
 
-        {/* 3. Filtered products ki grid list */}
         <section ref={productsSectionRef} id="products-section" className="space-y-3 scroll-mt-20">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm sm:text-base font-extrabold text-navy-900 tracking-tight">
-                {activePill === "All" ? "Best Selling Products" : `${activePill} Products`}
-              </h3>
-              <span className="bg-emerald-50 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-200">
-                {filteredCategoryProducts.length} Live
-              </span>
-            </div>
-            {activePill !== "All" && (
+          <SectionHeader
+            title={activePill === "All" ? "All products" : activePill}
+            badge={
+              !productsLoading && filteredCategoryProducts.length > 0 ? (
+                <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 tabular-nums">
+                  {filteredCategoryProducts.length}
+                </span>
+              ) : null
+            }
+          />
+          {activePill !== "All" && (
+            <div className="-mt-1">
               <button
                 type="button"
                 onClick={() => handleSelectCategory("All", false)}
-                className="text-xs font-bold text-[#c2410c] hover:text-[#9a3412] hover:underline cursor-pointer"
+                className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white px-3 text-xs font-medium text-slate-700 ring-1 ring-slate-200 transition-colors hover:bg-slate-50 cursor-pointer"
               >
-                Clear Filter (View All)
+                {activePill}
+                <span aria-hidden="true" className="text-slate-400">×</span>
+                <span className="sr-only">Clear category filter</span>
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
           {productsLoading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 sm:gap-3.5 animate-pulse">
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-                <div key={n} className="bg-white rounded-2xl p-3 border border-slate-200 h-44" />
-              ))}
-            </div>
+            <ProductGridSkeleton />
           ) : filteredCategoryProducts.length === 0 ? (
-            <div className="bg-white rounded-2xl p-8 text-center text-xs font-bold text-slate-500 border border-slate-200 space-y-2">
-              <span className="text-3xl block">⏳</span>
-              <p className="text-sm font-black text-navy-950">
-                {activePill} Products Coming Soon!
-              </p>
-              <p className="text-slate-400 max-w-sm mx-auto">
-                Hum jald hi {activePill} ke certified products {region?.name || "aapke region"} me launch kar rahe hain.
-              </p>
-              <button
-                onClick={() => handleSelectCategory("All", false)}
-                className="inline-block mt-2 px-4 py-2 bg-sky-50 text-[#0284C7] hover:bg-sky-100 font-black rounded-xl text-xs transition-colors cursor-pointer"
-              >
-                Explore All Available Products →
-              </button>
+            <div className="rounded-2xl bg-white ring-1 ring-slate-200/80">
+              <EmptyState
+                icon={PackageIcon}
+                title={`${activePill} is coming soon`}
+                description={`We're adding verified ${activePill.toLowerCase()} suppliers in ${region?.name || "your district"}.`}
+                actionLabel="Browse all products"
+                onAction={() => handleSelectCategory("All", false)}
+              />
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-2.5 sm:gap-3 lg:gap-4">
               {filteredCategoryProducts.map((p) => (
                 <ProductCard key={p.id} product={p} />
               ))}
@@ -387,24 +303,5 @@ export default function Categories() {
       </main>
       {!Capacitor.isNativePlatform() && <Footer />}
     </div>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="11" cy="11" r="7" />
-      <path d="m21 21-4.3-4.3" />
-    </svg>
-  );
-}
-
-function CartIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="8" cy="21" r="1" />
-      <circle cx="19" cy="21" r="1" />
-      <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
-    </svg>
   );
 }

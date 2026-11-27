@@ -343,7 +343,7 @@ export default function Login({ forceVendorMode = false }) {
         throw new Error(data.error || "Failed to submit partner application.");
       }
       setPartnerSubView("login");
-      setSuccessMsg("🎉 Partnership request submitted! BuildCity team will review and activate your account shortly.");
+      setSuccessMsg("Request submitted. The BuildCity team will review your shop and activate your account shortly.");
       setPhone(cleaned);
       setPassword("");
     } catch (err) {
@@ -432,7 +432,7 @@ export default function Login({ forceVendorMode = false }) {
         throw new Error(data.error || "Password reset failed.");
       }
       setPartnerSubView("login");
-      setSuccessMsg("🔐 Password reset successful! You can now sign in with your new password.");
+      setSuccessMsg("Password updated. You can now sign in with your new password.");
       setPhone(cleaned);
       setPassword("");
     } catch (err) {
@@ -456,23 +456,23 @@ export default function Login({ forceVendorMode = false }) {
           </button>
           <Link
             to={`/register?redirect=${encodeURIComponent(redirectTo)}`}
-            className="flex-1 py-2 text-xs font-bold rounded-lg text-slate-500 hover:text-navy-900 text-center transition-all"
+            className="flex-1 py-2 text-sm font-medium rounded-lg text-slate-500 hover:text-navy-900 text-center transition-colors"
           >
              Create Account
           </Link>
         </div>
       )}
 
-      <h1 className={mode === "vendor" ? "text-2xl font-semibold text-slate-900 mb-1 tracking-tight" : "text-2xl font-black text-navy-900 mb-1 tracking-tight"}>
+      <h1 className={mode === "vendor" ? "text-2xl font-semibold text-slate-900 mb-1 tracking-tight" : "text-2xl font-semibold text-navy-950 mb-1 tracking-tight"}>
         {mode === "vendor"
           ? partnerSubView === "register"
-            ? "Become a BuildCity Partner 🏪"
+            ? "Become a BuildCity partner"
             : partnerSubView === "forgot"
-            ? "Reset Password 🔐"
+            ? "Reset password"
             : "Partner sign in"
-          : "Welcome back "}
+          : "Welcome back"}
       </h1>
-      <p className={mode === "vendor" ? "text-sm text-slate-500 mb-6" : "text-xs text-slate-500 mb-6"}>
+      <p className="text-sm text-slate-500 mb-6">
         {mode === "vendor"
           ? partnerSubView === "register"
             ? "Fill in your shop details to join our vendor & supplier network."
@@ -485,13 +485,13 @@ export default function Login({ forceVendorMode = false }) {
       </p>
 
       {successMsg && (
-        <div role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-800 font-medium animate-in fade-in">
+        <div role="status" className="bc-fade-in mb-5 rounded-xl bg-emerald-50 ring-1 ring-inset ring-emerald-600/20 px-3.5 py-3 text-sm text-emerald-800">
           {successMsg}
         </div>
       )}
 
       {error && (
-        <div role="alert" className={`mb-5 p-3.5 rounded-xl border text-xs font-bold leading-relaxed shadow-2xs animate-in fade-in ${
+        <div role="alert" className={`bc-fade-in mb-5 p-3.5 rounded-xl border text-sm leading-relaxed ${
           typeof error === "string" && (error.includes("Partner") || error.includes("Vendor") || error.includes("DR") || error.includes("Admin"))
             ? "bg-amber-50 border-amber-200 text-amber-900"
             : "bg-rose-50 border-rose-200 text-rose-700"
@@ -845,7 +845,7 @@ export default function Login({ forceVendorMode = false }) {
                 }}
                 className="w-full py-2.5 px-3 rounded-xl border border-brand-200 bg-brand-50 hover:bg-brand-100 text-brand-700 text-xs font-bold transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5"
               >
-                🏪 Become a Partner / Register Shop →
+                Become a partner — register your shop
               </button>
             </div>
           </form>
@@ -933,9 +933,9 @@ export default function Login({ forceVendorMode = false }) {
 
             {cooldown > 0 ? (
               <div className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-100/90 border border-slate-200 px-3 py-1.5 rounded-xl shadow-2xs">
-                <span className="w-2 h-2 rounded-full bg-brand-500 animate-ping shrink-0" />
+                <span className="w-1.5 h-1.5 rounded-full bg-brand-500 shrink-0" aria-hidden="true" />
                 <span>Resend OTP in</span>
-                <span className="font-mono font-black text-brand-600 tabular-nums">{formatCooldown(cooldown)}</span>
+                <span className="font-mono font-semibold text-navy-950 tabular-nums">{formatCooldown(cooldown)}</span>
               </div>
             ) : (
               <button

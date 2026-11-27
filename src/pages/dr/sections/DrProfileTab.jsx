@@ -68,7 +68,7 @@ export default function DrProfileTab({
 
       {/* Quick Actions */}
       <section>
-        <h2 className="mb-2 px-1 text-xs font-medium uppercase tracking-wide text-slate-500">
+        <h2 className="mb-2 px-1 text-sm font-medium text-slate-500">
           Quick onboarding actions
         </h2>
         <div className="grid grid-cols-2 gap-2.5">
@@ -93,7 +93,7 @@ export default function DrProfileTab({
 
       {/* Representative Details */}
       <section>
-        <h2 className="mb-2 px-1 text-xs font-medium uppercase tracking-wide text-slate-500">
+        <h2 className="mb-2 px-1 text-sm font-medium text-slate-500">
           Representative details
         </h2>
         <Card className="divide-y divide-slate-100">

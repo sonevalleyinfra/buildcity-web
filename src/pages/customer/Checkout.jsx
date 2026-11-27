@@ -2,6 +2,8 @@ import { authFetch, getToken } from "../../config/authFetch";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate, Navigate, useLocation } from "react-router-dom";
 import Navbar from "../../components/Navbar";
+import MobileHeader from "../../components/ui/MobileHeader";
+import { CheckIcon, CloseIcon, PinIcon, TagIcon, TruckIcon } from "../../components/ui/Icons";
 import { useCart } from "../../context/CartContext";
 import { useOrders } from "../../context/OrderContext";
 import { useAuth } from "../../context/AuthContext";
@@ -580,19 +582,22 @@ export default function Checkout() {
   };
 
   return (
-    <div className="min-h-screen bg-surface pb-16">
-      <Navbar />
+    <div data-storefront className="min-h-screen bg-surface pb-16">
+      <div className="hidden lg:block">
+        <Navbar />
+      </div>
+      <MobileHeader title="Checkout" fallback="/cart" showCart={false} />
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
-        <h1 className="text-xl font-bold text-navy-900 mb-5">Checkout</h1>
+      <main className="bc-fade-in max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
+        <h1 className="hidden lg:block text-2xl font-semibold tracking-tight text-navy-950 mb-5">Checkout</h1>
 
         <div className="grid md:grid-cols-3 gap-6">
           <div className="md:col-span-2 space-y-5">
             {/* Delivery address choose karne ka section */}
-            <div className="bg-white rounded-xl border border-slate-200 p-4">
+            <div className="bg-white rounded-2xl ring-1 ring-slate-200/80 p-4 sm:p-5">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-bold text-navy-900">
-                  📍 Delivery Site Address
+                <h3 className="text-[15px] font-semibold text-navy-950">
+                  Delivery address
                 </h3>
                 {dbAddresses.length > 0 && (
                   <button
@@ -607,24 +612,24 @@ export default function Checkout() {
               {dbAddresses.length === 0 ? (
                 <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-4 space-y-3">
                   <div className="flex items-center gap-2 text-brand-700 bg-brand-50 p-2.5 rounded-lg border border-brand-200/60 mb-2">
-                    <span className="text-base">📍</span>
+                    <PinIcon className="h-4 w-4 shrink-0" />
                     <p className="text-xs font-bold">First Order: Please enter your Site Delivery Address below.</p>
                   </div>
 
                   <div className="grid sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-navy-900 mb-1">Full Name *</label>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Full Name *</label>
                       <input
                         type="text"
                         required
                         value={newFullName}
                         onChange={(e) => setNewFullName(e.target.value)}
                         placeholder="e.g. Ramesh Kumar"
-                        className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-medium"
+                        className="w-full bg-white h-11 text-sm border border-slate-200 rounded-xl px-3.5 outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-navy-900 mb-1">Mobile Phone *</label>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Mobile Phone *</label>
                       <input
                         type="tel"
                         required
@@ -632,29 +637,29 @@ export default function Checkout() {
                         value={newPhone}
                         onChange={(e) => setNewPhone(e.target.value.replace(/\D/g, ""))}
                         placeholder="10-digit mobile number"
-                        className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-medium"
+                        className="w-full bg-white h-11 text-sm border border-slate-200 rounded-xl px-3.5 outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-navy-900 mb-1">Site Delivery Address / House / Plot No. *</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Site Delivery Address / House / Plot No. *</label>
                     <input
                       type="text"
                       required
                       value={newStreet}
                       onChange={(e) => setNewStreet(e.target.value)}
                       placeholder="e.g. Plot No. 45, Near Hanuman Temple, Mirzapur Road"
-                      className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-medium"
+                      className="w-full bg-white h-11 text-sm border border-slate-200 rounded-xl px-3.5 outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-navy-900 mb-1 flex items-center justify-between">
+                      <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center justify-between">
                         <span>District / City *</span>
                         <span className="text-[10px] text-brand-600 font-bold bg-brand-50 px-1.5 py-0.5 rounded border border-brand-200">
-                          🔒 {region?.name || "Varanasi"}
+                          {region?.name || "Varanasi"}
                         </span>
                       </label>
                       <input
@@ -665,7 +670,7 @@ export default function Checkout() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-navy-900 mb-1">Pincode *</label>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Pincode *</label>
                       <input
                         type="text"
                         required
@@ -673,7 +678,7 @@ export default function Checkout() {
                         value={newPincode}
                         onChange={(e) => setNewPincode(e.target.value.replace(/\D/g, ""))}
                         placeholder="221001"
-                        className="w-full bg-white text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-brand-500 font-medium"
+                        className="w-full bg-white h-11 text-sm border border-slate-200 rounded-xl px-3.5 outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
                       />
                     </div>
                   </div>
@@ -684,7 +689,7 @@ export default function Checkout() {
                     disabled={savingAddr || !newStreet.trim()}
                     className="w-full mt-2 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] transition-all duration-200 text-white font-bold text-xs py-3 rounded-xl shadow-xs disabled:opacity-50 cursor-pointer"
                   >
-                    {savingAddr ? "Saving Address..." : "✓ Save & Select Delivery Address"}
+                    {savingAddr ? "Saving Address..." : "Save & Select Delivery Address"}
                   </button>
                 </div>
               ) : (
@@ -716,13 +721,13 @@ export default function Checkout() {
                             if (isDeliverable) setSelectedAddrId(a.id);
                           }}
                           className={`mt-1 h-4 w-4 ${
-                            !isDeliverable ? "cursor-not-allowed opacity-40" : "accent-[#1E5FD9] cursor-pointer"
+                            !isDeliverable ? "cursor-not-allowed opacity-40" : "accent-brand-600 cursor-pointer"
                           }`}
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between flex-wrap gap-1">
-                            <span className={`text-xs font-extrabold ${isDeliverable ? "text-navy-900" : "text-slate-600"}`}>
-                              👤 {a.fullName || user?.name || "Customer"} · 📱 {a.phone || user?.phone || "7607650875"}
+                            <span className={`text-xs font-semibold ${isDeliverable ? "text-navy-900" : "text-slate-600"}`}>
+                              {a.fullName || user?.name || "Customer"} <span className="font-normal text-slate-500 tabular-nums">· {a.phone || user?.phone || "7607650875"}</span>
                             </span>
                             {isDeliverable ? (
                               <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-md">
@@ -730,13 +735,13 @@ export default function Checkout() {
                               </span>
                             ) : (
                               <span className="text-[10px] font-bold text-amber-800 bg-amber-100/90 border border-amber-300/80 px-2 py-0.5 rounded-md">
-                                ⚠️ Not available for delivery in {region?.name || "Varanasi"}
+                                Not deliverable in {region?.name || "Varanasi"}
                               </span>
                             )}
                           </div>
                           <p className="text-xs text-slate-600 font-medium mt-0.5">{a.street}</p>
                           <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
-                            📍 {a.city}, {a.state} - {a.pincode}
+                            {a.city}, {a.state} - {a.pincode}
                           </p>
                         </div>
                       </div>
@@ -768,8 +773,8 @@ export default function Checkout() {
             </div>
 
             {/* Payment method section - sirf cash on delivery */}
-            <div className="bg-white rounded-xl border border-slate-200 p-4">
-              <h3 className="text-sm font-bold text-navy-900 mb-3">
+            <div className="bg-white rounded-2xl ring-1 ring-slate-200/80 p-4 sm:p-5">
+              <h3 className="text-[15px] font-semibold text-navy-950 mb-3">
                 Payment Method
               </h3>
               <div className="space-y-2.5">
@@ -779,11 +784,11 @@ export default function Checkout() {
                     name="payment"
                     checked={true}
                     readOnly
-                    className="h-4 w-4 accent-[#1E5FD9]"
+                    className="h-4 w-4 accent-brand-600"
                   />
                   <div>
-                    <span className="text-xs font-extrabold text-navy-900 block">
-                      💵 Cash on Delivery (Pay on Site Arrival)
+                    <span className="text-xs font-semibold text-navy-900 block">
+                      Cash on Delivery (pay when material arrives)
                     </span>
                     <span className="text-[11px] font-medium text-slate-500">
                       Pay cash to driver upon inspecting delivered materials at construction site.
@@ -794,17 +799,17 @@ export default function Checkout() {
             </div>
 
             {/* Promo / Coupon Code Section */}
-            <div className="bg-white rounded-xl border border-slate-200 p-4">
-              <h3 className="text-sm font-bold text-navy-900 mb-2 flex items-center justify-between">
-                <span>🏷️ Have a Coupon / Promo Code?</span>
+            <div className="bg-white rounded-2xl ring-1 ring-slate-200/80 p-4 sm:p-5">
+              <h3 className="text-[15px] font-semibold text-navy-950 mb-2 flex items-center justify-between">
+                <span className="flex items-center gap-2"><TagIcon className="h-4 w-4 text-slate-500" />Coupon</span>
                 {appliedCoupon && couponDiscount > 0 && (
-                  <span className="text-[11px] text-emerald-600 font-bold">✓ Coupon Applied</span>
+                  <span className="inline-flex items-center gap-1 text-xs text-emerald-700 font-medium"><CheckIcon className="h-3.5 w-3.5" strokeWidth={2.4} />Applied</span>
                 )}
               </h3>
               {appliedCoupon && couponDiscount > 0 ? (
                 <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
                   <div>
-                    <span className="text-xs font-black text-emerald-800 tracking-wide uppercase font-mono">{appliedCoupon.code}</span>
+                    <span className="text-xs font-semibold text-emerald-800 tracking-wide uppercase font-mono">{appliedCoupon.code}</span>
                     <p className="text-[11px] text-emerald-600 font-medium">₹{couponDiscount.toLocaleString("en-IN")} discount applied to your order</p>
                   </div>
                   <button
@@ -843,8 +848,8 @@ export default function Checkout() {
             </div>
 
             {/* Order me add kiye gaye items */}
-            <div className="bg-white rounded-xl border border-slate-200 p-4">
-              <h3 className="text-sm font-bold text-navy-900 mb-3">
+            <div className="bg-white rounded-2xl ring-1 ring-slate-200/80 p-4 sm:p-5">
+              <h3 className="text-[15px] font-semibold text-navy-950 mb-3">
                 Order Items ({checkoutItems.length})
               </h3>
               <div className="space-y-3">
@@ -871,8 +876,8 @@ export default function Checkout() {
           </div>
 
           {/* Order ka amount summary */}
-          <div className="bg-white rounded-xl border border-slate-200 p-4 h-fit sm:sticky sm:top-20">
-            <h3 className="text-sm font-bold text-navy-900 mb-3">
+          <div className="bg-white rounded-2xl ring-1 ring-slate-200/80 p-4 sm:p-5 h-fit sm:sticky sm:top-20">
+            <h3 className="text-[15px] font-semibold text-navy-950 mb-3">
               Order Summary
             </h3>
 
@@ -888,10 +893,10 @@ export default function Checkout() {
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1">
-                      <span className="font-extrabold text-xs text-navy-950 flex items-center gap-1">
+                      <span className="font-semibold text-xs text-navy-950 flex items-center gap-1">
                         <span>Use BuildCity Wallet</span>
                       </span>
-                      <span className="text-[10px] font-black text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-full border border-amber-200">
+                      <span className="text-[10px] font-semibold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-full border border-amber-200">
                         ₹{walletBalance.toLocaleString("en-IN")} Bal
                       </span>
                     </div>
@@ -900,7 +905,7 @@ export default function Checkout() {
                         ? `Applying ₹${appliedWalletDiscount.toLocaleString("en-IN")} discount on this order`
                         : `Apply ₹${maxWalletApplicable.toLocaleString("en-IN")} from your wallet`}
                     </p>
-                    <p className="text-[9.5px] text-slate-400 mt-0.5">
+                    <p className="text-xs text-slate-400 mt-0.5">
                       (Max {walletSettings.maxWalletUsagePercent || 10}% / ₹{walletSettings.maxWalletUsageFlat || 500} per order)
                     </p>
                   </div>
@@ -915,15 +920,15 @@ export default function Checkout() {
                   ? "bg-gradient-to-r from-emerald-50 to-teal-50/50 border-emerald-200 text-emerald-950 shadow-2xs" 
                   : "bg-gradient-to-r from-sky-50 to-blue-50 border-sky-200 text-slate-800 shadow-2xs"
               }`}>
-                <div className="flex items-center justify-between gap-2 text-xs font-black mb-1.5">
+                <div className="flex items-center justify-between gap-2 text-xs font-semibold mb-1.5">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-sm">🚚</span>
+                    <TruckIcon className="h-4 w-4 shrink-0" />
                     <span className="tracking-tight">
                       {isFreeDelivery ? "FREE District Delivery Unlocked!" : `Free Delivery on orders above ₹${freeDeliveryThreshold.toLocaleString("en-IN")}`}
                     </span>
                   </div>
                   {isFreeDelivery && (
-                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0 bg-emerald-600 text-white">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0 bg-emerald-600 text-white">
                       UNLOCKED
                     </span>
                   )}
@@ -937,12 +942,12 @@ export default function Checkout() {
                       />
                     </div>
                     <p className="text-[11px] text-slate-600 font-semibold leading-snug">
-                      Add <strong className="text-brand-600 font-extrabold">₹{remainingForFreeDelivery.toLocaleString("en-IN")}</strong> more materials to get <strong className="text-emerald-700 font-extrabold">100% Free District Delivery</strong>.
+                      Add <strong className="text-brand-600 font-semibold">₹{remainingForFreeDelivery.toLocaleString("en-IN")}</strong> more materials to get <strong className="text-emerald-700 font-semibold">100% Free District Delivery</strong>.
                     </p>
                   </>
                 ) : (
                   <p className="text-[11px] text-emerald-800 font-bold flex items-center gap-1">
-                    <span>✓</span>
+                    <CheckIcon className="h-3.5 w-3.5 shrink-0" strokeWidth={2.4} />
                     <span>District delivery fee (₹{baseDeliveryFee}) is 100% free for this order!</span>
                   </p>
                 )}
@@ -960,14 +965,14 @@ export default function Checkout() {
               </div>
               {appliedCoupon && couponDiscount > 0 && (
                 <div className="flex justify-between items-center text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200">
-                  <span className="font-extrabold text-xs">🏷️ Coupon ({appliedCoupon.code})</span>
-                  <span className="font-black">− ₹{couponDiscount.toLocaleString("en-IN")}</span>
+                  <span className="font-semibold text-xs">Coupon ({appliedCoupon.code})</span>
+                  <span className="font-semibold">− ₹{couponDiscount.toLocaleString("en-IN")}</span>
                 </div>
               )}
               {useWallet && appliedWalletDiscount > 0 && (
                 <div className="flex justify-between items-center text-amber-800 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200">
-                  <span className="font-extrabold text-xs">Wallet Balance</span>
-                  <span className="font-black">− ₹{appliedWalletDiscount.toLocaleString("en-IN")}</span>
+                  <span className="font-semibold text-xs">Wallet Balance</span>
+                  <span className="font-semibold">− ₹{appliedWalletDiscount.toLocaleString("en-IN")}</span>
                 </div>
               )}
               <div className="flex justify-between items-center text-slate-500">
@@ -983,7 +988,7 @@ export default function Checkout() {
                   {deliveryCharge === 0 ? (
                     <div className="flex items-center gap-1.5 justify-end">
                       <span className="line-through text-slate-400 font-semibold text-xs">₹{baseDeliveryFee}</span>
-                      <span className="text-emerald-700 font-extrabold text-xs bg-emerald-100/90 px-2 py-0.5 rounded-md border border-emerald-200">
+                      <span className="text-emerald-700 font-semibold text-xs bg-emerald-100/90 px-2 py-0.5 rounded-md border border-emerald-200">
                         FREE
                       </span>
                     </div>
@@ -1010,7 +1015,7 @@ export default function Checkout() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
                   </svg>
-                  <span>⚡ Placing Order & Dispatching...</span>
+                  <span>Placing order…</span>
                 </>
               ) : (
                 "Place Order (Cash on Delivery)"
@@ -1018,7 +1023,7 @@ export default function Checkout() {
             </button>
 
             {placing && (
-              <p className="text-[11px] text-brand-600 font-bold text-center mt-2 animate-pulse">
+              <p className="text-xs text-slate-500 text-center mt-2">
                 Processing site delivery dispatch... Please wait.
               </p>
             )}
@@ -1029,10 +1034,10 @@ export default function Checkout() {
       {/* Naya address add karne ka modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 bc-pop-in">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-              <h3 className="font-extrabold text-navy-900 text-base">📍 Add Delivery Address</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-navy-900 font-bold">✕</button>
+              <h3 className="font-semibold text-navy-900 text-base">Add delivery address</h3>
+              <button onClick={() => setShowAddModal(false)} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200"><CloseIcon className="h-4 w-4" /></button>
             </div>
 
             <form onSubmit={handleAddNewAddress} className="space-y-3 text-xs">
@@ -1119,7 +1124,7 @@ export default function Checkout() {
                       <span>Saving...</span>
                     </>
                   ) : (
-                    "✓ Save Address"
+                    "Save address"
                   )}
                 </button>
               </div>
@@ -1130,37 +1135,39 @@ export default function Checkout() {
 
       {/* Order success screen modal */}
       {successOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/80 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-emerald-100 text-center relative overflow-hidden animate-in zoom-in-95 duration-300">
+        <div className="bc-fade-in fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/70 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="order-success-title">
+          <div className="bc-pop-in bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 sm:p-8 shadow-2xl text-center relative">
             {/* Top background glow */}
-            <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-64 h-64 bg-emerald-400/20 rounded-full blur-3xl pointer-events-none" />
 
             {/* Success checkmark badge */}
-            <div className="relative mx-auto mb-4 w-20 h-20 rounded-full bg-emerald-50 border-4 border-emerald-100 flex items-center justify-center shadow-lg shadow-emerald-500/10">
-              <div className="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center text-2xl font-black shadow-md animate-bounce">
-                ✓
+            <div className="relative mx-auto mb-4 w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center">
+              <div className="w-11 h-11 rounded-full bg-emerald-600 text-white flex items-center justify-center">
+                <CheckIcon className="h-6 w-6" strokeWidth={2.6} />
               </div>
             </div>
 
-            <span className="inline-block text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full uppercase tracking-wider mb-2">
+            <span className="inline-block text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full mb-2">
               Order Confirmed & Placed
             </span>
 
-            <h2 className="text-2xl font-black text-navy-900 tracking-tight mb-1">
-              Thank You For Your Order!
+            <h2 id="order-success-title" className="text-xl sm:text-2xl font-semibold text-navy-950 tracking-tight mb-1">
+              Thank you for your order
             </h2>
-            <p className="text-xs text-slate-500 font-medium mb-5">
+            <p className="text-sm text-slate-500 mb-5">
               {successOrder.isMultiVendor && Array.isArray(successOrder.orders) && successOrder.orders.length > 1
                 ? `Your order has been split into ${successOrder.orders.length} vendor dispatch packages for immediate site delivery.`
                 : "Your construction material order has been confirmed for immediate site delivery."}
             </p>
 
             {/* Order ki details ka card */}
-            <div className="bg-slate-50/90 rounded-2xl p-4 border border-slate-200/80 text-left space-y-3 mb-6 shadow-2xs">
+            <div className="bg-slate-50 rounded-2xl p-4 text-left space-y-3 mb-6 text-sm">
               {successOrder.isMultiVendor && Array.isArray(successOrder.orders) && successOrder.orders.length > 1 ? (
                 <div className="space-y-2 pb-2.5 border-b border-slate-200/80">
-                  <span className="text-[10.5px] font-extrabold text-slate-500 uppercase tracking-wider block">
-                    Dispatched Packages ({successOrder.orders.length}):
+                  <span className="text-xs text-slate-500 block">
+                    Split into {successOrder.orders.length} shop orders
                   </span>
                   {successOrder.orders.map((subOrd, idx) => (
                     <div
@@ -1168,14 +1175,14 @@ export default function Checkout() {
                       className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200/90 shadow-2xs"
                     >
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-black text-brand-700 font-mono bg-brand-50 border border-brand-200/60 px-2 py-0.5 rounded-md">
+                        <span className="text-xs font-semibold text-brand-700 font-mono bg-brand-50 border border-brand-200/60 px-2 py-0.5 rounded-md">
                           {formatShortId(subOrd.id, "ORD")}
                         </span>
                         <span className="text-xs font-bold text-navy-900">
                           {subOrd.items?.length || 1} {(subOrd.items?.length === 1 ? "item" : "items")}
                         </span>
                       </div>
-                      <span className="text-xs font-black text-navy-900">
+                      <span className="text-xs font-semibold text-navy-900">
                         ₹{Number(subOrd.totalAmount || subOrd.total || 0).toLocaleString("en-IN")}
                       </span>
                     </div>
@@ -1184,7 +1191,7 @@ export default function Checkout() {
               ) : (
                 <div className="flex items-center justify-between pb-2.5 border-b border-slate-200/80">
                   <span className="text-xs font-bold text-slate-500">Order ID:</span>
-                  <span className="text-xs font-black text-brand-700 font-mono bg-brand-50 border border-brand-200/60 px-2.5 py-0.5 rounded-md">
+                  <span className="text-xs font-semibold text-brand-700 font-mono bg-brand-50 border border-brand-200/60 px-2.5 py-0.5 rounded-md">
                     {formatShortId(successOrder.id, "ORD")}
                   </span>
                 </div>
@@ -1192,7 +1199,7 @@ export default function Checkout() {
 
               <div className="flex items-center justify-between pb-2.5 border-b border-slate-200/80">
                 <span className="text-xs font-bold text-slate-500">Total Amount:</span>
-                <span className="text-sm font-black text-navy-900">
+                <span className="text-sm font-semibold text-navy-900">
                   ₹{Number(successOrder.total || total).toLocaleString("en-IN")}
                 </span>
               </div>
@@ -1200,12 +1207,12 @@ export default function Checkout() {
               <div className="flex items-center justify-between pb-2.5 border-b border-slate-200/80">
                 <span className="text-xs font-bold text-slate-500">Payment:</span>
                 <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
-                  💵 Cash on Delivery (Pay on Site)
+                  Cash on Delivery
                 </span>
               </div>
 
               <div>
-                <span className="text-xs font-bold text-slate-500 block mb-1">📍 Site Delivery Destination:</span>
+                <span className="text-xs font-bold text-slate-500 block mb-1">Delivering to</span>
                 <p className="text-xs font-bold text-navy-900">
                   {successOrder.address?.fullName || user?.name || "Customer"} · {successOrder.address?.phone || user?.phone}
                 </p>
@@ -1226,9 +1233,9 @@ export default function Checkout() {
                     { replace: true }
                   )
                 }
-                className="flex-1 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] transition-all duration-200 text-white font-black text-xs py-3.5 rounded-xl shadow-md cursor-pointer flex items-center justify-center gap-2"
+                className="flex-1 h-12 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] transition-colors text-white font-semibold text-sm rounded-xl cursor-pointer flex items-center justify-center gap-2"
               >
-                <span>🚚</span>
+                <TruckIcon className="h-4 w-4" />
                 <span>
                   {successOrder.isMultiVendor && Array.isArray(successOrder.orders) && successOrder.orders.length > 1
                     ? `Track All Packages (${successOrder.orders.length})`
@@ -1237,7 +1244,7 @@ export default function Checkout() {
               </button>
               <button
                 onClick={() => navigate("/", { replace: true })}
-                className="sm:w-36 bg-slate-100 hover:bg-slate-200 active:scale-[0.98] transition-all text-slate-700 font-bold text-xs py-3.5 rounded-xl cursor-pointer"
+                className="sm:w-40 h-12 bg-slate-100 hover:bg-slate-200 active:scale-[0.98] transition-colors text-slate-700 font-semibold text-sm rounded-xl cursor-pointer"
               >
                 Continue Shopping
               </button>

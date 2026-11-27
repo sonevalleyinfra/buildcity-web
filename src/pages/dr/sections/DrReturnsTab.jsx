@@ -145,14 +145,14 @@ export default function DrReturnsTab({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base font-semibold text-slate-900">
-                DR Return & Refund Desk ({districtName})
+                Returns & refunds
               </h2>
               <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
-                Delivered Orders Only
+                Delivered orders
               </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
-              Search by Customer Mobile Number (e.g. 9876543210) or Order ID (e.g. #ORD-*83F2) to view delivered orders, select returned items, and calculate the net cash refund.
+              Find a delivered order by the customer's mobile number or order ID, pick the returned items, and settle the refund.
             </p>
           </div>
         </div>
@@ -226,10 +226,10 @@ export default function DrReturnsTab({
           <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-[11px] font-bold text-white">
                   {returnSearchResults.length}
                 </span>
-                <p className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                <p className="text-sm font-semibold text-slate-800">
                   Matching Delivered Order{returnSearchResults.length > 1 ? "s" : ""} ({returnSearchResults.length})
                 </p>
               </div>
@@ -243,7 +243,7 @@ export default function DrReturnsTab({
                     onClick={() => setShowOrderList(false)}
                     className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
                   >
-                    Hide List ✕
+                    Hide list
                   </button>
                 )}
               </div>
@@ -280,7 +280,7 @@ export default function DrReturnsTab({
                         </span>
                         <span
                           className={cx(
-                            "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                            "rounded-full px-2 py-0.5 text-[11px] font-semibold",
                             ro.status === "COMPLETED"
                               ? "bg-emerald-100 text-emerald-800"
                               : "bg-blue-100 text-blue-800"
@@ -293,20 +293,20 @@ export default function DrReturnsTab({
                       <div className="text-xs text-slate-700">
                         <p className="font-semibold text-slate-900 truncate">{custName}</p>
                         {custPhone && (
-                          <p className="text-[11px] font-mono text-slate-500 tabular-nums">📞 {custPhone}</p>
+                          <p className="text-[11px] text-slate-500 tabular-nums">{custPhone}</p>
                         )}
                       </div>
 
                       {firstItemName && (
                         <p className="text-[11px] text-slate-600 truncate bg-slate-100/70 rounded px-1.5 py-0.5">
-                          📦 {firstItemName}{moreItemsCount > 0 ? ` +${moreItemsCount} more` : ""}
+                          {firstItemName}{moreItemsCount > 0 ? ` +${moreItemsCount} more` : ""}
                         </p>
                       )}
                     </div>
 
                     <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between w-full">
                       <div className="tabular-nums">
-                        <span className="text-[10px] text-slate-400 block uppercase">Total Paid</span>
+                        <span className="text-[11px] text-slate-500 block">Total Paid</span>
                         <span className="text-xs font-bold text-slate-900">{inr(ro.totalAmount || 0)}</span>
                       </div>
                       <button
@@ -319,7 +319,7 @@ export default function DrReturnsTab({
                             : "bg-navy-950 text-white hover:bg-[#0d224d] shadow-xs"
                         )}
                       >
-                        {isSel ? "✓ Selected" : "Select Order →"}
+                        {isSel ? "Selected" : "Select Order"}
                       </button>
                     </div>
                   </div>
@@ -338,7 +338,7 @@ export default function DrReturnsTab({
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <span className="text-sm font-bold text-slate-900">
                     Order ID:{" "}
-                    <span className="font-mono text-brand-700">
+                    <span className="font-mono text-slate-900">
                       {formatShortId(selectedReturnOrder.id || selectedReturnOrder.orderNumber, "ORD")}
                     </span>
                   </span>
@@ -397,7 +397,7 @@ export default function DrReturnsTab({
             {/* Items List with [-] Qty [+] Counter */}
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                <h3 className="text-sm font-semibold text-slate-900">
                   Step 1: Select Return Quantity (Ordered Items Auto-Loaded)
                 </h3>
                 <span className="text-[11px] font-medium text-slate-500">
@@ -478,7 +478,7 @@ export default function DrReturnsTab({
                       )}
 
                       <div className="min-w-[110px] text-right tabular-nums">
-                        <span className="block text-[10px] font-semibold uppercase text-slate-400">
+                        <span className="block text-[11px] font-medium text-slate-500">
                           Item Return Value
                         </span>
                         <span
@@ -500,7 +500,7 @@ export default function DrReturnsTab({
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Left: Return Reason */}
               <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-900">
+                <label className="block text-sm font-semibold text-slate-900">
                   Step 2: Return Reason / Notes
                 </label>
                 <select
@@ -545,7 +545,7 @@ export default function DrReturnsTab({
                     <label className="block text-xs font-bold text-slate-800">
                       Additional Deduction (Delivery / Logistics / Handling Fee):
                     </label>
-                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                    <span className="text-[11px] font-medium text-slate-500">
                       Editable
                     </span>
                   </div>
@@ -587,13 +587,13 @@ export default function DrReturnsTab({
               {/* Right: Final Cash & Wallet Settlement Summary */}
               <div className="flex flex-col justify-between rounded-xl border-2 border-emerald-500/40 bg-white p-4 space-y-3 tabular-nums">
                 <div className="space-y-2.5">
-                  <h4 className="border-b border-slate-100 pb-2 text-xs font-bold uppercase tracking-wider text-slate-900">
+                  <h4 className="border-b border-slate-100 pb-2 text-sm font-semibold text-slate-900">
                     Step 3: Final Cash & Wallet Settlement Summary
                   </h4>
 
                   {/* 1. Cash Hisaab: Total Order (with Delivery) (-) Delivery (-) Wallet Added (-) Cashback (-) Return Delivery = Net Cash */}
                   <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-1.5">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                    <p className="text-xs font-semibold text-slate-700">
                       1. Cash Refund Calculation
                     </p>
                     <div className="flex items-center justify-between text-xs font-medium text-slate-700">
@@ -643,7 +643,7 @@ export default function DrReturnsTab({
                   {/* 2. Wallet Hisaab: Cashback Already in Wallet (23) + Wallet Used Added Now (24) = Total in Wallet (47) */}
                   {(walletToCredit > 0 || cashbackDeductFromCash > 0) && (
                     <div className="rounded-xl border border-amber-200/80 bg-amber-50/60 p-3 space-y-1.5">
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-amber-900">
+                      <p className="text-xs font-semibold text-amber-900">
                         2. Wallet Settlement Calculation
                       </p>
                       <div className="flex items-center justify-between text-xs font-medium text-slate-700">
@@ -761,7 +761,7 @@ export default function DrReturnsTab({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <span className="font-mono text-xs font-bold text-brand-700">
+                        <span className="font-mono text-xs font-semibold text-slate-900">
                           {formatShortId(ret.orderId || ret.order?.orderNumber, "ORD")}
                         </span>
                         <p className="text-[11px] text-slate-400">{formatDateTimeIST(ret.createdAt)}</p>
@@ -806,7 +806,7 @@ export default function DrReturnsTab({
             {/* Desktop Return Records Table - Scrollable container */}
             <div className="hidden max-h-[500px] overflow-y-auto rounded-xl border border-slate-200 md:block scrollbar-thin">
               <table className="w-full text-left text-xs">
-                <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500 shadow-xs">
+                <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-xs font-medium text-slate-500 shadow-xs">
                   <tr>
                     <th className="py-3 px-4">Return Date & Order ID</th>
                     <th className="py-3 px-4">Customer</th>
@@ -822,7 +822,7 @@ export default function DrReturnsTab({
                     return (
                       <tr key={ret.id} className="hover:bg-slate-50/80">
                         <td className="py-3.5 px-4">
-                          <span className="block font-mono font-bold text-brand-700">
+                          <span className="block font-mono font-semibold text-slate-900">
                             {formatShortId(ret.orderId || ret.order?.orderNumber, "ORD")}
                           </span>
                           <span className="text-[11px] text-slate-400">{formatDateTimeIST(ret.createdAt)}</span>
@@ -844,7 +844,7 @@ export default function DrReturnsTab({
                                 <span className="ml-1 text-slate-400">@ {inr(ri.price)}</span>
                               </div>
                             ))}
-                            <span className="block text-[10px] text-slate-400">
+                            <span className="block text-[11px] text-slate-400">
                               Reason: {ret.returnReason}
                             </span>
                           </div>

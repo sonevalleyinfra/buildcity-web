@@ -116,7 +116,7 @@ export default function DrOrdersTab({
               </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
-              Real-time tracking of marketplace orders scheduled for delivery in {districtName}
+              Every customer order for delivery in {districtName}.
             </p>
           </div>
           <div className="w-full sm:w-72">
@@ -196,13 +196,10 @@ export default function DrOrdersTab({
                 key={ord.id}
                 style={{ "--i": idx }}
                 className={cx(
-                  "relative flex flex-col justify-between overflow-hidden p-4 sm:p-5 pl-5 sm:pl-6 transition-all duration-300 hover:shadow-[0_12px_28px_-18px_rgba(15,23,42,0.2)]",
-                  statusCfg.tile,
+                  "relative flex flex-col justify-between overflow-hidden p-4 sm:p-5 transition-shadow duration-300 hover:shadow-[0_12px_28px_-18px_rgba(15,23,42,0.2)]",
                   isTransitioning && "ring-2 ring-brand-500/30"
                 )}
               >
-                {/* Status colour down the leading edge */}
-                <span className={cx("absolute inset-y-0 left-0 w-1 transition-colors duration-500", statusCfg.accent)} aria-hidden="true" />
 
                 {/* Status Transition Top Progress Bar */}
                 {isTransitioning && (
@@ -215,10 +212,10 @@ export default function DrOrdersTab({
                   {/* Top Bar: Order ID + Date + Status Badge */}
                   <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
                     <div>
-                      <span className="font-mono text-sm font-bold text-brand-700">
+                      <span className="font-mono text-sm font-semibold text-slate-900">
                         {formatShortId(ord.id || ord.orderNumber, "ORD")}
                       </span>
-                      <p className="mt-0.5 text-xs text-slate-400">{dateStr}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">{dateStr}</p>
                     </div>
                     <StatusBadge status={effectiveStatus} />
                   </div>
@@ -257,7 +254,7 @@ export default function DrOrdersTab({
                     <MapPinIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
                     <div className="min-w-0 flex-1 text-xs">
                       <p className="font-medium text-slate-800 break-words leading-snug">{streetAddr}</p>
-                      <p className="mt-0.5 text-[11px] font-semibold text-brand-700">
+                      <p className="mt-0.5 text-[11px] text-slate-500">
                         {cityAddr} {pincodeAddr ? `· ${pincodeAddr}` : ""}
                       </p>
                     </div>
@@ -265,8 +262,8 @@ export default function DrOrdersTab({
 
                   {/* Ordered Items List */}
                   <div className="space-y-1.5">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                      Ordered Materials ({Array.isArray(ord.items) ? ord.items.length : 0})
+                    <p className="text-xs font-medium text-slate-500">
+                      Items ({Array.isArray(ord.items) ? ord.items.length : 0})
                     </p>
                     {Array.isArray(ord.items) && ord.items.length > 0 ? (
                       <div className="divide-y divide-slate-100 rounded-xl border border-slate-100 bg-white px-3 py-1">
@@ -308,22 +305,20 @@ export default function DrOrdersTab({
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-base font-bold tabular-nums text-slate-900">
+                        <span className="text-base font-semibold tabular-nums text-slate-900">
                           {inr(displayAmt)}
                         </span>
-                        <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
-                          COD
-                        </span>
+                        <span className="text-[11px] font-medium text-slate-500">COD</span>
                       </div>
                       <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                         {ord.couponCode && (
-                          <span className="inline-flex items-center rounded bg-purple-50 px-1.5 py-0.2 text-[10px] font-semibold text-purple-700 ring-1 ring-inset ring-purple-600/20">
+                          <span className="inline-flex items-center rounded bg-purple-50 px-1.5 py-0.5 text-[11px] font-semibold text-purple-700 ring-1 ring-inset ring-purple-600/20">
                             {ord.couponCode}{" "}
                             {Number(ord.discountAmount) > 0 ? `(-${inr(ord.discountAmount)})` : ""}
                           </span>
                         )}
                         {Number(ord.walletDiscount) > 0 && (
-                          <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.2 text-[10px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/20">
+                          <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/20">
                             Wallet -{inr(ord.walletDiscount)}
                           </span>
                         )}
@@ -344,7 +339,7 @@ export default function DrOrdersTab({
                               onChange={(e) => handleOrderStatusSelect(ord, e.target.value)}
                               aria-label="Update Order Status"
                               className={cx(
-                                "h-11 rounded-xl px-3.5 text-xs font-bold ring-1 ring-inset outline-none transition-colors duration-300 cursor-pointer disabled:opacity-50",
+                                "h-11 rounded-xl px-3.5 text-sm font-semibold ring-1 ring-inset outline-none transition-colors duration-300 cursor-pointer disabled:opacity-50",
                                 statusCfg.select
                               )}
                             >

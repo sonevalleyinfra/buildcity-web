@@ -644,7 +644,7 @@ export default function ProductDetail() {
 
   // Average star rating aur total reviews live calculate karna
   const avgRating = useMemo(() => {
-    if (!reviewsList || reviewsList.length === 0) return 5.0;
+    if (!reviewsList || reviewsList.length === 0) return "5.0";
     const sum = reviewsList.reduce((acc, r) => acc + Number(r.rating || 5), 0);
     return (sum / reviewsList.length).toFixed(1);
   }, [reviewsList]);
@@ -948,18 +948,17 @@ export default function ProductDetail() {
               {product.name}
             </h1>
 
-            {reviewsList.length > 0 ? (
-              <a href="#reviews" className="inline-flex items-center gap-2 mb-4 rounded-md">
-                <span className="flex items-center gap-1 bg-emerald-600 text-white text-xs font-semibold px-1.5 py-0.5 rounded-md tabular-nums">
-                  {avgRating} <StarIcon />
-                </span>
-                <span className="text-sm text-slate-500 hover:text-navy-950 tabular-nums">
-                  {reviewsList.length} {reviewsList.length === 1 ? "review" : "reviews"}
-                </span>
-              </a>
-            ) : (
-              <div className="mb-4" />
-            )}
+            {/* The rating always shows; the review count only says how many reviews back it */}
+            <a href="#reviews" className="inline-flex items-center gap-2 mb-4 rounded-md">
+              <span className="flex items-center gap-1 bg-emerald-600 text-white text-xs font-semibold px-1.5 py-0.5 rounded-md tabular-nums">
+                {avgRating} <StarIcon />
+              </span>
+              <span className="text-sm text-slate-500 hover:text-navy-950 tabular-nums">
+                {reviewsList.length === 0
+                  ? "No reviews yet"
+                  : `${reviewsList.length} ${reviewsList.length === 1 ? "review" : "reviews"}`}
+              </span>
+            </a>
 
             <div className="flex items-baseline gap-2.5 mb-1">
               <span className="text-3xl font-semibold text-navy-950 tracking-tight tabular-nums">
@@ -1259,11 +1258,9 @@ export default function ProductDetail() {
                 <h2 className="text-base sm:text-lg font-semibold text-navy-950 tracking-tight">
                   Customer reviews
                 </h2>
-                {reviewsList.length > 0 && (
-                  <span className="bg-emerald-50 text-emerald-700 font-semibold text-xs px-2 py-0.5 rounded-full ring-1 ring-inset ring-emerald-600/15 flex items-center gap-1 tabular-nums">
-                    <StarIcon /> {avgRating} / 5
-                  </span>
-                )}
+                <span className="bg-emerald-50 text-emerald-700 font-semibold text-xs px-2 py-0.5 rounded-full ring-1 ring-inset ring-emerald-600/15 flex items-center gap-1 tabular-nums">
+                  <StarIcon /> {avgRating} / 5
+                </span>
               </div>
               <p className="text-sm text-slate-500 mt-0.5">Only customers who bought this product can review it.</p>
             </div>

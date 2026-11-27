@@ -18,8 +18,11 @@ import {
   HeadsetIcon,
   InfoIcon,
   LogOutIcon,
+  MailIcon,
   MapIcon,
+  PhoneIcon,
   ReceiptIcon,
+  ShieldCheckIcon,
   TagIcon,
   WalletIcon,
   WhatsAppIcon,
@@ -149,6 +152,16 @@ export default function Profile() {
 
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ name: user?.name || "", email: user?.email || "" });
+
+  // Up to two initials, e.g. "Ravi Kumar" -> "RK"
+  const initials =
+    (user?.name || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0].toUpperCase())
+      .join("") || "U";
   const [successMsg, setSuccessMsg] = useState("");
 
   const handleLogout = () => {
@@ -178,28 +191,65 @@ export default function Profile() {
           </div>
         )}
 
-        {/* Clean Minimalist Profile Header Card */}
-        <div className="bg-white rounded-2xl ring-1 ring-slate-200/80 p-4 sm:p-5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
-            <div className="h-14 w-14 rounded-full bg-navy-950 text-white font-semibold text-xl flex items-center justify-center shrink-0 select-none">
-              {user?.name?.[0]?.toUpperCase() || "U"}
+        {/* Profile header: dark brand card with initials, contact details and a verified-number chip */}
+        <section className="bc-rise-in relative overflow-hidden rounded-2xl bg-navy-950 text-white p-4 sm:p-5 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.7)]">
+          <div aria-hidden="true" className="pointer-events-none absolute -right-14 -top-20 h-48 w-48 rounded-full bg-brand-500/25 blur-3xl" />
+          <div aria-hidden="true" className="pointer-events-none absolute -bottom-20 left-1/4 h-36 w-36 rounded-full bg-sky-400/10 blur-3xl" />
+
+          <div className="relative flex items-center gap-3.5 sm:gap-4">
+            <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-600 text-white text-xl sm:text-2xl font-semibold flex items-center justify-center shrink-0 select-none ring-4 ring-white/10 shadow-lg shadow-black/20">
+              {initials}
             </div>
-            <div className="min-w-0">
-              <h1 className="text-navy-950 text-base sm:text-lg font-semibold leading-snug capitalize truncate">
-                {user?.name || "Customer Account"}
+
+            <div className="min-w-0 flex-1">
+              <h1 title={user?.name || undefined} className="text-[17px] sm:text-xl font-semibold leading-snug tracking-tight capitalize truncate">
+                {user?.name || "Customer account"}
               </h1>
-              {user?.phone && <p className="text-sm text-slate-500 tabular-nums">+91 {user.phone}</p>}
+              {user?.phone && (
+                <p className="mt-0.5 flex items-center gap-1.5 text-sm text-slate-300 tabular-nums whitespace-nowrap">
+                  <PhoneIcon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                  +91 {user.phone}
+                </p>
+              )}
+              {user?.email ? (
+                <p className="mt-0.5 flex items-center gap-1.5 text-sm text-slate-300 min-w-0">
+                  <MailIcon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                  <span className="truncate">{user.email}</span>
+                </p>
+              ) : (
+                !editing && (
+                  <button
+                    type="button"
+                    onClick={() => setEditing(true)}
+                    className="mt-0.5 flex items-center gap-1.5 text-sm text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <MailIcon className="h-3.5 w-3.5 shrink-0" />
+                    <span className="underline decoration-slate-600 underline-offset-2">Add email</span>
+                  </button>
+                )
+              )}
             </div>
           </div>
 
-          <button
-            onClick={() => setEditing((v) => !v)}
-            className="h-10 text-sm font-medium text-navy-950 bg-white hover:bg-slate-50 ring-1 ring-slate-200 px-3.5 rounded-xl shrink-0 transition-colors cursor-pointer active:scale-[0.98] flex items-center gap-1.5"
-          >
-            {!editing && <EditIcon className="h-4 w-4 text-slate-500" />}
-            <span>{editing ? "Cancel" : "Edit"}</span>
-          </button>
-        </div>
+          <div className="relative mt-4 flex items-center justify-between gap-3 border-t border-white/10 pt-3">
+            {user?.phone ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[11px] font-medium text-emerald-300 ring-1 ring-inset ring-emerald-400/25">
+                <ShieldCheckIcon className="h-3.5 w-3.5" />
+                Verified number
+              </span>
+            ) : (
+              <span />
+            )}
+            <button
+              type="button"
+              onClick={() => setEditing((v) => !v)}
+              className="h-9 px-3 text-sm font-medium text-white bg-white/10 hover:bg-white/15 ring-1 ring-inset ring-white/15 rounded-xl shrink-0 transition-colors cursor-pointer active:scale-[0.98] flex items-center gap-1.5"
+            >
+              {!editing && <EditIcon className="h-4 w-4 text-slate-300" />}
+              <span>{editing ? "Cancel" : "Edit profile"}</span>
+            </button>
+          </div>
+        </section>
 
         {/* Edit Profile Form */}
         {editing && (
@@ -242,69 +292,65 @@ export default function Profile() {
           </form>
         )}
 
-        {/* 3 Matching Stat Cards: Wallet, Active Coupons, Total Orders */}
+        {/* 3 stat cards: wallet (opens passbook), active coupons, total orders */}
         {!editing && (
           <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
-            {/* 1. BuildCity Wallet (Click to open Passbook) */}
-            <button
-              type="button"
-              onClick={() => setShowPassbookModal(true)}
-              className="bg-white rounded-2xl ring-1 ring-slate-200/80 p-3 sm:p-4 text-left hover:ring-slate-300 hover:shadow-[0_10px_24px_-16px_rgba(15,23,42,0.35)] active:scale-[0.98] transition-[box-shadow,transform] cursor-pointer group block"
-            >
-              <span className="flex items-center gap-1.5 text-xs text-slate-500 mb-1.5">
-                <WalletIcon className="h-4 w-4 text-brand-600" />
-                Wallet
-              </span>
-              {loadingWallet && !walletData ? (
-                <div className="bc-skeleton h-7 w-16 rounded-md" />
-              ) : (
-                <p className="text-lg sm:text-xl font-semibold text-navy-950 tabular-nums truncate">
-                  ₹{displayedWalletBalance.toLocaleString("en-IN")}
-                </p>
-              )}
-              <p className="text-xs text-brand-700 mt-0.5 flex items-center gap-0.5">
-                <span>Passbook</span>
-                <ChevronRightIcon className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
-              </p>
-            </button>
-
-            {/* 2. Active Coupons (Click to view active coupons) */}
-            <button
-              type="button"
-              onClick={() => setShowCouponsModal(true)}
-              className="bg-white rounded-2xl ring-1 ring-slate-200/80 p-3 sm:p-4 text-left hover:ring-slate-300 hover:shadow-[0_10px_24px_-16px_rgba(15,23,42,0.35)] active:scale-[0.98] transition-[box-shadow,transform] cursor-pointer group block"
-            >
-              <span className="flex items-center gap-1.5 text-xs text-slate-500 mb-1.5">
-                <TagIcon className="h-4 w-4 text-emerald-600" />
-                Coupons
-              </span>
-              <p className="text-lg sm:text-xl font-semibold text-navy-950 tabular-nums">
-                {activeCouponsCount}
-              </p>
-              <p className="text-xs text-brand-700 mt-0.5 flex items-center gap-0.5">
-                <span>View all</span>
-                <ChevronRightIcon className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
-              </p>
-            </button>
-
-            {/* 3. Total Orders (Click to go to /orders) */}
-            <button
-              type="button"
-              onClick={() => navigate("/orders")}
-              className="bg-white rounded-2xl ring-1 ring-slate-200/80 p-3 sm:p-4 text-left hover:ring-slate-300 hover:shadow-[0_10px_24px_-16px_rgba(15,23,42,0.35)] active:scale-[0.98] transition-[box-shadow,transform] cursor-pointer group block"
-            >
-              <span className="flex items-center gap-1.5 text-xs text-slate-500 mb-1.5">
-                <ReceiptIcon className="h-4 w-4 text-sky-600" />
-                Orders
-              </span>
-              <p className="text-lg sm:text-xl font-semibold text-navy-950 tabular-nums">
-                {(ordersSummary?.totalOrders ?? myOrders.length) || 0}
-              </p>
-              <p className="text-xs text-brand-700 mt-0.5 flex items-center gap-0.5">
-                <span>History</span>
-                <ChevronRightIcon className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
-              </p>
-            </button>
+            {[
+              {
+                key: "wallet",
+                label: "Wallet",
+                link: "Passbook",
+                icon: WalletIcon,
+                chip: "bg-brand-50 text-brand-600 ring-brand-600/15",
+                onClick: () => setShowPassbookModal(true),
+                value:
+                  loadingWallet && !walletData ? null : `₹${displayedWalletBalance.toLocaleString("en-IN")}`,
+              },
+              {
+                key: "coupons",
+                label: "Coupons",
+                link: "View all",
+                icon: TagIcon,
+                chip: "bg-emerald-50 text-emerald-600 ring-emerald-600/15",
+                onClick: () => setShowCouponsModal(true),
+                value: activeCouponsCount,
+              },
+              {
+                key: "orders",
+                label: "Orders",
+                link: "History",
+                icon: ReceiptIcon,
+                chip: "bg-sky-50 text-sky-600 ring-sky-600/15",
+                onClick: () => navigate("/orders"),
+                value: (ordersSummary?.totalOrders ?? myOrders.length) || 0,
+              },
+            ].map(({ key, label, link, icon: Icon, chip, onClick, value }, i) => (
+              <button
+                key={key}
+                type="button"
+                onClick={onClick}
+                style={{ animationDelay: `${60 + i * 50}ms` }}
+                className="bc-rise-in group flex flex-col rounded-2xl bg-white p-3 sm:p-4 text-left ring-1 ring-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:ring-slate-300 hover:shadow-[0_14px_28px_-18px_rgba(15,23,42,0.4)] active:translate-y-0 active:scale-[0.98] cursor-pointer min-w-0"
+              >
+                <span className={`grid h-9 w-9 place-items-center rounded-xl ring-1 ring-inset ${chip}`}>
+                  <Icon className="h-[18px] w-[18px]" />
+                </span>
+                {value === null ? (
+                  <span className="bc-skeleton mt-3 block h-7 w-16 rounded-md" />
+                ) : (
+                  <span className="mt-3 block text-lg sm:text-2xl font-semibold leading-tight text-navy-950 tabular-nums truncate">
+                    {value}
+                  </span>
+                )}
+                <span className="block text-xs text-slate-500">{label}</span>
+                <span className="mt-auto pt-2.5">
+                  <span className="flex items-center justify-between gap-1 border-t border-slate-100 pt-2.5 text-xs font-medium text-brand-700">
+                    <span className="truncate">{link}</span>
+                    <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 transition-transform group-hover:translate-x-0.5" />
+                  </span>
+                </span>
+              </button>
+            ))}
           </div>
         )}
 

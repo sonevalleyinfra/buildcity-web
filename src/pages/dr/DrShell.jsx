@@ -405,7 +405,7 @@ export default function DrShell({
                 onClick={() => onTabChange(key)}
                 aria-current={active ? "page" : undefined}
                 className={cx(
-                  "relative flex h-16 flex-col items-center justify-center gap-1 text-[10px] font-medium transition-colors cursor-pointer",
+                  "relative flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors cursor-pointer",
                   active ? "text-brand-700" : "text-slate-400 active:text-slate-600"
                 )}
               >

@@ -44,6 +44,7 @@ function VendorStatusBadge({ status }) {
 }
 
 export default function DrVendorsTab({
+  listingCounts,
   districtName,
   filteredVendors,
   searchTerm,
@@ -62,14 +63,14 @@ export default function DrVendorsTab({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-base font-semibold text-slate-900">
-                Registered Vendors in {districtName}
+                Vendors in {districtName}
               </h2>
               <span className="rounded-full bg-sky-50 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-sky-700 ring-1 ring-inset ring-sky-600/15">
                 {filteredVendors.length}
               </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
-              Onboard, manage credentials, or suspend district vendor partners
+              Add shops, update their login, or pause them.
             </p>
           </div>
 
@@ -144,7 +145,7 @@ export default function DrVendorsTab({
                       </span>
                       <span className="text-slate-300">·</span>
                       <span className="font-semibold text-slate-700">
-                        {v.productCount || 0} Products
+                        {(listingCounts?.[v.id] ?? v.productCount ?? 0)} {(listingCounts?.[v.id] ?? v.productCount ?? 0) === 1 ? "product" : "products"}
                       </span>
                     </div>
                     {v.phone && (
@@ -244,15 +245,15 @@ export default function DrVendorsTab({
           {/* Desktop Table View */}
           <Card className="hidden overflow-hidden md:block">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
+              <table className="w-full min-w-[860px] text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                    <th className="py-3.5 px-4">Shop / Business</th>
-                    <th className="py-3.5 px-4">Owner & Mobile</th>
-                    <th className="py-3.5 px-4">District</th>
-                    <th className="py-3.5 px-4">Status</th>
-                    <th className="py-3.5 px-4">Products</th>
-                    <th className="py-3.5 px-4 text-right">Actions</th>
+                  <tr className="border-b border-slate-200 bg-slate-50/80 text-xs font-medium text-slate-500">
+                    <th className="whitespace-nowrap py-3.5 px-4">Shop / Business</th>
+                    <th className="whitespace-nowrap py-3.5 px-4">Owner & Mobile</th>
+                    <th className="whitespace-nowrap py-3.5 px-4">District</th>
+                    <th className="whitespace-nowrap py-3.5 px-4">Status</th>
+                    <th className="whitespace-nowrap py-3.5 px-4">Products</th>
+                    <th className="whitespace-nowrap py-3.5 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -273,7 +274,7 @@ export default function DrVendorsTab({
                         <VendorStatusBadge status={v.status} />
                       </td>
                       <td className="py-3.5 px-4 font-semibold tabular-nums text-slate-700">
-                        {v.productCount || 0} Products
+                        {(listingCounts?.[v.id] ?? v.productCount ?? 0)} {(listingCounts?.[v.id] ?? v.productCount ?? 0) === 1 ? "product" : "products"}
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">

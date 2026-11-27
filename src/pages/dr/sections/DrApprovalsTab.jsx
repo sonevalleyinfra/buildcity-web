@@ -74,14 +74,14 @@ export default function DrApprovalsTab({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-base font-semibold text-slate-900">
-                Vendor Listings & Approvals ({districtName})
+                Listings & approvals
               </h2>
               <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-indigo-700 ring-1 ring-inset ring-indigo-600/15">
                 {districtProducts.length}
               </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
-              Review vendor product requests, selling prices, and stock availability for {districtName}
+              Review the products, prices and stock vendors in {districtName} want to sell.
             </p>
           </div>
           <div className="w-full sm:w-72">
@@ -225,16 +225,16 @@ export default function DrApprovalsTab({
           {/* Desktop Table View */}
           <Card className="hidden overflow-hidden md:block">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
+              <table className="w-full min-w-[860px] text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                    <th className="py-3.5 px-4">Vendor Shop</th>
-                    <th className="py-3.5 px-4">Product Name</th>
-                    <th className="py-3.5 px-4">Category & Brand</th>
-                    <th className="py-3.5 px-4">Selling Price</th>
-                    <th className="py-3.5 px-4">Stock Qty</th>
-                    <th className="py-3.5 px-4">Status</th>
-                    <th className="py-3.5 px-4 text-right">Actions</th>
+                  <tr className="border-b border-slate-200 bg-slate-50/80 text-xs font-medium text-slate-500">
+                    <th className="whitespace-nowrap py-3.5 px-4">Vendor Shop</th>
+                    <th className="whitespace-nowrap py-3.5 px-4">Product Name</th>
+                    <th className="whitespace-nowrap py-3.5 px-4">Category & Brand</th>
+                    <th className="whitespace-nowrap py-3.5 px-4">Selling Price</th>
+                    <th className="whitespace-nowrap py-3.5 px-4">Stock Qty</th>
+                    <th className="whitespace-nowrap py-3.5 px-4">Status</th>
+                    <th className="whitespace-nowrap py-3.5 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">

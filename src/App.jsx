@@ -124,10 +124,10 @@ function CatchAll() {
   return <Navigate to={target} replace />;
 }
 
-// Keeps the first-visit delivery-location picker off the vendor web login page and the super admin dashboard.
+// Keeps the first-visit delivery-location picker off the vendor web login page and the admin / DR dashboards.
 function StorefrontLocationModal() {
   const { pathname } = useLocation();
-  if (pathname === "/vendor/login" || pathname.startsWith("/admin")) return null;
+  if (pathname === "/vendor/login" || pathname.startsWith("/admin") || pathname.startsWith("/dr")) return null;
   return <FirstTimeLocationModal />;
 }
 

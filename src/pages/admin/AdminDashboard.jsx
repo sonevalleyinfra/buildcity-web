@@ -1406,16 +1406,16 @@ export default function AdminDashboard() {
         {/* DISTRICT REPS (DR) TAB  hai ye */}
         {tab === "District Reps (DR)" && (
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
-            <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+            <div className="p-4 sm:p-5 border-b border-slate-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-slate-50/50">
               <div>
                 <h2 className="text-base sm:text-lg font-semibold tracking-tight text-navy-950 ">District reps</h2>
                 <p className="text-xs text-slate-500 mt-0.5">Each DR onboards vendors and approves listings in their district.</p>
               </div>
               <button
                 onClick={() => setShowDrForm((v) => !v)}
-                className="bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer"
+                className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 self-start rounded-xl bg-navy-950 px-4 text-sm font-semibold text-white transition-colors hover:bg-navy-900 active:scale-[0.98] cursor-pointer sm:self-auto"
               >
-                + Assign New DR
+                <PlusIcon className="h-4 w-4" /> Assign new DR
               </button>
             </div>
 
@@ -1593,12 +1593,12 @@ export default function AdminDashboard() {
         {/* VENDORS TAB */}
         {tab === "Vendors" && (
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
-            <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+            <div className="p-4 sm:p-5 border-b border-slate-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-slate-50/50">
               <div>
                 <h2 className="text-base sm:text-lg font-semibold tracking-tight text-navy-950 ">Vendors</h2>
                 <p className="text-xs text-slate-500 mt-0.5">Approve, edit, suspend or remove vendors. Approved vendors sign in with their mobile number and password.</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 <button
                   onClick={() => setShowVendorForm(true)}
                   className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-navy-950 px-4 text-sm font-semibold text-white transition-colors hover:bg-navy-900 active:scale-[0.98] cursor-pointer"
@@ -1891,12 +1891,12 @@ export default function AdminDashboard() {
         {/* PRODUCTS TAB */}
         {tab === "Products" && (
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
-            <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+            <div className="p-4 sm:p-5 border-b border-slate-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-slate-50/50">
               <div>
                 <h2 className="text-base sm:text-lg font-semibold tracking-tight text-navy-950">Master products</h2>
                 <p className="text-xs text-slate-500 mt-0.5">The shared catalog vendors pick from when they list products.</p>
               </div>
-              <button onClick={() => setShowProductForm((v) => !v)} className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-navy-950 px-4 text-sm font-semibold text-white transition-colors hover:bg-navy-900 active:scale-[0.98] cursor-pointer">
+              <button onClick={() => setShowProductForm((v) => !v)} className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 self-start sm:self-auto rounded-xl bg-navy-950 px-4 text-sm font-semibold text-white transition-colors hover:bg-navy-900 active:scale-[0.98] cursor-pointer">
                 <PlusIcon className="h-4 w-4" /> New product
               </button>
             </div>

@@ -255,17 +255,17 @@ export default function WalletSettingsTab() {
   return (
     <div className="space-y-6">
       {/* Top Header Card */}
-      <div className="bg-white rounded-2xl p-4 sm:p-5 ring-1 ring-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="bg-gradient-to-r from-navy-950 via-slate-900 to-[#0A1A3A] rounded-2xl p-4 sm:p-6 text-white shadow-md border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <h2 className="text-base sm:text-lg font-semibold tracking-tight text-navy-950">
+            <h2 className="text-base sm:text-lg font-semibold tracking-tight text-white">
               Wallet & rewards
             </h2>
             <span
               className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${
                 form.referralEnabled || form.cashbackEnabled
-                  ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20"
-                  : "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-600/20"
+                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                  : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
               }`}
             >
               {form.referralEnabled || form.cashbackEnabled ? "Active" : "Paused"}
@@ -276,7 +276,7 @@ export default function WalletSettingsTab() {
         <button
           onClick={handleSaveSettings}
           disabled={saving}
-          className="h-10 px-4 rounded-xl bg-navy-950 hover:bg-navy-900 text-white font-semibold text-sm active:scale-[0.98] transition-colors flex items-center justify-center gap-2 shrink-0 disabled:opacity-50"
+          className="h-10 px-4 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-sm shadow-md active:scale-[0.98] transition-colors flex items-center justify-center gap-2 shrink-0 disabled:opacity-50"
         >
           {saving ? (
             <>
